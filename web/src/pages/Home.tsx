@@ -347,7 +347,10 @@ function SessionCard({ s }: { s: NowPlaying }) {
             {s.product && s.product !== s.device ? ` (${s.product})` : ""}
           </p>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
-            <Badge variant={s.decision === "transcode" ? "warning" : "success"}>
+            <Badge
+              variant={s.decision === "transcode" ? "warning" : "success"}
+              title={s.decisionReason || undefined}
+            >
               {s.decision === "transcode"
                 ? t("Transcoding")
                 : s.decision === "copy"
@@ -363,7 +366,7 @@ function SessionCard({ s }: { s: NowPlaying }) {
                 {tn(s.failovers, "{count} failover", "{count} failovers")}
               </Badge>
             ) : null}
-            <Badge variant="secondary">{formatRate(s.speedBps)}</Badge>
+            {s.speedBps ? <Badge variant="secondary">{formatRate(s.speedBps)}</Badge> : null}
           </div>
           <div className="mt-2 max-w-md">
             {s.progress !== null ? (
@@ -377,9 +380,6 @@ function SessionCard({ s }: { s: NowPlaying }) {
               <p className="text-xs opacity-80">{t("Waiting for playback position")}</p>
             )}
           </div>
-          {s.decisionReason ? (
-            <p className="mt-1.5 text-xs opacity-80">{s.decisionReason}</p>
-          ) : null}
           {s.release ? (
             <p className="mt-1.5 truncate font-mono text-[11px] opacity-70" title={s.release}>
               {s.release}
