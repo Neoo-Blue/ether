@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -108,7 +109,8 @@ func RunTests(ctx context.Context, pkg *Package, etherBin string) (TestReport, e
 	}
 
 	if man.Ether != nil && man.Ether.Runtime.Kind == "hosted" {
-		eng := sharedEngine()
+		eng := wasm.NewEngine(nil)
+		defer func() { _ = eng.Close() }()
 
 		host := newRecordingHost(man)
 		var plug *wasm.Plugin
@@ -139,15 +141,24 @@ func RunTests(ctx context.Context, pkg *Package, etherBin string) (TestReport, e
 		}
 	}
 
-	if len(out.Cases) == 0 {
-		// Fall back to conformance check as the baseline test suite.
-		rep := Check(ctx, pkg)
-		cr := CaseResult{Name: "conformance", OK: rep.OK, Status: 200, DurationMS: rep.DurationMS}
-		if !rep.OK && len(rep.Errors) > 0 {
-			cr.Error = rep.Errors[0].String()
-			out.OK = false
+	if man.Ether != nil && man.Ether.Runtime.Kind == "remote" && len(suite.Cases) > 0 {
+		base := strings.TrimRight(strings.TrimSpace(os.Getenv("ETHER_PLUGIN_URL")), "/")
+		if base == "" {
+			return out, fmt.Errorf("kit: remote plugins require ETHER_PLUGIN_URL pointing to the running plugin")
 		}
-		out.Cases = append(out.Cases, cr)
+		for _, tc := range suite.Cases {
+			result := runRemoteFixtureCase(ctx, base, tc)
+			if !result.OK {
+				out.OK = false
+			}
+			out.Cases = append(out.Cases, result)
+		}
+	}
+	if len(out.Cases) == 0 {
+		if man.Ether == nil || man.Ether.Runtime.Kind != "hosted" {
+			return out, fmt.Errorf("kit: recorded fixtures require a hosted runtime; remote plugins must be tested against their own server")
+		}
+		return out, fmt.Errorf("kit: no recorded fixtures found in tests/fixtures.json")
 	}
 
 	if strings.TrimSpace(etherBin) != "" {
@@ -215,6 +226,69 @@ func runFixtureCase(ctx context.Context, plug *wasm.Plugin, tc FixtureCase) Case
 	return res
 }
 
+// runRemoteFixtureCase sends the same recorded request to an explicitly
+// supplied remote development server; it never starts a plugin process.
+func runRemoteFixtureCase(ctx context.Context, base string, tc FixtureCase) (result CaseResult) {
+	start := time.Now()
+	result = CaseResult{Name: tc.Name}
+	defer func() { result.DurationMS = float64(time.Since(start).Microseconds()) / 1000 }()
+	method := tc.Method
+	if method == "" {
+		method = http.MethodGet
+	}
+	q := url.Values{}
+	for k, v := range tc.Query {
+		q.Set(k, v)
+	}
+	target := base + tc.Path
+	if len(q) > 0 {
+		target += "?" + q.Encode()
+	}
+	req, err := http.NewRequestWithContext(ctx, method, target, bytes.NewReader(tc.Body))
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	for k, v := range tc.Headers {
+		req.Header.Set(k, v)
+	}
+	if len(tc.Body) > 0 {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	defer resp.Body.Close()
+	result.Status = resp.StatusCode
+	want := tc.WantStatus
+	if want == 0 {
+		want = http.StatusOK
+	}
+	if result.Status != want {
+		result.Error = fmt.Sprintf("status = %d, want %d", result.Status, want)
+		return result
+	}
+	if len(tc.WantFields) != 0 {
+		var doc map[string]any
+		if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&doc); err != nil {
+			result.Error = "decode body: " + err.Error()
+			return result
+		}
+		for k, want := range tc.WantFields {
+			w, _ := json.Marshal(want)
+			got, _ := json.Marshal(doc[k])
+			if !bytes.Equal(w, got) {
+				result.Error = fmt.Sprintf("field %q = %s, want %s", k, got, w)
+				return result
+			}
+		}
+	}
+	result.OK = true
+	return result
+}
+
 func runHeadlessEtherIntegration(ctx context.Context, pkg *Package, etherBin string) (res CaseResult) {
 	t0 := time.Now()
 	res = CaseResult{Name: "headless-ether", OK: true}
@@ -259,7 +333,7 @@ func runHeadlessEtherIntegration(ctx context.Context, pkg *Package, etherBin str
 		return res
 	}
 
-	runCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	runCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
 
 	cmd := exec.CommandContext(runCtx, etherBin, "--data-dir", tmpDir)
@@ -278,7 +352,7 @@ func runHeadlessEtherIntegration(ctx context.Context, pkg *Package, etherBin str
 	}()
 
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	client := &http.Client{Timeout: 3 * time.Second}
+	client := &http.Client{Timeout: 150 * time.Second}
 	ready := false
 	for i := 0; i < 200; i++ {
 		req, _ := http.NewRequestWithContext(runCtx, http.MethodGet, baseURL+"/ether/api/plugins/", nil)

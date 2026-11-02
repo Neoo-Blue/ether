@@ -665,3 +665,21 @@ func TestMigrationsApply(t *testing.T) {
 		t.Fatalf("plugin tables: %d", n)
 	}
 }
+
+func TestFetchSiblingsIncludesRelativeIcon(t *testing.T) {
+	env := newTestEnv(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/assets/icon.svg" {
+			_, _ = w.Write([]byte("icon"))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	env.m.client = srv.Client()
+	manifest := []byte(`{"id":"com.example.icon","version":"1.0.0","name":"Icon","ether":{"protocol":1,"kind":"extension","icon":"assets/icon.svg","runtime":{"kind":"remote"}}}`)
+	files := env.m.fetchSiblings(context.Background(), srv.URL+"/manifest.json", manifest, map[string][]byte{}, false)
+	if string(files["assets/icon.svg"]) != "icon" {
+		t.Fatalf("icon not fetched: %v", files)
+	}
+}

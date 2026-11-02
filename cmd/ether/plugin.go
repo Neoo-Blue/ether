@@ -28,7 +28,8 @@ const pluginUsage = `usage:
 
   ether plugin test <dir>
       Run recorded fixtures, conformance checks, and (when $ETHER_BIN is set)
-      an integration check against a headless Ether instance.
+      an integration check against a headless Ether instance. Set
+      ETHER_PLUGIN_URL to test a running remote plugin.
 
   ether plugin pack [-o <out.etherpkg>] <dir>
       Compile TypeScript, verify conformance, and bundle a verified .etherpkg.
@@ -230,7 +231,7 @@ func runPluginDev(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		return 2
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 3 * time.Minute}
 	var seenLogs []string
 
 	reload := func() (string, error) {

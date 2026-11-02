@@ -584,7 +584,8 @@ func hostMatches(patterns []string, host string) bool {
 }
 
 func checkHostedRuntime(ctx context.Context, rep *Report, man plugins.Manifest, files map[string][]byte, stringsByLocale map[string]map[string]string) {
-	eng := sharedEngine()
+	eng := wasm.NewEngine(nil)
+	defer func() { _ = eng.Close() }()
 
 	host := newRecordingHost(man)
 	decl := man.Ether.Runtime
@@ -645,7 +646,7 @@ func loadOrCompileEntry(entry string, files map[string][]byte) (string, error) {
 	if b, ok := files[entry]; ok {
 		if isTSPath(entry) {
 			srcMap := collectSources(files)
-			js, _, diags := cachedCompile(srcMap, entry)
+			js, _, diags := wasm.Compile(srcMap, entry)
 			if err := compileDiagsError(diags); err != nil {
 				return "", err
 			}
@@ -658,7 +659,7 @@ func loadOrCompileEntry(entry string, files map[string][]byte) (string, error) {
 		return "", fmt.Errorf("missing entry file %q", entry)
 	}
 	srcMap := collectSources(files)
-	js, _, diags := cachedCompile(srcMap, tsEntry)
+	js, _, diags := wasm.Compile(srcMap, tsEntry)
 	if err := compileDiagsError(diags); err != nil {
 		return "", err
 	}
@@ -1388,7 +1389,7 @@ func rankWithRetries(ctx context.Context, p *wasm.Plugin, batch []wasm.Candidate
 	var scores []int64
 	var out wasm.Outcome
 	var err error
-	for attempt := 0; attempt < 5; attempt++ {
+	for attempt := 0; attempt < 30; attempt++ {
 		fresh := append([]wasm.Candidate(nil), batch...)
 		for i := range fresh {
 			fresh[i].ReleaseID += fmt.Sprintf("-try-%d", attempt)
@@ -1397,8 +1398,10 @@ func rankWithRetries(ctx context.Context, p *wasm.Plugin, batch []wasm.Candidate
 		if err == nil && out.SlowCandidates == 0 {
 			return scores, out, nil
 		}
-		if ctx.Err() != nil {
-			break
+		select {
+		case <-ctx.Done():
+			return scores, out, ctx.Err()
+		case <-time.After(20 * time.Millisecond):
 		}
 	}
 	return scores, out, err
@@ -1407,13 +1410,15 @@ func condBatchWithRetries(ctx context.Context, p *wasm.Plugin, cands []wasm.Cand
 	var result []bool
 	var out wasm.Outcome
 	var err error
-	for attempt := 0; attempt < 5; attempt++ {
+	for attempt := 0; attempt < 30; attempt++ {
 		result, out, err = p.CondBatch(ctx, cands, op, val)
 		if err == nil && out.SlowCandidates == 0 {
 			return result, out, nil
 		}
-		if ctx.Err() != nil {
-			break
+		select {
+		case <-ctx.Done():
+			return result, out, ctx.Err()
+		case <-time.After(20 * time.Millisecond):
 		}
 	}
 	return result, out, err

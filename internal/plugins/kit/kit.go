@@ -7,18 +7,14 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/braedonsaunders/ether/internal/plugins"
@@ -295,7 +291,7 @@ func Pack(pkg *Package) ([]byte, error) {
 				return nil, fmt.Errorf("kit: pack: entry %q not found and no TypeScript source found", entry)
 			}
 			srcMap := collectSources(pkg.Files)
-			js, smap, diags := cachedCompile(srcMap, tsEntry)
+			js, smap, diags := wasm.Compile(srcMap, tsEntry)
 			if err := compileDiagsError(diags); err != nil {
 				return nil, err
 			}
@@ -305,7 +301,7 @@ func Pack(pkg *Package) ([]byte, error) {
 			}
 		} else if isTSPath(entry) {
 			srcMap := collectSources(pkg.Files)
-			js, smap, diags := cachedCompile(srcMap, entry)
+			js, smap, diags := wasm.Compile(srcMap, entry)
 			if err := compileDiagsError(diags); err != nil {
 				return nil, err
 			}
@@ -395,56 +391,6 @@ func compileDiagsError(diags []wasm.Diagnostic) error {
 
 func isUnsafePath(p string) bool {
 	return p != "" && (strings.HasPrefix(p, "/") || strings.Contains(p, ".."))
-}
-
-var (
-	engOnce   sync.Once
-	sharedEng *wasm.Engine
-
-	compMu    sync.Mutex
-	compCache = map[string]compResult{}
-)
-
-type compResult struct {
-	js    []byte
-	smap  []byte
-	diags []wasm.Diagnostic
-}
-
-func sharedEngine() *wasm.Engine {
-	engOnce.Do(func() {
-		sharedEng = wasm.NewEngine(slog.New(slog.NewTextHandler(io.Discard, nil)))
-	})
-	return sharedEng
-}
-
-func cachedCompile(sources map[string]string, entry string) ([]byte, []byte, []wasm.Diagnostic) {
-	keys := make([]string, 0, len(sources))
-	for k := range sources {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	h := sha256.New()
-	h.Write([]byte(entry))
-	h.Write([]byte{0})
-	for _, k := range keys {
-		h.Write([]byte(k))
-		h.Write([]byte{0})
-		h.Write([]byte(sources[k]))
-		h.Write([]byte{0})
-	}
-	sum := hex.EncodeToString(h.Sum(nil))
-	compMu.Lock()
-	if res, ok := compCache[sum]; ok {
-		compMu.Unlock()
-		return res.js, res.smap, res.diags
-	}
-	compMu.Unlock()
-	js, smap, diags := wasm.Compile(sources, entry)
-	compMu.Lock()
-	compCache[sum] = compResult{js: js, smap: smap, diags: diags}
-	compMu.Unlock()
-	return js, smap, diags
 }
 
 // CheckInstall adapts the conformance report to the plugin host's validation error.

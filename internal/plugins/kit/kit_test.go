@@ -3,6 +3,8 @@ package kit
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -240,6 +242,12 @@ func TestCheckAllTemplateKindsAndLangsPass(t *testing.T) {
 					}
 				}
 				tr, err := RunTests(context.Background(), pkg, "")
+				if l == "python" {
+					if err == nil || !strings.Contains(err.Error(), "remote plugins") {
+						t.Fatalf("remote test should explain its runtime requirement: %v", err)
+					}
+					return
+				}
 				if err != nil {
 					t.Fatalf("RunTests: %v", err)
 				}
@@ -539,5 +547,30 @@ func TestScaffoldDoesNotOverwriteExistingFiles(t *testing.T) {
 	data, err := os.ReadFile(name)
 	if err != nil || string(data) != "keep" {
 		t.Fatalf("existing file changed: %q, %v", data, err)
+	}
+}
+
+func TestRemoteFixturesUseRunningServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/ether/health" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer server.Close()
+	t.Setenv("ETHER_PLUGIN_URL", server.URL)
+	files, err := GenerateTemplateFiles(TemplateOptions{Kind: "livetv_source", Lang: "python", ID: "com.example.remote", Name: "Remote"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	files["tests/fixtures.json"] = []byte(`{"cases":[{"name":"health","path":"/ether/health","wantStatus":200,"wantFields":{"status":"ok"}}]}`)
+	pkg, err := FromFiles(files["manifest.json"], files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := RunTests(context.Background(), pkg, "")
+	if err != nil || !report.OK || len(report.Cases) != 1 {
+		t.Fatalf("report=%+v err=%v", report, err)
 	}
 }

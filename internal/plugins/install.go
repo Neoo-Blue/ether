@@ -133,6 +133,9 @@ func (m *Manager) fetchSiblings(ctx context.Context, manURL string, manRaw []byt
 	}
 	base := strings.TrimSuffix(manURL, "manifest.json")
 	var paths []string
+	if icon := man.Ether.Icon; icon != "" && !strings.HasPrefix(icon, "http://") && !strings.HasPrefix(icon, "https://") {
+		paths = append(paths, icon)
+	}
 	if man.Ether.Runtime.Entry != "" {
 		paths = append(paths, man.Ether.Runtime.Entry)
 	}

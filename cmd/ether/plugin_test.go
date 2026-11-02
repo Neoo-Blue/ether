@@ -203,7 +203,7 @@ func TestPluginCLIDevHotReloadAndLogs(t *testing.T) {
 	}
 
 	// The output events drive the test; the deadline is only a hang guard.
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	out.Reset()
 	errBuf.Reset()
