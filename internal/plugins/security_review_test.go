@@ -154,3 +154,29 @@ func TestPluginToolDoesNotSendSavedSecretToModel(t *testing.T) {
 		t.Fatal("saved secret exposed to model")
 	}
 }
+
+func TestPluginViewsAndActionsDoNotExposeSavedSecrets(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	rec := env.installHello(t, "1.0.0")
+	const secret = "private-value-472815"
+	if _, err := env.m.Configure(ctx, rec.ID, map[string]any{"api_token": secret}); err != nil {
+		t.Fatal(err)
+	}
+	env.fake.routes["/ether/view/home"] = func(Request) (Response, error) {
+		return Response{Status: 200, Body: json.RawMessage(`{"spec":{"specVersion":1,"layout":"list","header":[],"body":[]},"data":{"message":"private-value-472815"}}`)}, nil
+	}
+	env.fake.routes["/ether/action/change"] = func(Request) (Response, error) {
+		return Response{Status: 200, Body: json.RawMessage(`{"toast":"private-value-472815"}`)}, nil
+	}
+	for _, endpoint := range []struct{ method, path string }{{"GET", "/" + rec.ID + "/views/home"}, {"POST", "/" + rec.ID + "/actions/change"}} {
+		w := httptest.NewRecorder()
+		env.m.Handler().ServeHTTP(w, httptest.NewRequest(endpoint.method, endpoint.path, strings.NewReader(`{}`)))
+		if w.Code != 200 {
+			t.Fatalf("%s: status %d", endpoint.path, w.Code)
+		}
+		if strings.Contains(w.Body.String(), secret) {
+			t.Fatalf("saved secret exposed in %s", endpoint.path)
+		}
+	}
+}

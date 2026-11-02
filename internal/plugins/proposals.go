@@ -82,5 +82,10 @@ func (m *Manager) handleProposalDecision(w http.ResponseWriter, r *http.Request)
 		_, _ = w.Write([]byte(`{}`))
 		return
 	}
-	_, _ = w.Write(resp.Body)
+	clean := m.store.redactKnown(r.Context(), plugin, string(resp.Body))
+	if !json.Valid([]byte(clean)) {
+		writeErr(w, http.StatusBadGateway, "plugin_error", "Plugin returned an invalid result.", nil)
+		return
+	}
+	_, _ = w.Write([]byte(clean))
 }
