@@ -172,6 +172,13 @@ type exportLog struct {
 	Attempt  string    `json:"attempt,omitempty"`
 	Status   string    `json:"status,omitempty"`
 	Kind     string    `json:"kind,omitempty"`
+	// Method, Route and Dur describe a request line: which endpoint the
+	// device asked for and how long it took, with identifying segments masked.
+	Method    string `json:"method,omitempty"`
+	Route     string `json:"route,omitempty"`
+	Dur       string `json:"dur,omitempty"`
+	PageStart string `json:"pageStart,omitempty"`
+	PageSize  string `json:"pageSize,omitempty"`
 	Username string    `json:"username,omitempty"`
 	Peer     string    `json:"peer,omitempty"`
 	Title    string    `json:"title,omitempty"`
@@ -189,7 +196,7 @@ func projectLogs(records []LogRecord, q LogQuery, flags [3]bool, uses []secretUs
 	gaps = append(gaps, Gap{
 		Collector: "logs",
 		Status:    "omitted",
-		Detail:    "Free-text log messages, paths, and unrecognized fields were omitted. Usernames, addresses, and titles are included only when the summary lists them.",
+		Detail:    "Free-text log messages, file paths, and unrecognized fields were omitted. Request routes are kept with identifying parts masked. Usernames, addresses, and titles are included only when the summary lists them.",
 	})
 	limit := q.MaxLines
 	if limit <= 0 || limit > maxLogLines {
@@ -217,6 +224,13 @@ func projectLogs(records []LogRecord, q LogQuery, flags [3]bool, uses []secretUs
 		}
 		row.Status = boundToken(attrFold(rec.Attrs, "status"))
 		row.Kind = boundToken(attrFold(rec.Attrs, "kind"))
+		if rec.Message == "request" || rec.Message == "hls request" {
+			row.Method = boundToken(attrFold(rec.Attrs, "method"))
+			row.Route = requestRoute(attrFold(rec.Attrs, "path"))
+			row.Dur = boundToken(attrFold(rec.Attrs, "dur"))
+			row.PageStart = digitsOnly(attrFold(rec.Attrs, "pageStart"))
+			row.PageSize = digitsOnly(attrFold(rec.Attrs, "pageSize"))
+		}
 		if flags[1] {
 			if u := firstPresent(rec.Attrs, "user", "username"); u != "" {
 				u = redactString(u, uses)
@@ -255,6 +269,59 @@ func projectLogs(records []LogRecord, q LogQuery, flags [3]bool, uses []secretUs
 		gaps = append(gaps, Gap{Collector: "logs", Status: "truncated", Detail: "The log extract was shortened to the line limit. No line was cut in the middle."})
 	}
 	return []byte(b.String()), ident, truncated, gaps
+}
+
+// requestRoute keeps the shape of an HTTP request path, such as
+// /hubs/promoted or /library/metadata/123/children. A segment is kept only
+// when each of its dot, colon, dash or underscore separated parts is a
+// plain word or all digits; anything else (GUIDs, tokens, encoded addon
+// configuration, file names) becomes "*".
+func requestRoute(p string) string {
+	if !strings.HasPrefix(p, "/") || len(p) > 512 {
+		return ""
+	}
+	segs := strings.Split(p[1:], "/")
+	for i, seg := range segs {
+		if !plainSegment(seg) {
+			segs[i] = "*"
+		}
+	}
+	return "/" + strings.Join(segs, "/")
+}
+
+func plainSegment(seg string) bool {
+	if seg == "" || len(seg) > 64 {
+		return seg == ""
+	}
+	for _, part := range strings.FieldsFunc(seg, func(r rune) bool { return r == '.' || r == ':' || r == '-' || r == '_' }) {
+		letters, upper, digits := 0, 0, 0
+		for _, r := range part {
+			switch {
+			case r >= 'a' && r <= 'z':
+				letters++
+			case r >= 'A' && r <= 'Z':
+				letters++
+				upper++
+			case r >= '0' && r <= '9':
+				digits++
+			default:
+				return false
+			}
+		}
+		// Words and camelCase names pass; encoded blobs (many capitals,
+		// long runs) and mixed letter-digit ids do not.
+		if letters > 0 && (digits > 0 || upper > 3 || letters > 32) {
+			return false
+		}
+	}
+	return true
+}
+
+func digitsOnly(s string) string {
+	if s == "" || len(s) > 12 || strings.Trim(s, "0123456789") != "" {
+		return ""
+	}
+	return s
 }
 
 func boundToken(s string) string {
