@@ -19,7 +19,7 @@ export interface PageDef {
   href: string;
   title: string;
   /** In-page sections (tabs) in display order. */
-  sections: { key: string; title: string; keywords?: string }[];
+  sections: { key: string; title: string; keywords?: string; href?: string }[];
   keywords?: string;
 }
 
@@ -254,6 +254,11 @@ export const PAGES = localized<PageDef[]>(() => [
         title: t("Channels"),
         keywords: searchTerms(msg("email discord webhook push alerts watchlist")),
       },
+      {
+        key: "protection",
+        title: t("Server protection"),
+        keywords: searchTerms(msg("crash watcher restart guard")),
+      },
       { key: "report", title: t("Weekly report"), keywords: searchTerms(msg("newsletter digest")) },
       { key: "deliveries", title: t("Delivery history") },
     ],
@@ -290,14 +295,24 @@ export const PAGES = localized<PageDef[]>(() => [
     title: t("Apps"),
     sections: [
       {
-        key: "remote",
-        title: t("Remote access"),
-        keywords: searchTerms(msg("upnp port forward public")),
+        key: "account",
+        href: "/apps/plex/account",
+        title: t("Plex account"),
+        keywords: searchTerms(msg("plex sign in claim account")),
       },
       {
-        key: "secure",
-        title: t("Secure connections"),
-        keywords: searchTerms(msg("certificate plex.direct tls")),
+        key: "remote",
+        href: "/apps/plex/remote",
+        title: t("Remote access"),
+        keywords: searchTerms(
+          msg("upnp port forward public secure connections certificate plex.direct tls"),
+        ),
+      },
+      {
+        key: "compatibility",
+        href: "/apps/plex/compatibility",
+        title: t("Compatibility"),
+        keywords: searchTerms(msg("plex version compatibility")),
       },
     ],
     keywords: searchTerms(msg("settings plex apps protocols")),
@@ -311,14 +326,44 @@ export const PAGES = localized<PageDef[]>(() => [
         title: t("Integrations"),
         keywords: searchTerms(msg("status tmdb debrid prowlarr ratings")),
       },
-      { key: "trakt", title: "Trakt", keywords: searchTerms(msg("sync history")) },
-      { key: "simkl", title: "Simkl", keywords: searchTerms(msg("simkl sync history")) },
+      { key: "tmdb", title: "TMDB", keywords: searchTerms(msg("tmdb api key catalogue")) },
+      // Tabs for these only exist once the service is on, so ⌘K lands on the
+      // overview card where it can be enabled or configured.
+      {
+        key: "trakt",
+        href: "/services/overview#trakt",
+        title: "Trakt",
+        keywords: searchTerms(msg("sync history")),
+      },
+      {
+        key: "simkl",
+        href: "/services/overview#simkl",
+        title: "Simkl",
+        keywords: searchTerms(msg("simkl sync history")),
+      },
       {
         key: "llm",
+        href: "/services/overview#llm",
         title: t("Language model"),
         keywords: searchTerms(msg("llm ollama openai recaps search")),
       },
-      { key: "opensubtitles", title: "OpenSubtitles", keywords: searchTerms(msg("subtitles")) },
+      {
+        key: "opensubtitles",
+        href: "/services/overview#opensubtitles",
+        title: "OpenSubtitles",
+        keywords: searchTerms(msg("subtitles")),
+      },
+      {
+        key: "ratings",
+        href: "/services/overview#ratings",
+        title: t("Ratings"),
+        keywords: searchTerms(msg("omdb mdblist imdb rotten badges")),
+      },
+      {
+        key: "introdb",
+        title: "TheIntroDB",
+        keywords: searchTerms(msg("introdb intro credits markers skip")),
+      },
     ],
     keywords: searchTerms(msg("settings integrations")),
   },
@@ -376,7 +421,7 @@ export function destinations(): Destination[] {
   return PAGES.flatMap((p) => [
     { href: p.href, title: p.title, page: t("Page"), keywords: p.keywords, isPage: true },
     ...p.sections.map((s) => ({
-      href: `${p.href}/${s.key}`,
+      href: s.href ?? `${p.href}/${s.key}`,
       title: s.title,
       page: p.title,
       keywords: s.keywords,

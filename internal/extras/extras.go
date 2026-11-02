@@ -146,14 +146,27 @@ func New(o Options) *Service {
 
 func (s *Service) cfg() config.Extras { return s.cfgFn() }
 
+// DefaultResolverCommand is used when the owner enabled trailers but set
+// no resolver command. It is resolved on PATH at use time and never
+// written into the saved config.
+const DefaultResolverCommand = "yt-dlp"
+
+// effectiveCommand returns the command that would run for this config:
+// the configured one, or the yt-dlp default when none is set. The second
+// result reports whether it was found on PATH.
+func (s *Service) effectiveCommand(c config.Extras) (string, bool) {
+	cmd := strings.TrimSpace(c.ResolverCommand)
+	if cmd == "" {
+		cmd = DefaultResolverCommand
+	}
+	_, err := s.look(cmd)
+	return cmd, err == nil
+}
+
 // CommandAvailable reports whether the resolver command source can run.
 func (s *Service) CommandAvailable() bool {
-	c := s.cfg()
-	if strings.TrimSpace(c.ResolverCommand) == "" {
-		return false
-	}
-	_, err := s.look(c.ResolverCommand)
-	return err == nil
+	_, ok := s.effectiveCommand(s.cfg())
+	return ok
 }
 
 // Enabled reports whether any playable extras can be advertised.
@@ -171,7 +184,7 @@ func (s *Service) DisabledReason() string {
 	case s.Enabled():
 		return ""
 	case strings.TrimSpace(c.ResolverCommand) == "":
-		return "extras enabled but no playable source: set extras.resolverCommand to a yt-dlp-compatible tool"
+		return "extras enabled but trailers need yt-dlp installed (or set extras.resolverCommand to a yt-dlp-compatible tool)"
 	default:
 		return fmt.Sprintf("extras resolver command %q not found or not executable", c.ResolverCommand)
 	}
@@ -337,9 +350,11 @@ func (s *Service) resolveCommand(ctx context.Context, e Extra) (Resolved, error)
 	if !cfg.Enabled {
 		return Resolved{}, fmt.Errorf("extras disabled")
 	}
-	if _, err := s.look(cfg.ResolverCommand); strings.TrimSpace(cfg.ResolverCommand) == "" || err != nil {
+	cmd, ok := s.effectiveCommand(cfg)
+	if !ok {
 		return Resolved{}, fmt.Errorf("extras: resolver command unavailable")
 	}
+	cfg.ResolverCommand = cmd
 	// A new command or argument template may choose a different format or
 	// credentials. Do not reuse a URL produced by the previous settings.
 	identity, _ := json.Marshal(struct {

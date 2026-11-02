@@ -113,6 +113,7 @@ export function IntegrationAppCard({
   const switchDisabled = disabled || busy;
   return (
     <article
+      id={identity.id}
       aria-label={label ?? identity.name}
       aria-busy={busy || undefined}
       data-app-id={identity.id}
