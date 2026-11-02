@@ -224,6 +224,14 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   return data as T;
 }
 
+/**
+ * Fetch a streaming console API response (Ask Ether turns) with the same
+ * session and CSRF headers as apiFetch. The caller owns the Response body.
+ */
+export async function apiStream(path: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(API_BASE + path, { ...init, headers: authHeaders(init) });
+}
+
 let routeImagesThroughFetch = false;
 
 /** Load /ether/api images through fetch() even without a token (mock mode). */
