@@ -1327,9 +1327,9 @@ func (l *localFileSource) ReadAt(p []byte, off int64) (int, error) {
 	return l.file.ReadAt(p, off)
 }
 
-func (l *localFileSource) Size() int64           { return l.size }
-func (l *localFileSource) Name() string          { return l.name }
-func (l *localFileSource) ReleaseID() string     { return l.releaseID }
-func (l *localFileSource) Close() error          { return l.file.Close() }
-func (l *localFileSource) LocalFile() *os.File   { return l.file }
-func (l *localFileSource) Origin() string        { return l.origin }
+func (l *localFileSource) Size() int64         { return l.size }
+func (l *localFileSource) Name() string        { return l.name }
+func (l *localFileSource) ReleaseID() string   { return l.releaseID }
+func (l *localFileSource) Close() error        { return l.file.Close() }
+func (l *localFileSource) LocalFile() *os.File { return l.file }
+func (l *localFileSource) Origin() string      { return l.origin }
