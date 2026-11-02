@@ -316,6 +316,18 @@ func (p *Pairing) allowAttempt(addr string) bool {
 	now := p.now()
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if _, exists := p.attempts[host]; !exists && len(p.attempts) >= 4096 {
+		// Evict expired buckets, but never let arbitrary addresses allocate
+		// unbounded state or bypass a live bucket's limit.
+		for key, attempts := range p.attempts {
+			if len(attempts) == 0 || now.Sub(attempts[len(attempts)-1]) >= time.Minute {
+				delete(p.attempts, key)
+			}
+		}
+		if len(p.attempts) >= 4096 {
+			return false
+		}
+	}
 	recent := p.attempts[host][:0]
 	for _, t := range p.attempts[host] {
 		if now.Sub(t) < time.Minute {
