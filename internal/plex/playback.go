@@ -569,7 +569,15 @@ func (s *Server) decisionContainer(ctx context.Context, pr *Request, t *core.Tit
 	// engine decides: PMS answers with the source media as direct play and
 	// only an mdeDecisionCode. Ether's own decision is kept for start.m3u8
 	// in case the client then asks for a stream.
-	mdeDirect := p.mde && p.opts.DirectPlay && len(p.opts.AudioFilters) == 0 && !(onDemandSession(ps) && p.opts.DirectStream && dec.Kind != core.DecisionDirectPlay)
+	//
+	// An on-demand title's metadata is an estimate until it is probed, so
+	// the client's engine may have judged it playable from streams it
+	// does not have (an AC3 track estimated as AAC for a browser). When
+	// Ether's own decision must convert a stream for this client, say so
+	// instead of "Direct play OK", whatever directStream says (#246).
+	mustConvert := dec.Kind == core.DecisionTranscode || (dec.Kind != core.DecisionDirectPlay && (!dec.VideoCopy || !dec.AudioCopy))
+	mdeDirect := p.mde && p.opts.DirectPlay && len(p.opts.AudioFilters) == 0 &&
+		!(onDemandSession(ps) && (mustConvert || (p.opts.DirectStream && dec.Kind != core.DecisionDirectPlay)))
 	shown := dec
 	if mdeDirect {
 		shown = core.Decision{Kind: core.DecisionDirectPlay, VideoCopy: true, AudioCopy: true, Container: ps.Info.Container}
