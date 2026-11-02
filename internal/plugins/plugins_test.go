@@ -367,7 +367,7 @@ func TestKVQuotaAndGrantsRevokeMidCall(t *testing.T) {
 	}
 	// Forge a nearly-full quota by writing one large value past the cap
 	// through the store directly, then confirm the next put is refused.
-	big := bytes.Repeat([]byte("y"), KVQuotaBytes-1024-100)
+	big := bytes.Repeat([]byte("y"), KVQuotaBytes-1024-512-100)
 	if err := h.KVPut(ctx, "big", big); err != nil {
 		t.Fatal(err)
 	}

@@ -364,17 +364,49 @@ func (s *storage) kvGet(ctx context.Context, plugin, key string) ([]byte, bool, 
 }
 
 func (s *storage) kvPut(ctx context.Context, plugin, key string, value []byte) error {
-	var old int64
-	_ = s.db.QueryRowContext(ctx, `SELECT size FROM plugins_kv WHERE plugin=? AND kkey=?`, plugin, key).Scan(&old)
-	used, err := s.kvUsed(ctx, plugin)
+	if len(key) == 0 || len(key) > 256 {
+		return ErrQuotaExceeded
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	if used-old+int64(len(value)) > KVQuotaBytes {
+	defer tx.Rollback()
+	// Lock the plugin grant row across nodes before reading and changing usage.
+	result, err := tx.ExecContext(ctx, `UPDATE plugins_grants SET grants=grants WHERE plugin=?`, plugin)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return ErrPermissionDenied
+	}
+	var old int64
+	err = tx.QueryRowContext(ctx, `SELECT size FROM plugins_kv WHERE plugin=? AND kkey=?`, plugin, key).Scan(&old)
+	exists := err == nil
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	var used int64
+	var count int64
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(size),0),COUNT(*) FROM plugins_kv WHERE plugin=?`, plugin).Scan(&used, &count); err != nil {
+		return err
+	}
+	// A fixed key allowance also bounds Unicode keys on SQLite and PostgreSQL.
+	if !exists {
+		count++
+	}
+	if count > 10000 || used-old+int64(len(value))+count*256 > KVQuotaBytes {
 		return ErrQuotaExceeded
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO plugins_kv(plugin,kkey,value,size) VALUES(?,?,?,?) ON CONFLICT(plugin,kkey) DO UPDATE SET value=excluded.value,size=excluded.size`, plugin, key, value, len(value))
-	return err
+	_, err = tx.ExecContext(ctx, `INSERT INTO plugins_kv(plugin,kkey,value,size) VALUES(?,?,?,?) ON CONFLICT(plugin,kkey) DO UPDATE SET value=excluded.value,size=excluded.size`, plugin, key, value, len(value))
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *storage) kvDelete(ctx context.Context, plugin, key string) error {

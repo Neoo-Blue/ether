@@ -180,3 +180,12 @@ func TestPluginViewsAndActionsDoNotExposeSavedSecrets(t *testing.T) {
 		}
 	}
 }
+
+func TestKVRejectsUnboundedKeys(t *testing.T) {
+	env := newTestEnv(t)
+	rec := env.installHello(t, "1.0.0")
+	err := env.m.HostFor(rec.ID).KVPut(context.Background(), strings.Repeat("x", 1<<20), []byte("x"))
+	if err == nil {
+		t.Fatal("accepted a megabyte key with no quota charge")
+	}
+}
