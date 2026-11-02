@@ -25,6 +25,7 @@ import type { QualityProfile, ReleaseRule } from "../../lib/types";
 import { QUALITY_AUDIO, QUALITY_CODECS, QUALITY_SOURCES } from "../settings/schema";
 import { SourceOrderSection } from "../sources/EqualQuality";
 import { AwaySection } from "./AwaySection";
+import { WhoGetsWhat } from "./WhoGetsWhat";
 import { ConfigSection } from "../../components/ConfigSection";
 import { PLAY_VERSIONS } from "../settings/schema";
 import {
@@ -516,6 +517,7 @@ export function QualityTab() {
         commit={commit}
         refresh={refresh}
       />
+      <WhoGetsWhat refreshKey={quality} />
       <AwaySection quality={quality} onSaved={refresh} />
       <SourceOrderSection />
       <ConfigSection
