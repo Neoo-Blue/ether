@@ -114,6 +114,7 @@ type Channel struct {
 type Source struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
+	Kind        string `json:"kind,omitempty"`
 	PlaylistURL string `json:"playlistUrl,omitempty"`
 	GuideURL    string `json:"guideUrl,omitempty"`
 	// Inline uploads are supplied on import and are not returned by GET.

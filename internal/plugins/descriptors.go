@@ -57,12 +57,29 @@ func DescriptorsFor(man Manifest) []extend.Descriptor {
 			"operators": rc.Operators, "editor": rc.Editor})
 	}
 	for _, ls := range c.ListSources {
-		meta := map[string]any{"catalog": ls.Catalog, "params": ls.Params, "maxItems": ls.MaxItems, "refresh": ls.Refresh, "hint": ls.Hint}
-		add(extend.KindCollectionSource, ls.Key, textOf(id, ls.Label), meta)
-		add(extend.KindRowSource, ls.Key, textOf(id, ls.Label), meta)
+		pid := extend.PluginID(id, ls.Key)
+		meta := map[string]any{
+			"catalog":          ls.Catalog,
+			"params":           ls.Params,
+			"maxItems":         ls.MaxItems,
+			"refresh":          ls.Refresh,
+			"hint":             ls.Hint,
+			"hubId":            pid,
+			"rowKind":          pid,
+			"collectionSource": pid,
+			"sections":         []string{"home", "movies", "shows"},
+		}
+		dCol := extend.Descriptor{Kind: extend.KindCollectionSource, ID: pid, Owner: id, Label: textOf(id, ls.Label), Group: man.Name}
+		dRow := extend.Descriptor{Kind: extend.KindRowSource, ID: pid, Owner: id, Label: textOf(id, ls.Label), Group: man.Name}
+		if ls.Hint != "" {
+			h := textOf(id, ls.Hint)
+			dCol.Hint, dRow.Hint = h, h
+		}
+		out = append(out, dCol.WithMeta(meta), dRow.WithMeta(meta))
 	}
 	if man.HasCapability(CapLiveTV) && c.Channels != nil {
-		add(extend.KindLiveTVSource, "channels", textOf(id, man.Name), map[string]any{"refresh": c.Channels.Refresh})
+		add(extend.KindLiveTVSource, "channels", textOf(id, man.Name), map[string]any{
+			"refresh": c.Channels.Refresh, "yieldsChannels": true, "yieldsGuide": true})
 	}
 	if man.HasCapability(CapNotify) && c.Notification != nil {
 		add(extend.KindChannelKind, "notify", textOf(id, man.Name), map[string]any{
@@ -119,6 +136,12 @@ func (m *Manager) syncDescriptors(ctx context.Context, r Record) {
 		if err := m.deps.Tools.ReplaceOwner(r.ID, ts); err != nil {
 			m.log.Warn("plugins: tool sync", "plugin", r.ID, "err", err)
 		}
+	}
+	m.mu.Lock()
+	hooks := append([]func(context.Context, Record){}, m.syncHooks...)
+	m.mu.Unlock()
+	for _, fn := range hooks {
+		fn(ctx, r)
 	}
 }
 

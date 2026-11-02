@@ -347,9 +347,23 @@ export function SourceEditor({
             {pluginKinds.length ? (
               <div className="flex flex-wrap items-center gap-1.5">
                 {pluginKinds.map((d) => (
-                  <Badge key={d.id} variant="secondary">
-                    {t("{label} (from {owner})", { label: textOf(d.label), owner: d.owner })}
-                  </Badge>
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => {
+                      setKind("playlist");
+                      setDraft((s) => ({
+                        ...s,
+                        playlistUrl: d.id,
+                        playlist: "",
+                        name: s.name || textOf(d.label),
+                      }));
+                    }}
+                  >
+                    <Badge variant={draft.playlistUrl === d.id ? "default" : "secondary"}>
+                      {t("{label} (from {owner})", { label: textOf(d.label), owner: d.owner })}
+                    </Badge>
+                  </button>
                 ))}
               </div>
             ) : null}

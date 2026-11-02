@@ -59,14 +59,15 @@ type Deps struct {
 
 // Manager is the plugin host. It is safe for concurrent use.
 type Manager struct {
-	store    *storage
-	deps     Deps
-	log      *slog.Logger
-	now      func() time.Time
-	client   *http.Client
-	mu       sync.Mutex
-	fatories map[string]RuntimeFactory
-	runtimes map[string]Runtime
+	store     *storage
+	deps      Deps
+	log       *slog.Logger
+	now       func() time.Time
+	client    *http.Client
+	mu        sync.Mutex
+	fatories  map[string]RuntimeFactory
+	runtimes  map[string]Runtime
+	syncHooks []func(ctx context.Context, r Record)
 	// schedule bookkeeping: "plugin|call" -> next run
 	nextRun map[string]time.Time
 	// rate-limit bookkeeping for host log and notify
@@ -111,6 +112,31 @@ func (m *Manager) Start(ctx context.Context) error {
 		m.syncDescriptors(ctx, r)
 	}
 	return nil
+}
+
+// OnSync registers a callback notified whenever a plugin's enabled state or
+// manifest changes (install, update, rollback, enable, disable, auto-disable,
+// or remove). Any already-installed plugins are synced immediately.
+func (m *Manager) OnSync(fn func(ctx context.Context, r Record)) {
+	if fn == nil {
+		return
+	}
+	m.mu.Lock()
+	m.syncHooks = append(m.syncHooks, fn)
+	m.mu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if recs, err := m.store.list(ctx); err == nil {
+		for _, r := range recs {
+			fn(ctx, r)
+		}
+	}
+}
+
+// RecordFailure reports an adapter-observed failure (such as an HTTP 5xx or
+// malformed payload) into the plugin's health record and failure policy.
+func (m *Manager) RecordFailure(ctx context.Context, pluginID, reason string) {
+	m.recordFailure(ctx, pluginID, reason, false)
 }
 
 // RegisterRuntime adds a runtime factory for a runtime kind ("hosted" or
@@ -278,7 +304,7 @@ func DeadlineFor(path string) time.Duration {
 		return 15 * time.Second
 	case strings.HasPrefix(path, "/ether/options"), strings.HasPrefix(path, "/ether/view"):
 		return 2 * time.Second
-	case strings.HasPrefix(path, "/ether/open"):
+	case strings.HasPrefix(path, "/ether/open"), strings.HasPrefix(path, "/stream/"):
 		return 3 * time.Second
 	case strings.HasPrefix(path, "/ether/tool"):
 		return 15 * time.Second
@@ -496,7 +522,8 @@ func (m *Manager) SetShadow(ctx context.Context, id string, shadow bool) error {
 // live journal inverse is replayed), then purges KV, secrets, grants,
 // artifacts, logs and its registry entries.
 func (m *Manager) Remove(ctx context.Context, id string, undoFirst bool) error {
-	if _, err := m.store.record(ctx, id); err != nil {
+	r, err := m.store.record(ctx, id)
+	if err != nil {
 		return err
 	}
 	if undoFirst {
@@ -505,6 +532,8 @@ func (m *Manager) Remove(ctx context.Context, id string, undoFirst bool) error {
 		}
 	}
 	m.closeRuntime(id)
+	r.Enabled = false
+	m.syncDescriptors(ctx, r)
 	if m.deps.Registry != nil {
 		m.deps.Registry.RemoveOwner(id)
 	}
