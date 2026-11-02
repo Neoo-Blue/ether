@@ -13,6 +13,7 @@ import (
 )
 
 type candidate struct {
+	pluginKeys map[string]int64
 	policy     releasepolicy.Result
 	rel        core.Release
 	trace      int

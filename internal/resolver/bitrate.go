@@ -251,6 +251,10 @@ func compareCandidates(a, b candidate, profile core.QualityProfile) bool {
 	defaultTail := hasDefaultScoreTail(ladder)
 	for _, step := range ladder {
 		switch {
+		case core.IsPluginRankingStep(step):
+			if ak, bk := a.pluginKeys[step], b.pluginKeys[step]; ak != bk {
+				return ak > bk
+			}
 		case strings.HasPrefix(step, core.RankRulePrefix):
 			id := strings.TrimPrefix(step, core.RankRulePrefix)
 			if ap, bp := a.policy.PreferRule(id), b.policy.PreferRule(id); ap != bp {
