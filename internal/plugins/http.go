@@ -26,6 +26,8 @@ func (m *Manager) Handler() http.Handler {
 	mux.HandleFunc("POST /{id}/enable", m.handleEnable)
 	mux.HandleFunc("POST /{id}/disable", m.handleDisable)
 	mux.HandleFunc("PUT /{id}/grants", m.handleGrants)
+	mux.HandleFunc("GET /{id}/auto-update", m.handleGetAutoUpdate)
+	mux.HandleFunc("PUT /{id}/auto-update", m.handlePutAutoUpdate)
 	mux.HandleFunc("POST /{id}/shadow", m.handleShadow)
 	mux.HandleFunc("GET /{id}/shadow", m.handleShadowReport)
 	mux.HandleFunc("GET /{id}/journal", m.handleJournal)
@@ -268,7 +270,32 @@ func (m *Manager) handlePreview(w http.ResponseWriter, r *http.Request) {
 func (m *Manager) handleInstall(w http.ResponseWriter, r *http.Request) {
 	var src Source
 	var opts InstallOptions
-	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/octet-stream") ||
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		r.Body = http.MaxBytesReader(w, r.Body, 64<<20)
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			writeErr(w, http.StatusBadRequest, "invalid", "The package could not be read.", nil)
+			return
+		}
+		defer r.MultipartForm.RemoveAll()
+		file, _, err := r.FormFile("package")
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "invalid", "The package is missing.", nil)
+			return
+		}
+		defer file.Close()
+		b, err := io.ReadAll(file)
+		if err != nil {
+			m.fail(w, err)
+			return
+		}
+		var req installRequest
+		if err := json.Unmarshal([]byte(r.FormValue("options")), &req); err != nil {
+			writeErr(w, http.StatusBadRequest, "invalid", "The request was not understood.", nil)
+			return
+		}
+		src = Source{Kind: "pkg", Pkg: b}
+		opts = InstallOptions{Grants: req.Grants, Settings: req.Settings, AutoUpdate: req.AutoUpdate, Shadow: req.Shadow, AcceptAddedPermissions: req.AcceptAddedPermissions}
+	} else if strings.HasPrefix(r.Header.Get("Content-Type"), "application/octet-stream") ||
 		strings.HasPrefix(r.Header.Get("Content-Type"), "application/zip") {
 		b, err := io.ReadAll(io.LimitReader(r.Body, 64<<20))
 		if err != nil {
@@ -297,6 +324,37 @@ func (m *Manager) handleInstall(w http.ResponseWriter, r *http.Request) {
 	}
 	h, _ := m.store.health(r.Context(), rec.ID)
 	writeJSON(w, http.StatusCreated, m.summary(rec, h.Status))
+}
+
+func (m *Manager) handleGetAutoUpdate(w http.ResponseWriter, r *http.Request) {
+	rec, err := m.store.record(r.Context(), r.PathValue("id"))
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"autoUpdate": rec.AutoUpdate})
+}
+
+func (m *Manager) handlePutAutoUpdate(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		AutoUpdate *bool `json:"autoUpdate"`
+	}
+	if err := decode(r, &body); err != nil || body.AutoUpdate == nil {
+		writeErr(w, http.StatusBadRequest, "invalid", "The request was not understood.", nil)
+		return
+	}
+	rec, err := m.store.record(r.Context(), r.PathValue("id"))
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	rec.AutoUpdate = *body.AutoUpdate
+	if err := m.store.upsert(r.Context(), rec); err != nil {
+		m.fail(w, err)
+		return
+	}
+	m.broadcast(r.Context())
+	writeJSON(w, http.StatusOK, map[string]any{"autoUpdate": rec.AutoUpdate})
 }
 
 func (m *Manager) handleGetSettings(w http.ResponseWriter, r *http.Request) {
