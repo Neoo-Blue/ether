@@ -52,7 +52,19 @@ __attribute__((export_name("handle")))
 u64 handle(u32 ptr, u32 len) {
   const char *in = (const char *)(unsigned long)ptr;
   if (contains(in, len, "/loop")) { for (;;) {} }
-  if (contains(in, len, "/oom")) { for (;;) { if (__builtin_wasm_memory_grow(0, 256) < 0) break; } }
+  if (contains(in, len, "/oom")) {
+    for (;;) { if ((long)__builtin_wasm_memory_grow(0, 256) < 0) break; }
+    static char oresp[128];
+    const char *h = "{\"status\":200,\"headers\":{},\"body\":\"pages:";
+    u32 o = 0; for (u32 i = 0; h[i]; i++) oresp[o++] = h[i];
+    unsigned long pages = __builtin_wasm_memory_size(0);
+    char num[16]; int nl = 0;
+    if (pages == 0) num[nl++] = '0';
+    while (pages > 0) { num[nl++] = (char)('0' + pages % 10); pages /= 10; }
+    for (int i = nl - 1; i >= 0; i--) oresp[o++] = num[i];
+    oresp[o++] = '"'; oresp[o++] = '}';
+    return pack(oresp, o);
+  }
   if (contains(in, len, "/abort")) { ether_abort(7); }
   ether_log((u32)(unsigned long)"raw handle", 10);
   if (contains(in, len, "/host")) {

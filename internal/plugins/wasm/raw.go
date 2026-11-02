@@ -90,6 +90,13 @@ func goLog(ctx context.Context, mod api.Module, stack []uint64) {
 }
 
 func goAbort(ctx context.Context, mod api.Module, stack []uint64) {
+	// Record the abort on the call state, then unwind. Wazero recovers
+	// host panics into errors, so the flag is how rawCall tells an abort
+	// from an ordinary trap.
+	if cs := callStateOf(ctx); cs != nil {
+		cs.aborted = true
+		cs.abortCode = uint32(stack[0])
+	}
 	panic(abortPanic{code: uint32(stack[0])})
 }
 
@@ -157,18 +164,20 @@ func (e *Engine) LoadWASM(id, version string, module []byte, host Host, lim Limi
 	p := &Plugin{id: id, version: version, eng: e, host: host, lim: lim, memo: newMemo(4096)}
 	makeSvc := func() (instance, error) { return newRawInstance(rr, cm, false) }
 	makeHot := func() (instance, error) { return newRawInstance(rr, cm, true) }
-	probe, err := makeSvc()
+	p.svc = newPool(lim.PoolSize, makeSvc)
+	p.hot = newPool(lim.PoolSize, makeHot)
+	probe, err := p.svc.get(context.Background())
 	if err != nil {
+		p.Close()
 		return nil, err
 	}
 	p.caps = probe.caps()
-	p.svc = newPool(lim.PoolSize, makeSvc)
-	p.hot = newPool(lim.PoolSize, makeHot)
 	p.svc.put(probe, true)
 	if !p.caps.Handle && !p.caps.RankKey && !p.caps.CondMatch {
 		p.Close()
 		return nil, &Error{Status: StatusError, Message: "module exports none of handle, rank_key, cond_match"}
 	}
+	p.warmHot()
 	return p, nil
 }
 
@@ -229,6 +238,9 @@ func (in *rawInstance) rawCall(ctx context.Context, fn api.Function, args ...uin
 	}()
 	res, err := fn.Call(ctx, args...)
 	if err != nil {
+		if cs := callStateOf(ctx); cs != nil && cs.aborted {
+			return nil, &Error{Status: StatusAborted, Message: fmt.Sprintf("plugin aborted with code %d", cs.abortCode), Trap: true}
+		}
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
 			return nil, &Error{Status: StatusTimeout, Message: "call exceeded its deadline", Trap: true}
 		}

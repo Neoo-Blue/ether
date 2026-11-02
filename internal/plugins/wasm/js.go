@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/fastschema/qjs"
@@ -95,7 +96,10 @@ globalThis.console = { log: (...a) => ether.log(...a), error: (...a) => ether.lo
 const hotPrelude = `
 "use strict";
 globalThis.ether = (() => {
-  const now = globalThis.__ether_now_ms;
+  // Capture the real clock for budget checks before it is replaced. It
+  // lives only in this closure; plugin code sees the frozen Date below,
+  // and a host-function clock would cost a boundary crossing per check.
+  const now = Date.now.bind(Date);
   globalThis.__ether_now_ms = undefined;
   let state = 0x2545F491;
   const nextRandom = () => { state = (state * 1103515245 + 12345) & 0x7fffffff; return state / 0x80000000; };
@@ -135,9 +139,34 @@ const exportProbe = `
 })()
 `
 
+// swapCtx is a context whose target can be swapped atomically per call.
+// qjs calls wasm functions with its stored Context value; giving it a
+// swapCtx lets one pooled instance take per-call deadlines (which close
+// the module on expiry) without racing wazero's cancellation watcher.
+type swapCtx struct {
+	cur atomic.Pointer[context.Context]
+}
+
+func newSwapCtx() *swapCtx {
+	s := &swapCtx{}
+	bg := context.Background()
+	s.cur.Store(&bg)
+	return s
+}
+
+func (s *swapCtx) set(ctx context.Context) { s.cur.Store(&ctx) }
+func (s *swapCtx) reset()                  { s.set(context.Background()) }
+func (s *swapCtx) Deadline() (time.Time, bool) {
+	return (*s.cur.Load()).Deadline()
+}
+func (s *swapCtx) Done() <-chan struct{} { return (*s.cur.Load()).Done() }
+func (s *swapCtx) Err() error            { return (*s.cur.Load()).Err() }
+func (s *swapCtx) Value(key any) any     { return (*s.cur.Load()).Value(key) }
+
 type jsInstance struct {
 	rt           *qjs.Runtime
 	qc           *qjs.Context
+	swap         *swapCtx
 	instanceCaps caps
 	hot          bool
 	cs           *callState // set for the duration of one call
@@ -149,13 +178,14 @@ func newJSInstance(source string, lim *Limits, hot bool) (in *jsInstance, err er
 			in, err = nil, &Error{Status: StatusError, Message: fmt.Sprintf("create JS instance: %v", r), Trap: true}
 		}
 	}()
-	rt, err2 := qjs.New(qjs.Option{Context: context.Background(), CloseOnContextDone: true,
+	swap := newSwapCtx()
+	rt, err2 := qjs.New(qjs.Option{Context: swap, CloseOnContextDone: true,
 		MemoryLimit: int(lim.MemoryBytes), MaxStackSize: 1 << 20,
 		Stdout: io.Discard, Stderr: io.Discard})
 	if err2 != nil {
 		return nil, &Error{Status: StatusError, Message: "create JS runtime: " + err2.Error(), Trap: true}
 	}
-	in = &jsInstance{rt: rt, qc: rt.Context(), hot: hot}
+	in = &jsInstance{rt: rt, qc: rt.Context(), swap: swap, hot: hot}
 	qc := in.qc
 	qc.SetFunc("__ether_host", func(this *qjs.This) (*qjs.Value, error) {
 		args := this.Args()
@@ -219,10 +249,10 @@ func (in *jsInstance) closeInstance() {
 // (it panics when a deadline closes the module mid-call) into *Error.
 func (in *jsInstance) jsCall(ctx context.Context, cs *callState, fn func() (*qjs.Value, error)) (val *qjs.Value, callErr *Error) {
 	in.cs = cs
-	in.qc.Context = ctx
+	in.swap.set(ctx)
 	defer func() {
 		in.cs = nil
-		in.qc.Context = context.Background()
+		in.swap.reset()
 		if r := recover(); r != nil {
 			val = nil
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
@@ -324,7 +354,7 @@ func (in *jsInstance) condOne(ctx context.Context, cs *callState, cand []byte, o
 	if err != nil {
 		return false, err
 	}
-	return v.String() == "true", nil
+	return v.Bool(), nil
 }
 
 // LoadJS loads a JavaScript plugin (TypeScript authors go through Compile
@@ -345,18 +375,20 @@ func (e *Engine) LoadJS(id, version, source string, host Host, lim Limits) (*Plu
 		return in, nil
 	}
 	makeHot := func() (instance, error) { return newJSInstance(source, &p.lim, true) }
-	probe, err := makeSvc()
+	p.svc = newPool(lim.PoolSize, makeSvc)
+	p.hot = newPool(lim.PoolSize, makeHot)
+	probe, err := p.svc.get(context.Background())
 	if err != nil {
+		p.Close()
 		return nil, err
 	}
 	p.caps = probe.caps()
-	p.svc = newPool(lim.PoolSize, makeSvc)
-	p.hot = newPool(lim.PoolSize, makeHot)
 	p.svc.put(probe, true)
 	if !p.caps.Handle && !p.caps.RankKey && !p.caps.CondMatch {
 		p.Close()
 		return nil, &Error{Status: StatusError, Message: "plugin defines none of handle, rank_key, cond_match"}
 	}
+	p.warmHot()
 	return p, nil
 }
 

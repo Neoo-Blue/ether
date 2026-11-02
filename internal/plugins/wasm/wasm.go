@@ -209,17 +209,19 @@ func (c *counters) snapshot() Stats {
 // instance serves one call at a time, so no locking is needed beyond the
 // exceeded flag (read after the call from the same goroutine).
 type callState struct {
-	ctx      context.Context
-	host     Host
-	lim      *Limits
-	start    time.Time
-	last     time.Time
-	units    int64
-	logs     int
-	hot      bool
-	exceeded bool
-	logger   *slog.Logger
-	pluginID string
+	ctx       context.Context
+	host      Host
+	lim       *Limits
+	start     time.Time
+	last      time.Time
+	units     int64
+	logs      int
+	hot       bool
+	exceeded  bool
+	aborted   bool
+	abortCode uint32
+	logger    *slog.Logger
+	pluginID  string
 }
 
 func (cs *callState) chargeWall() {
