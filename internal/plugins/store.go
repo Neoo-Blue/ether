@@ -160,6 +160,24 @@ func (s *storage) record(ctx context.Context, id string) (Record, error) {
 	if err != nil {
 		return Record{}, err
 	}
+	if r.SourceURL != "" {
+		plain, legacy, err := config.OpenWith(s.sealer, r.SourceURL, "plugins_installed", "source_url", r.ID)
+		if err != nil {
+			return Record{}, err
+		}
+		if legacy && s.sealer != nil {
+			sealed, err := config.SealWith(s.sealer, plain, "plugins_installed", "source_url", r.ID)
+			if err != nil {
+				return Record{}, err
+			}
+			if sealed != r.SourceURL {
+				if _, err = s.db.ExecContext(ctx, `UPDATE plugins_installed SET source_url=? WHERE id=? AND source_url=?`, sealed, r.ID, r.SourceURL); err != nil {
+					return Record{}, err
+				}
+			}
+		}
+		r.SourceURL = plain
+	}
 	r.ManifestRaw = json.RawMessage(man)
 	if err := json.Unmarshal([]byte(man), &r.Manifest); err != nil {
 		return Record{}, fmt.Errorf("plugins: stored manifest for %s: %w", id, err)
@@ -200,9 +218,13 @@ func (s *storage) list(ctx context.Context) ([]Record, error) {
 
 func (s *storage) upsert(ctx context.Context, r Record) error {
 	now := s.now().Unix()
-	_, err := s.db.ExecContext(ctx, `INSERT INTO plugins_installed(id,name,version,kind,manifest,source_kind,source_url,enabled,verified,shadow,auto_update,update_version,update_manifest,update_files,prev_version,installed_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+	sealedURL, err := config.SealWith(s.sealer, r.SourceURL, "plugins_installed", "source_url", r.ID)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO plugins_installed(id,name,version,kind,manifest,source_kind,source_url,enabled,verified,shadow,auto_update,update_version,update_manifest,update_files,prev_version,installed_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(id) DO UPDATE SET name=excluded.name,version=excluded.version,kind=excluded.kind,manifest=excluded.manifest,source_kind=excluded.source_kind,source_url=excluded.source_url,enabled=excluded.enabled,verified=excluded.verified,shadow=excluded.shadow,auto_update=excluded.auto_update,update_version=excluded.update_version,update_manifest=excluded.update_manifest,update_files=excluded.update_files,prev_version=excluded.prev_version,updated_at=excluded.updated_at`,
-		r.ID, r.Name, r.Version, r.Kind, string(r.ManifestRaw), r.SourceKind, r.SourceURL,
+		r.ID, r.Name, r.Version, r.Kind, string(r.ManifestRaw), r.SourceKind, sealedURL,
 		bi(r.Enabled), bi(r.Verified), bi(r.Shadow), bi(r.AutoUpdate), r.UpdateVersion, r.updateManifest, r.updateFiles, r.PrevVersion, timeOr(r.InstalledAt, now), now)
 	return err
 }

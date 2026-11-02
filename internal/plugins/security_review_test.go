@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/braedonsaunders/ether/internal/agent/tools"
+	"github.com/braedonsaunders/ether/internal/config"
 )
 
 func TestHostFetchRejectsRedirectOutsideNetworkGrant(t *testing.T) {
@@ -187,5 +188,68 @@ func TestKVRejectsUnboundedKeys(t *testing.T) {
 	err := env.m.HostFor(rec.ID).KVPut(context.Background(), strings.Repeat("x", 1<<20), []byte("x"))
 	if err == nil {
 		t.Fatal("accepted a megabyte key with no quota charge")
+	}
+}
+
+func TestPluginSourceURLIsSealedAndBoundToPlugin(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	sealer, err := config.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sealer.UpgradeCredentials(ctx); err != nil {
+		t.Fatal(err)
+	}
+	env.m.store.sealer = sealer
+	rec := env.installHello(t, "1.0.0")
+	const secretURL = "https://example.com/private-configuration/manifest.json"
+	rec.SourceURL = secretURL
+	if err := env.m.store.upsert(ctx, rec); err != nil {
+		t.Fatal(err)
+	}
+	var stored string
+	if err := env.m.store.db.QueryRowContext(ctx, `SELECT source_url FROM plugins_installed WHERE id=?`, rec.ID).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(stored, "private-configuration") {
+		t.Fatal("source URL stored unsealed")
+	}
+	if _, _, err := config.OpenWith(sealer, stored, "plugins_installed", "source_url", "other-plugin"); err == nil {
+		t.Fatal("source URL not bound to plugin")
+	}
+	restored, err := env.m.store.record(ctx, rec.ID)
+	if err != nil || restored.SourceURL != secretURL {
+		t.Fatalf("source URL not restored: %v", err)
+	}
+}
+
+func TestInstallFetchDoesNotExposeSecretURL(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	const secret = "private-config-472815"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Error(w, "missing", http.StatusNotFound) }))
+	defer srv.Close()
+	env.m.client = srv.Client()
+	_, err := env.m.fetch(ctx, srv.URL+"/"+secret+"/manifest.json", false, 1024)
+	if err == nil || strings.Contains(err.Error(), secret) {
+		t.Fatalf("fetch error exposed URL: %v", err)
+	}
+}
+
+func TestInstallRedirectDoesNotSendSourceURLAsReferer(t *testing.T) {
+	env := newTestEnv(t)
+	const secret = "private-config-472815"
+	seen := make(chan string, 1)
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { seen <- r.Referer(); w.WriteHeader(http.StatusOK) }))
+	defer target.Close()
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, target.URL, http.StatusFound) }))
+	defer source.Close()
+	env.m.client = source.Client()
+	if _, err := env.m.fetch(context.Background(), source.URL+"/"+secret, false, 1024); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(<-seen, secret) {
+		t.Fatal("source secret sent in redirect Referer")
 	}
 }
