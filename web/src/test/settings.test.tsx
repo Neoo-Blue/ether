@@ -463,7 +463,10 @@ describe("Settings", () => {
 
   it("does not keep a General poster alias", async () => {
     renderApp("/server/posters");
-    expect(await screen.findByRole("heading", { name: "General" }, WAIT)).toBeInTheDocument();
+    expect((await screen.findAllByRole("link", { name: "Overview" }, WAIT)).length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.queryByRole("heading", { name: "General" })).not.toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: "Ether posters" })).not.toBeInTheDocument();
   });
 
