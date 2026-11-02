@@ -322,7 +322,7 @@ func writeTools(d Deps) []tools.Tool {
 		}),
 		tool(tools.Tool{
 			Name: "source_add_stremio", Title: "Add a Stremio add-on", OpenWorld: true,
-			Description: "Ask the owner for a Stremio add-on URL and add it as a source. The URL is collected through a secret card because add-on URLs can carry account keys; never ask for it in chat. Over MCP this returns secret_required: the owner adds it in the console instead.",
+			Description: "Ask the owner for a Stremio add-on URL and add it as a source. The URL is collected through a secret card because add-on URLs can carry account keys; never ask for it in chat. Over MCP this waits for approval and a secret card in the console.",
 			InputSchema: schema(map[string]any{}),
 			Execute: func(_ context.Context, _ tools.Principal, _ map[string]any) (tools.Result, error) {
 				return tools.Result{
@@ -330,7 +330,7 @@ func writeTools(d Deps) []tools.Tool {
 					Secret: &tools.SecretRequest{
 						ProviderLabel:   "Stremio add-on",
 						CredentialLabel: "Add-on URL",
-						Purpose:         "Add this Stremio add-on as a release source. The address can carry an account key, so it is stored sealed and never shown again.",
+						Purpose:         "Adds this Stremio add-on as a release source. The address is stored securely and never shown in chat.",
 						Store: func(ctx context.Context, value string) error {
 							value = strings.TrimSpace(value)
 							u, err := url.Parse(value)

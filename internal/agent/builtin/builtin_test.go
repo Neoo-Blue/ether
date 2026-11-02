@@ -207,7 +207,7 @@ func (f *fakeEnv) Tail(limit int, level, query string) []builtin.LogLine {
 			Time:    time.Date(2026, 11, 2, 2, 4, 0, 0, time.UTC),
 			Level:   "warn",
 			Message: "article missing on provider X-Plex-Token=supersecret123",
-			Attrs:   map[string]string{"Authorization": "Bearer ethg_secret_token_value"},
+			Attrs:   map[string]string{"Authorization": "Bearer ethg_secret_token_value", "password": "plain-password-value"},
 		},
 	}
 }
@@ -235,13 +235,13 @@ func (f *fakeEnv) Get(ctx context.Context, key core.RatingKey) (*core.Title, err
 	}, nil
 }
 
-func (f *fakeEnv) List(ctx context.Context, user *core.User, t core.MediaType) ([]core.Collection, error) {
+func (f *fakeEnv) SnapshotList(ctx context.Context, offset, limit int) ([]core.Collection, error) {
 	return []core.Collection{
 		{Key: core.CollectionKey(10), Title: "90s Thrillers", Kind: "smart", Type: core.TypeMovie, ChildCount: 14},
 	}, nil
 }
 
-func (f *fakeEnv) Items(ctx context.Context, user *core.User, key core.RatingKey, offset, limit int) (core.Page, error) {
+func (f *fakeEnv) SnapshotItems(ctx context.Context, key core.RatingKey, offset, limit int) (core.Page, error) {
 	if key != core.CollectionKey(10) {
 		return core.Page{}, core.ErrNotFound
 	}
@@ -432,6 +432,26 @@ func TestBuiltinCatalogueAndSchemaInvariants(t *testing.T) {
 		if sch["type"] != "object" || sch["additionalProperties"] != false {
 			t.Errorf("%s: top-level schema must have type=object and additionalProperties=false, got %v", tl.Name, sch)
 		}
+		var checkArrays func(map[string]any)
+		checkArrays = func(node map[string]any) {
+			if node["type"] == "array" {
+				max, ok := node["maxItems"].(float64)
+				if !ok || max < 1 || max > 200 {
+					t.Errorf("%s: unbounded array: %v", tl.Name, node)
+				}
+			}
+			if item, ok := node["items"].(map[string]any); ok {
+				checkArrays(item)
+			}
+			if props, ok := node["properties"].(map[string]any); ok {
+				for _, value := range props {
+					if child, ok := value.(map[string]any); ok {
+						checkArrays(child)
+					}
+				}
+			}
+		}
+		checkArrays(sch)
 		props, _ := sch["properties"].(map[string]any)
 		if ps, ok := props["pageSize"].(map[string]any); ok {
 			if mx, _ := ps["maximum"].(float64); mx > 50 || mx < 1 {
@@ -485,7 +505,7 @@ func TestReadToolsNeverMutate(t *testing.T) {
 		"logs_tail":          {"lines": 20, "level": "warn"},
 		"catalog_search":     {"query": "Heat", "type": "movie", "limit": 5},
 		"title_details":      {"titleKey": fmt.Sprint(int64(core.MovieKey(550)))},
-		"collection_list":    {"type": "movie"},
+		"collection_list":    {},
 		"collection_preview": {"collectionKey": fmt.Sprint(int64(core.CollectionKey(10))), "limit": 5},
 		"livetv_channels":    {"onlyFailing": true},
 		"sources_list":       {},
@@ -514,7 +534,7 @@ func TestReadToolsNeverMutate(t *testing.T) {
 		t.Fatal(err)
 	}
 	encoded, _ := json.Marshal(res.Data)
-	if strings.Contains(string(encoded), "supersecret123") || strings.Contains(string(encoded), "ethg_secret_token_value") {
+	if strings.Contains(string(encoded), "supersecret123") || strings.Contains(string(encoded), "ethg_secret_token_value") || strings.Contains(string(encoded), "plain-password-value") {
 		t.Fatalf("logs_tail leaked secret: %s", string(encoded))
 	}
 

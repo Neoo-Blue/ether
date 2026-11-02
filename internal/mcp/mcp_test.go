@@ -76,10 +76,10 @@ func (s *stubServices) Search(ctx context.Context, query string, types []core.Me
 func (s *stubServices) Get(ctx context.Context, key core.RatingKey) (*core.Title, error) {
 	return nil, core.ErrNotFound
 }
-func (s *stubServices) List(ctx context.Context, user *core.User, t core.MediaType) ([]core.Collection, error) {
+func (s *stubServices) SnapshotList(ctx context.Context, offset, limit int) ([]core.Collection, error) {
 	return nil, nil
 }
-func (s *stubServices) Items(ctx context.Context, user *core.User, key core.RatingKey, offset, limit int) (core.Page, error) {
+func (s *stubServices) SnapshotItems(ctx context.Context, key core.RatingKey, offset, limit int) (core.Page, error) {
 	return core.Page{}, core.ErrNotFound
 }
 func (s *stubServices) Generate(ctx context.Context, prompt, mediaType string) (*core.CollectionSpec, string, error) {
@@ -239,6 +239,13 @@ func TestMCPBoundaryAuthResourcesAndScopes(t *testing.T) {
 		t.Fatalf("expected 421 for bad Host, got %d", badHostRec.Code)
 	}
 
+	localHostReq := httptest.NewRequest(http.MethodPost, "http://attacker.local/ether/mcp", strings.NewReader(`{}`))
+	localHostRec := httptest.NewRecorder()
+	h.ServeHTTP(localHostRec, localHostReq)
+	if localHostRec.Code != http.StatusMisdirectedRequest {
+		t.Fatalf("unconfigured local hostname: %d", localHostRec.Code)
+	}
+
 	badOriginReq := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:32400/ether/mcp", strings.NewReader(`{}`))
 	badOriginReq.Header.Set("Origin", "https://evil.example.com")
 	badOriginRec := httptest.NewRecorder()
@@ -271,8 +278,8 @@ func TestMCPBoundaryAuthResourcesAndScopes(t *testing.T) {
 
 	_, resListBody := postRPC(t, h, "tok-read", "resources/list", nil)
 	resources := resListBody["result"].(map[string]any)["resources"].([]any)
-	if len(resources) != 4 {
-		t.Fatalf("expected 4 static resources, got %d", len(resources))
+	if len(resources) != 5 {
+		t.Fatalf("expected 5 static resources, got %d", len(resources))
 	}
 
 	_, schemaReadBody := postRPC(t, h, "tok-read", "resources/read", map[string]any{"uri": "ether://schemas/plugin-manifest"})
@@ -334,14 +341,14 @@ func TestMCPBoundaryAuthResourcesAndScopes(t *testing.T) {
 		t.Fatalf("unexpected approval_status: %v", statusStructured)
 	}
 
-	// 6. source_add_stremio over MCP returns secret_required.
+	// 6. source_add_stremio over MCP requires console approval.
 	_, secBody := postRPC(t, h, "tok-full", "tools/call", map[string]any{
 		"name":      "source_add_stremio",
 		"arguments": map[string]any{},
 	})
 	secStructured := secBody["result"].(map[string]any)["structuredContent"].(map[string]any)
-	if secStructured["status"] != "secret_required" {
-		t.Fatalf("expected secret_required, got %v", secStructured)
+	if secStructured["status"] != "pending_approval" {
+		t.Fatalf("expected pending_approval, got %v", secStructured)
 	}
 
 	if len(audits) == 0 {
@@ -397,6 +404,7 @@ func TestMCPPairingExchangeAndRevocation(t *testing.T) {
 
 	exReq := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:32400/ether/mcp/exchange",
 		strings.NewReader(fmt.Sprintf(`{"code":%q}`, code)))
+	exReq.Header.Set("Content-Type", "application/json")
 	exReq.RemoteAddr = "192.168.1.50:54321"
 	exRec := httptest.NewRecorder()
 	exchangeHandler.ServeHTTP(exRec, exReq)
@@ -413,6 +421,7 @@ func TestMCPPairingExchangeAndRevocation(t *testing.T) {
 	// Single-use: exchanging the same code a second time fails with 401.
 	exReq2 := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:32400/ether/mcp/exchange",
 		strings.NewReader(fmt.Sprintf(`{"code":%q}`, code)))
+	exReq2.Header.Set("Content-Type", "application/json")
 	exReq2.RemoteAddr = "192.168.1.50:54321"
 	exRec2 := httptest.NewRecorder()
 	exchangeHandler.ServeHTTP(exRec2, exReq2)
@@ -426,17 +435,33 @@ func TestMCPPairingExchangeAndRevocation(t *testing.T) {
 		t.Fatalf("Authenticate(token) = %+v, err=%v", principal, err)
 	}
 
-	// 2. Pair a second client with read scope and use the short code directly as Bearer credential.
+	// Pairing codes never authenticate, before or after exchange.
+	if _, err := pairing.Authenticate(ctx, code); err == nil {
+		t.Fatal("redeemed code authenticated")
+	}
 	pairReq2 := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:32400/pair", strings.NewReader(`{"name":"Cursor","scope":"read"}`))
 	pairRec2 := httptest.NewRecorder()
 	consoleHandler.ServeHTTP(pairRec2, pairReq2)
 	var pairData2 map[string]any
 	_ = json.Unmarshal(pairRec2.Body.Bytes(), &pairData2)
 	code2 := pairData2["code"].(string)
-
-	principal2, err := pairing.Authenticate(ctx, code2)
+	if _, err := pairing.Authenticate(ctx, code2); err == nil {
+		t.Fatal("unredeemed code authenticated")
+	}
+	req2 := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:32400/ether/mcp/exchange", strings.NewReader(fmt.Sprintf(`{"code":%q}`, code2)))
+	req2.Header.Set("Content-Type", "application/json")
+	req2.RemoteAddr = "192.168.1.51:1234"
+	rec2 := httptest.NewRecorder()
+	exchangeHandler.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("read exchange: %d %s", rec2.Code, rec2.Body.String())
+	}
+	var data2 map[string]any
+	_ = json.Unmarshal(rec2.Body.Bytes(), &data2)
+	token2 := data2["token"].(string)
+	principal2, err := pairing.Authenticate(ctx, token2)
 	if err != nil || principal2.HasScope("full") || !principal2.HasScope("read") {
-		t.Fatalf("Authenticate(code2) = %+v, err=%v", principal2, err)
+		t.Fatalf("read principal: %+v %v", principal2, err)
 	}
 
 	// 3. List paired clients via GET /clients and revoke both via DELETE /clients/{id}.
@@ -466,18 +491,75 @@ func TestMCPPairingExchangeAndRevocation(t *testing.T) {
 	if _, err := pairing.Authenticate(ctx, token); err == nil {
 		t.Fatal("expected revoked token to fail Authenticate")
 	}
-	if _, err := pairing.Authenticate(ctx, code2); err == nil {
-		t.Fatal("expected revoked direct code to fail Authenticate")
+	if _, err := pairing.Authenticate(ctx, token2); err == nil {
+		t.Fatal("expected revoked read grant to fail Authenticate")
+	}
+
+	// Concurrent exchange attempts can issue only one grant.
+	concurrentPair := httptest.NewRecorder()
+	consoleHandler.ServeHTTP(concurrentPair, httptest.NewRequest(http.MethodPost, "http://127.0.0.1:32400/pair", strings.NewReader(`{}`)))
+	var concurrentData map[string]any
+	_ = json.Unmarshal(concurrentPair.Body.Bytes(), &concurrentData)
+	concurrentCode := concurrentData["code"].(string)
+	start := make(chan struct{})
+	statuses := make(chan int, 2)
+	for i := 0; i < 2; i++ {
+		go func() {
+			req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:32400/ether/mcp/exchange", strings.NewReader(fmt.Sprintf(`{"code":%q}`, concurrentCode)))
+			req.Header.Set("Content-Type", "application/json")
+			req.RemoteAddr = "10.0.0.44:1234"
+			rec := httptest.NewRecorder()
+			<-start
+			exchangeHandler.ServeHTTP(rec, req)
+			statuses <- rec.Code
+		}()
+	}
+	close(start)
+	success := 0
+	for i := 0; i < 2; i++ {
+		if <-statuses == http.StatusOK {
+			success++
+		}
+	}
+	if success != 1 {
+		t.Fatalf("concurrent successful exchanges = %d", success)
+	}
+
+	// Expired codes cannot be exchanged or used as bearer credentials.
+	expiredPair := httptest.NewRecorder()
+	consoleHandler.ServeHTTP(expiredPair, httptest.NewRequest(http.MethodPost, "http://127.0.0.1:32400/pair", strings.NewReader(`{}`)))
+	var expiredData map[string]any
+	_ = json.Unmarshal(expiredPair.Body.Bytes(), &expiredData)
+	expiredCode := expiredData["code"].(string)
+	now = now.Add(11 * time.Minute)
+	expiredReq := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:32400/ether/mcp/exchange", strings.NewReader(fmt.Sprintf(`{"code":%q}`, expiredCode)))
+	expiredReq.Header.Set("Content-Type", "application/json")
+	expiredRec := httptest.NewRecorder()
+	exchangeHandler.ServeHTTP(expiredRec, expiredReq)
+	if expiredRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expired exchange = %d", expiredRec.Code)
+	}
+	if _, err := pairing.Authenticate(ctx, expiredCode); err == nil {
+		t.Fatal("expired code authenticated")
+	}
+	hostile := httptest.NewRequest(http.MethodPost, "http://evil.example/ether/mcp/exchange", strings.NewReader(`{"code":"BADCODE"}`))
+	hostile.Header.Set("Content-Type", "application/json")
+	hostileRec := httptest.NewRecorder()
+	exchangeHandler.ServeHTTP(hostileRec, hostile)
+	if hostileRec.Code != http.StatusMisdirectedRequest {
+		t.Fatalf("hostile host = %d", hostileRec.Code)
 	}
 
 	// 4. Rate limit on /ether/mcp/exchange: >10 attempts per minute from one IP -> 429.
 	for i := 0; i < 10; i++ {
 		r := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:32400/ether/mcp/exchange", strings.NewReader(`{"code":"BADCODE"}`))
+		r.Header.Set("Content-Type", "application/json")
 		r.RemoteAddr = "10.0.0.99:12345"
 		w := httptest.NewRecorder()
 		exchangeHandler.ServeHTTP(w, r)
 	}
 	r11 := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:32400/ether/mcp/exchange", strings.NewReader(`{"code":"BADCODE"}`))
+	r11.Header.Set("Content-Type", "application/json")
 	r11.RemoteAddr = "10.0.0.99:12345"
 	w11 := httptest.NewRecorder()
 	exchangeHandler.ServeHTTP(w11, r11)

@@ -11,11 +11,8 @@ import (
 // to this server still sends its own Host), and a cross-origin browser
 // caller must be explicitly allowed. Non-browser clients send no Origin.
 //
-// In Go the request URL's host is built from the Host header, so the
-// rebinding defence here is an allowlist shape instead: IP literals,
-// localhost, single-label LAN names, *.local and *.plex.direct pass, plus
-// anything the owner (or a test) explicitly allows. Public DNS names are
-// refused with 421.
+// In Go the request URL's host comes from the Host header, so accept only
+// IP literals, localhost, and explicitly configured server hostnames.
 type boundaryViolation struct {
 	status  int
 	code    int
@@ -37,27 +34,18 @@ func checkBoundary(r *http.Request, allowedHosts, allowedOrigins []string) *boun
 }
 
 func hostAllowed(hostport string, allowed []string) bool {
-	for _, a := range allowed {
-		if strings.EqualFold(strings.TrimSpace(a), hostport) {
-			return true
-		}
-	}
 	host := hostport
 	if h, _, err := net.SplitHostPort(hostport); err == nil {
 		host = h
 	}
-	host = strings.TrimSuffix(strings.Trim(host, "[]"), ".")
-	if host == "localhost" {
+	host = strings.ToLower(strings.TrimSuffix(strings.Trim(host, "[]"), "."))
+	if host == "localhost" || net.ParseIP(host) != nil {
 		return true
 	}
-	if ip := net.ParseIP(host); ip != nil {
-		return true
-	}
-	if !strings.Contains(host, ".") {
-		return true // single-label LAN name such as "ether" or "nas"
-	}
-	if strings.HasSuffix(host, ".local") || strings.HasSuffix(host, ".plex.direct") || strings.HasSuffix(host, ".lan") || strings.HasSuffix(host, ".home") || strings.HasSuffix(host, ".internal") {
-		return true
+	for _, a := range allowed {
+		if strings.EqualFold(strings.TrimSuffix(strings.TrimSpace(a), "."), host) || strings.EqualFold(strings.TrimSpace(a), hostport) {
+			return true
+		}
 	}
 	return false
 }

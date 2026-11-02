@@ -110,6 +110,30 @@ export function McpPairingDrawer({ open, onClose }: { open: boolean; onClose: ()
 
   const endpoint = pairing ? absoluteEndpoint(pairing.endpoint) : "";
   const expires = formatTime(pairing?.expiresAt);
+  const exchangeCommand = pairing
+    ? `curl -sS -X POST '${endpoint}/exchange' -H 'Content-Type: application/json' -d '{"code":"${pairing.code}"}'`
+    : "";
+  const codeCommand = `claude mcp add --transport http ether '${endpoint}' --header "Authorization: Bearer <token>"`;
+  const desktopConfig = JSON.stringify(
+    {
+      mcpServers: {
+        ether: {
+          command: "npx",
+          args: [
+            "-y",
+            "mcp-remote",
+            endpoint,
+            "--allow-http",
+            "--header",
+            "Authorization:${AUTH_HEADER}",
+          ],
+          env: { AUTH_HEADER: "Bearer <token>" },
+        },
+      },
+    },
+    null,
+    2,
+  );
 
   return (
     <Drawer open={open} onClose={onClose} title={t("Connect an AI app")} size="sm">
@@ -163,11 +187,40 @@ export function McpPairingDrawer({ open, onClose }: { open: boolean; onClose: ()
             {t("New code")}
           </Button>
 
-          <ol className="list-decimal space-y-1.5 pl-5 text-sm leading-relaxed text-fg-muted">
-            <li>{t("Open your AI app and add a custom MCP server.")}</li>
-            <li>{t("Paste the server address above as the server URL.")}</li>
-            <li>{t("Enter the pairing code when the app asks for it.")}</li>
-          </ol>
+          <p className="text-sm text-fg-muted">
+            {t(
+              "Run this command on a computer on the same network. Copy the token from the response and keep it private. The code can be exchanged once.",
+            )}
+          </p>
+          <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-bg-subtle p-3 text-xs">
+            {exchangeCommand}
+          </pre>
+          <CopyButton value={exchangeCommand} label={t("Copy exchange command")} />
+          <h4 className="text-sm font-semibold text-fg">Claude Code</h4>
+          <p className="text-sm text-fg-muted">
+            {t(
+              "Replace <token> with the token from the response, then run this command on the same network.",
+            )}
+          </p>
+          <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-bg-subtle p-3 text-xs">
+            {codeCommand}
+          </pre>
+          <CopyButton value={codeCommand} label={t("Copy Claude Code command")} />
+          <h4 className="text-sm font-semibold text-fg">Claude Desktop</h4>
+          <p className="text-sm text-fg-muted">
+            {t(
+              "Install Node.js, then open Claude Desktop settings, Developer, Edit Config. Add this server to the configuration, replace <token> with the token from the response, and restart Claude Desktop. If you already have servers, add only the ether entry to mcpServers.",
+            )}
+          </p>
+          <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-bg-subtle p-3 text-xs">
+            {desktopConfig}
+          </pre>
+          <CopyButton value={desktopConfig} label={t("Copy Claude Desktop configuration")} />
+          <p className="text-sm text-fg-muted">
+            {t(
+              "Claude Desktop custom connectors run in the cloud and cannot reach this local server. The local bridge above connects from your computer.",
+            )}
+          </p>
         </section>
 
         <section aria-label={t("Paired apps")} className="space-y-3">

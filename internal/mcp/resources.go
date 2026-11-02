@@ -33,6 +33,11 @@ func DefaultResources(manifestSchema string) []Resource {
 			MIMEType:    "text/markdown", Text: viewSpecVocabulary,
 		},
 		{
+			URI: "ether://fixtures/viewspec-overview", Name: "ViewSpec overview example",
+			Description: "A small plugin view with a bound heading and statistic.",
+			MIMEType:    "application/json", Text: `{"spec":{"specVersion":1,"layout":"detail","header":[{"kind":"page-header","title":{"$":"title"}}],"body":[{"kind":"stat-tile","iconKey":"layers","accent":"primary","label":"Matched titles","value":{"$":"matchedCount"}}]},"data":{"title":"Overview","matchedCount":"3"}}`,
+		},
+		{
 			URI: "ether://schemas/plugin-manifest", Name: "Plugin manifest JSON Schema",
 			Description: "The JSON Schema for Ether plugin manifests (EPP/1).",
 			MIMEType:    "application/json", Text: manifestSchema,

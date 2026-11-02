@@ -117,8 +117,8 @@ type CatalogService interface {
 }
 
 type CollectionService interface {
-	List(ctx context.Context, user *core.User, t core.MediaType) ([]core.Collection, error)
-	Items(ctx context.Context, user *core.User, key core.RatingKey, offset, limit int) (core.Page, error)
+	SnapshotList(ctx context.Context, offset, limit int) ([]core.Collection, error)
+	SnapshotItems(ctx context.Context, key core.RatingKey, offset, limit int) (core.Page, error)
 	Generate(ctx context.Context, prompt, mediaType string) (*core.CollectionSpec, string, error)
 	CreateSpec(ctx context.Context, sp core.CollectionSpec) (*core.CollectionSpec, error)
 }
@@ -377,7 +377,7 @@ func keyArg(in map[string]any, key string) (core.RatingKey, error) {
 		if f, ok, err := num(in, key); err != nil {
 			return 0, err
 		} else if ok {
-			if f <= 0 || f > 1<<62 {
+			if f <= 0 || f > 1<<62 || float64(int64(f)) != f {
 				return 0, tools.Userf("%s is not a valid title key", key)
 			}
 			return core.RatingKey(int64(f)), nil

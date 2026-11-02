@@ -74,6 +74,17 @@ func TestMCPBuiltinToolsAndEndToEndWorkflow(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Direct or tokenless setup access must not mint owner grants.
+	pairingHandler, err := a.buildMCPPairing()
+	if err != nil {
+		t.Fatal(err)
+	}
+	denied := httptest.NewRecorder()
+	pairingHandler.Handler().ServeHTTP(denied, httptest.NewRequest(http.MethodPost, "http://localhost/pair", strings.NewReader(`{}`)))
+	if denied.Code != http.StatusForbidden {
+		t.Fatalf("missing owner access: %d", denied.Code)
+	}
+
 	// Seed a title, playback history, resolver history trace, and a server log entry.
 	movieKey := core.MovieKey(550)
 	title := core.Title{
@@ -309,4 +320,63 @@ func TestMCPBuiltinToolsAndEndToEndWorkflow(t *testing.T) {
 	if blocked, err := a.resolver.ReleaseBlocked(ctx, "rel-heat-bad"); err != nil || !blocked {
 		t.Fatalf("release should be blocked after owner approval (blocked=%v err=%v)", blocked, err)
 	}
+	// MCP secret-requiring writes wait for approval and then present a secret card.
+	sourceCount := len(a.cfg.Get().Indexers)
+	secretProposal := mcpCall("source_add_stremio", map[string]any{})
+	if secretProposal["status"] != "pending_approval" {
+		t.Fatalf("secret proposal: %v", secretProposal)
+	}
+	secretApproval := secretProposal["approvalId"].(string)
+	var threadID string
+	if err := a.db.QueryRowContext(ctx, `SELECT thread_id FROM agent_approvals WHERE id=?`, secretApproval).Scan(&threadID); err != nil {
+		t.Fatal(err)
+	}
+	approveSecret, _ := http.NewRequest(http.MethodPost, srv.URL+"/ether/api/agent/approvals/"+secretApproval, strings.NewReader(`{"decision":"approved"}`))
+	approveSecret.Header.Set("Authorization", "Bearer "+ownerToken)
+	approveSecret.Header.Set("Content-Type", "application/json")
+	approveSecret.Header.Set("X-Ether-Request", "1")
+	approveSecretResp, err := http.DefaultClient.Do(approveSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	approveSecretResp.Body.Close()
+	if approveSecretResp.StatusCode != http.StatusOK {
+		t.Fatalf("secret approval: %d", approveSecretResp.StatusCode)
+	}
+	pendingSecretStatus := mcpCall("approval_status", map[string]any{"approvalId": secretApproval})
+	if pendingSecretStatus["status"] != "pending_secret" {
+		t.Fatalf("source added prematurely: %v", pendingSecretStatus)
+	}
+	var requestID string
+	if err := a.db.QueryRowContext(ctx, `SELECT id FROM agent_secret_requests WHERE thread_id=? AND status='pending'`, threadID).Scan(&requestID); err != nil {
+		t.Fatal(err)
+	}
+	if len(a.cfg.Get().Indexers) != sourceCount {
+		t.Fatal("source added before secret submission")
+	}
+	const secretURL = "https://example.invalid/key123/manifest.json"
+	secretReq, _ := http.NewRequest(http.MethodPost, srv.URL+"/ether/api/agent/secrets/"+requestID, strings.NewReader(`{"value":"`+secretURL+`"}`))
+	secretReq.Header.Set("Authorization", "Bearer "+ownerToken)
+	secretReq.Header.Set("Content-Type", "application/json")
+	secretReq.Header.Set("X-Ether-Request", "1")
+	secretResp, err := http.DefaultClient.Do(secretReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secretResp.Body.Close()
+	if secretResp.StatusCode != http.StatusOK {
+		t.Fatalf("secret submit: %d", secretResp.StatusCode)
+	}
+	if len(a.cfg.Get().Indexers) != sourceCount+1 {
+		t.Fatal("source was not added after secret submission")
+	}
+	storedSecretStatus := mcpCall("approval_status", map[string]any{"approvalId": secretApproval})
+	if storedSecretStatus["status"] != "approved" {
+		t.Fatalf("source approval after submit: %v", storedSecretStatus)
+	}
+	var leaked int
+	if err := a.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM agent_messages WHERE thread_id=? AND parts LIKE ?`, threadID, "%key123%").Scan(&leaked); err != nil || leaked != 0 {
+		t.Fatalf("secret in transcript: %d %v", leaked, err)
+	}
+
 }

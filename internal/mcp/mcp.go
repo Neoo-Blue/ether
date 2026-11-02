@@ -329,14 +329,12 @@ func (s *Server) callTool(ctx context.Context, r *http.Request, p tools.Principa
 		audit.Status = "proposal"
 		return s.proposalResult(ctx, r, p, tool, result.Proposal), nil
 	case result.Secret != nil:
-		audit.Status = "secret_request"
-		structured := map[string]any{
-			"status":     "secret_required",
-			"message":    "This change needs a credential, which is never collected over MCP. Ask the owner to do it in the Ether console (Ask Ether can start it; the value goes into a secret card there).",
-			"provider":   result.Secret.ProviderLabel,
-			"credential": result.Secret.CredentialLabel,
-		}
-		return toolResult(structured, false), nil
+		audit.Status = "proposal"
+		return s.proposalResult(ctx, r, p, tool, &tools.Proposal{
+			Category:    tool.Title,
+			Description: result.Secret.Purpose + " After approval, enter the address in the secret card to add the source.",
+			Input:       input,
+		}), nil
 	default:
 		audit.Status = "ok"
 		structured := map[string]any{}

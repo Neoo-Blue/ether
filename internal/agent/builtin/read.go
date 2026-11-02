@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/braedonsaunders/ether/internal/agent/tools"
+	"github.com/braedonsaunders/ether/internal/collections"
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/logredact"
 	"github.com/braedonsaunders/ether/internal/resolver"
@@ -81,16 +82,18 @@ func readTools(d Deps) []tools.Tool {
 					viewerID = int(owner.ID)
 				}
 				var since time.Time
-				if hours, ok, err := num(in, "sinceHours"); err != nil {
-					return tools.Result{}, err
-				} else if ok {
+				if _, ok := in["sinceHours"]; ok {
+					hours, err := intArg(in, "sinceHours", 0, 1, 24*90)
+					if err != nil {
+						return tools.Result{}, err
+					}
 					since = d.now().Add(-time.Duration(hours) * time.Hour)
 				}
 				// The state service pages from the top; fetch enough for
 				// this page and slice, capped so no page scans far.
-				limit := page * pageSize
-				if limit > 500 {
-					limit = 500
+				limit := page*pageSize + 1
+				if limit > 501 {
+					limit = 501
 				}
 				entries, err := d.Playback.History(ctx, int64(viewerID), since, limit)
 				if err != nil {
@@ -118,9 +121,10 @@ func readTools(d Deps) []tools.Tool {
 					out = append(out, row)
 				}
 				data := pageMeta(page, pageSize, total)
+				data["hasMore"] = len(entries) > page*pageSize && page*pageSize < 500
 				data["viewerId"] = viewerID
 				data["entries"] = out
-				if len(entries) == 500 {
+				if len(entries) > 500 {
 					data["note"] = "Only the 500 most recent entries are reachable here; narrow with sinceHours."
 				}
 				return tools.Result{Data: data}, nil
@@ -283,6 +287,9 @@ func readTools(d Deps) []tools.Tool {
 							}
 							n++
 							val := truncate(logredact.String(v), 200)
+							if logredact.Sensitive(k) {
+								val = logredact.Mask
+							}
 							attrs[k] = val
 							total += len(val)
 						}
@@ -365,52 +372,32 @@ func readTools(d Deps) []tools.Tool {
 		}),
 		tool(tools.Tool{
 			Name: "collection_list", Title: "Collections", ReadOnly: true,
-			Description: "The owner's collections with their keys and sizes. Use collection_preview to see what is inside one.",
-			InputSchema: schema(map[string]any{
-				"type": pEnum("Only collections of this kind", "movie", "show"),
-			}),
+			Description: "A page of stored smart collection summaries. Counts reflect the last build, and franchise collections are not included.",
+			InputSchema: schema(pPage()),
 			Execute: func(ctx context.Context, _ tools.Principal, in map[string]any) (tools.Result, error) {
-				owner, err := d.OwnerUser(ctx)
-				if err != nil || owner == nil {
-					return tools.Result{}, errors.New("no owner")
+				page, size, err := pageArgs(in)
+				if err != nil {
+					return tools.Result{}, err
 				}
-				var mt core.MediaType
-				if t, _ := optStr(in, "type", 16); t != "" {
-					mt = core.MediaType(t)
-				}
-				colls, err := d.Collections.List(ctx, owner, mt)
+				colls, err := d.Collections.SnapshotList(ctx, (page-1)*size, size)
 				if err != nil {
 					return tools.Result{}, err
 				}
 				out := make([]any, 0, len(colls))
 				for _, c := range colls {
-					out = append(out, map[string]any{
-						"key": fmt.Sprint(int64(c.Key)), "title": truncate(c.Title, 200),
-						"kind": c.Kind, "type": string(c.Type), "items": c.ChildCount,
-					})
-					if len(out) >= 200 {
-						break
-					}
+					out = append(out, map[string]any{"key": fmt.Sprint(int64(c.Key)), "title": truncate(c.Title, 200), "kind": c.Kind, "type": string(c.Type), "items": c.ChildCount})
 				}
-				data := map[string]any{"collections": out, "total": len(colls)}
-				if len(colls) > 200 {
-					data["note"] = "Showing the first 200 collections."
-				}
-				return tools.Result{Data: data}, nil
+				return tools.Result{Data: map[string]any{"collections": out, "page": page, "pageSize": size, "hasMore": len(colls) == size}}, nil
 			},
 		}),
 		tool(tools.Tool{
 			Name: "collection_preview", Title: "Collection preview", ReadOnly: true, OpenWorld: true,
-			Description: "The first titles in one collection, to show what it contains. Building a collection the owner has never opened can take a few seconds.",
+			Description: "The last built shared snapshot of a smart collection. This does not rebuild the collection or apply personal rules.",
 			InputSchema: schema(map[string]any{
 				"collectionKey": pString("A collection key from collection_list", 32),
 				"limit":         pInt("Titles to preview, at most 25", 1, 25),
 			}, "collectionKey"),
 			Execute: func(ctx context.Context, _ tools.Principal, in map[string]any) (tools.Result, error) {
-				owner, err := d.OwnerUser(ctx)
-				if err != nil || owner == nil {
-					return tools.Result{}, errors.New("no owner")
-				}
 				key, err := keyArg(in, "collectionKey")
 				if err != nil {
 					return tools.Result{}, err
@@ -419,10 +406,13 @@ func readTools(d Deps) []tools.Tool {
 				if err != nil {
 					return tools.Result{}, err
 				}
-				page, err := d.Collections.Items(ctx, owner, key, 0, limit)
+				page, err := d.Collections.SnapshotItems(ctx, key, 0, limit)
 				if err != nil {
 					if errors.Is(err, core.ErrNotFound) {
 						return tools.Result{}, tools.Userf("no collection with that key")
+					}
+					if errors.Is(err, collections.ErrSnapshotNotBuilt) {
+						return tools.Result{}, tools.Userf("this collection has no built snapshot yet")
 					}
 					return tools.Result{}, err
 				}
@@ -437,7 +427,7 @@ func readTools(d Deps) []tools.Tool {
 		}),
 		tool(tools.Tool{
 			Name: "livetv_channels", Title: "Live TV channels", ReadOnly: true,
-			Description: "Live TV channels with input health, one page at a time. Set onlyFailing to find channels with no working input.",
+			Description: "Live TV channels with input health, one page at a time. onlyFailing filters the selected page to channels with no working input.",
 			InputSchema: schema(merge(pPage(), map[string]any{
 				"onlyFailing": pBool("Only channels whose inputs are all failing or cooling down"),
 			})),
@@ -461,9 +451,7 @@ func readTools(d Deps) []tools.Tool {
 					states                        map[string]int
 					failing                       bool
 				}
-				// Health is per channel; fetch it for every channel only
-				// when filtering, otherwise just for the page shown. The
-				// channel list itself is owner-scale, not library-scale.
+				// Only the selected page is probed for recorded health.
 				healthOf := func(id string) (map[string]int, bool) {
 					states := map[string]int{}
 					sts, err := d.LiveTV.StreamSourceStatuses(ctx, id)
@@ -479,8 +467,9 @@ func readTools(d Deps) []tools.Tool {
 					}
 					return states, len(sts) > 0 && !healthy
 				}
+				selected, total := paged(channels, page, pageSize)
 				var rows []row
-				for _, ch := range channels {
+				for _, ch := range selected {
 					r := row{id: ch.ID, number: ch.Number, name: truncate(ch.Name, 120),
 						kind: ch.Kind, group: truncate(ch.Group, 80), enabled: ch.Enabled,
 						inputs: len(ch.StreamSources)}
@@ -492,9 +481,8 @@ func readTools(d Deps) []tools.Tool {
 					}
 					rows = append(rows, r)
 				}
-				slice, total := paged(rows, page, pageSize)
-				out := make([]any, 0, len(slice))
-				for _, r := range slice {
+				out := make([]any, 0, len(rows))
+				for _, r := range rows {
 					if !onlyFailing {
 						r.states, r.failing = healthOf(r.id)
 					}

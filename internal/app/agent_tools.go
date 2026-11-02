@@ -497,7 +497,7 @@ func (s *appSourceService) AddStremio(ctx context.Context, addonURL string) (bui
 		Class:   "addon",
 		Enabled: true,
 		Host:    base.Host,
-		Health:  "ok",
+		Health:  "unknown",
 	}, nil
 }
 
@@ -511,7 +511,7 @@ func bareHost(raw string) string {
 
 func enabledHealth(enabled bool) string {
 	if enabled {
-		return "ok"
+		return "unknown"
 	}
 	return "disabled"
 }
@@ -604,16 +604,27 @@ func (ar *appApprovalReader) Approval(ctx context.Context, id string) (builtin.A
 		return builtin.ApprovalInfo{}, builtin.ErrApprovalNotFound
 	}
 	var info builtin.ApprovalInfo
-	var decisionNote, failureReason string
+	var decisionNote, failureReason, threadID string
 	var createdMs, decidedMs int64
 	err := ar.a.db.QueryRowContext(ctx,
-		`SELECT id, tool_name, category, description, status, decision_note, failure_reason, created_at, decided_at FROM agent_approvals WHERE id=?`, id).
-		Scan(&info.ID, &info.Tool, &info.Category, &info.Description, &info.Status, &decisionNote, &failureReason, &createdMs, &decidedMs)
+		`SELECT id, tool_name, category, description, status, decision_note, failure_reason, created_at, decided_at, thread_id FROM agent_approvals WHERE id=?`, id).
+		Scan(&info.ID, &info.Tool, &info.Category, &info.Description, &info.Status, &decisionNote, &failureReason, &createdMs, &decidedMs, &threadID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return builtin.ApprovalInfo{}, builtin.ErrApprovalNotFound
 	}
 	if err != nil {
 		return builtin.ApprovalInfo{}, err
+	}
+	if info.Tool == "source_add_stremio" && info.Status == "approved" {
+		var secretStatus string
+		err := ar.a.db.QueryRowContext(ctx, `SELECT status FROM agent_secret_requests WHERE thread_id=? ORDER BY created_at DESC LIMIT 1`, threadID).Scan(&secretStatus)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return builtin.ApprovalInfo{}, err
+		}
+		if secretStatus != "stored" {
+			info.Status = "pending_secret"
+			decisionNote = "The owner must submit the add-on URL in the console before the source is added."
+		}
 	}
 	info.Note = firstNonEmptyStr(decisionNote, failureReason)
 	if createdMs > 0 {

@@ -23,8 +23,7 @@ import (
 // MCP pairing: the owner clicks "Connect an AI app" in the console, which
 // is already an authenticated act, so POST /pair starts a Quick Connect
 // code and approves it at once. The person then exchanges the short code
-// for a grant token at /ether/mcp/exchange (one curl), or uses the short
-// code directly as a Bearer token before it expires.
+// for a grant token at /ether/mcp/exchange. Only the grant authenticates.
 func init() {
 	store.Register("mcp_pairings", 1, `
 CREATE TABLE mcp_pairings (
@@ -41,8 +40,9 @@ type PairingOptions struct {
 	QuickConnect *identity.QuickConnect
 	// Authorize returns the owner viewer id for a console request. The app
 	// implements it from the admin API's owner check.
-	Authorize func(ctx context.Context) (int64, error)
-	Logger    *slog.Logger
+	Authorize    func(ctx context.Context) (int64, error)
+	Logger       *slog.Logger
+	AllowedHosts []string
 	// CodeTTL bounds how long a pairing code can be exchanged (default 10m).
 	CodeTTL time.Duration
 	Now     func() time.Time
@@ -100,65 +100,17 @@ func (p *Pairing) ExchangeHandler() http.Handler {
 	return http.HandlerFunc(p.handleExchange)
 }
 
-// Authenticate resolves a bearer credential on the MCP surface. It accepts
-// either a grant token (`ethg_...`) or a short pairing code directly (which
-// is redeemed into a grant on first use before its 10-minute expiry). Every
-// request resolves through Grants.ResolveScoped so revoking a paired app in
-// the console immediately invalidates both the token and the code.
+// Authenticate accepts only scoped grant credentials, never pairing codes.
 func (p *Pairing) Authenticate(ctx context.Context, credential string) (tools.Principal, error) {
 	credential = strings.TrimSpace(credential)
-	if credential == "" {
+	if !identity.IsGrantCredential(credential) {
 		return tools.Principal{}, core.ErrUnauthorized
 	}
-	token := credential
-	if !identity.IsGrantCredential(credential) {
-		redeemed, err := p.redeemCode(ctx, credential)
-		if err != nil {
-			return tools.Principal{}, err
-		}
-		token = redeemed
-	}
-	viewer, scopes, err := p.opts.Grants.ResolveScoped(ctx, identity.SurfaceMCP, token)
+	viewer, scopes, err := p.opts.Grants.ResolveScoped(ctx, identity.SurfaceMCP, credential)
 	if err != nil || viewer == nil || !viewer.IsOwner {
 		return tools.Principal{}, core.ErrUnauthorized
 	}
-	return tools.Principal{
-		ViewerID: viewer.ID,
-		IsOwner:  true,
-		Surface:  identity.SurfaceMCP,
-		Scopes:   scopes,
-	}, nil
-}
-
-func (p *Pairing) redeemCode(ctx context.Context, rawCode string) (string, error) {
-	code := strings.ToUpper(strings.TrimSpace(rawCode))
-	if len(code) < 4 || len(code) > 16 {
-		return "", core.ErrUnauthorized
-	}
-	var secret, scopesRaw, existingToken string
-	var expires int64
-	err := p.opts.DB.QueryRowContext(ctx, `SELECT secret,scopes,expires,token FROM mcp_pairings WHERE code=?`, code).
-		Scan(&secret, &scopesRaw, &expires, &existingToken)
-	if err != nil {
-		return "", core.ErrUnauthorized
-	}
-	if existingToken != "" {
-		return existingToken, nil
-	}
-	if expires <= p.now().UnixMilli() {
-		_, _ = p.opts.DB.ExecContext(ctx, `DELETE FROM mcp_pairings WHERE code=?`, code)
-		return "", core.ErrUnauthorized
-	}
-	token, err := p.opts.QuickConnect.PollSurface(ctx, identity.SurfaceMCP, secret)
-	if err != nil {
-		return "", core.ErrUnauthorized
-	}
-	scopes := identity.ParseScopes(scopesRaw)
-	if err := p.opts.Grants.SetScopes(ctx, identity.SurfaceMCP, token, scopes); err != nil {
-		return "", err
-	}
-	_, _ = p.opts.DB.ExecContext(ctx, `UPDATE mcp_pairings SET token=?,secret='' WHERE code=?`, token, code)
-	return token, nil
+	return tools.Principal{ViewerID: viewer.ID, IsOwner: true, Surface: identity.SurfaceMCP, Scopes: scopes}, nil
 }
 
 func (p *Pairing) owner(w http.ResponseWriter, r *http.Request) (int64, bool) {
@@ -235,9 +187,18 @@ func (p *Pairing) handlePair(w http.ResponseWriter, r *http.Request) {
 
 func (p *Pairing) handleExchange(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Request-ID", resolveRequestID(r))
+	if v := checkBoundary(r, p.opts.AllowedHosts, nil); v != nil {
+		writeJSON(w, v.status, map[string]any{"error": v.message})
+		return
+	}
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "use POST"})
+		return
+	}
+	if !strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
+		writeJSON(w, http.StatusUnsupportedMediaType, map[string]any{"error": "Content-Type must be application/json"})
 		return
 	}
 	if !p.allowAttempt(r.RemoteAddr) {
@@ -257,22 +218,17 @@ func (p *Pairing) handleExchange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	var secret, scopesRaw, name, existingToken string
-	var expires int64
-	err := p.opts.DB.QueryRowContext(ctx, `SELECT secret,scopes,name,expires,token FROM mcp_pairings WHERE code=?`, code).
-		Scan(&secret, &scopesRaw, &name, &expires, &existingToken)
-	if errors.Is(err, sql.ErrNoRows) || existingToken != "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "unknown or already-used code"})
+	var secret, scopesRaw, name string
+	// Consume the code atomically before minting a grant. Concurrent exchanges
+	// cannot both obtain a token, even across server instances.
+	err := p.opts.DB.QueryRowContext(ctx, `DELETE FROM mcp_pairings WHERE code=? AND expires>? AND token='' RETURNING secret,scopes,name`, code, p.now().UnixMilli()).Scan(&secret, &scopesRaw, &name)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "unknown, expired or already-used code"})
 		return
 	}
 	if err != nil {
 		p.log.Warn("mcp exchange lookup failed", "err", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "exchange failed"})
-		return
-	}
-	if expires <= p.now().UnixMilli() {
-		_, _ = p.opts.DB.ExecContext(ctx, `DELETE FROM mcp_pairings WHERE code=?`, code)
-		writeJSON(w, http.StatusGone, map[string]any{"error": "that code has expired; create a new one in the console"})
 		return
 	}
 	token, err := p.opts.QuickConnect.PollSurface(ctx, identity.SurfaceMCP, secret)

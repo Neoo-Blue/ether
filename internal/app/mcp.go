@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/braedonsaunders/ether/internal/admin"
@@ -11,6 +13,18 @@ import (
 	"github.com/braedonsaunders/ether/internal/identity"
 	"github.com/braedonsaunders/ether/internal/mcp"
 )
+
+func mcpAllowedHosts() []string {
+	host, err := os.Hostname()
+	if err != nil || host == "" {
+		return nil
+	}
+	hosts := []string{host}
+	if !strings.Contains(host, ".") {
+		hosts = append(hosts, host+".local")
+	}
+	return hosts
+}
 
 func (a *App) buildMCPPairing() (*mcp.Pairing, error) {
 	if a.db == nil || a.users == nil {
@@ -26,11 +40,12 @@ func (a *App) buildMCPPairing() (*mcp.Pairing, error) {
 	}
 	return mcp.NewPairing(mcp.PairingOptions{
 		DB:           a.db,
+		AllowedHosts: mcpAllowedHosts(),
 		Grants:       grants,
 		QuickConnect: quick,
 		Logger:       a.log.With("component", "mcp-pairing"),
 		Authorize: func(ctx context.Context) (int64, error) {
-			if acc, ok := admin.RequestAccess(ctx); ok && !acc.Owner && acc.SetupComplete {
+			if acc, ok := admin.RequestAccess(ctx); !ok || !acc.Owner {
 				return 0, fmt.Errorf("owner required")
 			}
 			owner, err := a.users.Owner(ctx)
@@ -66,6 +81,7 @@ func (a *App) mountMCP(mux *http.ServeMux) {
 	store := agent.NewStore(a.db)
 	srv, err := mcp.New(mcp.Options{
 		Catalogue:    a.extendRT.tools,
+		AllowedHosts: mcpAllowedHosts(),
 		Approvals:    store,
 		Authenticate: pairing.Authenticate,
 		Resources:    mcp.DefaultResources(""),
