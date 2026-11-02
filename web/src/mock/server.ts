@@ -19,7 +19,14 @@ import type {
   TitleCard,
   Viewer,
 } from "../lib/contract";
-import { daypartOf, overrideCount, pageOf } from "../lib/layout";
+import {
+  collectionIdOf,
+  daypartOf,
+  overrideCount,
+  pageOf,
+  tidySchedule,
+  whenMatches,
+} from "../lib/layout";
 import { assemble } from "./assemble";
 import { normalizeSpec } from "../lib/rules";
 import type {
@@ -1186,16 +1193,16 @@ export function createFakeServer(opts: FakeOptions = {}) {
         c.targets.homeRow &&
         (c.targets.users === "all" || (userId !== null && c.targets.users.includes(userId)));
       if (!targeted && !placed.has(String(c.id))) continue;
-      const s = c.targets.schedule;
-      if (targeted && !placed.has(String(c.id))) {
-        if (s?.days?.length && !s.days.includes(day)) continue;
-        if (s?.devices?.length && !s.devices.includes(device as never)) continue;
-        if (s && (s.fromHour !== undefined || s.toHour !== undefined)) {
-          const f = s.fromHour ?? 0;
-          const to = s.toHour ?? 24;
-          if (!(f <= to ? hour >= f && hour < to : hour >= f || hour < to)) continue;
-        }
-      }
+      // The collection's schedule (a draft's edit in a preview), unless this
+      // viewer's own override sets a schedule; the layout pass applies that.
+      const id = String(c.id);
+      const own =
+        userId === null ? undefined : page(userId).find((r) => collectionIdOf(r.row) === id);
+      const s =
+        layout.collectionSchedules && id in layout.collectionSchedules
+          ? layout.collectionSchedules[id]
+          : c.targets.schedule;
+      if (!own?.when && !whenMatches(tidySchedule(s), { day, hour, device, date: at })) continue;
       const items = evaluate(c).items.slice(0, 12);
       if (!items.length) continue;
       rows.push({
@@ -1530,8 +1537,15 @@ export function createFakeServer(opts: FakeOptions = {}) {
   }
 
   function layoutDoc() {
+    const collectionSchedules = Object.fromEntries(
+      state.collections.flatMap((c) =>
+        c.targets.schedule ? [[String(c.id), c.targets.schedule] as const] : [],
+      ),
+    );
     return {
-      layout: state.layout,
+      layout: Object.keys(collectionSchedules).length
+        ? { ...state.layout, collectionSchedules }
+        : state.layout,
       availableRows: availableRows(),
       defaults: { maxRows: DEFAULT_ROWS },
     };
@@ -1566,6 +1580,15 @@ export function createFakeServer(opts: FakeOptions = {}) {
         });
       });
     pages("global", doc.global ?? []);
+    (doc.global ?? []).forEach((p, i) =>
+      p.rows.forEach((r, j) => {
+        if (r.when && collectionIdOf(r.row))
+          out.push({
+            field: `layout.global[${i}].rows[${j}].when`,
+            message: "a collection row uses its collection's schedule",
+          });
+      }),
+    );
     (doc.viewers ?? []).forEach((v, i) => pages(`viewers[${i}].pages`, v.pages));
     return out;
   }
@@ -3113,6 +3136,11 @@ export function createFakeServer(opts: FakeOptions = {}) {
           viewers: doc.viewers ?? [],
           updatedAt: new Date().toISOString(),
         };
+        // Edited collection schedules are saved on their collections.
+        for (const [id, schedule] of Object.entries(doc.collectionSchedules ?? {})) {
+          const c = state.collections.find((x) => String(x.id) === id);
+          if (c) c.targets = { ...c.targets, schedule: tidySchedule(schedule) ?? null };
+        }
         return json(layoutDoc());
       }
       case "POST /layout/preview": {

@@ -11,13 +11,17 @@ import type {
   RowInsight,
   RowPolicy,
   RowStatus,
+  TargetSchedule,
   Viewer,
 } from "../../lib/contract";
 import { api } from "../../lib/api";
-import { localized, t, tn } from "../../i18n";
+import { localized, t, tn, tx } from "../../i18n";
 import { WEEKDAYS, formatNumber } from "../../lib/format";
 import {
   FRONT_END_ROWS,
+  collectionIdOf,
+  collectionSchedule,
+  setCollectionSchedule,
   STATUS_HINT,
   STATUS_LABEL,
   pageOf,
@@ -29,7 +33,8 @@ import {
   viewersOverriding,
   type LayerKey,
 } from "../../lib/layout";
-import { PolicyEditor } from "./PolicyEditor";
+import { PolicyEditor, type ScheduleSource } from "./PolicyEditor";
+import { Link } from "react-router-dom";
 import { useLocale } from "../../i18n/react";
 
 interface PoolEntry {
@@ -308,7 +313,37 @@ function PoolItem({
           viewers.some((v) => v.id === id),
         )
       : [];
-  const chips = policyChips(effective, WEEKDAYS);
+  // A collection row's schedule is its collection's; a viewer override may set its own.
+  const collectionId = collectionIdOf(entry.row);
+  const ownWhen = layer !== "global" ? own?.when : undefined;
+  const schedule: ScheduleSource | undefined = collectionId
+    ? ownWhen
+      ? {
+          when: ownWhen,
+          onChange: (w) => edit({ ...effective, when: w }),
+          note: t("This viewer's own schedule, instead of the collection's."),
+        }
+      : {
+          when: collectionSchedule(draft, collectionId),
+          onChange: (w) =>
+            layer === "global"
+              ? onChange(
+                  setCollectionSchedule(draft, collectionId, w as TargetSchedule | undefined),
+                )
+              : edit({ ...effective, when: w }),
+          note: tx("The collection's schedule, also set in {link}.", {
+            link: (
+              <Link
+                to={`/collections/${encodeURIComponent(collectionId)}?section=audience`}
+                className="text-primary underline-offset-2 hover:underline"
+              >
+                {t("Collections")}
+              </Link>
+            ),
+          }),
+        }
+    : undefined;
+  const chips = policyChips(schedule ? { ...effective, when: schedule.when } : effective, WEEKDAYS);
   const statuses: RowStatus[] = ["always", "eligible", "off"];
   return (
     <li
@@ -411,7 +446,7 @@ function PoolItem({
             </Button>
           ) : null}
         </div>
-        <PolicyEditor policy={effective} title={entry.title} onChange={edit} />
+        <PolicyEditor policy={effective} title={entry.title} onChange={edit} schedule={schedule} />
       </Drawer>
     </li>
   );

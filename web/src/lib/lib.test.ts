@@ -20,6 +20,9 @@ import { COALESCE_MS, historyReducer, initHistory } from "./history";
 import {
   anchorsOf,
   atFor,
+  collectionIdOf,
+  collectionSchedule,
+  collectionScheduleChanges,
   describeWhen,
   effectiveLength,
   effectivePolicy,
@@ -31,6 +34,7 @@ import {
   removePolicy,
   reorderAnchors,
   sameLayout,
+  setCollectionSchedule,
   setPageLength,
   setPolicy,
   viewersOverriding,
@@ -154,6 +158,34 @@ describe("undo history", () => {
 
 describe("layout", () => {
   const empty = (): HomeLayout => ({ global: [], viewers: [] });
+
+  it("keeps collection schedules beside the layout and saves only the edited ones", () => {
+    expect(collectionIdOf("collection:c4")).toBe("c4");
+    expect(collectionIdOf("collection.12")).toBe("12");
+    expect(collectionIdOf("collection:*")).toBeUndefined();
+    expect(collectionIdOf("short-on-time")).toBeUndefined();
+    const saved: HomeLayout = {
+      ...empty(),
+      collectionSchedules: { a: { days: [1] }, b: { months: [12] } },
+    };
+    expect(
+      sameLayout(saved, {
+        ...saved,
+        collectionSchedules: { ...saved.collectionSchedules, c: null },
+      }),
+    ).toBe(true);
+    let draft = setCollectionSchedule(saved, "a", { days: [1, 2] });
+    draft = setCollectionSchedule(draft, "b", { months: [] });
+    draft = setCollectionSchedule(draft, "c", { dayparts: ["evening"] });
+    expect(collectionSchedule(draft, "b")).toBeUndefined();
+    expect(sameLayout(draft, saved)).toBe(false);
+    expect(collectionScheduleChanges(draft, saved)).toEqual({
+      a: { days: [1, 2] },
+      b: null,
+      c: { dayparts: ["evening"] },
+    });
+    expect(collectionScheduleChanges(saved, saved)).toEqual({});
+  });
 
   it("finds the next moment for a weekday and hour", () => {
     const wed = new Date(2026, 9, 21, 10, 0, 0); // Wednesday 10:00

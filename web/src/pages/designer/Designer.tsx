@@ -8,7 +8,14 @@ import { api, errorMessage } from "../../lib/api";
 import type { HomeLayout } from "../../lib/contract";
 import { useAsync } from "../../lib/hooks";
 import { Workspace, PanelHead } from "../../components/workspace";
-import { EMPTY_LAYOUT, overrideCount, prune, sameLayout, type LayerKey } from "../../lib/layout";
+import {
+  EMPTY_LAYOUT,
+  collectionScheduleChanges,
+  overrideCount,
+  prune,
+  sameLayout,
+  type LayerKey,
+} from "../../lib/layout";
 import { ContextBar, type ViewContext } from "./ContextBar";
 import { HomeCanvas } from "./HomeCanvas";
 import { LayerSwitcher } from "./LayerSwitcher";
@@ -69,7 +76,12 @@ export default function Designer() {
   const save = async () => {
     setSaving(true);
     try {
-      const next = await api.putLayout(draft);
+      // Collection schedules belong to their collections: send only the edited ones.
+      const schedules = collectionScheduleChanges(draft, saved);
+      const next = await api.putLayout({
+        ...draft,
+        collectionSchedules: Object.keys(schedules).length ? schedules : undefined,
+      });
       doc.setData(next);
       setDraft(prune(next.layout));
       setNonce((n) => n + 1);
