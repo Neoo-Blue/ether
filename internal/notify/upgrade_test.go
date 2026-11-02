@@ -53,7 +53,7 @@ func TestConnectionTestIsImmediateAndRetainsSafeFailure(t *testing.T) {
 			}))
 			defer up.Close()
 			// Test deliberately works on a paused channel, with a one-week digest.
-			if err := s.Save(context.Background(), Channel{ID: "x", Kind: "webhook", Endpoint: up.URL + "/private-secret", DigestMinutes: 10080}); err != nil {
+			if err := s.Save(context.Background(), Channel{ID: "x", Kind: "webhook", Secrets: map[string]string{"endpoint": up.URL + "/private-secret"}, DigestMinutes: 10080}); err != nil {
 				t.Fatal(err)
 			}
 			w := httptest.NewRecorder()
@@ -78,7 +78,7 @@ func TestConnectionTestIsImmediateAndRetainsSafeFailure(t *testing.T) {
 func TestDeleteRetainsHistoryAndCancelsPending(t *testing.T) {
 	s := newTestService(t)
 	ctx := context.Background()
-	if err := s.Save(ctx, Channel{ID: "x", Kind: "webhook", Endpoint: "https://example.test", Enabled: true, Events: []string{"*"}}); err != nil {
+	if err := s.Save(ctx, Channel{ID: "x", Kind: "webhook", Secrets: map[string]string{"endpoint": "https://example.test"}, Enabled: true, Events: []string{"*"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Emit(ctx, Event{Kind: "playback.error"}); err != nil {
@@ -104,7 +104,7 @@ func TestLifecycleAndNewsletterDoNotWaitForOrJoinDigest(t *testing.T) {
 		got = append(got, e)
 	}))
 	defer up.Close()
-	c := Channel{ID: "x", Kind: "webhook", Endpoint: up.URL, Enabled: true, Events: []string{"*"}, DigestMinutes: 60}
+	c := Channel{ID: "x", Kind: "webhook", Secrets: map[string]string{"endpoint": up.URL}, Enabled: true, Events: []string{"*"}, DigestMinutes: 60}
 	if err := s.Save(ctx, c); err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,8 @@ func TestBrowserIdentitySubscriptionRedactionAndExpiredDelivery(t *testing.T) {
 	auth := make([]byte, 16)
 	_, _ = rand.Read(auth)
 	sub := &PushSubscription{Endpoint: "https://push.example.test/private", Keys: PushKeys{Auth: base64.RawURLEncoding.EncodeToString(auth), P256dh: base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes())}}
-	c := Channel{ID: "browser", Kind: "webpush", Enabled: true, Subscription: sub, Events: []string{"server.crash"}}
+	c := Channel{ID: "browser", Kind: "webpush", Enabled: true, Events: []string{"server.crash"}}
+	c.SetSubscription(sub)
 	if err := s.Save(ctx, c); err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +160,8 @@ func TestBrowserIdentitySubscriptionRedactionAndExpiredDelivery(t *testing.T) {
 		w.WriteHeader(410)
 	}))
 	defer up.Close()
-	c.Subscription.Endpoint = up.URL
+	sub.Endpoint = up.URL
+	c.SetSubscription(sub)
 	s.opts.Client = up.Client()
 	if err := s.deliver(ctx, c, Event{Title: "Server crashed"}); err == nil || !strings.Contains(err.Error(), "expired") {
 		t.Fatalf("%v", err)
@@ -186,7 +188,7 @@ func TestIndependentCrashWatcherAndCleanExit(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Changes made after the watcher starts must be included.
-			if err := s.Save(ctx, Channel{ID: "x", Kind: "webhook", Endpoint: up.URL, Enabled: true, Events: []string{"server.crash"}, DigestMinutes: 10080}); err != nil {
+			if err := s.Save(ctx, Channel{ID: "x", Kind: "webhook", Secrets: map[string]string{"endpoint": up.URL}, Enabled: true, Events: []string{"server.crash"}, DigestMinutes: 10080}); err != nil {
 				_ = finish(true)
 				t.Fatal(err)
 			}
@@ -217,7 +219,7 @@ func TestFatalParentHelper(t *testing.T) {
 		return
 	}
 	s := newTestService(t)
-	if err := s.Save(context.Background(), Channel{ID: "x", Kind: "webhook", Endpoint: os.Getenv("ETHER_TEST_CRASH_URL"), Enabled: true, Events: []string{"server.crash"}}); err != nil {
+	if err := s.Save(context.Background(), Channel{ID: "x", Kind: "webhook", Secrets: map[string]string{"endpoint": os.Getenv("ETHER_TEST_CRASH_URL")}, Enabled: true, Events: []string{"server.crash"}}); err != nil {
 		os.Exit(4)
 	}
 	exe, _ := os.Executable()
@@ -313,7 +315,7 @@ func TestSMTPWithTLSRecipientsAndUnicode(t *testing.T) {
 					}
 				}
 			}()
-			c := Channel{Kind: "smtp", Endpoint: listener.Addr().String(), SMTPMode: mode, From: "Ether <owner@example.test>", To: "a@example.test, B <b@example.test>"}
+			c := Channel{Kind: "smtp", Secrets: map[string]string{"endpoint": listener.Addr().String()}, Settings: map[string]string{"smtpMode": mode, "from": "Ether <owner@example.test>", "to": "a@example.test, B <b@example.test>"}}
 			if err := validateChannel(c); err != nil {
 				t.Fatal(err)
 			}
@@ -372,7 +374,7 @@ func TestCrashDuringSnapshotKeepsLastCompleteDestinations(t *testing.T) {
 	called := false
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true }))
 	defer up.Close()
-	frame, _ := json.Marshal(monitorFrame{Channels: []Channel{{Kind: "webhook", Endpoint: up.URL, Enabled: true, Events: []string{"server.crash"}}}})
+	frame, _ := json.Marshal(monitorFrame{Channels: []Channel{{Kind: "webhook", Secrets: map[string]string{"endpoint": up.URL}, Enabled: true, Events: []string{"server.crash"}}}})
 	input := string(frame) + "\n" + `{"channels":[{"kind":"webhook"`
 	if err := RunMonitor(strings.NewReader(input)); err != nil {
 		t.Fatal(err)

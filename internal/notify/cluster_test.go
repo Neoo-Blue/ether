@@ -39,7 +39,7 @@ func TestTwoNodesDeliverEachEventOnce(t *testing.T) {
 		t.Cleanup(func() { db.Close() })
 		nodes = append(nodes, New(db, Options{NodeID: id}))
 	}
-	if err := nodes[0].Save(ctx, Channel{ID: "hook", Kind: "webhook", Enabled: true, Endpoint: up.URL, Events: []string{"*"}, PerMinute: 60}); err != nil {
+	if err := nodes[0].Save(ctx, Channel{ID: "hook", Kind: "webhook", Enabled: true, Secrets: map[string]string{"endpoint": up.URL}, Events: []string{"*"}, PerMinute: 60}); err != nil {
 		t.Fatal(err)
 	}
 	const events = 20

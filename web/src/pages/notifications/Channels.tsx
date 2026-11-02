@@ -4,10 +4,12 @@ import { BellRing, Pencil, Plus, Send, Smartphone, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Section } from "../../components/layout";
 import { apiFetch, errorMessage } from "../../lib/api";
+import { useRegistry } from "../../lib/extend";
 import { BrowserPush } from "./BrowserPush";
 import { ChannelDrawer } from "./ChannelDrawer";
 import {
   blankChannel,
+  channelKindDescriptor,
   channelName,
   eventLabel,
   transportLabel,
@@ -23,6 +25,7 @@ export function Channels({
   data: NotificationsData;
   onChanged: () => Promise<void>;
 }) {
+  const { descriptors } = useRegistry("channelKind", "eventKind");
   const [editing, setEditing] = useState<{ channel: Channel; isNew: boolean } | null>(null);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -78,7 +81,7 @@ export function Channels({
     const ok = await confirmDialog({
       title: t("Delete channel?"),
       message: t("{channel} stops receiving alerts. Its delivery history is kept.", {
-        channel: channelName(c),
+        channel: channelName(c, descriptors),
       }),
       confirmLabel: t("Delete"),
       tone: "danger",
@@ -96,69 +99,80 @@ export function Channels({
         title={t("Channels")}
         description={t("Alerts for playback, sources and the server.")}
         actions={
-          <Button size="sm" onClick={() => edit(blankChannel(), true)}>
+          <Button size="sm" onClick={() => edit(blankChannel(descriptors), true)}>
             <Plus size={14} /> {t("New channel")}
           </Button>
         }
         bodyClassName={data.channels.length ? "divide-y divide-border" : undefined}
       >
         {data.channels.length ? (
-          data.channels.map((c) => (
-            <div key={c.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-              <div className="min-w-0 space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-medium text-fg">{channelName(c)}</p>
-                  <Badge variant="secondary">{transportLabel(c.kind)}</Badge>
-                  <Badge variant={c.enabled ? "success" : "outline"}>
-                    {c.enabled ? t("On") : t("Off")}
-                  </Badge>
+          data.channels.map((c) => {
+            const kindDesc = channelKindDescriptor(descriptors, c.kind);
+            const canTest = kindDesc?.meta?.sendTest !== false;
+            return (
+              <div
+                key={c.id}
+                className="flex flex-wrap items-center justify-between gap-3 px-5 py-4"
+              >
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium text-fg">{channelName(c, descriptors)}</p>
+                    <Badge variant="secondary">{transportLabel(c.kind, descriptors)}</Badge>
+                    <Badge variant={c.enabled ? "success" : "outline"}>
+                      {c.enabled ? t("On") : t("Off")}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-fg-muted">
+                    {c.events.length
+                      ? c.events.map((k) => eventLabel(k, descriptors)).join(", ")
+                      : t("No events selected")}
+                    {c.digestMinutes
+                      ? ` · ${t("digest every {minutes} min", { minutes: c.digestMinutes })}`
+                      : ""}
+                  </p>
                 </div>
-                <p className="text-xs text-fg-muted">
-                  {c.events.length ? c.events.map(eventLabel).join(", ") : t("No events selected")}
-                  {c.digestMinutes
-                    ? ` · ${t("digest every {minutes} min", { minutes: c.digestMinutes })}`
-                    : ""}
-                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy === c.id}
+                    onClick={() =>
+                      void run(c.id, async () => {
+                        await apiFetch(`/notifications/${c.id}`, {
+                          method: "PUT",
+                          body: JSON.stringify({ ...c, enabled: !c.enabled }),
+                        });
+                      })
+                    }
+                  >
+                    {c.enabled ? t("Pause") : t("Resume")}
+                  </Button>
+                  {canTest ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busy === c.id}
+                      onClick={() => void test(c)}
+                    >
+                      <Send size={14} /> {t("Send test")}
+                    </Button>
+                  ) : null}
+                  <Button variant="outline" size="sm" onClick={() => edit(c)}>
+                    <Pencil size={14} /> {t("Edit")}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy === c.id}
+                    onClick={() => void remove(c)}
+                    aria-label={t("Delete {channel}", { channel: channelName(c, descriptors) })}
+                  >
+                    <Trash2 size={14} />
+                  </Button>
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={busy === c.id}
-                  onClick={() =>
-                    void run(c.id, async () => {
-                      await apiFetch(`/notifications/${c.id}`, {
-                        method: "PUT",
-                        body: JSON.stringify({ ...c, enabled: !c.enabled }),
-                      });
-                    })
-                  }
-                >
-                  {c.enabled ? t("Pause") : t("Resume")}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy === c.id}
-                  onClick={() => void test(c)}
-                >
-                  <Send size={14} /> {t("Send test")}
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => edit(c)}>
-                  <Pencil size={14} /> {t("Edit")}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={busy === c.id}
-                  onClick={() => void remove(c)}
-                  aria-label={t("Delete {channel}", { channel: channelName(c) })}
-                >
-                  <Trash2 size={14} />
-                </Button>
-              </div>
-            </div>
-          ))
+            );
+          })
         ) : (
           <EmptyState
             icon={<BellRing />}
@@ -170,7 +184,7 @@ export function Channels({
         )}
       </Section>
 
-      <BrowserPush data={data} onChanged={onChanged} />
+      <BrowserPush data={data} descriptors={descriptors} onChanged={onChanged} />
       <Section
         title={t("Alerts on your phone")}
         description={t("Choose where you want to receive background alerts.")}
@@ -186,8 +200,7 @@ export function Channels({
           open={open}
           channel={editing.channel}
           isNew={editing.isNew}
-          events={data.events}
-          catalog={data.eventCatalog}
+          descriptors={descriptors}
           saving={saving}
           error={saveError}
           onClose={() => setOpen(false)}

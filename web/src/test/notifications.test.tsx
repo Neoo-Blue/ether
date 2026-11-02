@@ -2,18 +2,47 @@ import { render, screen, fireEvent, waitFor, within } from "@testing-library/rea
 import { MemoryRouter } from "react-router-dom";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { webcrypto } from "node:crypto";
+import { resetRegistryCache, type Descriptor } from "../lib/extend";
+import { descriptors as notifyDescriptors } from "../mock/extend/descriptors/notify";
 import { BrowserPush } from "../pages/notifications/BrowserPush";
 import { ChannelDrawer } from "../pages/notifications/ChannelDrawer";
 import { Channels } from "../pages/notifications/Channels";
 import { Protection } from "../pages/notifications/Protection";
-import { blankChannel, type NotificationsData } from "../pages/notifications/types";
+import {
+  blankChannel,
+  channelKindDescriptors,
+  eventKindDescriptors,
+  type ChannelKindMeta,
+  type NotificationsData,
+} from "../pages/notifications/types";
 
 const empty: NotificationsData = {
   channels: [],
-  events: ["server.crash", "playback.error", "newsletter.weekly"],
   deliveries: [],
 };
-afterEach(() => vi.unstubAllGlobals());
+
+afterEach(() => {
+  resetRegistryCache();
+  vi.unstubAllGlobals();
+});
+
+function stubFetch(
+  handler: (url: string, init?: RequestInit) => Response | Promise<Response> = () =>
+    new Response("{}", { status: 200 }),
+) {
+  const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.includes("/extend/registry")) {
+      return new Response(JSON.stringify({ version: 1, descriptors: notifyDescriptors }), {
+        status: 200,
+      });
+    }
+    return handler(url, init);
+  });
+  vi.stubGlobal("fetch", fetcher);
+  return fetcher;
+}
+
 function pushSupport(permission = "granted") {
   const requestPermission = vi.fn().mockResolvedValue(permission);
   vi.stubGlobal("isSecureContext", true);
@@ -40,32 +69,40 @@ function pushSupport(permission = "granted") {
   });
   return { requestPermission, subscription, subscribe };
 }
+
 describe("Notification setup", () => {
   it("opens, saves and edits a channel on an HTTP LAN page without randomUUID", async () => {
     // randomUUID is secure-context-only; getRandomValues is available on HTTP.
     vi.stubGlobal("isSecureContext", false);
     vi.stubGlobal("crypto", { getRandomValues: webcrypto.getRandomValues.bind(webcrypto) });
-    const fetcher = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
-    vi.stubGlobal("fetch", fetcher);
+    const fetcher = stubFetch();
     const onChanged = vi.fn().mockResolvedValue(undefined);
     const { rerender } = render(<Channels data={empty} onChanged={onChanged} />);
+    await waitFor(() =>
+      expect(fetcher.mock.calls.some(([u]) => String(u).includes("/extend/registry"))).toBe(true),
+    );
     fireEvent.click(screen.getByRole("button", { name: "New channel" }));
     const drawer = await screen.findByRole("dialog", { name: "New notification channel" });
     fireEvent.change(within(drawer).getByLabelText("Name"), { target: { value: "Server alerts" } });
-    fireEvent.change(within(drawer).getByLabelText("Endpoint URL"), {
+    fireEvent.change(await within(drawer).findByLabelText("Endpoint URL"), {
       target: { value: "https://notify.example.test/hook" },
     });
     fireEvent.click(within(drawer).getByRole("button", { name: "Save channel" }));
     await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());
-    const [url, request] = fetcher.mock.calls[0]!;
-    const saved = JSON.parse(request.body);
+    const puts = fetcher.mock.calls.filter(
+      ([u, init]) => String(u).includes("/notifications/") && init?.method === "PUT",
+    );
+    expect(puts).toHaveLength(1);
+    const [url, request] = puts[0]!;
+    const saved = JSON.parse(String(request?.body));
     expect(saved.id).toEqual(expect.any(String));
     expect(saved.id.length).toBeGreaterThan(0);
     expect(url).toContain(`/notifications/${saved.id}`);
-    expect(request.method).toBe("PUT");
+    expect(request?.method).toBe("PUT");
     expect(saved).toMatchObject({
       name: "Server alerts",
-      endpoint: "https://notify.example.test/hook",
+      kind: "webhook",
+      secrets: { endpoint: "https://notify.example.test/hook" },
     });
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     rerender(<Channels data={{ ...empty, channels: [saved] }} onChanged={onChanged} />);
@@ -74,7 +111,11 @@ describe("Notification setup", () => {
     expect(within(editor).getByLabelText("Name")).toHaveValue("Server alerts");
     fireEvent.click(within(editor).getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(fetcher).toHaveBeenCalledOnce();
+    expect(
+      fetcher.mock.calls.filter(
+        ([u, init]) => String(u).includes("/notifications/") && init?.method === "PUT",
+      ),
+    ).toHaveLength(1);
   });
 
   it("saves all email fields, recipient lists and explicit TLS mode", () => {
@@ -82,9 +123,9 @@ describe("Notification setup", () => {
     render(
       <ChannelDrawer
         open
-        channel={{ ...blankChannel(), kind: "smtp" }}
+        channel={{ ...blankChannel(notifyDescriptors, "smtp"), kind: "smtp" }}
         isNew
-        events={empty.events}
+        descriptors={notifyDescriptors}
         saving={false}
         error={null}
         onClose={() => {}}
@@ -105,26 +146,134 @@ describe("Notification setup", () => {
     fireEvent.click(within(drawer).getByRole("button", { name: "Save channel" }));
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({
-        smtpMode: "starttls",
-        endpoint: "smtp.example.test:587",
-        to: "one@example.test, two@example.test",
+        kind: "smtp",
+        settings: {
+          smtpMode: "starttls",
+          from: "owner@example.test",
+          to: "one@example.test, two@example.test",
+        },
+        secrets: {
+          endpoint: "smtp.example.test:587",
+        },
         events: expect.arrayContaining(["server.crash", "newsletter.weekly"]),
       }),
     );
   });
-  it("tests a paused channel directly and reloads failed delivery history", async () => {
-    const onChanged = vi.fn().mockResolvedValue(undefined);
-    const fetcher = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ error: { message: "SMTP authentication failed" } }), {
-        status: 502,
+
+  it("renders built-in and plugin channel kinds and schemas from the registry", async () => {
+    const channels = channelKindDescriptors(notifyDescriptors);
+    const events = eventKindDescriptors(notifyDescriptors);
+    expect(channels.map((d) => d.id)).toEqual([
+      "webpush",
+      "webhook",
+      "discord",
+      "slack",
+      "telegram",
+      "smtp",
+      "ntfy",
+      "gotify",
+    ]);
+    expect(events).toHaveLength(20);
+
+    const pluginDescriptor: Descriptor<ChannelKindMeta> = {
+      kind: "channelKind",
+      id: "plugin:community.matrix.notify/room",
+      owner: "community.matrix.notify",
+      label: { resolved: "Matrix" },
+      hint: { resolved: "Post alerts to an encrypted Matrix room." },
+      meta: {
+        selectable: true,
+        sendTest: true,
+        fields: [
+          {
+            key: "homeserver",
+            kind: "url",
+            label: { resolved: "Homeserver URL" },
+            required: true,
+            wide: true,
+          },
+          {
+            key: "room",
+            kind: "text",
+            label: { resolved: "Room ID" },
+            required: true,
+          },
+          {
+            key: "accessToken",
+            kind: "secret",
+            label: { resolved: "Room token" },
+            required: true,
+            secret: true,
+          },
+        ],
+      },
+    };
+    const combined = [...notifyDescriptors, pluginDescriptor];
+    const onSave = vi.fn();
+    render(
+      <ChannelDrawer
+        open
+        channel={blankChannel(combined)}
+        isNew
+        descriptors={combined}
+        saving={false}
+        error={null}
+        onClose={() => {}}
+        onSave={onSave}
+      />,
+    );
+    const drawer = screen.getByRole("dialog");
+    fireEvent.click(within(drawer).getByRole("button", { name: "Transport" }));
+    fireEvent.click(
+      await screen.findByRole("option", { name: "Matrix (from community.matrix.notify)" }),
+    );
+    expect(
+      within(drawer).getByText("Post alerts to an encrypted Matrix room."),
+    ).toBeInTheDocument();
+    fireEvent.change(within(drawer).getByLabelText("Homeserver URL"), {
+      target: { value: "https://matrix.example.org" },
+    });
+    fireEvent.change(within(drawer).getByLabelText("Room ID"), {
+      target: { value: "!ops:example.org" },
+    });
+    fireEvent.change(within(drawer).getByLabelText("Room token"), {
+      target: { value: "syt_secret_token" },
+    });
+    fireEvent.click(within(drawer).getByRole("button", { name: "Save channel" }));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "plugin:community.matrix.notify/room",
+        settings: {
+          homeserver: "https://matrix.example.org",
+          room: "!ops:example.org",
+        },
+        secrets: {
+          accessToken: "syt_secret_token",
+        },
       }),
     );
-    vi.stubGlobal("fetch", fetcher);
+  });
+
+  it("tests a paused channel directly and reloads failed delivery history", async () => {
+    const onChanged = vi.fn().mockResolvedValue(undefined);
+    const fetcher = stubFetch(
+      () =>
+        new Response(JSON.stringify({ error: { message: "SMTP authentication failed" } }), {
+          status: 502,
+        }),
+    );
     render(
       <Channels
         data={{
           ...empty,
-          channels: [{ ...blankChannel(), id: "mail", kind: "smtp", enabled: false }],
+          channels: [
+            {
+              ...blankChannel(notifyDescriptors, "smtp"),
+              id: "mail",
+              kind: "smtp",
+              enabled: false,
+            },
+          ],
         }}
         onChanged={onChanged}
       />,
@@ -136,63 +285,67 @@ describe("Notification setup", () => {
       expect.objectContaining({ method: "POST" }),
     );
   });
+
   it("does not subscribe or save when browser permission is declined", async () => {
     const { subscribe } = pushSupport("denied");
-    const fetcher = vi.fn();
-    vi.stubGlobal("fetch", fetcher);
-    render(<BrowserPush data={empty} onChanged={vi.fn()} />);
+    const fetcher = stubFetch();
+    render(<BrowserPush data={empty} descriptors={notifyDescriptors} onChanged={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "Connect this device" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Allow notifications");
     expect(subscribe).not.toHaveBeenCalled();
-    expect(fetcher).not.toHaveBeenCalled();
+    expect(fetcher.mock.calls.filter(([u]) => String(u).includes("/notifications/"))).toHaveLength(
+      0,
+    );
   });
+
   it("registers a device and saves its encrypted push subscription", async () => {
     const { subscribe } = pushSupport();
     const onChanged = vi.fn().mockResolvedValue(undefined);
-    const fetcher = vi.fn(
+    const fetcher = stubFetch(
       async (url: string) =>
         new Response(
           JSON.stringify(url.endsWith("/push/key") ? { publicKey: btoa("test-key") } : {}),
           { status: 200 },
         ),
     );
-    vi.stubGlobal("fetch", fetcher);
-    render(<BrowserPush data={empty} onChanged={onChanged} />);
+    render(<BrowserPush data={empty} descriptors={notifyDescriptors} onChanged={onChanged} />);
     fireEvent.click(screen.getByRole("button", { name: "Connect this device" }));
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
     expect(subscribe).toHaveBeenCalledWith(expect.objectContaining({ userVisibleOnly: true }));
     const put = fetcher.mock.calls.find(
       (c) => (c as unknown as [string, RequestInit])[1]?.method === "PUT",
     ) as unknown as [string, RequestInit];
-    expect(JSON.parse(String(put[1].body))).toMatchObject({
+    const body = JSON.parse(String(put[1].body));
+    expect(body).toMatchObject({
       kind: "webpush",
-      subscription: { endpoint: "https://push.example.test/device" },
       events: expect.arrayContaining(["server.crash"]),
     });
+    expect(JSON.parse(body.secrets.subscription)).toMatchObject({
+      endpoint: "https://push.example.test/device",
+    });
   });
+
   it("removes a newly created subscription if saving the destination fails", async () => {
     const { subscription } = pushSupport();
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async (url: string) =>
-          new Response(
-            JSON.stringify(
-              url.endsWith("/push/key")
-                ? { publicKey: btoa("key") }
-                : { error: { message: "Save failed" } },
-            ),
-            { status: url.endsWith("/push/key") ? 200 : 500 },
+    stubFetch(
+      async (url: string) =>
+        new Response(
+          JSON.stringify(
+            url.endsWith("/push/key")
+              ? { publicKey: btoa("key") }
+              : { error: { message: "Save failed" } },
           ),
-      ),
+          { status: url.endsWith("/push/key") ? 200 : 500 },
+        ),
     );
-    render(<BrowserPush data={empty} onChanged={vi.fn()} />);
+    render(<BrowserPush data={empty} descriptors={notifyDescriptors} onChanged={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "Connect this device" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Save failed");
     expect(subscription.unsubscribe).toHaveBeenCalled();
   });
+
   it("saves external outage monitoring without exposing its existing URL", async () => {
-    const fetcher = vi.fn(
+    const fetcher = stubFetch(
       async (_url: string, init?: RequestInit) =>
         new Response(
           JSON.stringify(
@@ -201,7 +354,6 @@ describe("Notification setup", () => {
           { status: 200 },
         ),
     );
-    vi.stubGlobal("fetch", fetcher);
     render(
       <MemoryRouter>
         <Protection active />
