@@ -253,6 +253,65 @@ func (c *Catalog) PersonCreditKeys(ctx context.Context, person int64, types []co
 	return out, rows.Err()
 }
 
+// PersonByTMDB resolves one TMDB person from their credits: the person's
+// name and portrait, the credit kinds they hold ("cast", "director",
+// "writer", "crew", in that order) and a title key carrying the portrait
+// credit (for per-title person image routes). It returns core.ErrNotFound
+// when the catalogue credits nobody under that id. Both reads ride the
+// catalog_credits_person index, so the cost scales with the person's own
+// credits, never with the library.
+func (c *Catalog) PersonByTMDB(ctx context.Context, person int64) (core.Person, []string, core.RatingKey, error) {
+	if person <= 0 {
+		return core.Person{}, nil, 0, core.ErrNotFound
+	}
+	rows, err := c.db.QueryContext(ctx, `SELECT DISTINCT kind FROM catalog_credits WHERE person_tmdb=?`, person)
+	if err != nil {
+		return core.Person{}, nil, 0, err
+	}
+	kindSet := map[string]bool{}
+	for rows.Next() {
+		var kind string
+		if err := rows.Scan(&kind); err != nil {
+			_ = rows.Close()
+			return core.Person{}, nil, 0, err
+		}
+		kindSet[kind] = true
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return core.Person{}, nil, 0, err
+	}
+	_ = rows.Close()
+	if len(kindSet) == 0 {
+		return core.Person{}, nil, 0, core.ErrNotFound
+	}
+	kinds := make([]string, 0, len(kindSet))
+	for _, k := range []string{"cast", "director", "writer", "crew"} {
+		if kindSet[k] {
+			kinds = append(kinds, k)
+		}
+	}
+	if len(kinds) == 0 {
+		return core.Person{}, nil, 0, core.ErrNotFound
+	}
+	// The portrait must come from a credit of the primary kind, because
+	// per-title person image routes only serve a portrait for the kind
+	// that title credits. Crew portraits have no such route.
+	var name, thumb string
+	var key int64
+	if kinds[0] != "crew" {
+		_ = c.db.QueryRowContext(ctx, `SELECT thumb, key FROM catalog_credits WHERE person_tmdb=? AND kind=? AND thumb<>'' LIMIT 1`, person, kinds[0]).Scan(&thumb, &key)
+	}
+	err = c.db.QueryRowContext(ctx, `SELECT name FROM catalog_credits WHERE person_tmdb=? AND name<>'' LIMIT 1`, person).Scan(&name)
+	if err != nil {
+		err = c.db.QueryRowContext(ctx, `SELECT name FROM catalog_credits WHERE person_tmdb=? LIMIT 1`, person).Scan(&name)
+	}
+	if err != nil {
+		return core.Person{}, nil, 0, err
+	}
+	return core.Person{TMDB: person, Name: name, ThumbPath: thumb}, kinds, core.RatingKey(key), nil
+}
+
 func personCreditKeysSQL(person int64, types []core.MediaType, limit int) (string, []any) {
 	in := make([]string, 0, len(types))
 	args := []any{person}

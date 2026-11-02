@@ -375,6 +375,9 @@ func (r *frontendRuntime) plexHandler() http.Handler {
 			handler.ServeHTTP(w, req)
 			return
 		}
+		if siloProbeMiss(w, req) {
+			return
+		}
 		inst, ok := r.registry.Instance("plex")
 		if !ok {
 			http.NotFound(w, req)
@@ -415,6 +418,10 @@ func (r *frontendRuntime) sharedStatus(id frontend.Protocol, status *frontend.St
 		status.Addresses = append(status.Addresses, addr.String()+spec.PathPrefix)
 		addresses, _ := net.InterfaceAddrs()
 		status.ConnectURLs = append(status.ConnectURLs, connectionURLs(addr.String(), spec.PathPrefix, addresses)...)
+		// Only the first shared prefix is the address owners type into an
+		// app; extra shared prefixes are routing aliases (Silo's root
+		// /api/v2 and /api/v1 beside its canonical /silo).
+		break
 	}
 }
 func (r *frontendRuntime) plexStatus(ctx context.Context) frontend.Status {

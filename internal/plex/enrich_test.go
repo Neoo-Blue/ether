@@ -549,3 +549,48 @@ func TestHEVCDecisionReportsMP4ForFragmentedHLS(t *testing.T) {
 		t.Fatalf("HEVC HLS advertised as MPEG-TS: %+v", m)
 	}
 }
+
+// Plex Web decides with its own engine (hasMDE=1) from metadata that, for
+// an on-demand title not yet probed, is an estimate: it saw AAC, the file
+// has AC3. Ether's own decision must convert the audio, so the answer is
+// not "Direct play OK", even with directStream=0 (#246). A compatible
+// file is still direct play.
+func TestMDEOnDemandIncompatibleAudioIsNotDirectPlay(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		dec  core.Decision
+		want bool // answered as MDE direct play
+	}{
+		{"audio conversion", core.Decision{Kind: core.DecisionTranscode, VideoCopy: true, AudioCopy: false, Container: "mp4", AudioCodec: "aac"}, false},
+		{"full conversion", core.Decision{Kind: core.DecisionTranscode, Container: "mp4", VideoCodec: "h264", AudioCodec: "aac"}, false},
+		{"compatible", core.Decision{Kind: core.DecisionDirectPlay, VideoCopy: true, AudioCopy: true, Container: "mkv"}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture()
+			defer f.srv.Close()
+			user := &core.User{ID: 1, IsOwner: true}
+			caps := core.ClientCaps{ClientID: "web-mde", Product: "Plex Web", Platform: "Chrome"}
+			ps, err := f.playback.Prepare(context.Background(), user, fightClub.Key, caps)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ps.Resolution = &core.Resolution{Release: core.Release{ID: "usenet-release"}}
+			pr := &Request{User: user, ClientID: caps.ClientID}
+			p := playRequest{key: fightClub.Key, caps: caps, mde: true, sessionID: "web-mde", protocol: "dash", opts: core.DecideOptions{DirectPlay: true, DirectStream: false}}
+			mc := f.srv.decisionContainer(context.Background(), pr, &fightClub, ps, tc.dec, p)
+			part := mc.Metadata[0].Media[0].Part[0]
+			if got := part.Decision == "directplay"; got != tc.want {
+				t.Fatalf("part decision %q, want direct play %v", part.Decision, tc.want)
+			}
+			mde := false
+			for _, a := range mc.Extra {
+				if a.Name == "mdeDecisionCode" && fmt.Sprint(a.Value) == "1000" {
+					mde = true
+				}
+			}
+			if mde != tc.want {
+				t.Fatalf("mdeDecisionCode 1000 = %v, want %v", mde, tc.want)
+			}
+		})
+	}
+}

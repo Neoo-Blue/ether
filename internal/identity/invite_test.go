@@ -76,7 +76,7 @@ func TestInviteSingleUse(t *testing.T) {
 	}
 	var origin string
 	var pid *int64
-	if err = db.QueryRow(`SELECT origin,plex_id FROM auth_users WHERE id=?`, id).Scan(&origin, &pid); err != nil || origin != "local" || pid != nil {
+	if err = db.QueryRow(`SELECT origin,plex_id FROM auth_users WHERE id=?`, id).Scan(&origin, &pid); err != nil || origin != "invite" || pid != nil {
 		t.Fatalf("viewer origin=%s plex=%v err=%v", origin, pid, err)
 	}
 	local, _ := identity.NewLocal(db)

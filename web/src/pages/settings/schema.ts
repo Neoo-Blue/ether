@@ -269,76 +269,6 @@ export const PLEX: FieldGroup[] = localized(() => [
   },
 ]);
 
-export const CACHE: FieldGroup[] = localized(() => [
-  {
-    title: t("Disk cache"),
-    description: t("Segments from Usenet are cached on disk so seeks and rewatches are instant."),
-    fields: [
-      { key: "dir", label: t("Cache folder"), kind: "text", wide: true },
-      {
-        key: "budgetBytes",
-        label: t("Disk budget"),
-        kind: "bytes",
-        unit: "GiB",
-        help: t("The oldest segments are evicted when the cache reaches this size."),
-      },
-    ],
-  },
-  {
-    title: t("Prefetch"),
-    fields: [
-      {
-        key: "prefetchNextEpisode",
-        label: t("Prefetch the next episode"),
-        kind: "bool",
-        help: t("Warms the opening of the next episode so it starts instantly."),
-      },
-      {
-        key: "nextEpisodeAt",
-        label: t("Start prefetching at"),
-        kind: "number",
-        min: 0,
-        max: 1,
-        step: 0.05,
-        help: t("Fraction of the current episode watched (0–1)."),
-      },
-      {
-        key: "prefetchBytes",
-        label: t("Prefetch size"),
-        kind: "bytes",
-        unit: "MiB",
-        help: t("How much of the next episode to pull ahead."),
-      },
-      {
-        key: "keepInProgressWarm",
-        label: t("Keep in-progress titles warm"),
-        kind: "bool",
-        help: t("Keeps the resume point of unfinished titles cached."),
-      },
-      {
-        key: "inProgressPinMaxAge",
-        label: t("Stop keeping a title warm after"),
-        kind: "duration",
-        placeholder: "720h",
-        help: t(
-          "An unfinished title nobody has watched for this long loses its cache pin. Empty uses 30 days.",
-        ),
-      },
-      {
-        key: "inProgressPinPercent",
-        label: t("Share of the cache for in-progress titles"),
-        kind: "number",
-        min: 0,
-        max: 100,
-        step: 5,
-        help: t(
-          "Percent of the disk budget unfinished titles may keep pinned; the least recently watched lose their pin first. 0 uses 50.",
-        ),
-      },
-    ],
-  },
-]);
-
 export const CATALOG: FieldGroup[] = localized(() => [
   {
     title: t("Names and dates"),
@@ -652,7 +582,12 @@ export const TRAKT: FieldGroup[] = localized(() => [
     fields: [
       { key: "enabled", label: t("Enabled"), kind: "bool" },
       { key: "clientId", label: t("Client ID"), kind: "text", wide: true },
-      { key: "clientSecret", label: t("Client secret"), kind: "secret" },
+      {
+        key: "clientSecret",
+        label: t("Client secret"),
+        kind: "secret",
+        help: t("Optional. Trakt apps created since October 2026 don't have one; leave it empty."),
+      },
     ],
   },
 ]);

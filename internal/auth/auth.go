@@ -404,6 +404,12 @@ type row struct {
 	Restricted   bool
 	PlexSections []int
 	LastSeen     time.Time
+	// OwnerEnabled is the owner's pause decision (owner_enabled);
+	// PlexShared is whether plex.tv still shares the server with this
+	// viewer (plex_shared); HasPlex is plex_id IS NOT NULL.
+	OwnerEnabled bool
+	PlexShared   bool
+	HasPlex      bool
 }
 
 var (
@@ -466,18 +472,20 @@ func HashToken(token string) string {
 }
 
 const userCols = `id, COALESCE(plex_id, 0), uuid, username, title, email, thumb, is_owner, is_home, restricted, active, origin,
-	plex_sections, stream_limit, max_content_rating, subtitle_languages, audio_languages, allowed_sections, last_seen_at, CASE WHEN created_at>0 THEN created_at ELSE COALESCE((SELECT MIN(event_time) FROM (SELECT verified_at AS event_time FROM identity_links WHERE viewer_id=auth_users.id AND verified_at>0 UNION ALL SELECT created_at AS event_time FROM auth_tokens WHERE user_id=auth_users.id AND created_at>0 UNION ALL SELECT last_seen_at AS event_time WHERE last_seen_at>0) AS known_times),0) END, updated_at`
+	plex_sections, stream_limit, max_content_rating, subtitle_languages, audio_languages, allowed_sections, last_seen_at, CASE WHEN created_at>0 THEN created_at ELSE COALESCE((SELECT MIN(event_time) FROM (SELECT verified_at AS event_time FROM identity_links WHERE viewer_id=auth_users.id AND verified_at>0 UNION ALL SELECT created_at AS event_time FROM auth_tokens WHERE user_id=auth_users.id AND created_at>0 UNION ALL SELECT last_seen_at AS event_time WHERE last_seen_at>0) AS known_times),0) END, updated_at, COALESCE(owner_enabled, 1), COALESCE(plex_shared, 1), plex_id`
 
 func scanRow(sc interface{ Scan(...any) error }) (*row, error) {
 	var r row
-	var isOwner, home, restricted, active int
+	var isOwner, home, restricted, active, ownerEnabled, plexShared int
 	var plexSecs, subs, auds, secs string
 	var lastSeen, created, updated int64
+	var rawPlexID sql.NullInt64
 	if err := sc.Scan(&r.ID, &r.PlexID, &r.UUID, &r.Username, &r.Title, &r.Email, &r.Thumb, &isOwner, &home,
-		&restricted, &active, &r.Origin, &plexSecs, &r.StreamLimit, &r.MaxContentRating, &subs, &auds, &secs, &lastSeen, &created, &updated); err != nil {
+		&restricted, &active, &r.Origin, &plexSecs, &r.StreamLimit, &r.MaxContentRating, &subs, &auds, &secs, &lastSeen, &created, &updated, &ownerEnabled, &plexShared, &rawPlexID); err != nil {
 		return nil, err
 	}
 	r.IsOwner, r.Home, r.Restricted, r.Active = isOwner == 1, home == 1, restricted == 1, active == 1
+	r.OwnerEnabled, r.PlexShared, r.HasPlex = ownerEnabled == 1, plexShared == 1, rawPlexID.Valid
 	_ = json.Unmarshal([]byte(plexSecs), &r.PlexSections)
 	_ = json.Unmarshal([]byte(subs), &r.SubtitleLanguages)
 	_ = json.Unmarshal([]byte(auds), &r.AudioLanguages)
@@ -1401,6 +1409,12 @@ type UserInfo struct {
 	Restricted   bool      `json:"restricted"`
 	PlexSections []int     `json:"plexSections"`
 	LastSeen     time.Time `json:"lastSeen,omitempty"`
+	// OwnerEnabled is false when the owner paused this viewer;
+	// PlexShared is whether plex.tv still shares the server with them;
+	// HasPlex is whether the viewer carries a Plex account id.
+	OwnerEnabled bool `json:"ownerEnabled"`
+	PlexShared   bool `json:"plexShared"`
+	HasPlex      bool `json:"hasPlex"`
 }
 
 // AllUsers lists every known user including those who lost access.
@@ -1410,7 +1424,8 @@ func (s *Service) AllUsers(ctx context.Context) ([]UserInfo, error) {
 	out := make([]UserInfo, 0, len(s.users))
 	for _, r := range s.users {
 		out = append(out, UserInfo{User: r.effective(), Active: r.Active, Origin: r.Origin, Home: r.Home,
-			Restricted: r.Restricted, PlexSections: append([]int{}, r.PlexSections...), LastSeen: r.LastSeen})
+			Restricted: r.Restricted, PlexSections: append([]int{}, r.PlexSections...), LastSeen: r.LastSeen,
+			OwnerEnabled: r.OwnerEnabled, PlexShared: r.PlexShared, HasPlex: r.HasPlex})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out, nil

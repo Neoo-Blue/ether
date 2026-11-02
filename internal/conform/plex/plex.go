@@ -53,7 +53,12 @@ func Corpus() []Request {
 		"/video/:/transcode/universal/decision?hasMDE=1&path=%2Flibrary%2Fmetadata%2F{{movieKey}}&mediaIndex=0&partIndex=0&protocol=hls&fastSeek=1&directPlay=0&directStream=1&subtitleSize=100&audioBoost=100&location=lan",
 		// Searches with results (the query matches the discovered movie).
 		"/hubs/search?query=burbs&limit=10&includeCollections=1",
-		"/library/search?query=burbs&limit=10&searchTypes=movies%2Ctv&includeMetadata=1"}
+		"/library/search?query=burbs&limit=10&searchTypes=movies%2Ctv&includeMetadata=1",
+		// Person pages behind Cast & Crew tiles, by numeric tag id and by tagKey.
+		"/library/people/{{personKey}}",
+		"/library/people/{{personKey}}/media",
+		"/library/people/{{personTagKey}}",
+		"/library/people/{{personTagKey}}/media"}
 	clients := Clients()
 	out := make([]Request, 0, len(paths))
 	for _, p := range paths {
@@ -211,6 +216,15 @@ func Discover(ctx context.Context, client *http.Client, base, token, profile str
 					break
 				}
 			}
+			if typ == "movie" && out.Values["personKey"] == "" {
+				for _, role := range detail.descendants("Role") {
+					if id := role.attr("id"); id != "" {
+						out.Values["personKey"] = id
+						out.Values["personTagKey"] = role.attr("tagKey")
+						break
+					}
+				}
+			}
 		}
 		out.Values[typ+"Guid"] = guid
 		if typ == "show" {
@@ -275,7 +289,7 @@ func Discover(ctx context.Context, client *http.Client, base, token, profile str
 			out.Values["section"] = out.Values["showSection"]
 		}
 	}
-	for k, v := range map[string]string{"section": "1", "movieKey": "1", "showKey": "1", "seasonKey": "1", "episodeKey": "1", "collectionKey": "1", "playlistKey": "1"} {
+	for k, v := range map[string]string{"section": "1", "movieKey": "1", "showKey": "1", "seasonKey": "1", "episodeKey": "1", "collectionKey": "1", "playlistKey": "1", "personKey": "1", "personTagKey": "1"} {
 		if out.Values[k] == "" {
 			out.Values[k] = v
 			out.Warnings = append(out.Warnings, "using fallback "+k+" ID "+v)

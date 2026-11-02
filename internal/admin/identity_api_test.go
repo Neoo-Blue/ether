@@ -238,7 +238,7 @@ func TestPortalPlexLinkCannotAttachAnotherViewer(t *testing.T) {
 	}
 }
 
-func TestOwnerManagesLocalMembership(t *testing.T) {
+func TestOwnerPausesAndResumesLocalViewer(t *testing.T) {
 	ctx := context.Background()
 	db := store.OpenTest(t)
 	users, err := auth.New(ctx, db, auth.Options{})
@@ -260,7 +260,7 @@ func TestOwnerManagesLocalMembership(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := newStore(t, func(c *config.Config) { c.SetupComplete = true })
-	h := admin.New(admin.Deps{Config: cfg, LocalIdentity: local, IdentityGrants: grants, IdentityLimiter: limiter, RefreshViewers: users.RefreshViewers, SetViewerActive: users.SetOwnerEnabled})
+	h := admin.New(admin.Deps{Config: cfg, LocalIdentity: local, IdentityGrants: grants, IdentityLimiter: limiter, RefreshViewers: users.RefreshViewers, Lifecycle: users, ViewerDirectory: lifecycleDirectory(users)})
 	r := req("POST", "/ether/api/users/local", `{"username":"bob","password":"secret-pass1"}`)
 	r.Header.Set("Authorization", "Bearer "+ownerToken)
 	res := serve(h, r)
@@ -275,26 +275,35 @@ func TestOwnerManagesLocalMembership(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r = req("PATCH", fmt.Sprintf("/ether/api/users/%d/membership", created.ID), `{"active":false}`)
+	r = req("POST", fmt.Sprintf("/ether/api/users/%d/pause", created.ID), `{}`)
 	r.Header.Set("Authorization", "Bearer "+ownerToken)
 	if res = serve(h, r); res.Code != 200 {
-		t.Fatalf("deactivate: %d %s", res.Code, res.Body)
+		t.Fatalf("pause: %d %s", res.Code, res.Body)
 	}
 	if _, err = grants.Resolve(ctx, "jellyfin", token); err == nil {
-		t.Fatal("inactive grant accepted")
+		t.Fatal("paused viewer's grant accepted")
 	}
-	r = req("PATCH", fmt.Sprintf("/ether/api/users/%d/membership", created.ID), `{"active":true}`)
+	r = req("POST", fmt.Sprintf("/ether/api/users/%d/resume", created.ID), `{}`)
 	r.Header.Set("Authorization", "Bearer "+ownerToken)
 	if res = serve(h, r); res.Code != 200 {
-		t.Fatalf("reactivate: %d %s", res.Code, res.Body)
+		t.Fatalf("resume: %d %s", res.Code, res.Body)
 	}
-	if _, err = grants.Resolve(ctx, "jellyfin", token); err != nil {
+	// Pausing signs the viewer out everywhere, so the old grant stays
+	// revoked after a resume; a fresh sign-in works again.
+	if _, err = grants.Resolve(ctx, "jellyfin", token); err == nil {
+		t.Fatal("grant revoked by pause accepted after resume")
+	}
+	fresh, err := grants.Issue(ctx, created.ID, nil, "jellyfin", core.Device{})
+	if err != nil {
 		t.Fatal(err)
 	}
-	r = req("PATCH", fmt.Sprintf("/ether/api/users/%d/membership", owner), `{"active":false}`)
+	if _, err = grants.Resolve(ctx, "jellyfin", fresh); err != nil {
+		t.Fatal(err)
+	}
+	r = req("POST", fmt.Sprintf("/ether/api/users/%d/pause", owner), `{}`)
 	r.Header.Set("Authorization", "Bearer "+ownerToken)
 	if res = serve(h, r); res.Code != 403 {
-		t.Fatalf("owner deactivated: %d", res.Code)
+		t.Fatalf("owner paused: %d", res.Code)
 	}
 }
 

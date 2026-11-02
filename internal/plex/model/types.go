@@ -251,14 +251,18 @@ type Metadata struct {
 	ChapterSource         string  `plex:"chapterSource,omitempty"`
 	PrimaryExtraKey       string  `plex:"primaryExtraKey,omitempty"`
 	RatingImage           string  `plex:"ratingImage,omitempty"`
-	SkipChildren          *bool   `plex:"skipChildren"`
-	PlaylistItemID        int64   `plex:"playlistItemID,omitempty"`
-	PlayQueueItemID       int64   `plex:"playQueueItemID,omitempty"`
-	SessionKey            string  `plex:"sessionKey,omitempty"`
-	Reason                string  `plex:"reason,omitempty"`
-	ReasonTitle           string  `plex:"reasonTitle,omitempty"`
-	ReasonID              string  `plex:"reasonID,omitempty"`
-	Score                 string  `plex:"score,omitempty"`
+	// MediaCount/MediaCountOptimized replace the Media children when a
+	// listing is asked to excludeElements=Media (PMS orders them here).
+	MediaCount          *int   `plex:"mediaCount"`
+	MediaCountOptimized *int   `plex:"mediaCountOptimized"`
+	SkipChildren        *bool  `plex:"skipChildren"`
+	PlaylistItemID      int64  `plex:"playlistItemID,omitempty"`
+	PlayQueueItemID     int64  `plex:"playQueueItemID,omitempty"`
+	SessionKey          string `plex:"sessionKey,omitempty"`
+	Reason              string `plex:"reason,omitempty"`
+	ReasonTitle         string `plex:"reasonTitle,omitempty"`
+	ReasonID            string `plex:"reasonID,omitempty"`
+	Score               string `plex:"score,omitempty"`
 
 	Extra []Attr `plex:",attrs"`
 

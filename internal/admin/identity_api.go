@@ -553,31 +553,6 @@ func (h *Handler) handleCreateLocalViewer(w http.ResponseWriter, r *http.Request
 	}
 	writeJSON(w, 201, map[string]int64{"id": id})
 }
-func (h *Handler) handleViewerMembership(w http.ResponseWriter, r *http.Request) {
-	access, _ := RequestAccess(r.Context())
-	if !access.Owner || h.deps.SetViewerActive == nil {
-		writeError(w, 403, "forbidden", "owner required")
-		return
-	}
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil || id <= 0 {
-		writeError(w, 400, "invalid", "invalid viewer")
-		return
-	}
-	var body struct {
-		Active *bool `json:"active"`
-	}
-	if decodeJSON(r, &body) != nil || body.Active == nil {
-		writeError(w, 400, "invalid", "invalid request")
-		return
-	}
-	if err = h.deps.SetViewerActive(r.Context(), id, *body.Active); err != nil {
-		writeError(w, 403, "forbidden", "viewer cannot be changed")
-		return
-	}
-	writeJSON(w, 200, map[string]bool{"ownerEnabled": *body.Active})
-}
-
 func (h *Handler) handleCreateInviteViewer(w http.ResponseWriter, r *http.Request) {
 	access, _ := RequestAccess(r.Context())
 	if !access.Owner || h.deps.Invites == nil || h.deps.RefreshViewers == nil {

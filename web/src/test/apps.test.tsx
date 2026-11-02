@@ -72,7 +72,7 @@ function renderApps(entry: string) {
     <MemoryRouter initialEntries={[entry]}>
       <LocationProbe />
       <Routes>
-        <Route path="/apps/:tab?" element={<Apps />} />
+        <Route path="/apps/:tab?/:section?" element={<Apps />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -130,8 +130,12 @@ describe("Apps", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open my account" })).toHaveAttribute(
       "href",
-      "/profile",
+      "/viewers",
     );
+    expect(
+      screen.getByText(/People sign in with their Ether viewer account\. Manage them under/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Viewers" })).toHaveAttribute("href", "/viewers");
     fireEvent.click(screen.getByRole("button", { name: "Connect a device" }));
     expect(screen.getByText("Certified player")).toBeInTheDocument();
     expect(screen.getByText("Open the app on your device.")).toBeInTheDocument();
@@ -260,7 +264,7 @@ describe("Apps", () => {
     expect(screen.queryByRole("link", { name: "Settings" })).not.toBeInTheDocument();
     expect(screen.getByText("Off")).toBeInTheDocument();
     unmount();
-    renderApps("/apps/secure");
+    renderApps("/apps/plex/remote");
     await waitFor(() => expect(screen.getByTestId("loc")).toHaveTextContent("/apps/overview"));
     expect(screen.queryByLabelText("Secure connections")).not.toBeInTheDocument();
   });

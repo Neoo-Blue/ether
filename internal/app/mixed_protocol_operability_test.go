@@ -310,6 +310,8 @@ func TestMixedProtocolOperability(t *testing.T) {
 			{"/jellyfin/System/Info/Public", 200},
 			{"/emby/System/Info/Public", 200},
 			{"/silo/api/v2/system/info", 200},
+			{"/api/v2/system/info", 200},
+			{"/api/v1/health", 200},
 			{"/stremio/not-a-token/manifest.json", 401},
 			{"/m3u/not-a-token/playlist.m3u", 401},
 			{"/dlna/description.xml", 200},

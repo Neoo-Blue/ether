@@ -109,7 +109,14 @@ func (i *instance) Listeners() []frontend.ListenerSpec {
 			port = int(n)
 		}
 	}
-	return []frontend.ListenerSpec{{Address: fmt.Sprintf(":%d", port)}, {Shared: true, PathPrefix: "/silo"}}
+	// On the shared main port Silo answers under /silo and at the root
+	// /api/v2 (plus /api/v1 for the health probe), so a client given the
+	// bare main address reaches it without a path. No other surface on
+	// that port uses /api/v1 or /api/v2: Plex serves its own routes, the
+	// console lives under /ether, and the other apps sit under their own
+	// prefixes. Root requests carry no sharedPrefix marker, so the URLs
+	// Silo returns stay root-relative and correct.
+	return []frontend.ListenerSpec{{Address: fmt.Sprintf(":%d", port)}, {Shared: true, PathPrefix: "/silo"}, {Shared: true, PathPrefix: "/api/v2"}, {Shared: true, PathPrefix: "/api/v1"}}
 }
 func (*instance) Discovery() []frontend.Announcer { return nil }
 func (*instance) Status(context.Context) frontend.Status {

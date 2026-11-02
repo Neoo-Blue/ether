@@ -109,7 +109,7 @@ func (i *Invite) CreateViewer(ctx context.Context, display string) (int64, strin
 	defer tx.Rollback()
 	now := i.now().Unix()
 	var id int64
-	err = tx.QueryRowContext(ctx, `INSERT INTO auth_users(plex_id,username,title,is_owner,active,origin,created_at,updated_at) VALUES(NULL,'',?,0,1,'local',?,?) RETURNING id`, display, now, now).Scan(&id)
+	err = tx.QueryRowContext(ctx, `INSERT INTO auth_users(plex_id,username,title,is_owner,active,origin,created_at,updated_at) VALUES(NULL,'',?,0,1,'invite',?,?) RETURNING id`, display, now, now).Scan(&id)
 	if err != nil {
 		return 0, "", err
 	}

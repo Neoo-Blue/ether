@@ -210,12 +210,27 @@ describe("Getting started", () => {
     expect(screen.queryByRole("region", { name: "Next steps" })).not.toBeInTheDocument();
   });
 
-  it("hides once source, device, viewers, and quality are done", async () => {
+  it("hides once source, device, and viewers are done, even at 1080p", async () => {
     localStorage.removeItem("ether.getting-started.dismissed");
     renderApp("/", {}, (fake) => {
-      fake.state.config.quality.default = "4K";
+      // A deliberate 1080p default is not a todo and must not keep the bar up.
+      fake.state.config.quality.default = "1080p";
     });
     expect(await screen.findByTestId("getting-started-clear", {}, WAIT)).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Next steps" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Playback quality/ })).not.toBeInTheDocument();
+  });
+
+  it("shows the current default on the quality chip without flagging it", async () => {
+    localStorage.removeItem("ether.getting-started.dismissed");
+    renderApp("/", {}, (fake) => {
+      fake.state.config.debrid = { ...fake.state.config.debrid!, providers: [] };
+      fake.state.config.usenet.providers = [];
+      fake.state.config.quality.default = "4K";
+    });
+    const steps = await screen.findByRole("region", { name: "Next steps" }, WAIT);
+    expect(
+      within(steps).getByRole("link", { name: "Playback quality: 4K at home · change" }),
+    ).toHaveAttribute("href", "/releases/profiles");
   });
 });

@@ -1,5 +1,9 @@
 /** Mirrors of the Go config/API types (internal/config, internal/admin). */
 
+import type { ViewerLifecycle } from "./contract";
+
+export type { ViewerLifecycle };
+
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 
 export interface UsenetProvider {
@@ -327,6 +331,7 @@ export interface EtherConfig {
     optimisticStart?: boolean;
     healthRace?: number;
     sourcePreference?: string;
+    sourceAlwaysFirst?: boolean;
     customFormats?: unknown[];
     customFormatScores?: Record<string, number>;
   };
@@ -500,6 +505,7 @@ export interface EtherUser {
   email?: string;
   thumb?: string;
   isOwner: boolean;
+  lifecycle?: ViewerLifecycle;
   streamLimit: number;
   maxContentRating: string;
   subtitleLanguages: string[] | null;

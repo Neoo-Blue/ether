@@ -1108,9 +1108,11 @@ func (r *Registrar) refreshCertTrust(ctx context.Context) {
 		identity = info.Hash
 	}
 	addr := localPlexDirectDial(r.connections(cfg))
-	vctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	host, _, _ := net.SplitHostPort(addr)
+	self := net.JoinHostPort("127.0.0.1", strconv.Itoa(serverPort(cfg)))
+	vctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	_, _ = r.o.Certs.VerifyTrust(vctx, identity, addr)
+	_, _ = r.o.Certs.VerifyTrust(vctx, identity, host, self, addr)
 	r.mu.Lock()
 	r.trustAt = r.o.Now()
 	r.trustFP = info.Fingerprint

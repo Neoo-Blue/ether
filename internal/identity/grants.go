@@ -379,3 +379,28 @@ func (g *Grants) RevokeViewer(ctx context.Context, viewerID int64) error {
 	}
 	return err
 }
+
+// SignOutViewer revokes every live device grant (including the grants
+// other apps use as app passwords) and refresh family the viewer holds,
+// returning how many credentials were revoked.
+func (g *Grants) SignOutViewer(ctx context.Context, viewerID int64) (int, error) {
+	var total int64
+	for _, q := range []string{
+		`UPDATE identity_grants SET revoked=1 WHERE viewer_id=? AND revoked=0`,
+		`UPDATE identity_refresh_families SET revoked=1 WHERE viewer_id=? AND revoked=0`,
+	} {
+		res, err := g.db.ExecContext(ctx, q, viewerID)
+		if err != nil {
+			return int(total), err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return int(total), err
+		}
+		total += n
+	}
+	if total > 0 {
+		g.gen.Add(1)
+	}
+	return int(total), nil
+}
