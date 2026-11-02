@@ -32,8 +32,7 @@ import type {
   DebridProviderStatus,
   EtherConfig,
 } from "../../lib/types";
-import { SchemaField } from "../settings/SchemaForm";
-import { DEBRID } from "../settings/schema";
+import { SchemaField, useSettingsSchema, type FieldDef } from "../settings/SchemaForm";
 import { DEBRID_KINDS, DEBRID_TOKEN_URL, SourceCard, debridFix } from "./cards";
 import { debridMark } from "./marks";
 
@@ -551,6 +550,7 @@ function DebridSettings({
     };
   }, [debrid]);
   const { draft, setDraft, dirty, reset } = useDraft<Obj>(saved);
+  const debridSchema = useSettingsSchema("debrid");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<unknown>(null);
   const [saving, setSaving] = useState(false);
@@ -575,12 +575,13 @@ function DebridSettings({
     }
   }
 
-  if (!draft) return null;
+  if (!draft || !debridSchema.groups) return null;
+  const DEBRID = debridSchema.groups;
   // Connection knobs stay under More options whether the schema lists them as
   // ordinary fields or on FieldGroup.more. omit is not used here: the draft
   // still saves every key.
   const power = new Set(["chunkBytes", "readAheadChunks", "maxConnections"]);
-  const collapsed = new Map<string, (typeof DEBRID)[number]["fields"][number]>();
+  const collapsed = new Map<string, FieldDef>();
   for (const group of DEBRID) {
     for (const item of [...group.fields, ...(group.more ?? [])]) {
       if (power.has(item.key) || group.more?.some((extra) => extra.key === item.key)) {
