@@ -76,35 +76,41 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 		defer cancel()
 		mgr.Publish(pctx, ev)
 	}
-	stopPlayback := a.playback.Subscribe(func(ev playback.Event) {
-		name := plugins.NormalizePlayback(ev.Kind, "")
-		if name == "" {
-			return
-		}
-		payload, _ := json.Marshal(map[string]any{"kind": ev.Kind})
-		var viewer int64
-		if ev.Session != nil {
-			viewer = ev.Session.UserID
-			payload, _ = json.Marshal(map[string]any{
-				"kind": ev.Kind, "ratingKey": int64(ev.Session.Key),
-			})
-		}
-		publish(plugins.Event{Name: name, At: ev.At, ViewerID: viewer, Payload: payload})
-	})
-	stopState := a.state.Subscribe(func(ev state.Event) {
-		var name string
-		switch ev.Kind {
-		case state.EventCompleted, state.EventScrobble:
-			name = plugins.EventPlaybackCompleted
-		case state.EventProgress:
-			name = plugins.NormalizePlayback("update", ev.State)
-		}
-		if name == "" {
-			return
-		}
-		payload, _ := json.Marshal(map[string]any{"ratingKey": int64(ev.Key), "completed": ev.Completed})
-		publish(plugins.Event{Name: name, At: ev.At, ViewerID: ev.UserID, Payload: payload})
-	})
+	stopPlayback := func() {}
+	if a.playback != nil {
+		stopPlayback = a.playback.Subscribe(func(ev playback.Event) {
+			name := plugins.NormalizePlayback(ev.Kind, "")
+			if name == "" {
+				return
+			}
+			payload, _ := json.Marshal(map[string]any{"kind": ev.Kind})
+			var viewer int64
+			if ev.Session != nil {
+				viewer = ev.Session.UserID
+				payload, _ = json.Marshal(map[string]any{
+					"kind": ev.Kind, "ratingKey": int64(ev.Session.Key),
+				})
+			}
+			publish(plugins.Event{Name: name, At: ev.At, ViewerID: viewer, Payload: payload})
+		})
+	}
+	stopState := func() {}
+	if a.state != nil {
+		stopState = a.state.Subscribe(func(ev state.Event) {
+			var name string
+			switch ev.Kind {
+			case state.EventCompleted, state.EventScrobble:
+				name = plugins.EventPlaybackCompleted
+			case state.EventProgress:
+				name = plugins.NormalizePlayback("update", ev.State)
+			}
+			if name == "" {
+				return
+			}
+			payload, _ := json.Marshal(map[string]any{"ratingKey": int64(ev.Key), "completed": ev.Completed})
+			publish(plugins.Event{Name: name, At: ev.At, ViewerID: ev.UserID, Payload: payload})
+		})
+	}
 
 	runCtx, cancelRun := context.WithCancel(context.Background())
 	go mgr.Run(runCtx)
