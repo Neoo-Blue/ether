@@ -73,6 +73,14 @@ import { SaveBarHost } from "./components/SaveBar";
 import { UpdateReady } from "./components/UpdateReady";
 import { LEVEL_LABEL, LevelBadge, StatusDot } from "./components/status";
 import { api, getToken, setToken } from "./lib/api";
+import { BUILTIN, textOf, useRegistry, type Descriptor } from "./lib/extend";
+import {
+  pageRoute,
+  pluginNavGroup,
+  pluginPageRoute,
+  type NavItemMeta,
+  type PageMeta,
+} from "./lib/console-descriptors";
 import type { Bootstrap } from "./lib/types";
 import { theme } from "./theme";
 import Home from "./pages/Home";
@@ -121,64 +129,125 @@ const linkRender: LinkRender = ({ href, children, className, title, ariaCurrent,
   </Link>
 );
 
+/** Lucide icons by the name page descriptors carry. */
+const NAV_ICONS = {
+  Gauge,
+  Activity: ActivityIcon,
+  Users,
+  Library,
+  Layers,
+  LayoutTemplate,
+  Tv,
+  CalendarDays,
+  Tags,
+  Network,
+  ListFilter,
+  HardDrive,
+  MonitorPlay,
+  Server,
+  Globe,
+  Plug,
+  Puzzle,
+  Bell,
+  Boxes,
+  LifeBuoy,
+} as const;
+
+function navIcon(icon: string | undefined): ReactNode {
+  const size = 18;
+  if (icon && /^(https?:)?\/\//.test(icon)) {
+    return <img src={icon} alt="" width={size} height={size} className="rounded-sm" />;
+  }
+  const Icon = (icon && NAV_ICONS[icon as keyof typeof NAV_ICONS]) || Puzzle;
+  return <Icon size={size} />;
+}
+
+/** Sidebar groups in display order; the top group has no heading. */
+const NAV_GROUPS: { key: string; label: () => string }[] = [
+  { key: "", label: () => "" },
+  { key: "library", label: () => t("Library") },
+  { key: "streaming", label: () => t("Streaming") },
+  { key: "server", label: () => t("Server") },
+];
+
 /**
+ * The sidebar, from registry descriptors (WS1d). Built-in navItems come from
+ * Go; a plugin page joins its declared nav group (or Server) with the
+ * plugin's icon, after the built-ins of the same order.
  * Grouped by the owner's questions: what's happening and who watches; what
  * viewers see in their apps; how titles reach the screen; how the server runs.
  */
-function navigation(): SidebarNavGroup[] {
-  const icon = 18;
-  return [
-    {
-      label: "",
-      items: [
-        { href: "/", label: t("Overview"), icon: <Gauge size={icon} />, exact: true, mobile: true },
-        {
-          href: "/activity",
-          label: t("Activity"),
-          icon: <ActivityIcon size={icon} />,
-          mobile: true,
-        },
-        { href: "/viewers", label: t("Viewers"), icon: <Users size={icon} />, mobile: true },
-      ],
-    },
-    {
-      label: t("Library"),
-      items: [
-        { href: "/catalog", label: t("Catalog"), icon: <Library size={icon} /> },
-        {
-          href: "/collections",
-          label: t("Collections"),
-          icon: <Layers size={icon} />,
-          mobile: true,
-        },
-        { href: "/home", label: t("Home"), icon: <LayoutTemplate size={icon} /> },
-        { href: "/livetv", label: t("Live TV"), icon: <Tv size={icon} /> },
-        { href: "/calendar", label: t("Calendar"), icon: <CalendarDays size={icon} /> },
-        { href: "/metadata", label: t("Metadata"), icon: <Tags size={icon} /> },
-      ],
-    },
-    {
-      label: t("Streaming"),
-      items: [
-        { href: "/sources", label: t("Sources"), icon: <Network size={icon} /> },
-        { href: "/releases", label: t("Releases"), icon: <ListFilter size={icon} /> },
-        { href: "/cache", label: t("Cache"), icon: <HardDrive size={icon} /> },
-        { href: "/playback", label: t("Playback"), icon: <MonitorPlay size={icon} /> },
-      ],
-    },
-    {
-      label: t("Server"),
-      items: [
-        { href: "/server", label: t("General"), icon: <Server size={icon} /> },
-        { href: "/apps", label: t("Apps"), icon: <Globe size={icon} /> },
-        { href: "/services", label: t("Integrations"), icon: <Plug size={icon} /> },
-        { href: "/plugins", label: t("Plugins"), icon: <Puzzle size={icon} /> },
-        { href: "/notifications", label: t("Notifications"), icon: <Bell size={icon} /> },
-        { href: "/cluster", label: t("Cluster"), icon: <Boxes size={icon} /> },
-        { href: "/maintenance", label: t("Maintenance"), icon: <LifeBuoy size={icon} /> },
-      ],
-    },
-  ];
+export function buildNavigation(descriptors: Descriptor[]): SidebarNavGroup[] {
+  type Item = {
+    group: string;
+    order: number;
+    builtin: boolean;
+    item: SidebarNavGroup["items"][number];
+  };
+  const items: Item[] = [];
+  const navPages = new Set<string>();
+  const pageById = new Map<string, Descriptor<PageMeta>>();
+  for (const d of descriptors) {
+    if (d.kind === "page") {
+      pageById.set(d.id, d as Descriptor<PageMeta>);
+    }
+  }
+  for (const d of descriptors) {
+    if (d.kind !== "navItem") continue;
+    const meta = d.meta as NavItemMeta | undefined;
+    if (!meta?.route) continue;
+    const pageId = meta.page ?? (meta.pageKey ? `plugin:${d.owner}/${meta.pageKey}` : undefined);
+    if (pageId) navPages.add(pageId);
+    navPages.add(d.id);
+    const page = pageId ? pageById.get(pageId) : undefined;
+    const pageMeta = page?.meta;
+    const group =
+      d.owner === BUILTIN
+        ? (d.group ?? "")
+        : ((page ? pluginNavGroup(page) : undefined) ?? d.group ?? "server");
+    const href =
+      d.owner !== BUILTIN && meta.pageKey ? pluginPageRoute(d.owner, meta.pageKey) : meta.route;
+    items.push({
+      group,
+      order: d.order ?? page?.order ?? 0,
+      builtin: d.owner === BUILTIN,
+      item: {
+        href,
+        label: textOf(d.label),
+        icon: navIcon(d.icon ?? page?.icon ?? pageMeta?.icon),
+        exact: meta.exact || undefined,
+        mobile: meta.mobile || undefined,
+      },
+    });
+  }
+  for (const d of descriptors) {
+    if (d.kind !== "page" || d.owner === BUILTIN || navPages.has(d.id)) continue;
+    const page = d as Descriptor<PageMeta>;
+    const meta = page.meta;
+    const group = pluginNavGroup(page) ?? "server";
+    items.push({
+      group,
+      order: d.order ?? 0,
+      builtin: false,
+      item: {
+        href: pageRoute(page),
+        label: textOf(d.label),
+        icon: navIcon(d.icon ?? meta?.icon),
+        mobile: meta?.mobile || undefined,
+      },
+    });
+  }
+  items.sort((a, b) => a.order - b.order || Number(b.builtin) - Number(a.builtin));
+  const groups: SidebarNavGroup[] = NAV_GROUPS.map((g) => ({
+    label: g.label(),
+    items: items.filter((i) => i.group === g.key).map((i) => i.item),
+  }));
+  // A plugin may declare a group the console does not know; keep it visible
+  // under Server rather than dropping the page.
+  const known = new Set(NAV_GROUPS.map((g) => g.key));
+  const stray = items.filter((i) => !known.has(i.group)).map((i) => i.item);
+  if (stray.length) groups[groups.length - 1]!.items.push(...stray);
+  return groups.filter((g) => g.items.length > 0);
 }
 
 function HealthIndicator() {
@@ -322,9 +391,54 @@ function PageFallback() {
   );
 }
 
+// Compiled components and local parameters; base paths come from page descriptors.
+const BUILTIN_PAGES: Record<
+  string,
+  {
+    element: ReactNode;
+    suffix?: string;
+    children?: ReactNode;
+    extra?: { suffix: string; element: ReactNode }[];
+  }
+> = {
+  overview: { element: <Home /> },
+  activity: { element: <Activity />, suffix: "/:tab?" },
+  viewers: { element: <ViewersList />, extra: [{ suffix: "/:id/:tab?", element: <ViewerById /> }] },
+  home: { element: <Designer /> },
+  collections: {
+    element: <CollectionsLayout />,
+    children: (
+      <>
+        <Route path="new" element={<CollectionDrawer fresh />} />
+        <Route path=":id" element={<CollectionDrawer />} />
+      </>
+    ),
+  },
+  livetv: { element: <LiveTV />, suffix: "/:tab?" },
+  calendar: { element: <Calendar />, suffix: "/:view?" },
+  catalog: { element: <Catalog />, suffix: "/:tab?" },
+  metadata: { element: <Metadata />, suffix: "/:tab?" },
+  sources: { element: <Sources />, suffix: "/:tab?" },
+  releases: { element: <Releases />, suffix: "/:tab?" },
+  cache: { element: <Cache />, suffix: "/:tab?" },
+  playback: { element: <Playback />, suffix: "/:tab?/:section?" },
+  notifications: { element: <Notifications />, suffix: "/:tab?" },
+  general: { element: <GeneralPage />, suffix: "/:tab?" },
+  apps: { element: <Apps />, suffix: "/:tab?/:section?" },
+  integrations: { element: <ServicesPage />, suffix: "/:tab?" },
+  cluster: { element: <ClusterPage /> },
+  maintenance: { element: <MaintenancePage />, suffix: "/:tab?/:backupTab?" },
+};
+
 function Shell() {
   const { boot } = useApp();
   const location = useLocation();
+  const {
+    descriptors: navDescriptors,
+    loading: registryLoading,
+    error: registryError,
+    reload: reloadRegistry,
+  } = useRegistry<PageMeta>("page", "navItem");
   const remoteSession = boot.authRequired && Boolean(getToken());
   const version = versionLabel(boot.version);
   const serverName = boot.serverName?.trim() || "Ether";
@@ -335,7 +449,7 @@ function Shell() {
       }
     >
       <AppShell
-        groups={location.pathname === "/setup" ? [] : navigation()}
+        groups={location.pathname === "/setup" ? [] : buildNavigation(navDescriptors)}
         pathname={location.pathname}
         navigationMode="sidebar"
         linkRender={linkRender}
@@ -431,43 +545,51 @@ function Shell() {
         <SaveBarHost>
           <Suspense fallback={<PageFallback />}>
             <Routes>
+              <Route path="/setup" element={<Setup />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/plugins/:tab?/*" element={<Plugins />} />
+              <Route path="/p/:plugin/:page/*" element={<PluginPage />} />
+              {navDescriptors
+                .filter((d) => d.kind === "page" && d.owner === BUILTIN && d.meta?.route)
+                .flatMap((d) => {
+                  const page = BUILTIN_PAGES[d.id];
+                  if (!page) return [];
+                  const base = d.meta!.route!;
+                  const element =
+                    d.id === "overview" && !(boot.setupComplete || boot.ownerConfigured) ? (
+                      <Navigate to="/setup" replace />
+                    ) : (
+                      page.element
+                    );
+                  return [
+                    <Route
+                      key={d.id}
+                      path={`${base === "/" ? "" : base}${page.suffix ?? ""}` || "/"}
+                      element={element}
+                    >
+                      {page.children}
+                    </Route>,
+                    ...(page.extra ?? []).map(({ suffix, element }) => (
+                      <Route
+                        key={`${d.id}:${suffix}`}
+                        path={`${base}${suffix}`}
+                        element={element}
+                      />
+                    )),
+                  ];
+                })}
               <Route
-                path="/"
+                path="*"
                 element={
-                  boot.setupComplete || boot.ownerConfigured ? (
-                    <Home />
+                  registryLoading ? (
+                    <PageFallback />
+                  ) : registryError ? (
+                    <ErrorPanel error={registryError} onRetry={reloadRegistry} />
                   ) : (
-                    <Navigate to="/setup" replace />
+                    <Navigate to="/" replace />
                   )
                 }
               />
-              <Route path="/setup" element={<Setup />} />
-              <Route path="/activity/:tab?" element={<Activity />} />
-              <Route path="/viewers" element={<ViewersList />} />
-              <Route path="/viewers/:id/:tab?" element={<ViewerById />} />
-              <Route path="/home" element={<Designer />} />
-              <Route path="/collections" element={<CollectionsLayout />}>
-                <Route path="new" element={<CollectionDrawer fresh />} />
-                <Route path=":id" element={<CollectionDrawer />} />
-              </Route>
-              <Route path="/livetv/:tab?" element={<LiveTV />} />
-              <Route path="/calendar/:view?" element={<Calendar />} />
-              <Route path="/catalog/:tab?" element={<Catalog />} />
-              <Route path="/metadata/:tab?" element={<Metadata />} />
-              <Route path="/sources/:tab?" element={<Sources />} />
-              <Route path="/releases/:tab?" element={<Releases />} />
-              <Route path="/cache/:tab?" element={<Cache />} />
-              <Route path="/playback/:tab?/:section?" element={<Playback />} />
-              <Route path="/notifications/:tab?" element={<Notifications />} />
-              <Route path="/profile" element={<Profile />} />
-              <Route path="/server/:tab?" element={<GeneralPage />} />
-              <Route path="/apps/:tab?/:section?" element={<Apps />} />
-              <Route path="/services/:tab?" element={<ServicesPage />} />
-              <Route path="/plugins/:tab?/*" element={<Plugins />} />
-              <Route path="/p/:plugin/:page/*" element={<PluginPage />} />
-              <Route path="/cluster" element={<ClusterPage />} />
-              <Route path="/maintenance/:tab?/:backupTab?" element={<MaintenancePage />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>
         </SaveBarHost>

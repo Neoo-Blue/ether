@@ -32,7 +32,7 @@ func writeJSON(w http.ResponseWriter, v any) {
 type Frontend struct{}
 
 func (Frontend) Describe() frontend.Descriptor {
-	return frontend.Descriptor{ID: "stremio", Name: "Stremio", Version: "1.0.0", Clients: []string{"Stremio"}}
+	return frontend.Descriptor{ID: "stremio", Name: "Stremio", Version: "1.0.0", Clients: []string{"Stremio"}, SettingsSchema: frontend.AccountSchema("addon")}
 }
 
 func (Frontend) Mount(_ context.Context, host frontend.Host) (frontend.Instance, error) {

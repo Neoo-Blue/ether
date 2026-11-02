@@ -32,7 +32,23 @@ it("creates a restricted guest and stages it as the selected DLNA viewer", async
     if (path === "/frontends")
       return [
         {
-          descriptor: { id: "dlna", name: "DLNA" },
+          descriptor: {
+            id: "dlna",
+            name: "DLNA",
+            // The settings schema the server serves for DLNA (WS1d).
+            settingsSchema: {
+              sections: [
+                {
+                  key: "tv",
+                  fields: [
+                    { key: "serverName", kind: "serverName" },
+                    { key: "viewerId", kind: "viewer" },
+                    { key: "discovery", kind: "bool", more: true },
+                  ],
+                },
+              ],
+            },
+          },
           enabled: true,
           status: {
             addresses: [],

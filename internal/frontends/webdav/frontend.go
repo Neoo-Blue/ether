@@ -17,7 +17,7 @@ import (
 type Frontend struct{}
 
 func (Frontend) Describe() frontend.Descriptor {
-	return frontend.Descriptor{ID: "webdav", Name: "Files", Version: "1.0", Clients: []string{"Infuse", "VLC", "Kodi", "rclone"}}
+	return frontend.Descriptor{ID: "webdav", Name: "Files", Version: "1.0", Clients: []string{"Infuse", "VLC", "Kodi", "rclone"}, SettingsSchema: frontend.AccountSchema("files")}
 }
 func (Frontend) Mount(_ context.Context, host frontend.Host) (frontend.Instance, error) {
 	if host.Identity == nil || host.Experience == nil || host.Sessions == nil {
