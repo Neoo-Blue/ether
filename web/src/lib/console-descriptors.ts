@@ -14,7 +14,10 @@ export interface PageSectionMeta {
 
 export interface PageMeta {
   route?: string;
+  pluginRoute?: string;
   navGroup?: string;
+  group?: string;
+  icon?: string;
   inNav?: boolean;
   mobile?: boolean;
   exact?: boolean;
@@ -25,6 +28,7 @@ export interface PageMeta {
 export interface NavItemMeta {
   route: string;
   page?: string;
+  pageKey?: string;
   mobile?: boolean;
   exact?: boolean;
 }
@@ -72,11 +76,32 @@ export function searchTextOf(text?: ExtendText): string | undefined {
   return resolved || undefined;
 }
 
+const NAV_GROUPS = new Set(["", "library", "streaming", "server"]);
+
+/**
+ * The sidebar group for a plugin page descriptor, when it declares one.
+ * Note that internal/plugins/descriptors.go sets top-level `d.group` to the
+ * plugin's human name ("Ether Wrapped") while putting the manifest's sidebar
+ * group on `meta.group` (or `meta.navGroup`).
+ */
+export function pluginNavGroup(d: Descriptor<PageMeta>): string | undefined {
+  const meta = d.meta;
+  const candidate = meta?.navGroup ?? meta?.group ?? d.group;
+  if (candidate === undefined) return undefined;
+  if (meta?.navGroup !== undefined || meta?.group !== undefined) return candidate;
+  return NAV_GROUPS.has(candidate) ? candidate : "server";
+}
+
 /** The console route a page descriptor opens. */
 export function pageRoute(d: Descriptor<PageMeta>): string {
-  if (d.meta?.route) return d.meta.route;
-  if (d.owner !== BUILTIN) return pluginPageRoute(d.owner, pluginLocalId(d));
-  return "/";
+  if (d.owner !== BUILTIN) {
+    const route = d.meta?.route;
+    if (route && route.startsWith("/") && !route.startsWith("/ether/")) {
+      return route;
+    }
+    return pluginPageRoute(d.owner, pluginLocalId(d));
+  }
+  return d.meta?.route || "/";
 }
 
 /** A plugin page's local id: the part after "plugin:<owner>/". */
@@ -102,7 +127,6 @@ export function agentSuggestionsFor(
 ): Descriptor<CommandMeta>[] {
   return commands.filter(
     (c) =>
-      c.meta?.agentSuggestion &&
-      (c.meta.routePatterns ?? []).some((p) => routeMatches(p, route)),
+      c.meta?.agentSuggestion && (c.meta.routePatterns ?? []).some((p) => routeMatches(p, route)),
   );
 }

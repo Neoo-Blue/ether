@@ -994,47 +994,49 @@ export function ConnectedServices({
           onToggleRatings={(next) => void toggleRatings(next)}
         />
       </div>
-      {services.filter((s) => !s.custom).map((s) => {
-        if (tab !== s.tab && !visited.has(s.tab)) return null;
-        const value = draft[s.configKey] ?? {};
-        const set = (next: Obj) => setDraft({ ...draft, [s.configKey]: next });
-        const testButton =
-          s.test && s.testLabel ? (
-            <TestButton
-              label={s.testLabel}
-              state={tests[s.configKey] ?? { status: "idle" }}
-              onTest={() => runTest(s, value)}
-            />
-          ) : undefined;
-        return (
-          <div key={s.configKey} hidden={tab !== s.tab}>
-            {s.form ? (
-              <s.form
-                value={value}
-                saved={stored?.[s.configKey]}
-                onChange={set}
-                errors={errors}
-                footer={testButton}
+      {services
+        .filter((s) => !s.custom)
+        .map((s) => {
+          if (tab !== s.tab && !visited.has(s.tab)) return null;
+          const value = draft[s.configKey] ?? {};
+          const set = (next: Obj) => setDraft({ ...draft, [s.configKey]: next });
+          const testButton =
+            s.test && s.testLabel ? (
+              <TestButton
+                label={s.testLabel}
+                state={tests[s.configKey] ?? { status: "idle" }}
+                onTest={() => runTest(s, value)}
               />
-            ) : (
-              <SchemaGroups
-                service={s}
-                value={value}
-                set={set}
-                errors={errors}
-                footer={testButton}
-              />
-            )}
-            {s.tab === "llm" ? (
-              <LanguageFeatures
-                textModelReady={languageModelReady(stored?.llm)}
-                speechReady={speechToTextReady(stored?.llm)}
-              />
-            ) : null}
-            {s.tab === "introdb" ? <MarkerCoverage /> : null}
-          </div>
-        );
-      })}
+            ) : undefined;
+          return (
+            <div key={s.configKey} hidden={tab !== s.tab}>
+              {s.form ? (
+                <s.form
+                  value={value}
+                  saved={stored?.[s.configKey]}
+                  onChange={set}
+                  errors={errors}
+                  footer={testButton}
+                />
+              ) : (
+                <SchemaGroups
+                  service={s}
+                  value={value}
+                  set={set}
+                  errors={errors}
+                  footer={testButton}
+                />
+              )}
+              {s.tab === "llm" ? (
+                <LanguageFeatures
+                  textModelReady={languageModelReady(stored?.llm)}
+                  speechReady={speechToTextReady(stored?.llm)}
+                />
+              ) : null}
+              {s.tab === "introdb" ? <MarkerCoverage /> : null}
+            </div>
+          );
+        })}
       {tab === "simkl" || visited.has("simkl") ? (
         <div hidden={tab !== "simkl"}>
           <SimklIntegration
@@ -1223,7 +1225,9 @@ function ServiceOverview({
     if (!service) {
       // No switch: a core service (TMDB) or a plugin integration.
       const readyField = meta.readyField ?? meta.requiredField;
-      const ready = readyField ? secretConfigured(stored?.[meta.configKey ?? ""]?.[readyField]) : false;
+      const ready = readyField
+        ? secretConfigured(stored?.[meta.configKey ?? ""]?.[readyField])
+        : false;
       const catalogHealth = health.find((item) => item.id === "catalog");
       return (
         <IntegrationAppCard
@@ -1320,7 +1324,6 @@ function ServiceOverview({
     </>
   );
 }
-
 
 function introStatus(enabled: boolean, apiKey: unknown) {
   if (!enabled) return <Badge variant="secondary">{t("Off")}</Badge>;

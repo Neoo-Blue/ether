@@ -76,6 +76,8 @@ import { api, getToken, setToken } from "./lib/api";
 import { BUILTIN, textOf, useRegistry, type Descriptor } from "./lib/extend";
 import {
   pageRoute,
+  pluginNavGroup,
+  pluginPageRoute,
   type NavItemMeta,
   type PageMeta,
 } from "./lib/console-descriptors";
@@ -170,29 +172,49 @@ const NAV_GROUPS: { key: string; label: () => string }[] = [
 
 /**
  * The sidebar, from registry descriptors (WS1d). Built-in navItems come from
- * Go; a plugin page with a declared nav group joins that group with the
+ * Go; a plugin page joins its declared nav group (or Server) with the
  * plugin's icon, after the built-ins of the same order.
  * Grouped by the owner's questions: what's happening and who watches; what
  * viewers see in their apps; how titles reach the screen; how the server runs.
  */
 export function buildNavigation(descriptors: Descriptor[]): SidebarNavGroup[] {
-  type Item = { group: string; order: number; builtin: boolean; item: SidebarNavGroup["items"][number] };
+  type Item = {
+    group: string;
+    order: number;
+    builtin: boolean;
+    item: SidebarNavGroup["items"][number];
+  };
   const items: Item[] = [];
   const navPages = new Set<string>();
+  const pageById = new Map<string, Descriptor<PageMeta>>();
+  for (const d of descriptors) {
+    if (d.kind === "page") {
+      pageById.set(d.id, d as Descriptor<PageMeta>);
+    }
+  }
   for (const d of descriptors) {
     if (d.kind !== "navItem") continue;
     const meta = d.meta as NavItemMeta | undefined;
     if (!meta?.route) continue;
-    if (meta.page) navPages.add(meta.page);
+    const pageId = meta.page ?? (meta.pageKey ? `plugin:${d.owner}/${meta.pageKey}` : undefined);
+    if (pageId) navPages.add(pageId);
     navPages.add(d.id);
+    const page = pageId ? pageById.get(pageId) : undefined;
+    const pageMeta = page?.meta;
+    const group =
+      d.owner === BUILTIN
+        ? (d.group ?? "")
+        : ((page ? pluginNavGroup(page) : undefined) ?? d.group ?? "server");
+    const href =
+      d.owner !== BUILTIN && meta.pageKey ? pluginPageRoute(d.owner, meta.pageKey) : meta.route;
     items.push({
-      group: d.group ?? "",
-      order: d.order ?? 0,
+      group,
+      order: d.order ?? page?.order ?? 0,
       builtin: d.owner === BUILTIN,
       item: {
-        href: meta.route,
+        href,
         label: textOf(d.label),
-        icon: navIcon(d.icon),
+        icon: navIcon(d.icon ?? page?.icon ?? pageMeta?.icon),
         exact: meta.exact || undefined,
         mobile: meta.mobile || undefined,
       },
@@ -200,24 +222,22 @@ export function buildNavigation(descriptors: Descriptor[]): SidebarNavGroup[] {
   }
   for (const d of descriptors) {
     if (d.kind !== "page" || d.owner === BUILTIN || navPages.has(d.id)) continue;
-    const meta = d.meta as PageMeta | undefined;
-    const group = meta?.navGroup ?? d.group;
-    if (group === undefined) continue;
+    const page = d as Descriptor<PageMeta>;
+    const meta = page.meta;
+    const group = pluginNavGroup(page) ?? "server";
     items.push({
       group,
       order: d.order ?? 0,
       builtin: false,
       item: {
-        href: pageRoute(d as Descriptor<PageMeta>),
+        href: pageRoute(page),
         label: textOf(d.label),
-        icon: navIcon(d.icon),
+        icon: navIcon(d.icon ?? meta?.icon),
         mobile: meta?.mobile || undefined,
       },
     });
   }
-  items.sort(
-    (a, b) => a.order - b.order || Number(b.builtin) - Number(a.builtin),
-  );
+  items.sort((a, b) => a.order - b.order || Number(b.builtin) - Number(a.builtin));
   const groups: SidebarNavGroup[] = NAV_GROUPS.map((g) => ({
     label: g.label(),
     items: items.filter((i) => i.group === g.key).map((i) => i.item),

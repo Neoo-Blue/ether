@@ -25,6 +25,14 @@ const commands = descriptors.filter((d) => d.kind === "command") as Descriptor<C
 describe("console descriptors", () => {
   it("routes a plugin page to /p/<plugin>/<page>", () => {
     expect(pageRoute(fixturePluginPage)).toBe("/p/dev.example/wrapped");
+    // A plugin page descriptor whose meta.route is the internal /ether/view/...
+    // loader route still maps to its console /p/<plugin>/<page> route.
+    expect(
+      pageRoute({
+        ...fixturePluginPage,
+        meta: { route: "/ether/view/wrapped", group: "server" },
+      }),
+    ).toBe("/p/dev.example/wrapped");
   });
 
   it("lists a plugin page as a search destination", () => {

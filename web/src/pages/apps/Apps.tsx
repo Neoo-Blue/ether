@@ -93,10 +93,7 @@ const HOME_ROW_LABELS: Record<string, () => string> = {
  * Copy and defaults for the setting keys a schema can name. The schema says
  * which settings a frontend has; the console keeps their wording.
  */
-const FIELD_COPY: Record<
-  string,
-  () => { label: string; help?: string; fallback?: unknown }
-> = {
+const FIELD_COPY: Record<string, () => { label: string; help?: string; fallback?: unknown }> = {
   discovery: () => ({
     label: t("Let apps find this server"),
     help: t("Apps on your network can find this server without typing an address."),
@@ -432,7 +429,9 @@ function ProtocolSettings({ info, hidden }: { info: FrontendInfo; hidden: boolea
       case "number": {
         if (!copy) return null;
         const value =
-          typeof draft[field.key] === "number" ? (draft[field.key] as number) : Number(copy.fallback ?? 0);
+          typeof draft[field.key] === "number"
+            ? (draft[field.key] as number)
+            : Number(copy.fallback ?? 0);
         return (
           <SettingsRow
             key={field.key}
@@ -446,9 +445,7 @@ function ProtocolSettings({ info, hidden }: { info: FrontendInfo; hidden: boolea
                 min={field.min}
                 max={field.max}
                 value={value}
-                onChange={(e) =>
-                  setDraft({ ...draft, [field.key]: Number(e.currentTarget.value) })
-                }
+                onChange={(e) => setDraft({ ...draft, [field.key]: Number(e.currentTarget.value) })}
               />
             }
           />
@@ -556,7 +553,6 @@ function portHelp(defaultPort?: number): string {
       )
     : t("Change this only if the usual port is already in use.");
 }
-
 
 function DLNAViewer({ value, onChange }: { value?: number; onChange: (id?: number) => void }) {
   const viewers = useAsync(() => api.viewers(), []);

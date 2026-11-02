@@ -1,14 +1,16 @@
 import {
   GlobalSearch,
+  toast,
   type GlobalSearchGroup,
   type GlobalSearchResult,
 } from "@braedonsaunders/appkit-ui";
 import { useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../lib/api";
+import { api, apiFetch, errorMessage } from "../lib/api";
 import { t, tn } from "../i18n";
-import { textOf, useRegistry, type Descriptor } from "../lib/extend";
+import { BUILTIN, textOf, useRegistry, type Descriptor } from "../lib/extend";
 import {
+  pluginPageRoute,
   searchTextOf,
   type CommandMeta,
   type PageMeta,
@@ -25,11 +27,19 @@ function matches(q: string, ...fields: (string | undefined)[]): boolean {
     .every((w) => hay.includes(w));
 }
 
+const ACTION_PREFIX = "action:";
+
+interface PluginActionOutcome {
+  toast?: string | { text: string; kind?: "success" | "error" | "info" };
+  open?: { page?: string; route?: string; params?: Record<string, string> };
+}
+
 /**
  * ⌘K: jump to any page, section, viewer or collection, or start a common
  * task. Destinations and actions come from the descriptor registry (WS1d):
  * page descriptors (built-in and plugin) fill "Go to", command descriptors
- * with a route fill "Actions". Agent suggestions are not ⌘K actions.
+ * with a route or plugin action fill "Actions". Agent suggestions are not ⌘K
+ * actions.
  */
 export function CommandSearch() {
   const navigate = useNavigate();
@@ -56,7 +66,7 @@ export function CommandSearch() {
       const actions = commands
         .filter(
           (c) =>
-            c.meta?.route &&
+            (c.meta?.route || c.meta?.action) &&
             !c.meta.agentSuggestion &&
             matches(q, textOf(c.label), searchTextOf(c.meta.keywords)),
         )
@@ -64,7 +74,9 @@ export function CommandSearch() {
           id: c.id,
           type: "action",
           title: textOf(c.label),
-          href: c.meta!.route!,
+          href:
+            c.meta?.route ||
+            `${ACTION_PREFIX}${encodeURIComponent(c.owner)}/${encodeURIComponent(c.meta!.action!)}`,
         }));
       if (actions.length) groups.push({ id: "actions", label: t("Actions"), hits: actions });
       const [viewers, collections] = await Promise.all([
@@ -98,12 +110,52 @@ export function CommandSearch() {
     },
     [],
   );
+  const runHit = useCallback(
+    (href: string) => {
+      if (!href.startsWith(ACTION_PREFIX)) {
+        navigate(href);
+        return;
+      }
+      const [rawOwner = "", rawAction = ""] = href.slice(ACTION_PREFIX.length).split("/", 2);
+      const owner = decodeURIComponent(rawOwner);
+      const action = decodeURIComponent(rawAction);
+      if (!owner || owner === BUILTIN || !action) return;
+      void apiFetch<PluginActionOutcome>(
+        `/plugins/${encodeURIComponent(owner)}/actions/${encodeURIComponent(action)}`,
+        { method: "POST", body: JSON.stringify({ params: {} }) },
+      )
+        .then((res) => {
+          if (res?.toast) {
+            const spec =
+              typeof res.toast === "string"
+                ? { text: res.toast, kind: "success" as const }
+                : res.toast;
+            if (spec.kind === "error") toast.error(spec.text);
+            else if (spec.kind === "info") toast.info(spec.text);
+            else toast.success(spec.text);
+          }
+          if (res?.open?.page) {
+            const q = new URLSearchParams(res.open.params ?? {});
+            const suffix = q.toString() ? `?${q}` : "";
+            navigate(`${pluginPageRoute(owner, res.open.page)}${suffix}`);
+          } else if (
+            res?.open?.route &&
+            res.open.route.startsWith("/") &&
+            !res.open.route.startsWith("//")
+          ) {
+            navigate(res.open.route);
+          }
+        })
+        .catch((e) => toast.error(errorMessage(e)));
+    },
+    [navigate],
+  );
   return (
     <GlobalSearch
       className="w-full max-w-md"
       search={search}
       minimumQueryLength={1}
-      onNavigate={(hit) => navigate(hit.href)}
+      onNavigate={(hit) => runHit(hit.href)}
       labels={{
         placeholder: t("Search or jump to…"),
         ariaLabel: t("Search Ether"),

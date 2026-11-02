@@ -2084,8 +2084,20 @@ export function createFakeServer(opts: FakeOptions = {}) {
       sections: [{ key: "connect", fields: [{ key: note, kind: "note" }] }],
     });
     const protocolDefs = [
-      { id: "plex", name: "Plex", defaultPort: 32400, settingsSchema: { sections: [{ key: "find", fields: [{ key: "port", kind: "port", min: 1, max: 65535 }] }] } },
-      { id: "jellyfin", name: "Jellyfin", defaultPort: 8096, settingsSchema: mediaBrowserSchema(true) },
+      {
+        id: "plex",
+        name: "Plex",
+        defaultPort: 32400,
+        settingsSchema: {
+          sections: [{ key: "find", fields: [{ key: "port", kind: "port", min: 1, max: 65535 }] }],
+        },
+      },
+      {
+        id: "jellyfin",
+        name: "Jellyfin",
+        defaultPort: 8096,
+        settingsSchema: mediaBrowserSchema(true),
+      },
       { id: "emby", name: "Emby", defaultPort: 8097, settingsSchema: mediaBrowserSchema(false) },
       { id: "stremio", name: "Stremio", settingsSchema: accountSchema("addon") },
       {
