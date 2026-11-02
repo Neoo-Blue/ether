@@ -248,12 +248,18 @@ func (m *Manager) Hot(ctx context.Context, pluginID string) (HotRuntime, bool) {
 // plugin's hosted runtime only when it is already loaded, and otherwise
 // starts loading it in the background and reports false, so the caller
 // treats the plugin's steps and conditions as neutral for this resolve.
-// Runtimes are dropped on update, disable, remove and failure (closeRuntime)
+// Plugins in shadow mode are never ready on the play path. Runtimes are dropped on update, disable, remove and failure (closeRuntime)
 // and warmed again when descriptors sync.
 func (m *Manager) HotReady(pluginID string) (HotRuntime, bool) {
 	m.mu.Lock()
 	rt, ok := m.runtimes[pluginID]
+	shadow := m.shadow[pluginID]
 	m.mu.Unlock()
+	if shadow {
+		// A plugin in shadow mode never changes real picks; replay and the
+		// shadow report show what it would have done.
+		return nil, false
+	}
 	if !ok {
 		m.warmAsync(pluginID)
 		return nil, false
