@@ -93,6 +93,10 @@ type HomeLayoutStore interface {
 
 const layoutSchedulesMeta = "layout-schedules-v1"
 
+// layoutSchedulesSpecsMoved marks a carry-over interrupted after its
+// collections step.
+const layoutSchedulesSpecsMoved = "specs"
+
 // AdoptLayoutSchedules is the one-time carry-over from the time the Home
 // layout kept its own schedule for collection rows: it folds each Everyone
 // schedule of a collection row into the collection's schedule, preserving
@@ -106,7 +110,13 @@ func (s *Service) AdoptLayoutSchedules(ctx context.Context, layouts HomeLayoutSt
 	if unlock != nil {
 		defer unlock()
 	}
-	if s.meta(ctx, layoutSchedulesMeta) != "" {
+	// "" has not run; layoutSchedulesSpecsMoved moved the schedules onto
+	// the collections but did not finish rewriting the layout; anything
+	// else is done. The collections step must not run twice: the layout
+	// it reads may already be rewritten, and folding it again would
+	// replace the moved schedules with "any time".
+	state := s.meta(ctx, layoutSchedulesMeta)
+	if state != "" && state != layoutSchedulesSpecsMoved {
 		return nil
 	}
 	d, err := layouts.HomeLayout(ctx)
@@ -124,6 +134,9 @@ func (s *Service) AdoptLayoutSchedules(ctx context.Context, layouts HomeLayoutSt
 		ids[r.publicID()] = r.id
 	}
 	next, schedules, layoutChanged := foldLayoutSchedules(d, specs)
+	if state == layoutSchedulesSpecsMoved {
+		schedules = nil
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -141,6 +154,9 @@ func (s *Service) AdoptLayoutSchedules(ctx context.Context, layouts HomeLayoutSt
 			return err
 		}
 		touched = append(touched, ids[id])
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO collections_meta(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v`, layoutSchedulesMeta, layoutSchedulesSpecsMoved); err != nil {
+		return err
 	}
 	if err := tx.Commit(); err != nil {
 		return err

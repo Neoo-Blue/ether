@@ -11,10 +11,15 @@ import (
 type fakeLayouts struct {
 	d    core.HomeLayout
 	sets int
+	fail error // returned once by SetHomeLayout
 }
 
 func (f *fakeLayouts) HomeLayout(context.Context) (core.HomeLayout, error) { return f.d, nil }
 func (f *fakeLayouts) SetHomeLayout(_ context.Context, d core.HomeLayout) (core.HomeLayout, error) {
+	if err := f.fail; err != nil {
+		f.fail = nil
+		return core.HomeLayout{}, err
+	}
 	f.d = d
 	f.sets++
 	return d, nil
@@ -103,5 +108,40 @@ func TestSetSchedule(t *testing.T) {
 	}
 	if err := e.svc.SetSchedule(e.ctx, "123456", nil); !errors.Is(err, core.ErrNotFound) {
 		t.Fatalf("missing collection: %v", err)
+	}
+}
+
+// A carry-over that stops after moving the schedules (here the layout
+// rewrite fails) finishes on the next start without folding again: a
+// second fold of a rewritten layout would wipe the moved schedule.
+func TestAdoptLayoutSchedulesResumesAfterPartialRun(t *testing.T) {
+	e := newEnv(t)
+	sp := spec("Weekends", "movie", catalogSource(), rl("genre", "is", "Thriller"))
+	sp.Targets.HomeRow = true
+	made, err := e.svc.CreateSpec(e.ctx, sp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	layouts := &fakeLayouts{fail: errors.New("injected layout write failure"), d: core.HomeLayout{Global: []core.LayoutPage{{Section: "home", Rows: []core.RowPolicy{
+		{Row: "collection:" + made.ID, Status: "eligible", When: &core.LayoutWhen{Days: []int{0, 6}}},
+	}}}}}
+	if err := e.svc.AdoptLayoutSchedules(e.ctx, layouts); err == nil {
+		t.Fatal("layout failure not reported")
+	}
+	// The layout write lands but the run stops before its done marker:
+	// simulate by rewriting the layout as the first run would have.
+	layouts.d.Global[0].Rows[0].When = nil
+	if err := e.svc.AdoptLayoutSchedules(e.ctx, layouts); err != nil {
+		t.Fatal(err)
+	}
+	got, err := e.svc.GetSpec(e.ctx, made.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sc := got.Targets.Schedule; sc == nil || len(sc.Days) != 2 || sc.Days[0] != 0 || sc.Days[1] != 6 {
+		t.Fatalf("rerun wiped the moved schedule: %+v", sc)
+	}
+	if layouts.d.Global[0].Rows[0].When != nil {
+		t.Fatalf("layout keeps the Everyone When: %+v", layouts.d.Global[0].Rows[0])
 	}
 }
