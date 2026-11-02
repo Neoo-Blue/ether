@@ -1,5 +1,10 @@
 package extend
 
+import (
+	"bytes"
+	"encoding/json"
+)
+
 // Ranking step and rule field descriptor metadata (SPEC §5.9, WS1a).
 // Mirrored as TypeScript types next to the console consumer in
 // web/src/pages/releases/ReleasePreferences.tsx.
@@ -33,6 +38,41 @@ const (
 	RankingEditorToggle      RankingEditorKind = "toggle"
 )
 
+// UnmarshalJSON accepts a plain editor kind string, null, or a plugin
+// manifest editor object ({"kind": "choice"}).
+func (k *RankingEditorKind) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		*k = RankingEditorNone
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(trimmed, &s); err == nil {
+		if s == "" {
+			*k = RankingEditorNone
+		} else {
+			*k = RankingEditorKind(s)
+		}
+		return nil
+	}
+	var obj struct {
+		Kind   string `json:"kind"`
+		Editor string `json:"editor"`
+	}
+	if err := json.Unmarshal(trimmed, &obj); err != nil {
+		return err
+	}
+	switch {
+	case obj.Kind != "":
+		*k = RankingEditorKind(obj.Kind)
+	case obj.Editor != "":
+		*k = RankingEditorKind(obj.Editor)
+	default:
+		*k = RankingEditorNone
+	}
+	return nil
+}
+
 // RankingStepMeta is the Meta of a KindRankingStep descriptor.
 type RankingStepMeta struct {
 	// Editor is the inline editor kind for this step's own setting.
@@ -40,6 +80,9 @@ type RankingStepMeta struct {
 	// Options are the values the editor offers: the ordered choices for
 	// ordered_list and choice editors, the selectable bounds for range.
 	Options []DescriptorOption `json:"options,omitempty"`
+	// Choices are optional selectable choices when a step distinguishes
+	// choices from options.
+	Choices []DescriptorOption `json:"choices,omitempty"`
 	// Required steps must stay in every ladder (connection, verified).
 	Required bool `json:"required,omitempty"`
 	// CanMove is false for steps the ladder renders as Automatic: the owner
@@ -85,4 +128,66 @@ type RuleFieldMeta struct {
 	// SingleValue fields can hold one value per release, so two required
 	// rules demanding different values conflict.
 	SingleValue bool `json:"singleValue,omitempty"`
+	// Editor carries a plugin manifest's raw ruleConditions[].editor
+	// (SPEC §5.1.3) when ValueClass was not set directly.
+	Editor json.RawMessage `json:"editor,omitempty"`
+}
+
+// Resolved folds a plugin manifest Editor declaration into ValueClass,
+// Choices, Unit and SingleValue when those fields were not set directly.
+func (m RuleFieldMeta) Resolved() RuleFieldMeta {
+	if trimmed := bytes.TrimSpace(m.Editor); len(trimmed) > 0 && !bytes.Equal(trimmed, []byte("null")) {
+		var s string
+		if err := json.Unmarshal(trimmed, &s); err == nil {
+			if m.ValueClass == "" && s != "" {
+				m.ValueClass = normalizeRuleValueClass(s)
+			}
+		} else {
+			var obj struct {
+				Kind        string             `json:"kind"`
+				ValueClass  string             `json:"valueClass"`
+				Choices     []DescriptorOption `json:"choices"`
+				Options     []DescriptorOption `json:"options"`
+				Unit        string             `json:"unit"`
+				SingleValue bool               `json:"singleValue"`
+			}
+			if err := json.Unmarshal(trimmed, &obj); err == nil {
+				if m.ValueClass == "" {
+					switch {
+					case obj.ValueClass != "":
+						m.ValueClass = normalizeRuleValueClass(obj.ValueClass)
+					case obj.Kind != "":
+						m.ValueClass = normalizeRuleValueClass(obj.Kind)
+					}
+				}
+				if len(m.Choices) == 0 {
+					if len(obj.Choices) > 0 {
+						m.Choices = obj.Choices
+					} else if len(obj.Options) > 0 {
+						m.Choices = obj.Options
+					}
+				}
+				if m.Unit == "" && obj.Unit != "" {
+					m.Unit = obj.Unit
+				}
+				if !m.SingleValue && obj.SingleValue {
+					m.SingleValue = true
+				}
+			}
+		}
+	}
+	if m.ValueClass == "" && len(m.Operators) == 1 && m.Operators[0] == "range" {
+		m.ValueClass = RuleValueNumber
+	}
+	if m.DefaultOperator == "" && len(m.Operators) > 0 {
+		m.DefaultOperator = m.Operators[0]
+	}
+	return m
+}
+
+func normalizeRuleValueClass(v string) string {
+	if v == "range" {
+		return RuleValueNumber
+	}
+	return v
 }

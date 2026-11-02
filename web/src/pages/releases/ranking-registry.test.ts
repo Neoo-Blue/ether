@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { descriptors } from "../../mock/extend/descriptors/ranking";
 import {
+  descriptorLabel,
+  descriptorOwnerName,
   insertStepAtDefaultPosition,
   newCondition,
   normalizeRanking,
+  resolveRuleFieldMeta,
   type RankingStepDescriptor,
   type RuleFieldDescriptor,
 } from "./ReleasePreferences";
@@ -19,6 +22,7 @@ const pluginStep: RankingStepDescriptor = {
   kind: "rankingStep",
   id: "plugin:example.dub/lang",
   owner: "example.dub",
+  group: "Dub language",
   label: { plugin: "example.dub", key: "step.lang", resolved: "Dub language" },
   order: 99,
   meta: { editor: "none", canMove: true, defaultPosition: 1 },
@@ -122,7 +126,7 @@ describe("registry-driven ranking ladder", () => {
     expect(next).toHaveLength(ladder.length + 1);
   });
 
-  it("creates conditions with each field's declared operator", () => {
+  it("creates conditions with each field's declared operator and resolves manifest metadata", () => {
     expect(newCondition(fields, "name").operator).toBe("contains");
     expect(newCondition(fields, "group").operator).toBe("equals");
     expect(newCondition(fields, "height").operator).toBe("range");
@@ -130,5 +134,28 @@ describe("registry-driven ranking ladder", () => {
     const size = fields.find((f) => f.id === "size_gib")!;
     expect(size.meta?.unit).toBe("GiB");
     expect(size.meta?.valueClass).toBe("number");
+
+    const pluginField: RuleFieldDescriptor = {
+      kind: "ruleField",
+      id: "plugin:example.dub/dubbed",
+      owner: "example.dub",
+      group: "Dub language",
+      label: { plugin: "example.dub", key: "field.dubbed", resolved: "Dubbed" },
+      order: 100,
+      meta: {
+        valueClass: "" as unknown as "choice",
+        operators: ["equals"],
+        editor: {
+          kind: "choice",
+          options: [{ value: "ja", label: { resolved: "Japanese" } }],
+        },
+      },
+    };
+    const resolved = resolveRuleFieldMeta(pluginField.meta);
+    expect(resolved?.defaultOperator).toBe("equals");
+    expect(resolved?.valueClass).toBe("choice");
+    expect(resolved?.choices).toEqual([{ value: "ja", label: { resolved: "Japanese" } }]);
+    expect(descriptorOwnerName(pluginField)).toBe("Dub language");
+    expect(descriptorLabel(pluginField)).toBe("Dubbed · From Dub language");
   });
 });

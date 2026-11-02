@@ -151,6 +151,12 @@ func compileCondition(c core.ReleaseCondition, lookup FieldLookup) (condition, e
 		return out, fmt.Errorf("unsupported field %q", c.Field)
 	}
 	out.external = spec.External
+	if spec.External && spec.ValueClass == "" {
+		if len(spec.Operators) > 0 && !slices.Contains(spec.Operators, c.Operator) {
+			return out, fmt.Errorf("unsupported comparison %q", c.Operator)
+		}
+		return compileExternalShape(out)
+	}
 	if spec.ValueClass == "none" {
 		if c.Operator != "" && c.Operator != "equals" {
 			return out, fmt.Errorf("unsupported comparison %q", c.Operator)

@@ -175,4 +175,30 @@ describe("profile rules and ranking ladder", () => {
     ).toBeGreaterThan(0);
     expect(within(drawer).getByText(/cannot be compared from a filename/)).toBeInTheDocument();
   });
+
+  it("adds and removes a plugin ranking step and selects a plugin rule field", async () => {
+    const { fake, drawer } = await openProfile();
+    const addStepBtn = await within(drawer).findByRole("button", { name: "Add a step" }, WAIT);
+    fireEvent.click(addStepBtn);
+    expect(
+      await within(drawer).findByText("From community.example.dub", {}, WAIT),
+    ).toBeInTheDocument();
+
+    fireEvent.click(within(drawer).getByRole("button", { name: "Remove step" }));
+    expect(within(drawer).queryByText("From community.example.dub")).not.toBeInTheDocument();
+
+    fireEvent.click(within(drawer).getByRole("button", { name: "Add a step" }));
+    await addRule(drawer, "en", "Dubbed · From community.example.dub", "Prefer");
+    expect(within(drawer).getAllByText("From community.example.dub").length).toBeGreaterThanOrEqual(
+      2,
+    );
+
+    fireEvent.click(within(drawer).getByRole("button", { name: "Save profile" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), WAIT);
+    const saved = fake.state.config.quality.profiles!.find((p) => p.name === "1080p")!;
+    expect(saved.ranking).toContain("plugin:community.example.dub/dub");
+    expect(saved.releaseRules?.[0]?.conditions[0]?.field).toBe(
+      "plugin:community.example.dub/dubbed",
+    );
+  });
 });

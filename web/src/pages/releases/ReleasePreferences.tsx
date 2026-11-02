@@ -51,10 +51,12 @@ export type RankingEditorKind = "ordered_list" | "choice" | "range" | "toggle" |
 export interface RankingStepMeta {
   editor: RankingEditorKind;
   options?: DescriptorOption[];
+  choices?: DescriptorOption[];
   required?: boolean;
   canMove: boolean;
   defaultPosition: number;
   configKey?: string;
+  hint?: string;
 }
 
 export type RuleValueClass = "text" | "choice" | "language" | "number" | "none";
@@ -66,10 +68,79 @@ export interface RuleFieldMeta {
   choices?: DescriptorOption[];
   unit?: string;
   singleValue?: boolean;
+  editor?:
+    | string
+    | {
+        kind?: string;
+        valueClass?: string;
+        choices?: DescriptorOption[];
+        options?: DescriptorOption[];
+        unit?: string;
+        singleValue?: boolean;
+      };
 }
 
 export type RankingStepDescriptor = Descriptor<RankingStepMeta>;
 export type RuleFieldDescriptor = Descriptor<RuleFieldMeta>;
+
+function normalizeValueClass(raw: string | undefined): RuleValueClass | undefined {
+  if (!raw) return undefined;
+  if (raw === "range") return "number";
+  if (
+    raw === "text" ||
+    raw === "choice" ||
+    raw === "language" ||
+    raw === "number" ||
+    raw === "none"
+  ) {
+    return raw;
+  }
+  return undefined;
+}
+
+/**
+ * Normalizes a ruleField descriptor's meta whether it was registered directly
+ * as RuleFieldMeta or built from a plugin manifest's ruleConditions entry.
+ */
+export function resolveRuleFieldMeta(meta: RuleFieldMeta | undefined):
+  | {
+      valueClass?: RuleValueClass;
+      operators?: string[];
+      defaultOperator?: string;
+      choices?: DescriptorOption[];
+      unit?: string;
+      singleValue?: boolean;
+    }
+  | undefined {
+  if (!meta) return undefined;
+  let valueClass = normalizeValueClass(meta.valueClass);
+  let choices = meta.choices;
+  let unit = meta.unit;
+  let singleValue = meta.singleValue;
+  if (typeof meta.editor === "string") {
+    valueClass = valueClass ?? normalizeValueClass(meta.editor);
+  } else if (typeof meta.editor === "object" && meta.editor !== null) {
+    valueClass = valueClass ?? normalizeValueClass(meta.editor.valueClass ?? meta.editor.kind);
+    if (!choices?.length) {
+      choices = meta.editor.choices ?? meta.editor.options;
+    }
+    unit = unit ?? meta.editor.unit;
+    singleValue = singleValue ?? meta.editor.singleValue;
+  }
+  const operators = meta.operators?.length ? meta.operators : undefined;
+  if (!valueClass && operators?.length === 1 && operators[0] === "range") {
+    valueClass = "number";
+  }
+  const defaultOperator = meta.defaultOperator || operators?.[0];
+  return {
+    valueClass,
+    operators,
+    defaultOperator,
+    choices,
+    unit,
+    singleValue,
+  };
+}
 
 /** Ranking steps and rule fields from the descriptor registry, in registry order. */
 export function useRankingRegistry(): {
@@ -92,6 +163,11 @@ export function useRankingRegistry(): {
   );
 }
 
+/** Display name for a plugin-contributed descriptor's owner. */
+export function descriptorOwnerName(d: Descriptor): string {
+  return d.group || d.owner;
+}
+
 /** Small badge marking a descriptor a plugin contributed. */
 export function PluginBadge({ owner }: { owner: string }) {
   return (
@@ -102,9 +178,11 @@ export function PluginBadge({ owner }: { owner: string }) {
   );
 }
 
-function descriptorLabel(d: Descriptor): string {
+export function descriptorLabel(d: Descriptor): string {
   const label = textOf(d.label) || d.id;
-  return isPluginDescriptor(d) ? `${label} · ${t("From {name}", { name: d.owner })}` : label;
+  return isPluginDescriptor(d)
+    ? `${label} · ${t("From {name}", { name: descriptorOwnerName(d) })}`
+    : label;
 }
 
 export function optionLabel(option: DescriptorOption): string {
@@ -255,15 +333,16 @@ function languageSuggestions(codes: string[]) {
 }
 
 function suggestionsFor(d: RuleFieldDescriptor | undefined) {
-  if (!d?.meta) return [];
-  if (d.meta.valueClass === "language") {
-    return languageSuggestions((d.meta.choices ?? []).map((c) => c.value));
+  const meta = resolveRuleFieldMeta(d?.meta);
+  if (!meta) return [];
+  if (meta.valueClass === "language") {
+    return languageSuggestions((meta.choices ?? []).map((c) => c.value));
   }
-  return (d.meta.choices ?? []).map((c) => ({ value: c.value, label: optionLabel(c) }));
+  return (meta.choices ?? []).map((c) => ({ value: c.value, label: optionLabel(c) }));
 }
 
 export function newCondition(fields: RuleFieldDescriptor[], field = "name"): ReleaseCondition {
-  const meta = fieldDescriptor(fields, field)?.meta;
+  const meta = resolveRuleFieldMeta(fieldDescriptor(fields, field)?.meta);
   return {
     field,
     operator: (meta?.defaultOperator ??
@@ -293,7 +372,9 @@ function createRule(
 
 /** Same conflict the server rejects on save. Exceptions and fallbacks stay allowed. */
 export function releaseRuleConflict(rules: ReleaseRule[], fields: RuleFieldDescriptor[]): string {
-  const singleValue = new Set(fields.filter((f) => f.meta?.singleValue).map((f) => f.id));
+  const singleValue = new Set(
+    fields.filter((f) => resolveRuleFieldMeta(f.meta)?.singleValue).map((f) => f.id),
+  );
   const needs: { name: string; field: string; value: string }[] = [];
   for (const r of rules) {
     if (
@@ -394,11 +475,11 @@ function ConditionEditor({
   onChange: (c: ReleaseCondition) => void;
 }) {
   const desc = fieldDescriptor(fields, c.field);
-  const meta = desc?.meta;
+  const meta = resolveRuleFieldMeta(desc?.meta);
   // A field with no descriptor (its plugin is gone, or the registry has
   // not answered yet) keeps the generic comparison editor its saved
   // operator implies, so the condition stays visible and removable.
-  const numeric = meta ? meta.valueClass === "number" : c.operator === "range";
+  const numeric = meta?.valueClass ? meta.valueClass === "number" : c.operator === "range";
   const valueless = meta?.valueClass === "none";
   const operators = (meta?.operators ?? ["equals", "contains", "regex"]).filter(
     (op) => op !== "range",
@@ -414,7 +495,7 @@ function ConditionEditor({
           onChange={(v) => onChange(retarget(c, v, fields))}
         />
       </div>
-      {desc && isPluginDescriptor(desc) ? <PluginBadge owner={desc.owner} /> : null}
+      {desc && isPluginDescriptor(desc) ? <PluginBadge owner={descriptorOwnerName(desc)} /> : null}
       {valueless ? (
         <p className="text-xs text-fg-muted sm:flex-1">{textOf(desc?.hint)}</p>
       ) : numeric ? (
@@ -442,6 +523,7 @@ function ConditionEditor({
               onChange({ ...c, max: e.target.value === "" ? 0 : Number(e.target.value) })
             }
           />
+          {meta?.unit ? <span className="text-xs text-fg-muted">{meta.unit}</span> : null}
         </div>
       ) : (
         <>
@@ -739,7 +821,7 @@ export function FilterRulesEditor({
     const value = term.trim();
     if (!value || rules.length >= 32) return;
     const c = newCondition(fields, field);
-    if (fieldDescriptor(fields, field)?.meta?.valueClass === "none") {
+    if (resolveRuleFieldMeta(fieldDescriptor(fields, field)?.meta)?.valueClass === "none") {
       c.value = "";
     } else if (c.operator === "range") {
       const [min, max] = value.split(/[-–]/).map((part) => part.trim());
@@ -873,7 +955,7 @@ export function FilterRulesEditor({
             {t("Add rule")}
           </Button>
         </div>
-        {fieldDescriptor(fields, field)?.meta?.valueClass === "none" && (
+        {resolveRuleFieldMeta(fieldDescriptor(fields, field)?.meta)?.valueClass === "none" && (
           <p className="text-xs text-fg-muted">{textOf(fieldDescriptor(fields, field)?.hint)}</p>
         )}
       </div>

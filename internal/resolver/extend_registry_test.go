@@ -36,7 +36,17 @@ func TestServiceRegistryValidation(t *testing.T) {
 		Kind: extend.KindRuleField, ID: "plugin:example.dub/dub_lang", Owner: "example.dub",
 		Label: extend.PluginText("example.dub", "field.dub_lang"),
 	}.WithMeta(extend.RuleFieldMeta{ValueClass: extend.RuleValueChoice, Operators: []string{"equals"}, DefaultOperator: "equals", SingleValue: true})
-	if err := reg.Register(step, field); err != nil {
+	// Manifest-shaped descriptors produced by plugins.DescriptorsFor
+	// (editor as string/object/null instead of valueClass).
+	manifestField := extend.Descriptor{
+		Kind: extend.KindRuleField, ID: "plugin:example.dub/dubbed", Owner: "example.dub",
+		Label: extend.Text{Resolved: "Dubbed"},
+	}.WithMeta(map[string]any{"operators": nil, "editor": nil})
+	manifestRangeField := extend.Descriptor{
+		Kind: extend.KindRuleField, ID: "plugin:example.dub/score", Owner: "example.dub",
+		Label: extend.Text{Resolved: "Dub score"},
+	}.WithMeta(map[string]any{"operators": []string{"range"}, "editor": "range"})
+	if err := reg.Register(step, field, manifestField, manifestRangeField); err != nil {
 		t.Fatal(err)
 	}
 	if err := svc.validateRanking(ladder, rules); err != nil {
@@ -45,6 +55,8 @@ func TestServiceRegistryValidation(t *testing.T) {
 
 	dubRules := []core.ReleaseRule{
 		{ID: "dub", Name: "Dub", Action: "prefer", Conditions: []core.ReleaseCondition{{Field: field.ID, Operator: "equals", Value: "fr"}}},
+		{ID: "dubbed", Name: "Dubbed", Action: "prefer", Conditions: []core.ReleaseCondition{{Field: manifestField.ID, Operator: "equals", Value: "yes"}}},
+		{ID: "score", Name: "Score", Action: "prefer", Conditions: []core.ReleaseCondition{{Field: manifestRangeField.ID, Operator: "range", Min: 1, Max: 10}}},
 	}
 	if _, err := svc.compileRules(dubRules); err != nil {
 		t.Fatalf("registered plugin field should compile: %v", err)
@@ -66,6 +78,9 @@ func TestServiceRegistryValidation(t *testing.T) {
 	specs := svc.fieldSpecs()
 	if specs == nil || !specs[field.ID].External || !specs[field.ID].SingleValue {
 		t.Fatalf("registry field spec not merged: %+v", specs[field.ID])
+	}
+	if specs[manifestRangeField.ID].ValueClass != extend.RuleValueNumber {
+		t.Fatalf("manifest range field valueClass = %q, want %q", specs[manifestRangeField.ID].ValueClass, extend.RuleValueNumber)
 	}
 	if _, ok := specs["group"]; !ok {
 		t.Fatal("built-in fields must survive the registry merge")

@@ -40,6 +40,8 @@ import {
   PluginBadge,
   RuleEditorCard,
   RulePreview,
+  descriptorLabel,
+  descriptorOwnerName,
   insertPreferRuleInRanking,
   insertStepAtDefaultPosition,
   normalizeRanking,
@@ -334,7 +336,7 @@ function WhatMattersMostSection({
           ? t("Ranks larger files higher within the allowed size range")
           : t("Off");
       default:
-        return textOf(desc?.hint);
+        return textOf(desc?.hint) || (typeof desc?.meta?.hint === "string" ? desc.meta.hint : "");
     }
   }
 
@@ -347,7 +349,7 @@ function WhatMattersMostSection({
     const summary = stepSummary(desc);
     const expandable = meta?.editor === "ordered_list" && !!meta.configKey;
     const isExpanded = expanded === step;
-    const options = (meta?.options ?? []).map((o) => o.value);
+    const options = (meta?.options ?? meta?.choices ?? []).map((o) => o.value);
 
     return (
       <div
@@ -364,7 +366,7 @@ function WhatMattersMostSection({
           <div className="min-w-0 flex-1">
             <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-fg">
               {title}
-              {desc && plugin ? <PluginBadge owner={desc.owner} /> : null}
+              {desc && plugin ? <PluginBadge owner={descriptorOwnerName(desc)} /> : null}
             </p>
             <p className="truncate text-xs text-fg-muted">{summary}</p>
           </div>
@@ -512,9 +514,7 @@ function WhatMattersMostSection({
                     value={chosen}
                     options={addable.map((d) => ({
                       value: d.id,
-                      label: isPluginDescriptor(d)
-                        ? `${textOf(d.label) || d.id} · ${t("From {name}", { name: d.owner })}`
-                        : textOf(d.label) || d.id,
+                      label: descriptorLabel(d),
                     }))}
                     onChange={setStepToAdd}
                   />

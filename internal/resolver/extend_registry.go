@@ -60,6 +60,7 @@ func (s *Service) fieldSpecs() map[string]releasepolicy.FieldSpec {
 		if err != nil {
 			continue
 		}
+		meta = meta.Resolved()
 		fields[d.ID] = releasepolicy.FieldSpec{
 			ID:              d.ID,
 			ValueClass:      meta.ValueClass,

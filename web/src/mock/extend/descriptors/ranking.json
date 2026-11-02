@@ -278,9 +278,7 @@
     "hint": {},
     "meta": {
       "valueClass": "language",
-      "operators": [
-        "equals"
-      ],
+      "operators": ["equals"],
       "defaultOperator": "equals",
       "choices": [
         {
@@ -433,9 +431,7 @@
     "order": 1,
     "meta": {
       "valueClass": "language",
-      "operators": [
-        "equals"
-      ],
+      "operators": ["equals"],
       "defaultOperator": "equals",
       "choices": [
         {
@@ -590,9 +586,7 @@
     "order": 2,
     "meta": {
       "valueClass": "none",
-      "operators": [
-        "equals"
-      ],
+      "operators": ["equals"],
       "defaultOperator": "equals"
     }
   },
@@ -607,11 +601,7 @@
     "order": 3,
     "meta": {
       "valueClass": "text",
-      "operators": [
-        "equals",
-        "contains",
-        "regex"
-      ],
+      "operators": ["equals", "contains", "regex"],
       "defaultOperator": "contains"
     }
   },
@@ -626,11 +616,7 @@
     "order": 4,
     "meta": {
       "valueClass": "text",
-      "operators": [
-        "equals",
-        "contains",
-        "regex"
-      ],
+      "operators": ["equals", "contains", "regex"],
       "defaultOperator": "equals",
       "singleValue": true
     }
@@ -646,11 +632,7 @@
     "order": 5,
     "meta": {
       "valueClass": "choice",
-      "operators": [
-        "equals",
-        "contains",
-        "regex"
-      ],
+      "operators": ["equals", "contains", "regex"],
       "defaultOperator": "equals",
       "choices": [
         {
@@ -696,11 +678,7 @@
     "order": 6,
     "meta": {
       "valueClass": "choice",
-      "operators": [
-        "equals",
-        "contains",
-        "regex"
-      ],
+      "operators": ["equals", "contains", "regex"],
       "defaultOperator": "equals",
       "choices": [
         {
@@ -738,11 +716,7 @@
     "order": 7,
     "meta": {
       "valueClass": "choice",
-      "operators": [
-        "equals",
-        "contains",
-        "regex"
-      ],
+      "operators": ["equals", "contains", "regex"],
       "defaultOperator": "equals",
       "choices": [
         {
@@ -788,9 +762,7 @@
     "order": 8,
     "meta": {
       "valueClass": "number",
-      "operators": [
-        "range"
-      ],
+      "operators": ["range"],
       "defaultOperator": "range",
       "unit": "p"
     }
@@ -806,9 +778,7 @@
     "order": 9,
     "meta": {
       "valueClass": "number",
-      "operators": [
-        "range"
-      ],
+      "operators": ["range"],
       "defaultOperator": "range",
       "unit": "GiB"
     }
@@ -824,11 +794,7 @@
     "order": 10,
     "meta": {
       "valueClass": "choice",
-      "operators": [
-        "equals",
-        "contains",
-        "regex"
-      ],
+      "operators": ["equals", "contains", "regex"],
       "defaultOperator": "equals",
       "choices": [
         {
@@ -853,11 +819,7 @@
     "order": 11,
     "meta": {
       "valueClass": "text",
-      "operators": [
-        "equals",
-        "contains",
-        "regex"
-      ],
+      "operators": ["equals", "contains", "regex"],
       "defaultOperator": "equals",
       "singleValue": true
     }
@@ -873,11 +835,7 @@
     "order": 12,
     "meta": {
       "valueClass": "text",
-      "operators": [
-        "equals",
-        "contains",
-        "regex"
-      ],
+      "operators": ["equals", "contains", "regex"],
       "defaultOperator": "equals",
       "singleValue": true
     }
@@ -893,11 +851,7 @@
     "order": 13,
     "meta": {
       "valueClass": "choice",
-      "operators": [
-        "equals",
-        "contains",
-        "regex"
-      ],
+      "operators": ["equals", "contains", "regex"],
       "defaultOperator": "equals",
       "choices": [
         {
