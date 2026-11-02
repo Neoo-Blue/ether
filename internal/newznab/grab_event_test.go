@@ -12,12 +12,18 @@ import (
 
 type blockingFetch struct {
 	fakeBackend
+	mu   sync.Mutex
 	fail error
 }
 
+func (b *blockingFetch) setFail(err error) { b.mu.Lock(); b.fail = err; b.mu.Unlock() }
+
 func (b *blockingFetch) FetchNZB(ctx context.Context, r core.Release, reserve func(context.Context, string) error) ([]byte, error) {
-	if b.fail != nil {
-		return nil, b.fail
+	b.mu.Lock()
+	fail := b.fail
+	b.mu.Unlock()
+	if fail != nil {
+		return nil, fail
 	}
 	<-ctx.Done()
 	return nil, ctx.Err()
@@ -42,8 +48,12 @@ func TestCancelledGrabIsNotAnIndexerFailure(t *testing.T) {
 	if _, err := m.FetchNZB(ctx, rels[0]); !errors.Is(err, context.Canceled) {
 		t.Fatalf("fetch: %v", err)
 	}
-	fb.fail = errors.New("indexer answered 503")
-	if _, err := m.FetchNZB(context.Background(), rels[0]); err == nil {
+	fb.setFail(errors.New("indexer answered 503"))
+	// A different release: the cancelled fetch's shared flight may still be
+	// winding down, and a second fetch of the same release would join it.
+	other := rels[0]
+	other.ID, other.GUID, other.NZBURL = "other", "g2", "https://site.invalid/nzb/2"
+	if _, err := m.FetchNZB(context.Background(), other); err == nil {
 		t.Fatal("failing fetch succeeded")
 	}
 	mu.Lock()
