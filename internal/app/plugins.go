@@ -73,6 +73,7 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 	if err := mgr.Start(ctx); err != nil {
 		return nil, err
 	}
+	a.bindStreamSources(mgr)
 	unsubscribe := mgr.SubscribeInvalidations()
 
 	studioSvc := studio.New(studio.Deps{

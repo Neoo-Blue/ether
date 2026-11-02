@@ -118,7 +118,7 @@ func TestRankingReplayPrefersDubAndNeutralIsUnchanged(t *testing.T) {
 		},
 	})
 
-	runner := NewRunner(Deps{
+	runner := NewRunner(ReplayDeps{
 		DB:     db,
 		Engine: eng,
 	})
@@ -390,7 +390,7 @@ globalThis.handle = handle;
 		t.Fatal(err)
 	}
 
-	runner := NewRunner(Deps{
+	runner := NewRunner(ReplayDeps{
 		DB:      db,
 		Manager: mgr,
 		Engine:  eng,
@@ -443,7 +443,7 @@ func TestListAndChannelReplay(t *testing.T) {
 	}
 
 	var probedURLs []string
-	runner := NewRunner(Deps{
+	runner := NewRunner(ReplayDeps{
 		DB:     db,
 		Engine: eng,
 		CatalogMatch: func(_ context.Context, item ListItem) (MatchedTitle, bool) {
@@ -611,7 +611,7 @@ func TestReplayHTTPEndpoint(t *testing.T) {
 		{ReleaseID: "rel-2", Name: "Kiki.1989.DUB.1080p.BluRay.x264-GRP", Score: 85, Height: 1080},
 	})
 
-	runner := NewRunner(Deps{DB: db, Engine: eng})
+	runner := NewRunner(ReplayDeps{DB: db, Engine: eng})
 	t.Cleanup(func() { _ = runner.Close() })
 	srv := httptest.NewServer(runner.Handler())
 	t.Cleanup(srv.Close)

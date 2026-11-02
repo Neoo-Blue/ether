@@ -396,14 +396,14 @@ type dryRunHost struct {
 	grants        plugins.Grants
 	secrets       map[string]string
 	kv            map[string][]byte
-	deps          Deps
+	deps          ReplayDeps
 	writes        []RecordedWrite
 	notifications []RecordedNotification
 	outbound      []RecordedOutbound
 	logs          []RecordedLog
 }
 
-func newDryRunHost(manifest plugins.Manifest, grants plugins.Grants, secrets map[string]string, kvSeed map[string][]byte, deps Deps) *dryRunHost {
+func newDryRunHost(manifest plugins.Manifest, grants plugins.Grants, secrets map[string]string, kvSeed map[string][]byte, deps ReplayDeps) *dryRunHost {
 	kv := make(map[string][]byte, len(kvSeed))
 	for k, v := range kvSeed {
 		kv[k] = append([]byte(nil), v...)

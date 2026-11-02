@@ -58,7 +58,7 @@ func TestBuiltinsAreValidSchemas(t *testing.T) {
 		"server", "serverCluster", "plex", "cache", "catalog", "playVersions",
 		"releaseSearch", "releaseBlocks", "transcode", "trakt", "openSubtitles",
 		"updates", "spike", "markers", "debrid", "downloads", "personalize",
-		"extras", "quality",
+		"extras",
 	} {
 		if !ids[want] {
 			t.Fatalf("missing builtin schema %q", want)

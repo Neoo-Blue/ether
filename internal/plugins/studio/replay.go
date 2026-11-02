@@ -116,8 +116,8 @@ type ReplayReport struct {
 	Channels   *ChannelReplayReport `json:"channels,omitempty"`
 }
 
-// Deps configures a Studio replay Runner.
-type Deps struct {
+// ReplayDeps configures a Studio replay Runner.
+type ReplayDeps struct {
 	DB      *sql.DB
 	Manager *plugins.Manager
 	Engine  *wasm.Engine
@@ -146,7 +146,7 @@ type Deps struct {
 // dev instances. It is safe for concurrent use; replays are serialized by a
 // small semaphore so background runs cannot starve request paths.
 type Runner struct {
-	deps    Deps
+	deps    ReplayDeps
 	log     *slog.Logger
 	now     func() time.Time
 	timeout time.Duration
@@ -157,7 +157,7 @@ type Runner struct {
 }
 
 // NewRunner builds a Studio replay runner.
-func NewRunner(deps Deps) *Runner {
+func NewRunner(deps ReplayDeps) *Runner {
 	log := deps.Logger
 	if log == nil {
 		log = slog.New(slog.NewTextHandler(io.Discard, nil))

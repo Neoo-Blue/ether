@@ -43,7 +43,7 @@ func TestStudioMCPToolsContractAndExecution(t *testing.T) {
 	}
 	mgr.RegisterRuntime("hosted", plugins.HostedRuntimeFactory(eng))
 
-	runner := NewRunner(Deps{
+	runner := NewRunner(ReplayDeps{
 		DB:      db,
 		Manager: mgr,
 		Engine:  eng,

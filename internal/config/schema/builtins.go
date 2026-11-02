@@ -252,13 +252,6 @@ func Builtins() []Builtin {
 			}},
 		}}},
 		// QUALITY_*
-		{ID: "quality", ConfigKey: "resolver", Label: extend.T("Release preferences"), Schema: Schema{Groups: []Group{
-			{Title: extend.T("Release preferences"), Fields: []Field{
-				{Key: "sources", Label: extend.T("Release type"), Kind: KindOrderedList, Options: []Option{{Value: "remux", Label: extend.Text{Source: "remux"}}, {Value: "bluray", Label: extend.Text{Source: "bluray"}}, {Value: "webdl", Label: extend.Text{Source: "webdl"}}, {Value: "webrip", Label: extend.Text{Source: "webrip"}}, {Value: "hdtv", Label: extend.Text{Source: "hdtv"}}, {Value: "dvd", Label: extend.Text{Source: "dvd"}}, {Value: "screener", Label: extend.Text{Source: "screener"}}, {Value: "cam", Label: extend.Text{Source: "cam"}}}},
-				{Key: "codecs", Label: extend.T("Video codec"), Kind: KindOrderedList, Options: []Option{{Value: "av1", Label: extend.Text{Source: "av1"}}, {Value: "hevc", Label: extend.Text{Source: "hevc"}}, {Value: "h264", Label: extend.Text{Source: "h264"}}, {Value: "vp9", Label: extend.Text{Source: "vp9"}}, {Value: "mpeg2", Label: extend.Text{Source: "mpeg2"}}}},
-				{Key: "audio", Label: extend.T("Audio format"), Kind: KindOrderedList, Options: []Option{{Value: "truehd", Label: extend.Text{Source: "truehd"}}, {Value: "dtshd", Label: extend.Text{Source: "dtshd"}}, {Value: "eac3", Label: extend.Text{Source: "eac3"}}, {Value: "ac3", Label: extend.Text{Source: "ac3"}}, {Value: "dts", Label: extend.Text{Source: "dts"}}, {Value: "aac", Label: extend.Text{Source: "aac"}}, {Value: "flac", Label: extend.Text{Source: "flac"}}, {Value: "opus", Label: extend.Text{Source: "opus"}}}},
-			}},
-		}}},
 	}
 }
 
