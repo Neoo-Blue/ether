@@ -74,6 +74,15 @@ type Manager struct {
 	// rate-limit bookkeeping for host log and notify
 	notifyTimes map[string][]time.Time
 	logTimes    map[string][]time.Time
+	// healthMu serializes health read-modify-writes so concurrent calls
+	// (resolves on the hot path, scheduled jobs) never lose an update.
+	healthMu sync.Mutex
+	// warming holds plugin ids whose runtime is loading in the background
+	// (guarded by mu), so the hot path never waits for a load.
+	warming map[string]bool
+	// shadow mirrors each plugin's shadow flag (guarded by mu) so the play
+	// path can skip shadow plugins without a database read.
+	shadow map[string]bool
 }
 
 // New builds the host and re-registers descriptors for enabled plugins.
@@ -96,7 +105,7 @@ func New(deps Deps) (*Manager, error) {
 	m := &Manager{
 		store: &storage{db: deps.DB, sealer: deps.Sealer, now: now}, deps: deps,
 		log: log, now: now, client: client,
-		fatories: map[string]RuntimeFactory{}, runtimes: map[string]Runtime{},
+		fatories: map[string]RuntimeFactory{}, runtimes: map[string]Runtime{}, warming: map[string]bool{}, shadow: map[string]bool{},
 		nextRun: map[string]time.Time{}, notifyTimes: map[string][]time.Time{}, logTimes: map[string][]time.Time{},
 	}
 	return m, nil
@@ -230,12 +239,12 @@ func (m *Manager) ResolveText(ctx context.Context, plugin, key, locale string) (
 func (m *Manager) runtimeFor(ctx context.Context, r Record) (Runtime, error) {
 	m.mu.Lock()
 	rt, ok := m.runtimes[r.ID]
-	f, hasFactory := m.fatories[r.Manifest.Ether.Runtime.Kind]
+	f, hasFactory := m.fatories[r.Manifest.RuntimeKind()]
 	m.mu.Unlock()
 	if ok {
 		return rt, nil
 	}
-	if r.Manifest.Ether == nil || !hasFactory {
+	if !hasFactory {
 		return nil, ErrNoRuntime
 	}
 	inst := Installed{
@@ -341,7 +350,7 @@ func (m *Manager) Call(ctx context.Context, pluginID string, req Request) (Respo
 	}
 	m.store.addCall(ctx, rec)
 	if ms > deadline.Milliseconds()/2 && ms > 1000 {
-		m.recordSlow(ctx, pluginID)
+		m.RecordSlow(ctx, pluginID, 1)
 	}
 	return resp, nil
 }
@@ -386,6 +395,8 @@ func redactValue(v any) {
 // from 1s to 5 minutes, and five failures in ten minutes disables the
 // plugin with a console notice.
 func (m *Manager) recordFailure(ctx context.Context, pluginID, reason string, restart bool) {
+	m.healthMu.Lock()
+	defer m.healthMu.Unlock()
 	h, err := m.store.health(ctx, pluginID)
 	if err != nil {
 		return
@@ -431,12 +442,20 @@ func (m *Manager) recordFailure(ctx context.Context, pluginID, reason string, re
 	}
 }
 
-func (m *Manager) recordSlow(ctx context.Context, pluginID string) {
+// RecordSlow adds n slow calls or slow hot-path candidates to a plugin's
+// health and flags it for the owner's attention. It is safe for concurrent
+// use; the ranking adapters call it after a resolve.
+func (m *Manager) RecordSlow(ctx context.Context, pluginID string, n int) {
+	if n <= 0 {
+		return
+	}
+	m.healthMu.Lock()
+	defer m.healthMu.Unlock()
 	h, err := m.store.health(ctx, pluginID)
 	if err != nil {
 		return
 	}
-	h.Slow++
+	h.Slow += int64(n)
 	if h.Status == "ok" {
 		h.Status = "attention"
 		h.Reason = "Recent calls were slow."
@@ -445,6 +464,8 @@ func (m *Manager) recordSlow(ctx context.Context, pluginID string) {
 }
 
 func (m *Manager) recordOK(ctx context.Context, pluginID string) {
+	m.healthMu.Lock()
+	defer m.healthMu.Unlock()
 	h, err := m.store.health(ctx, pluginID)
 	if err != nil {
 		return
@@ -490,6 +511,9 @@ func (m *Manager) SetShadow(ctx context.Context, id string, shadow bool) error {
 	if err := m.store.upsert(ctx, r); err != nil {
 		return err
 	}
+	m.mu.Lock()
+	m.shadow[id] = shadow
+	m.mu.Unlock()
 	m.broadcast(ctx)
 	return nil
 }
