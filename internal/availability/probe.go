@@ -104,24 +104,42 @@ func (s *Service) probeDue(ctx context.Context) error {
 	return nil
 }
 
+// Title probe cadence. The release feeds already watch every new upload
+// every few minutes; a probe only catches what a feed missed, so it runs on
+// hours, never on the one-minute monitor cycle.
+const (
+	probeFound         = 24 * time.Hour // evidence held: re-confirm daily
+	probeDigitalFresh  = 3 * time.Hour  // digital date passed within probeFreshWindow
+	probeFreshWindow   = 72 * time.Hour
+	probeNew           = 6 * time.Hour  // no digital date, released in the last two weeks
+	probeWaiting       = 12 * time.Hour // no digital date, or it passed long ago
+	probeBeforeDigital = 72 * time.Hour // longest wait while a digital date is ahead
+)
+
 func (s *Service) probeWhen(t core.Title, digital time.Time, known, found bool) time.Time {
 	now := s.now()
 	if found {
-		return now.Add(24 * time.Hour)
+		return now.Add(probeFound)
 	}
 	if known && !digital.IsZero() && !digital.After(now) {
-		return now
-	}
-	if known && !digital.IsZero() && digital.Sub(now) < 72*time.Hour {
-		return now.Add(3 * time.Hour)
+		// Releases usually land around the digital date; look a few times
+		// in the first days, then settle. Rechecking every cycle spent a
+		// full indexer search per minute on movies nobody had posted.
+		if now.Sub(digital) < probeFreshWindow {
+			return now.Add(probeDigitalFresh)
+		}
+		return now.Add(probeWaiting)
 	}
 	if known && !digital.IsZero() {
-		return now.Add(24 * time.Hour)
+		// Wait for the digital date (probeDue makes it due the moment the
+		// date arrives) but recheck at least every few days: early leaks
+		// and wrong dates exist, and the feeds see most of those first.
+		return now.Add(min(max(digital.Sub(now), probeDigitalFresh), probeBeforeDigital))
 	}
 	if now.Sub(t.Released) < 14*24*time.Hour {
-		return now.Add(6 * time.Hour)
+		return now.Add(probeNew)
 	}
-	return now.Add(12 * time.Hour)
+	return now.Add(probeWaiting)
 }
 
 func (s *Service) probeOne(ctx context.Context, t core.Title, digital time.Time, known bool) error {
@@ -130,7 +148,11 @@ func (s *Service) probeOne(ctx context.Context, t core.Title, digital time.Time,
 	releases, err := s.d.Search(bctx, req)
 	cancel()
 	if err != nil && len(releases) == 0 {
-		if errors.Is(err, core.ErrBudgetExhausted) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		// A spent budget or a stopping service decides nothing: the title
+		// stays due and the pass ends. A slow or failing indexer is a
+		// result, though: retrying it on the next minute's cycle would
+		// search the same title over and over.
+		if errors.Is(err, core.ErrBudgetExhausted) || errors.Is(err, context.Canceled) || ctx.Err() != nil {
 			return err
 		}
 		return s.saveTitleCheck(ctx, t.Key, "none", "Search could not be completed", s.probeWhen(t, digital, known, false))
