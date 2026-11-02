@@ -1,0 +1,30 @@
+{
+  "status": 200,
+  "headers": {
+    "Cache-Control": [
+      "no-cache"
+    ],
+    "Connection": [
+      "Keep-Alive"
+    ],
+    "Content-Type": [
+      "application/json"
+    ],
+    "Date": [
+      "Mon, 02 Nov 2026 [REDACTED_IP] GMT"
+    ],
+    "Keep-Alive": [
+      "timeout=20"
+    ],
+    "X-Plex-Content-Compressed-Length": [
+      "281"
+    ],
+    "X-Plex-Content-Original-Length": [
+      "354"
+    ],
+    "X-Plex-Protocol": [
+      "1.0"
+    ]
+  },
+  "body": "eyJNZWRpYUNvbnRhaW5lciI6eyJEaXJlY3RvcnkiOlt7ImZpbHRlciI6ImFjdG9yPTExNzQ4OSIsImlkIjoxMTc0ODksInRhZyI6IlRvbSBIYW5rcyIsInRhZ0tleSI6IjVkNzc2ODI2NTRmNDJjMDAxZjhjMjY1MCIsInRhZ1R5cGUiOjYsInRodW1iIjoiaHR0cHM6Ly9tZXRhZGF0YS1zdGF0aWMucGxleC50di9kL3Blb3BsZS9kYzVlOTgzZmExNjY4MTFkYjdiMWFiNTg0YzQyZGYwOS5qcGcifV0sImlkZW50aWZpZXIiOiJjb20ucGxleGFwcC5wbHVnaW5zLmxpYnJhcnkiLCJtZWRpYVRhZ1ByZWZpeCI6Ii9zeXN0ZW0vYnVuZGxlL21lZGlhL2ZsYWdzLyIsIm1lZGlhVGFnVmVyc2lvbiI6MTc5Mjc2NjA3NCwic2l6ZSI6MX19"
+}

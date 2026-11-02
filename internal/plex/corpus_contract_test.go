@@ -74,7 +74,7 @@ func TestRecordedCorpusProtocolContracts(t *testing.T) {
 					f.catalog.children[nineShow.Key] = []core.RatingKey{nineS1.Key}
 					f.catalog.children[nineS1.Key] = []core.RatingKey{nineE1.Key}
 					f.playback.info = burbsInfo
-					target := strings.NewReplacer("{{section}}", "1", "{{movieSection}}", "1", "{{showSection}}", "2", "{{movieKey}}", burbs.Key.String(), "{{showKey}}", nineShow.Key.String(), "{{seasonKey}}", nineS1.Key.String(), "{{episodeKey}}", nineE1.Key.String(), "{{collectionKey}}", "1", "{{playlistKey}}", "1").Replace(probe.Path)
+					target := strings.NewReplacer("{{section}}", "1", "{{movieSection}}", "1", "{{showSection}}", "2", "{{movieKey}}", burbs.Key.String(), "{{showKey}}", nineShow.Key.String(), "{{seasonKey}}", nineS1.Key.String(), "{{episodeKey}}", nineE1.Key.String(), "{{collectionKey}}", "1", "{{playlistKey}}", "1", "{{personKey}}", "31", "{{personTagKey}}", "tmdb-person-31").Replace(probe.Path)
 					hdr := map[string]string{}
 					for k, v := range client.Headers {
 						if !strings.EqualFold(k, "X-Plex-Token") {
