@@ -36,7 +36,7 @@ func (m *Manager) Handler() http.Handler {
 	mux.HandleFunc("POST /{id}/update", m.handleUpdate)
 	mux.HandleFunc("POST /{id}/rollback", m.handleRollback)
 	mux.HandleFunc("DELETE /{id}", m.handleRemove)
-	mux.HandleFunc("GET /{id}/view/{page}", m.handleView)
+	mux.HandleFunc("GET /{id}/views/{page}", m.handleView)
 	mux.HandleFunc("POST /{id}/actions/{action}", m.handleAction)
 	return mux
 }
