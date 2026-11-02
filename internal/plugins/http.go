@@ -16,6 +16,8 @@ import (
 func (m *Manager) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", m.handleList)
+	mux.HandleFunc("GET /catalogue", m.handleCatalogue)
+	mux.HandleFunc("POST /catalogue/refresh", m.handleCatalogue)
 	mux.HandleFunc("POST /install/preview", m.handlePreview)
 	mux.HandleFunc("POST /install", m.handleInstall)
 	mux.HandleFunc("GET /{id}", m.handleGet)
@@ -26,6 +28,8 @@ func (m *Manager) Handler() http.Handler {
 	mux.HandleFunc("POST /{id}/enable", m.handleEnable)
 	mux.HandleFunc("POST /{id}/disable", m.handleDisable)
 	mux.HandleFunc("PUT /{id}/grants", m.handleGrants)
+	mux.HandleFunc("GET /{id}/auto-update", m.handleGetAutoUpdate)
+	mux.HandleFunc("PUT /{id}/auto-update", m.handlePutAutoUpdate)
 	mux.HandleFunc("POST /{id}/shadow", m.handleShadow)
 	mux.HandleFunc("GET /{id}/shadow", m.handleShadowReport)
 	mux.HandleFunc("GET /{id}/journal", m.handleJournal)
@@ -39,6 +43,15 @@ func (m *Manager) Handler() http.Handler {
 	mux.HandleFunc("GET /{id}/views/{page}", m.handleView)
 	mux.HandleFunc("POST /{id}/actions/{action}", m.handleAction)
 	return mux
+}
+
+func (m *Manager) handleCatalogue(w http.ResponseWriter, r *http.Request) {
+	cat := m.getCatalogue()
+	if cat == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"entries": []any{}, "configured": false})
+		return
+	}
+	cat.ServeHTTP(w, r)
 }
 
 // Summary is one row of the installed list.
@@ -138,6 +151,10 @@ func (m *Manager) fail(w http.ResponseWriter, err error) {
 			fields[i] = FieldError{"permissions", a}
 		}
 		writeErr(w, http.StatusConflict, "permission_increase", "This update asks for more access. Review it, then confirm.", fields)
+	case errors.Is(err, ErrDigestMismatch):
+		writeErr(w, http.StatusBadRequest, "digest_mismatch", "The downloaded package did not match its expected digest.", nil)
+	case errors.Is(err, ErrRevoked):
+		writeErr(w, http.StatusForbidden, "revoked", "This plugin has been revoked in the catalogue and cannot be enabled.", nil)
 	case errors.Is(err, ErrPermissionDenied):
 		writeErr(w, http.StatusForbidden, "permission_denied", "That access was not granted.", nil)
 	case errors.Is(err, ErrNoRuntime):
@@ -205,6 +222,9 @@ func (m *Manager) handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 type installRequest struct {
+	ID                     string                     `json:"id,omitempty"`
+	Version                string                     `json:"version,omitempty"`
+	SHA256                 string                     `json:"sha256,omitempty"`
 	URL                    string                     `json:"url"`
 	Kind                   string                     `json:"kind"`
 	LAN                    bool                       `json:"lan"`
@@ -218,7 +238,7 @@ type installRequest struct {
 }
 
 func (req installRequest) source() Source {
-	src := Source{Kind: req.Kind, URL: req.URL, LAN: req.LAN}
+	src := Source{Kind: req.Kind, ID: req.ID, Version: req.Version, SHA256: req.SHA256, URL: req.URL, LAN: req.LAN}
 	if len(req.Manifest) > 0 {
 		src.Kind = "studio"
 		src.Manifest = req.Manifest
@@ -268,7 +288,32 @@ func (m *Manager) handlePreview(w http.ResponseWriter, r *http.Request) {
 func (m *Manager) handleInstall(w http.ResponseWriter, r *http.Request) {
 	var src Source
 	var opts InstallOptions
-	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/octet-stream") ||
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		r.Body = http.MaxBytesReader(w, r.Body, 64<<20)
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			writeErr(w, http.StatusBadRequest, "invalid", "The package could not be read.", nil)
+			return
+		}
+		defer r.MultipartForm.RemoveAll()
+		file, _, err := r.FormFile("package")
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "invalid", "The package is missing.", nil)
+			return
+		}
+		defer file.Close()
+		b, err := io.ReadAll(file)
+		if err != nil {
+			m.fail(w, err)
+			return
+		}
+		var req installRequest
+		if err := json.Unmarshal([]byte(r.FormValue("options")), &req); err != nil {
+			writeErr(w, http.StatusBadRequest, "invalid", "The request was not understood.", nil)
+			return
+		}
+		src = Source{Kind: "pkg", Pkg: b}
+		opts = InstallOptions{Grants: req.Grants, Settings: req.Settings, AutoUpdate: req.AutoUpdate, Shadow: req.Shadow, AcceptAddedPermissions: req.AcceptAddedPermissions}
+	} else if strings.HasPrefix(r.Header.Get("Content-Type"), "application/octet-stream") ||
 		strings.HasPrefix(r.Header.Get("Content-Type"), "application/zip") {
 		b, err := io.ReadAll(io.LimitReader(r.Body, 64<<20))
 		if err != nil {
@@ -297,6 +342,37 @@ func (m *Manager) handleInstall(w http.ResponseWriter, r *http.Request) {
 	}
 	h, _ := m.store.health(r.Context(), rec.ID)
 	writeJSON(w, http.StatusCreated, m.summary(rec, h.Status))
+}
+
+func (m *Manager) handleGetAutoUpdate(w http.ResponseWriter, r *http.Request) {
+	rec, err := m.store.record(r.Context(), r.PathValue("id"))
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"autoUpdate": rec.AutoUpdate})
+}
+
+func (m *Manager) handlePutAutoUpdate(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		AutoUpdate *bool `json:"autoUpdate"`
+	}
+	if err := decode(r, &body); err != nil || body.AutoUpdate == nil {
+		writeErr(w, http.StatusBadRequest, "invalid", "The request was not understood.", nil)
+		return
+	}
+	rec, err := m.store.record(r.Context(), r.PathValue("id"))
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	rec.AutoUpdate = *body.AutoUpdate
+	if err := m.store.upsert(r.Context(), rec); err != nil {
+		m.fail(w, err)
+		return
+	}
+	m.broadcast(r.Context())
+	writeJSON(w, http.StatusOK, map[string]any{"autoUpdate": rec.AutoUpdate})
 }
 
 func (m *Manager) handleGetSettings(w http.ResponseWriter, r *http.Request) {

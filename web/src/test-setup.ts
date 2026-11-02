@@ -1,6 +1,12 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
+
+// Page tests render lazy routes against the mock backend. On a loaded
+// machine (parallel builds, CI runners) that can take longer than Testing
+// Library's 1 s default, so findBy/waitFor wait up to 5 s. Real failures
+// still fail; slow-but-correct renders no longer flake.
+configure({ asyncUtilTimeout: 5000 });
 
 // Node 25+ defines its own (file-backed, here unconfigured) Web Storage
 // globals, which stop vitest from installing jsdom's. Use jsdom's.

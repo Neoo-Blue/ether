@@ -59,14 +59,15 @@ type Deps struct {
 
 // Manager is the plugin host. It is safe for concurrent use.
 type Manager struct {
-	store    *storage
-	deps     Deps
-	log      *slog.Logger
-	now      func() time.Time
-	client   *http.Client
-	mu       sync.Mutex
-	fatories map[string]RuntimeFactory
-	runtimes map[string]Runtime
+	store     *storage
+	deps      Deps
+	log       *slog.Logger
+	now       func() time.Time
+	client    *http.Client
+	mu        sync.Mutex
+	catalogue Catalogue
+	fatories  map[string]RuntimeFactory
+	runtimes  map[string]Runtime
 	// schedule bookkeeping: "plugin|call" -> next run
 	nextRun map[string]time.Time
 	// rate-limit bookkeeping for host log and notify
@@ -75,6 +76,12 @@ type Manager struct {
 	// healthMu serializes health read-modify-writes so concurrent calls
 	// (resolves on the hot path, scheduled jobs) never lose an update.
 	healthMu sync.Mutex
+	// warming holds plugin ids whose runtime is loading in the background
+	// (guarded by mu), so the hot path never waits for a load.
+	warming map[string]bool
+	// shadow mirrors each plugin's shadow flag (guarded by mu) so the play
+	// path can skip shadow plugins without a database read.
+	shadow map[string]bool
 }
 
 // New builds the host and re-registers descriptors for enabled plugins.
@@ -97,7 +104,7 @@ func New(deps Deps) (*Manager, error) {
 	m := &Manager{
 		store: &storage{db: deps.DB, sealer: deps.Sealer, now: now}, deps: deps,
 		log: log, now: now, client: client,
-		fatories: map[string]RuntimeFactory{}, runtimes: map[string]Runtime{},
+		fatories: map[string]RuntimeFactory{}, runtimes: map[string]Runtime{}, warming: map[string]bool{}, shadow: map[string]bool{},
 		nextRun: map[string]time.Time{}, notifyTimes: map[string][]time.Time{}, logTimes: map[string][]time.Time{},
 	}
 	return m, nil
@@ -122,6 +129,19 @@ func (m *Manager) RegisterRuntime(kind string, f RuntimeFactory) {
 	m.mu.Lock()
 	m.fatories[kind] = f
 	m.mu.Unlock()
+}
+
+// SetCatalogue attaches the signed plugin catalogue (WS12).
+func (m *Manager) SetCatalogue(c Catalogue) {
+	m.mu.Lock()
+	m.catalogue = c
+	m.mu.Unlock()
+}
+
+func (m *Manager) getCatalogue() Catalogue {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.catalogue
 }
 
 func (m *Manager) isLeader() bool {
@@ -231,12 +251,12 @@ func (m *Manager) ResolveText(ctx context.Context, plugin, key, locale string) (
 func (m *Manager) runtimeFor(ctx context.Context, r Record) (Runtime, error) {
 	m.mu.Lock()
 	rt, ok := m.runtimes[r.ID]
-	f, hasFactory := m.fatories[r.Manifest.Ether.Runtime.Kind]
+	f, hasFactory := m.fatories[r.Manifest.RuntimeKind()]
 	m.mu.Unlock()
 	if ok {
 		return rt, nil
 	}
-	if r.Manifest.Ether == nil || !hasFactory {
+	if !hasFactory {
 		return nil, ErrNoRuntime
 	}
 	inst := Installed{
@@ -468,11 +488,58 @@ func (m *Manager) recordOK(ctx context.Context, pluginID string) {
 	_ = m.store.putHealth(ctx, pluginID, h)
 }
 
+// Revoke disables an installed plugin that was marked revoked in the
+// signed catalogue, records the reason in its health, and posts a console
+// notice (SPEC WS12, §10). It returns true when an installed plugin was
+// newly disabled or updated with the revocation reason.
+func (m *Manager) Revoke(ctx context.Context, id, reason string) (bool, error) {
+	r, err := m.store.record(ctx, id)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "This plugin was revoked by the catalogue."
+	}
+	healthReason := "Revoked: " + reason
+	h, _ := m.store.health(ctx, id)
+	if !r.Enabled && h.Status == "disabled" && h.Reason == healthReason {
+		return false, nil
+	}
+	r.Enabled = false
+	if err := m.store.upsert(ctx, r); err != nil {
+		return false, err
+	}
+	h.Status = "disabled"
+	h.Reason = healthReason
+	h.LastError = reason
+	_ = m.store.putHealth(ctx, id, h)
+	m.closeRuntime(id)
+	m.syncDescriptors(ctx, r)
+	m.broadcast(ctx)
+	msg := "Plugin " + r.Name + " was disabled because it was revoked: " + reason
+	m.log.Warn(msg, "plugin", id, "reason", reason)
+	if m.deps.Backends.Notice != nil {
+		m.deps.Backends.Notice(msg)
+	}
+	return true, nil
+}
+
 // SetEnabled enables or disables a plugin and refreshes its descriptors.
 func (m *Manager) SetEnabled(ctx context.Context, id string, enabled bool) error {
 	r, err := m.store.record(ctx, id)
 	if err != nil {
 		return err
+	}
+	if enabled {
+		if cat := m.getCatalogue(); cat != nil {
+			if _, cerr := cat.Resolve(ctx, id, ""); errors.Is(cerr, ErrRevoked) {
+				return cerr
+			}
+		}
 	}
 	r.Enabled = enabled
 	if err := m.store.upsert(ctx, r); err != nil {
@@ -503,6 +570,9 @@ func (m *Manager) SetShadow(ctx context.Context, id string, shadow bool) error {
 	if err := m.store.upsert(ctx, r); err != nil {
 		return err
 	}
+	m.mu.Lock()
+	m.shadow[id] = shadow
+	m.mu.Unlock()
 	m.broadcast(ctx)
 	return nil
 }
