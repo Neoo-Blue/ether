@@ -486,6 +486,7 @@ func (h *host) NotifyOwner(ctx context.Context, text string) error {
 	if !h.m.rateOK(h.m.notifyTimes, h.plugin, 5, time.Hour) {
 		return fmt.Errorf("plugins: owner notices are limited to five an hour")
 	}
+	text = h.m.store.redactKnown(ctx, h.plugin, text)
 	if h.m.deps.Backends.Notice != nil {
 		h.m.deps.Backends.Notice(truncate(text, 500))
 	}

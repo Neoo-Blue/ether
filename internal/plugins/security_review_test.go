@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -72,5 +73,60 @@ func TestFolderHostRejectsSymlinkEscape(t *testing.T) {
 	}
 	if _, err := h.FoldersStat(ctx, root, "escape/private"); err == nil {
 		t.Error("stat outside root through symlink")
+	}
+}
+
+func TestPluginLogDoesNotExposeSavedSecrets(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	rec := env.installHello(t, "1.0.0")
+	const secret = "private-value-472815"
+	if _, err := env.m.Configure(ctx, rec.ID, map[string]any{"api_token": secret}); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.m.HostFor(rec.ID).Log(ctx, "info", "value: "+secret, nil); err != nil {
+		t.Fatal(err)
+	}
+	logs, err := env.m.store.logs(ctx, rec.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range logs {
+		if strings.Contains(line, secret) {
+			t.Fatal("saved secret exposed in plugin logs")
+		}
+	}
+}
+
+func TestPluginInspectorAndNoticeRedactSavedSecrets(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	rec := env.installHello(t, "1.0.0")
+	const secret = "private-value-472815"
+	if _, err := env.m.Configure(ctx, rec.ID, map[string]any{"api_token": secret}); err != nil {
+		t.Fatal(err)
+	}
+	env.fake.routes["/ether/view/test"] = func(Request) (Response, error) {
+		return Response{Status: 200, Body: json.RawMessage(`{"message":"private-value-472815"}`)}, nil
+	}
+	if _, err := env.m.Call(ctx, rec.ID, Request{Method: "GET", Path: "/ether/view/test"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.m.HostFor(rec.ID).NotifyOwner(ctx, "message "+secret); err != nil {
+		t.Fatal(err)
+	}
+	calls, err := env.m.store.calls(ctx, rec.ID, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range calls {
+		if strings.Contains(c.Response, secret) {
+			t.Fatal("saved secret exposed in inspector")
+		}
+	}
+	for _, notice := range env.notices {
+		if strings.Contains(notice, secret) {
+			t.Fatal("saved secret exposed in notice")
+		}
 	}
 }

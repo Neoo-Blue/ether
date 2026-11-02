@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/braedonsaunders/ether/internal/config"
+	"github.com/braedonsaunders/ether/internal/logredact"
 	"github.com/braedonsaunders/ether/internal/store"
 )
 
@@ -561,7 +562,33 @@ func (s *storage) callStats(ctx context.Context, plugin string) (count, errors i
 	return len(ms), errors, pct(0.5), pct(0.95), nil
 }
 
+// redactKnown removes saved plugin credentials even when a plugin includes one
+// in free text or under a harmless-looking field name. Fail closed if the
+// settings cannot be read or decrypted.
+func (s *storage) redactKnown(ctx context.Context, plugin, value string) string {
+	row, err := s.settings(ctx, plugin)
+	if err != nil {
+		return "[redacted]"
+	}
+	for name, sealed := range row.Secrets {
+		secret, err := s.openSecret(plugin, name, sealed)
+		if err != nil {
+			return "[redacted]"
+		}
+		if secret == "" {
+			continue
+		}
+		value = strings.ReplaceAll(value, secret, "[redacted]")
+		encoded, _ := json.Marshal(secret)
+		if len(encoded) > 2 {
+			value = strings.ReplaceAll(value, string(encoded[1:len(encoded)-1]), "[redacted]")
+		}
+	}
+	return logredact.String(value)
+}
+
 func (s *storage) addLog(ctx context.Context, plugin, line string) {
+	line = s.redactKnown(ctx, plugin, line)
 	_, _ = s.db.ExecContext(ctx, `INSERT INTO plugins_logs(plugin,line,created) VALUES(?,?,?)`, plugin, truncate(line, 2000), s.now().Unix())
 	capRing(ctx, s.db, "plugins_logs", plugin, LogsCap)
 }
