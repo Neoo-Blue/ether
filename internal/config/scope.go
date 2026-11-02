@@ -32,26 +32,27 @@ func (s Scope) String() string {
 // sectionScopes classifies every top-level key of Config whose whole value
 // shares one scope.
 var sectionScopes = map[string]Scope{
-	"frontends":     Shared,
-	"frontendPorts": Local,
-	"posters":       Shared,
-	"sharedCache":   Shared,
-	"availability":  Shared,
-	"usenet":        Shared,
-	"indexers":      Shared,
-	"prowlarr":      Shared, // one connection, and the indexers it syncs, for the cluster
-	"catalog":       Shared,
-	"resolver":      Shared,
-	"quality":       Shared,
-	"trakt":         Shared,
-	"simkl":         Shared,
-	"openSubtitles": Shared,
-	"llm":           Shared,
-	"updates":       Shared, // incl. maxDrain: every node drains the same way
-	"markers":       Shared,
-	"personalize":   Shared,
-	"clients":       Shared,
-	"setupComplete": Shared,
+	"frontends":      Shared,
+	"frontendPorts":  Local,
+	"posters":        Shared,
+	"sharedCache":    Shared,
+	"availability":   Shared,
+	"usenet":         Shared,
+	"indexers":       Shared,
+	"clientIdentity": Shared, // one wire identity for every node
+	"prowlarr":       Shared, // one connection, and the indexers it syncs, for the cluster
+	"catalog":        Shared,
+	"resolver":       Shared,
+	"quality":        Shared,
+	"trakt":          Shared,
+	"simkl":          Shared,
+	"openSubtitles":  Shared,
+	"llm":            Shared,
+	"updates":        Shared, // incl. maxDrain: every node drains the same way
+	"markers":        Shared,
+	"personalize":    Shared,
+	"clients":        Shared,
+	"setupComplete":  Shared,
 	// Spike serves files from this node's disk.
 	"spike": Local,
 	// Each node holds its own connection settings; the URL is sealed.

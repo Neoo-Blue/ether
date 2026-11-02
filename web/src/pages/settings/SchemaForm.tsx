@@ -8,7 +8,7 @@ import {
   Textarea,
 } from "@braedonsaunders/appkit-ui";
 import { useEffect, useState, type ReactNode } from "react";
-import { ListInput, NumberInput, SecretInput } from "../../components/fields";
+import { ListInput, MapInput, NumberInput, SecretInput } from "../../components/fields";
 import { t } from "../../i18n";
 import { humanizeKey, isPlainObject } from "../../lib/format";
 import { REDACTED } from "../../lib/types";
@@ -52,6 +52,8 @@ export type FieldDef =
       placeholder?: string;
       numeric?: boolean;
     }
+  /** Name/value rows whose values are secrets (custom headers). */
+  | { key: string; label: string; help?: ReactNode; kind: "map" }
   | { key: string; label: string; help?: ReactNode; kind: "bytes"; unit: "GiB" | "MiB" }
   /** Nested values the UI has no form for, edited as JSON. */
   | { key: string; label: string; help?: ReactNode; kind: "json" }
@@ -227,6 +229,24 @@ export function SchemaField({
             onChange={onChange}
             placeholder={def.placeholder}
             numeric={def.numeric}
+          />
+        </SettingsRow>
+      );
+    case "map":
+      return (
+        <SettingsRow
+          stacked
+          title={<label htmlFor={id}>{def.label}</label>}
+          description={description}
+        >
+          <MapInput
+            id={id}
+            ariaLabel={def.label}
+            invalid={Boolean(error)}
+            value={(value as Record<string, string> | null) ?? {}}
+            onChange={onChange}
+            namePlaceholder={t("Header name")}
+            valuePlaceholder={t("Value")}
           />
         </SettingsRow>
       );

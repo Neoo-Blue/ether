@@ -3,6 +3,7 @@ import {
   AlertDescription,
   Badge,
   EmptyState,
+  SearchSelect,
   SettingsSection,
   confirmDialog,
   toast,
@@ -13,7 +14,7 @@ import { Link } from "react-router-dom";
 import { useApp } from "../../app-context";
 import { localized, t, tn } from "../../i18n";
 import { ActionMenu } from "../../components/ActionMenu";
-import { MoreOptions } from "../../components/ConfigSection";
+import { ConfigSection, MoreOptions } from "../../components/ConfigSection";
 import { Meter } from "../../components/charts";
 import { Drawer } from "../../components/Drawer";
 import { ErrorPanel, LoadingRows } from "../../components/feedback";
@@ -31,6 +32,7 @@ import { api, errorMessage, newId } from "../../lib/api";
 import { isPlainObject } from "../../lib/format";
 import { useAsync } from "../../lib/hooks";
 import type { Indexer, IndexerProtocol, SiteDefinition, SiteTestResult } from "../../lib/types";
+import { CLIENT_IDENTITY, searchIdentityOptions } from "../settings/schema";
 import { hasUsableDebrid } from "./Debrid";
 import {
   BoolRow,
@@ -559,6 +561,13 @@ export function IndexerList({
         )}
       </Section>
 
+      <ConfigSection
+        configKey="clientIdentity"
+        endpoint="clientIdentity"
+        groups={CLIENT_IDENTITY}
+        label={t("Client identity")}
+      />
+
       <SiteDefinitions
         cfg={cfg}
         definitions={definitions}
@@ -759,47 +768,79 @@ export function IndexerList({
                 />
               </SettingsSection>
             ) : (
-              <SettingsSection title={t("Connection")}>
-                <SettingsRow
-                  title={t("Protocol")}
-                  description={
-                    isTorrent(draft)
-                      ? t("Torrent releases stream through your debrid account.")
-                      : t("Usenet releases stream from your Usenet providers.")
-                  }
-                  control={
-                    <Segmented
-                      ariaLabel={t("Protocol")}
-                      size="sm"
-                      options={PROTOCOLS}
-                      value={isTorrent(draft) ? "torrent" : "usenet"}
-                      onChange={(v) => set({ protocol: v })}
-                    />
-                  }
-                />
-                <TextRow label={t("Name")} value={draft.name} onChange={(v) => set({ name: v })} />
-                <TextRow
-                  label={t("URL")}
-                  type="url"
-                  value={draft.url}
-                  placeholder="https://indexer.example.com"
-                  help={t("/api is added automatically.")}
-                  error={errors.url}
-                  onChange={(v) => set({ url: v })}
-                />
-                <SettingsRow stacked title={t("API key")}>
-                  <SecretInput
-                    ariaLabel={t("API key")}
-                    value={draft.apiKey}
-                    onChange={(v) => set({ apiKey: v })}
+              <>
+                <SettingsSection title={t("Connection")}>
+                  <SettingsRow
+                    title={t("Protocol")}
+                    description={
+                      isTorrent(draft)
+                        ? t("Torrent releases stream through your debrid account.")
+                        : t("Usenet releases stream from your Usenet providers.")
+                    }
+                    control={
+                      <Segmented
+                        ariaLabel={t("Protocol")}
+                        size="sm"
+                        options={PROTOCOLS}
+                        value={isTorrent(draft) ? "torrent" : "usenet"}
+                        onChange={(v) => set({ protocol: v })}
+                      />
+                    }
                   />
-                </SettingsRow>
-                <BoolRow
-                  label={t("Enabled")}
-                  value={draft.enabled}
-                  onChange={(v) => set({ enabled: v })}
-                />
-              </SettingsSection>
+                  <TextRow
+                    label={t("Name")}
+                    value={draft.name}
+                    onChange={(v) => set({ name: v })}
+                  />
+                  <TextRow
+                    label={t("URL")}
+                    type="url"
+                    value={draft.url}
+                    placeholder="https://indexer.example.com"
+                    help={t("/api is added automatically.")}
+                    error={errors.url}
+                    onChange={(v) => set({ url: v })}
+                  />
+                  <SettingsRow stacked title={t("API key")}>
+                    <SecretInput
+                      ariaLabel={t("API key")}
+                      value={draft.apiKey}
+                      onChange={(v) => set({ apiKey: v })}
+                    />
+                  </SettingsRow>
+                  <BoolRow
+                    label={t("Enabled")}
+                    value={draft.enabled}
+                    onChange={(v) => set({ enabled: v })}
+                  />
+                </SettingsSection>
+                <SettingsSection
+                  title={t("Client identity")}
+                  description={t(
+                    "What this indexer sees Ether as. Inherit uses the global choice on this page.",
+                  )}
+                >
+                  <SettingsRow
+                    title={t("Identity")}
+                    description={t("Inherit uses the identity chosen above.")}
+                    control={
+                      <div className="w-56">
+                        <SearchSelect
+                          value={draft.clientIdentity ?? ""}
+                          onChange={(v) => set({ clientIdentity: v })}
+                          options={[{ value: "", label: t("Inherit") }, ...searchIdentityOptions(false)]}
+                          ariaLabel={t("Identity")}
+                          placeholder={t("Select…")}
+                          searchPlaceholder={t("Search…")}
+                          noMatchesLabel={t("No matches")}
+                          selectLabel={t("Select")}
+                          closeLabel={t("Close")}
+                        />
+                      </div>
+                    }
+                  />
+                </SettingsSection>
+              </>
             )}
             {builtin && draftDef ? (
               <SiteSettingsFields def={draftDef} draft={draft} onChange={set} errors={errors} />

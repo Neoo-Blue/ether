@@ -94,7 +94,7 @@ func (a *App) buildAdmin() http.Handler {
 				}
 				return nil
 			}
-			return newznab.Test(ctx, ix)
+			return newznab.Test(ctx, ix, a.cfg.Get().ClientIdentity)
 		},
 		TestDebrid: func(ctx context.Context, p config.DebridProvider) error {
 			return a.debrid.Test(ctx, p)

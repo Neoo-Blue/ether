@@ -168,6 +168,12 @@ func parseXMLStream(reader io.Reader, indexer string, arrived func([]core.Releas
 						if a.Name.Local == "value" {
 							val = a.Value
 						}
+						// Torznab numeric attributes (category, size, seeders)
+						// carry the number in its own attribute; value wins when
+						// both are present.
+						if a.Name.Local == "number" && val == "" {
+							val = a.Value
+						}
 					}
 					applyAttr(cur, name, val)
 				}
@@ -317,7 +323,11 @@ func parseJSONFeed(body []byte, indexer string) ([]core.Release, error) {
 			}
 		}
 		for _, a := range attrList(it) {
-			applyAttr(&r, strings.ToLower(asString(a["name"])), asString(a["value"]))
+			val := asString(a["value"])
+			if val == "" {
+				val = asString(a["number"])
+			}
+			applyAttr(&r, strings.ToLower(asString(a["name"])), val)
 		}
 		out = append(out, r.toRelease(indexer))
 	}

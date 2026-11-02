@@ -190,7 +190,7 @@ func TestErrorMapping(t *testing.T) {
 		t.Fatalf("err=%v want budget", err)
 	}
 	f2 := newFakeIndexer(t, "badkey")
-	err = Test(context.Background(), testConfig(f2.server.URL))
+	err = Test(context.Background(), testConfig(f2.server.URL), config.ClientIdentity{})
 	if err == nil || !strings.Contains(err.Error(), "incorrect API key") {
 		t.Fatalf("Test err=%v", err)
 	}
@@ -198,7 +198,7 @@ func TestErrorMapping(t *testing.T) {
 
 func TestCapsAndTestOK(t *testing.T) {
 	f := newFakeIndexer(t, "")
-	if err := Test(context.Background(), testConfig(f.server.URL)); err != nil {
+	if err := Test(context.Background(), testConfig(f.server.URL), config.ClientIdentity{}); err != nil {
 		t.Fatal(err)
 	}
 	c := New(testConfig(f.server.URL), nil, Options{})

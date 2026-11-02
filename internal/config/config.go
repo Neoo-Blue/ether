@@ -34,6 +34,9 @@ type Config struct {
 	Plex        Plex      `json:"plex"`
 	Usenet      Usenet    `json:"usenet"`
 	Indexers    []Indexer `json:"indexers"`
+	// ClientIdentity is the client Ether presents to Newznab/Torznab
+	// indexers. Zero value keeps the Ether identity.
+	ClientIdentity ClientIdentity `json:"clientIdentity"`
 	// Prowlarr is the saved connection for indexer sync. Empty means the
 	// owner has not saved one. The API key is a secret, redacted like indexer keys.
 	Prowlarr      Prowlarr      `json:"prowlarr,omitempty"`
@@ -205,6 +208,9 @@ type Indexer struct {
 	// SecretSettings are the definition's password-type settings. They are
 	// sealed at rest and redacted in API responses like API keys.
 	SecretSettings map[string]string `json:"secretSettings,omitempty"`
+	// ClientIdentity overrides the global client identity for this indexer's
+	// searches and grabs. Empty inherits the policy.
+	ClientIdentity string `json:"clientIdentity,omitempty"`
 }
 
 // Indexer kinds (Indexer.Kind).
