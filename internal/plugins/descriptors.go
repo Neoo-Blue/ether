@@ -120,6 +120,7 @@ func (m *Manager) syncDescriptors(ctx context.Context, r Record) {
 			m.log.Warn("plugins: tool sync", "plugin", r.ID, "err", err)
 		}
 	}
+	m.prewarmHot(r)
 }
 
 // pluginTool adapts one contributed tool to the catalogue. Read-only tools
