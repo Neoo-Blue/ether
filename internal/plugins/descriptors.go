@@ -194,6 +194,14 @@ func (m *Manager) pluginTool(r Record, tl ToolMeta) tools.Tool {
 				return tools.Result{}, tools.Userf("Plugin tool returned invalid output.")
 			}
 		}
+		encoded, err := json.Marshal(data)
+		if err != nil {
+			return tools.Result{}, tools.Userf("Plugin tool returned invalid output.")
+		}
+		clean := m.store.redactKnown(ctx, pluginID, string(encoded))
+		if err := json.Unmarshal([]byte(clean), &data); err != nil {
+			return tools.Result{}, tools.Userf("Plugin tool output could not be safely displayed.")
+		}
 		redactValue(data)
 		return tools.Result{Data: data}, nil
 	}

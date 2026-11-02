@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/braedonsaunders/ether/internal/agent/tools"
 )
 
 func TestHostFetchRejectsRedirectOutsideNetworkGrant(t *testing.T) {
@@ -128,5 +130,27 @@ func TestPluginInspectorAndNoticeRedactSavedSecrets(t *testing.T) {
 		if strings.Contains(notice, secret) {
 			t.Fatal("saved secret exposed in notice")
 		}
+	}
+}
+
+func TestPluginToolDoesNotSendSavedSecretToModel(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	rec := env.installHello(t, "1.0.0")
+	const secret = "private-value-472815"
+	if _, err := env.m.Configure(ctx, rec.ID, map[string]any{"api_token": secret}); err != nil {
+		t.Fatal(err)
+	}
+	env.fake.routes["/ether/tool/leak"] = func(Request) (Response, error) {
+		return Response{Status: 200, Body: json.RawMessage(`{"message":"private-value-472815"}`)}, nil
+	}
+	tool := env.m.pluginTool(rec, ToolMeta{Name: "leak", Title: "Leak", Description: "test", ReadOnly: true, InputSchema: json.RawMessage(`{"type":"object"}`)})
+	result, err := tool.Execute(ctx, tools.Principal{}, map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(result.Data)
+	if strings.Contains(string(raw), secret) {
+		t.Fatal("saved secret exposed to model")
 	}
 }
