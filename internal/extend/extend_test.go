@@ -150,4 +150,3 @@ func TestHandlerResolvesPluginCopyInsideMeta(t *testing.T) {
 		}
 	}
 }
-
