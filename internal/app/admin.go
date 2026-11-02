@@ -33,7 +33,7 @@ func (a *App) buildAdmin() http.Handler {
 	pollLimiter, _ := identity.NewPollLimiter(a.db, time.Minute, 120, 60, nil)
 	quick, _ := identity.NewQuickConnect(a.db, 10*time.Minute, 30*24*time.Hour, nil)
 	invites, _ := identity.NewInvite(a.db, 24*time.Hour, 30*24*time.Hour, nil)
-	return admin.New(admin.Deps{
+	deps := admin.Deps{
 		FavoritesMirror:  a.favorites,
 		NotInterested:    notInterestedPortal{a},
 		ViewerAlerts:     &notify.ViewerAlerts{DB: a.db, Active: a.users.ActiveUser},
@@ -190,7 +190,12 @@ func (a *App) buildAdmin() http.Handler {
 		},
 		Images:    a.images,
 		PlexWatch: a.plexWatchAPI(),
-	})
+	}
+	h := admin.NewHandler(deps)
+	if a.streamRT != nil {
+		a.streamRT.SetDashboard(h.SnapshotDashboard)
+	}
+	return h
 }
 
 func (a *App) plexWatchAPI() admin.PlexWatch {
