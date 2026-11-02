@@ -191,3 +191,28 @@ it("opens Studio when an x-ray anchor is selected", async () => {
   fireEvent.click(screen.getByRole("button", { name: "New plugin for slot" }));
   expect(screen.getByText("/plugins/develop")).toBeTruthy();
 });
+
+it("shows a job toast without applying other action effects", async () => {
+  setup([descriptor("actionMenu.title")], {
+    job: "scan",
+    toast: "Scanning",
+    refresh: true,
+    open: { route: "/metadata" },
+  });
+  const refresh = vi.fn();
+  function Location() {
+    return <span>{useLocation().pathname}</span>;
+  }
+  renderIn(
+    <>
+      <Toaster />
+      <PluginActionMenu slot="actionMenu.title" recordId="1" onRefresh={refresh} />
+      <Location />
+    </>,
+  );
+  fireEvent.click(await screen.findByRole("button", { name: "More actions" }));
+  fireEvent.click(await screen.findByText("Fixture actionMenu.title"));
+  expect(await screen.findByText("Scanning")).toBeTruthy();
+  expect(refresh).not.toHaveBeenCalled();
+  expect(screen.getByText("/")).toBeTruthy();
+});

@@ -212,6 +212,7 @@ export function PluginView({
         else if (toastSpec.kind === "info") toast.info(toastSpec.text);
         else toast.success(toastSpec.text);
       }
+      if (result.job) return;
       if (result.proposal) setProposal(result.proposal);
       if (result.open) open(result.open);
       if (result.refresh) refresh();

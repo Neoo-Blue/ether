@@ -131,6 +131,7 @@ export function PluginActionMenu({
       else if (v.kind === "info") toast.info(v.text);
       else toast.success(v.text);
     }
+    if (result.job) return;
     if (result.refresh) onRefresh?.();
     if (result.proposal) setProposal({ plugin, value: result.proposal });
     if (result.open) {
