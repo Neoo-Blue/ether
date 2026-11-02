@@ -2,13 +2,11 @@ package mcp
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -17,53 +15,33 @@ import (
 	"github.com/braedonsaunders/ether/internal/agent/tools"
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/identity"
-	"github.com/braedonsaunders/ether/internal/store"
 )
-
-// MCP pairing: the owner clicks "Connect an AI app" in the console, which
-// is already an authenticated act, so POST /pair starts a Quick Connect
-// code and approves it at once. The person then exchanges the short code
-// for a grant token at /ether/mcp/exchange. Only the grant authenticates.
-func init() {
-	store.Register("mcp_pairings", 1, `
-CREATE TABLE mcp_pairings (
-  code TEXT PRIMARY KEY, secret TEXT NOT NULL, scopes TEXT NOT NULL DEFAULT '',
-  name TEXT NOT NULL DEFAULT '', expires INTEGER NOT NULL,
-  token TEXT NOT NULL DEFAULT '');
-CREATE INDEX mcp_pairings_expires ON mcp_pairings(expires);`)
-}
 
 // PairingOptions configures the pairing service.
 type PairingOptions struct {
-	DB           *sql.DB
-	Grants       *identity.Grants
-	QuickConnect *identity.QuickConnect
+	DB     *sql.DB
+	Grants *identity.Grants
 	// Authorize returns the owner viewer id for a console request. The app
 	// implements it from the admin API's owner check.
 	Authorize    func(ctx context.Context) (int64, error)
 	Logger       *slog.Logger
 	AllowedHosts []string
-	// CodeTTL bounds how long a pairing code can be exchanged (default 10m).
-	CodeTTL time.Duration
-	Now     func() time.Time
+	Now          func() time.Time
 }
 
-// Pairing serves the console pairing routes and the exchange endpoint.
+// Pairing serves the owner console and OAuth routes.
 type Pairing struct {
 	opts PairingOptions
 	log  *slog.Logger
 
 	mu       sync.Mutex
-	attempts map[string][]time.Time // exchange attempts per remote address
+	attempts map[string][]time.Time // attempts per remote address
 }
 
 // NewPairing builds the pairing service.
 func NewPairing(opts PairingOptions) (*Pairing, error) {
-	if opts.DB == nil || opts.Grants == nil || opts.QuickConnect == nil || opts.Authorize == nil {
-		return nil, fmt.Errorf("mcp: pairing needs a database, grants, quick connect and authorize")
-	}
-	if opts.CodeTTL <= 0 {
-		opts.CodeTTL = 10 * time.Minute
+	if opts.DB == nil || opts.Grants == nil || opts.Authorize == nil {
+		return nil, fmt.Errorf("mcp: pairing needs a database, grants and authorize")
 	}
 	log := opts.Logger
 	if log == nil {
@@ -82,22 +60,17 @@ func (p *Pairing) now() time.Time {
 // Handler serves the console routes, mounted by the app under
 // /api/agent/mcp (owner-authenticated by the admin API):
 //
-//	POST   /pair            -> {code, expiresAt, endpoint}
+//	GET    /authorization   -> pending request details
+//	POST   /authorization   -> approve or deny
 //	GET    /clients         -> {clients: [...]}
 //	DELETE /clients/{id}    -> 204
 func (p *Pairing) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /pair", p.handlePair)
+	mux.HandleFunc("GET /authorization", p.authorizationDetails)
+	mux.HandleFunc("POST /authorization", p.authorizationDecision)
 	mux.HandleFunc("GET /clients", p.handleClients)
 	mux.HandleFunc("DELETE /clients/{id}", p.handleRevoke)
 	return mux
-}
-
-// ExchangeHandler trades a pairing code for a grant token. Mount it
-// LAN-only at /ether/mcp/exchange, beside the MCP endpoint. The code is
-// the only credential: single-use, short-lived and rate-limited.
-func (p *Pairing) ExchangeHandler() http.Handler {
-	return http.HandlerFunc(p.handleExchange)
 }
 
 // Authenticate accepts only scoped grant credentials, never pairing codes.
@@ -120,144 +93,6 @@ func (p *Pairing) owner(w http.ResponseWriter, r *http.Request) (int64, bool) {
 		return 0, false
 	}
 	return id, true
-}
-
-func (p *Pairing) handlePair(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := p.owner(w, r)
-	if !ok {
-		return
-	}
-	var body struct {
-		Name  string `json:"name"`
-		Scope string `json:"scope"`
-	}
-	// An empty body is fine: the drawer posts {}.
-	_ = json.NewDecoder(r.Body).Decode(&body)
-	name := strings.TrimSpace(body.Name)
-	if len(name) > 80 {
-		name = name[:80]
-	}
-	if name == "" {
-		name = "AI app"
-	}
-	scope := strings.TrimSpace(body.Scope)
-	if scope == "" {
-		scope = identity.ScopeFull
-	}
-	scopes, err := identity.NormaliseScopes([]string{scope})
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "scope must be read or full"})
-		return
-	}
-	ctx := r.Context()
-	deviceID := "mcp-" + randomHex(6)
-	code, secret, err := p.opts.QuickConnect.Initiate(ctx, identity.SurfaceMCP, core.Device{
-		ID: deviceID, Client: name, Product: "MCP", DeviceName: name,
-	})
-	if err != nil {
-		p.log.Warn("mcp pairing initiate failed", "err", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "could not start pairing"})
-		return
-	}
-	if err := p.opts.QuickConnect.ApproveSurface(ctx, identity.SurfaceMCP, code, ownerID); err != nil {
-		p.log.Warn("mcp pairing approve failed", "err", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "could not start pairing"})
-		return
-	}
-	expires := p.now().Add(p.opts.CodeTTL)
-	if _, err := p.opts.DB.ExecContext(ctx, `DELETE FROM mcp_pairings WHERE expires<=? AND token=''`, p.now().UnixMilli()); err != nil {
-		p.log.Warn("mcp pairing cleanup failed", "err", err)
-	}
-	if _, err := p.opts.DB.ExecContext(ctx, `INSERT INTO mcp_pairings(code,secret,scopes,name,expires,token) VALUES(?,?,?,?,?,'')`,
-		code, secret, strings.Join(scopes, " "), name, expires.UnixMilli()); err != nil {
-		p.log.Warn("mcp pairing store failed", "err", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "could not start pairing"})
-		return
-	}
-	endpoint := absoluteURL(r, "/ether/mcp")
-	exchange := absoluteURL(r, "/ether/mcp/exchange")
-	writeJSON(w, http.StatusCreated, map[string]any{
-		"code":      code,
-		"expiresAt": expires.UTC().Format(time.RFC3339),
-		"endpoint":  endpoint,
-		"exchange":  exchange,
-		"command":   fmt.Sprintf("curl -s -X POST %s -H 'Content-Type: application/json' -d '{\"code\":\"%s\"}'", exchange, code),
-	})
-}
-
-func (p *Pairing) handleExchange(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("X-Request-ID", resolveRequestID(r))
-	if v := checkBoundary(r, p.opts.AllowedHosts, nil); v != nil {
-		writeJSON(w, v.status, map[string]any{"error": v.message})
-		return
-	}
-	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", "POST")
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "use POST"})
-		return
-	}
-	if !strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
-		writeJSON(w, http.StatusUnsupportedMediaType, map[string]any{"error": "Content-Type must be application/json"})
-		return
-	}
-	if !p.allowAttempt(r.RemoteAddr) {
-		writeJSON(w, http.StatusTooManyRequests, map[string]any{"error": "too many attempts; wait a minute"})
-		return
-	}
-	var body struct {
-		Code string `json:"code"`
-	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "send {\"code\": \"...\"}"})
-		return
-	}
-	code := strings.ToUpper(strings.TrimSpace(body.Code))
-	if code == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "a pairing code is required"})
-		return
-	}
-	ctx := r.Context()
-	var secret, scopesRaw, name string
-	// Consume the code atomically before minting a grant. Concurrent exchanges
-	// cannot both obtain a token, even across server instances.
-	err := p.opts.DB.QueryRowContext(ctx, `DELETE FROM mcp_pairings WHERE code=? AND expires>? AND token='' RETURNING secret,scopes,name`, code, p.now().UnixMilli()).Scan(&secret, &scopesRaw, &name)
-	if errors.Is(err, sql.ErrNoRows) {
-		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "unknown, expired or already-used code"})
-		return
-	}
-	if err != nil {
-		p.log.Warn("mcp exchange lookup failed", "err", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "exchange failed"})
-		return
-	}
-	token, err := p.opts.QuickConnect.PollSurface(ctx, identity.SurfaceMCP, secret)
-	if errors.Is(err, identity.ErrQuickConnectPending) {
-		writeJSON(w, http.StatusAccepted, map[string]any{"status": "pending"})
-		return
-	}
-	if err != nil {
-		_, _ = p.opts.DB.ExecContext(ctx, `DELETE FROM mcp_pairings WHERE code=?`, code)
-		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "unknown or already-used code"})
-		return
-	}
-	scopes := identity.ParseScopes(scopesRaw)
-	if err := p.opts.Grants.SetScopes(ctx, identity.SurfaceMCP, token, scopes); err != nil {
-		p.log.Warn("mcp exchange set scopes failed", "err", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "exchange failed"})
-		return
-	}
-	_, _ = p.opts.DB.ExecContext(ctx, `DELETE FROM mcp_pairings WHERE code=?`, code)
-	endpoint := absoluteURL(r, "/ether/mcp")
-	writeJSON(w, http.StatusOK, map[string]any{
-		"token":    token,
-		"endpoint": endpoint,
-		"name":     name,
-		"scopes":   scopes,
-		"claudeCodeCommand": fmt.Sprintf(
-			`claude mcp add --transport http ether %s --header "Authorization: Bearer %s"`, endpoint, token),
-		"note": "Keep the token like a password. The owner can revoke this app at any time in the console under Ask Ether, Connect an AI app.",
-	})
 }
 
 func (p *Pairing) handleClients(w http.ResponseWriter, r *http.Request) {
@@ -306,16 +141,25 @@ func (p *Pairing) handleRevoke(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// allowAttempt rate-limits exchanges: 10 per address per minute. Codes are
-// short, so guessing must be slow.
+// allowAttempt bounds OAuth requests to 10 per address per minute.
 func (p *Pairing) allowAttempt(addr string) bool {
 	host := addr
-	if i := strings.LastIndex(addr, ":"); i > 0 {
-		host = addr[:i]
+	if h, _, err := net.SplitHostPort(addr); err == nil {
+		host = h
 	}
 	now := p.now()
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if _, exists := p.attempts[host]; !exists && len(p.attempts) >= 4096 {
+		for key, attempts := range p.attempts {
+			if len(attempts) == 0 || now.Sub(attempts[len(attempts)-1]) >= time.Minute {
+				delete(p.attempts, key)
+			}
+		}
+		if len(p.attempts) >= 4096 {
+			return false
+		}
+	}
 	recent := p.attempts[host][:0]
 	for _, t := range p.attempts[host] {
 		if now.Sub(t) < time.Minute {
@@ -336,12 +180,6 @@ func absoluteURL(r *http.Request, path string) string {
 		scheme = "https"
 	}
 	return scheme + "://" + r.Host + path
-}
-
-func randomHex(bytes int) string {
-	b := make([]byte, bytes)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

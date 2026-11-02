@@ -3,12 +3,15 @@ package app
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -80,7 +83,7 @@ func TestMCPBuiltinToolsAndEndToEndWorkflow(t *testing.T) {
 		t.Fatal(err)
 	}
 	denied := httptest.NewRecorder()
-	pairingHandler.Handler().ServeHTTP(denied, httptest.NewRequest(http.MethodPost, "http://localhost/pair", strings.NewReader(`{}`)))
+	pairingHandler.Handler().ServeHTTP(denied, httptest.NewRequest(http.MethodPost, "http://localhost/authorization", strings.NewReader(`{}`)))
 	if denied.Code != http.StatusForbidden {
 		t.Fatalf("missing owner access: %d", denied.Code)
 	}
@@ -155,53 +158,69 @@ func TestMCPBuiltinToolsAndEndToEndWorkflow(t *testing.T) {
 	srv := httptest.NewServer(a.Handler())
 	t.Cleanup(srv.Close)
 
-	// 2. Pair an MCP client via the console API and exchange the pairing code.
-	pairReq, _ := http.NewRequest(http.MethodPost, srv.URL+"/ether/api/agent/mcp/pair",
-		strings.NewReader(`{"name":"Claude Desktop","scope":"full"}`))
-	pairReq.Header.Set("Authorization", "Bearer "+ownerToken)
-	pairReq.Header.Set("Content-Type", "application/json")
-	pairReq.Header.Set("X-Ether-Request", "1")
-	pairResp, err := http.DefaultClient.Do(pairReq)
+	// Pair through the public OAuth endpoints and authenticated console API.
+	reg, err := http.Post(srv.URL+"/ether/oauth/register", "application/json", strings.NewReader(`{"client_name":"Claude Desktop","redirect_uris":["http://127.0.0.1:9876/cb"]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer pairResp.Body.Close()
-	if pairResp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(pairResp.Body)
-		t.Fatalf("POST /ether/api/agent/mcp/pair status = %d: %s", pairResp.StatusCode, string(body))
+	defer reg.Body.Close()
+	var registration struct {
+		ClientID string `json:"client_id"`
 	}
-	var pairPayload struct {
-		Code     string `json:"code"`
-		Endpoint string `json:"endpoint"`
-		Exchange string `json:"exchange"`
+	if err := json.NewDecoder(reg.Body).Decode(&registration); err != nil || reg.StatusCode != 201 {
+		t.Fatalf("registration %d %v", reg.StatusCode, err)
 	}
-	if err := json.NewDecoder(pairResp.Body).Decode(&pairPayload); err != nil {
-		t.Fatal(err)
-	}
-	if pairPayload.Code == "" {
-		t.Fatal("empty pairing code")
-	}
-
-	exResp, err := http.Post(srv.URL+"/ether/mcp/exchange", "application/json",
-		strings.NewReader(fmt.Sprintf(`{"code":%q}`, pairPayload.Code)))
+	verifier := strings.Repeat("v", 43)
+	sum := sha256.Sum256([]byte(verifier))
+	challenge := base64.RawURLEncoding.EncodeToString(sum[:])
+	redirect := "http://127.0.0.1:9876/cb"
+	params := url.Values{"response_type": {"code"}, "client_id": {registration.ClientID}, "redirect_uri": {redirect}, "code_challenge": {challenge}, "code_challenge_method": {"S256"}, "scope": {"full"}, "resource": {srv.URL + "/ether/mcp"}}
+	noRedirect := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	auth, err := noRedirect.Get(srv.URL + "/ether/oauth/authorize?" + params.Encode())
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer exResp.Body.Close()
-	if exResp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(exResp.Body)
-		t.Fatalf("POST /ether/mcp/exchange status = %d: %s", exResp.StatusCode, string(body))
+	defer auth.Body.Close()
+	if auth.StatusCode != 303 {
+		t.Fatalf("authorize: %d", auth.StatusCode)
 	}
-	var exPayload struct {
-		Token string `json:"token"`
-	}
-	if err := json.NewDecoder(exResp.Body).Decode(&exPayload); err != nil {
+	location, err := url.Parse(auth.Header.Get("Location"))
+	if err != nil {
 		t.Fatal(err)
 	}
-	mcpToken := exPayload.Token
-	if !identity.IsGrantCredential(mcpToken) {
-		t.Fatalf("expected ethg_ token, got %q", mcpToken)
+	body, _ := json.Marshal(map[string]any{"request": location.Query().Get("request"), "approve": true})
+	oauthApproveReq, _ := http.NewRequest(http.MethodPost, srv.URL+"/ether/api/agent/mcp/authorization", bytes.NewReader(body))
+	oauthApproveReq.Header.Set("Authorization", "Bearer "+ownerToken)
+	oauthApproveReq.Header.Set("Content-Type", "application/json")
+	oauthApproveReq.Header.Set("X-Ether-Request", "1")
+	approval, err := http.DefaultClient.Do(oauthApproveReq)
+	if err != nil {
+		t.Fatal(err)
 	}
+	defer approval.Body.Close()
+	var approved struct {
+		Redirect string `json:"redirect"`
+	}
+	if err := json.NewDecoder(approval.Body).Decode(&approved); err != nil || approval.StatusCode != 200 {
+		t.Fatalf("approval %d %v", approval.StatusCode, err)
+	}
+	dest, err := url.Parse(approved.Redirect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	form := url.Values{"grant_type": {"authorization_code"}, "client_id": {registration.ClientID}, "redirect_uri": {redirect}, "code": {dest.Query().Get("code")}, "code_verifier": {verifier}, "resource": {srv.URL + "/ether/mcp"}}
+	exchange, err := http.PostForm(srv.URL+"/ether/oauth/token", form)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer exchange.Body.Close()
+	var issued struct {
+		Token string `json:"access_token"`
+	}
+	if err := json.NewDecoder(exchange.Body).Decode(&issued); err != nil || exchange.StatusCode != 200 {
+		t.Fatalf("token %d %v", exchange.StatusCode, err)
+	}
+	mcpToken := issued.Token
 
 	mcpCall := func(toolName string, args map[string]any) map[string]any {
 		t.Helper()

@@ -342,7 +342,6 @@ export function createAgentMock(): { handle: ExtendHandler } {
       scopes: ["read"],
     },
   ];
-  let pairing: { code: string; expiresAt: string; endpoint: string } | null = null;
 
   const handle: ExtendHandler = (method, seg, q, body) => {
     if (seg[0] !== "agent") return null;
@@ -494,15 +493,10 @@ export function createAgentMock(): { handle: ExtendHandler } {
       return json({ status: "stored" });
     }
 
-    if (method === "POST" && seg[1] === "mcp" && seg[2] === "pair") {
-      pairing = {
-        code: "482913",
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-        endpoint: "/ether/mcp",
-      };
-      return json(pairing);
+    if (seg[1] === "mcp" && seg[2] === "authorization") {
+      if (method === "GET") return json({ name: "Claude", scope: "read" });
+      if (method === "POST") return json({ redirect: "#mcp-complete" });
     }
-
     if (method === "GET" && seg[1] === "mcp" && seg[2] === "clients" && !seg[3]) {
       return json({ clients });
     }

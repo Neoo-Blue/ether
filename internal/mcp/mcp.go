@@ -139,13 +139,6 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		s.preflight(w, r)
 		return
 	}
-	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", "POST, OPTIONS")
-		s.writeRPC(w, r, http.StatusMethodNotAllowed, rpcResponse{
-			JSONRPC: "2.0", ID: nullID, Error: &rpcError{Code: -32000, Message: "Method not allowed"},
-		})
-		return
-	}
 	if v := checkBoundary(r, s.opts.AllowedHosts, s.opts.AllowedOrigins); v != nil {
 		s.writeRPC(w, r, v.status, rpcResponse{
 			JSONRPC: "2.0", ID: nullID, Error: &rpcError{Code: v.code, Message: v.message},
@@ -154,9 +147,16 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	principal, err := s.authenticate(r)
 	if err != nil {
-		w.Header().Set("WWW-Authenticate", `Bearer realm="ether-mcp"`)
+		w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+absoluteURL(r, "/.well-known/oauth-protected-resource/ether/mcp")+`"`)
 		s.writeRPC(w, r, http.StatusUnauthorized, rpcResponse{
 			JSONRPC: "2.0", ID: nullID, Error: &rpcError{Code: -32001, Message: "Unauthorized"},
+		})
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST, OPTIONS")
+		s.writeRPC(w, r, http.StatusMethodNotAllowed, rpcResponse{
+			JSONRPC: "2.0", ID: nullID, Error: &rpcError{Code: -32000, Message: "Method not allowed"},
 		})
 		return
 	}
@@ -477,13 +477,14 @@ func (s *Server) writeRPC(w http.ResponseWriter, r *http.Request, status int, re
 	}
 	accept := r.Header.Get("Accept")
 	sseOnly := strings.Contains(accept, "text/event-stream") && !strings.Contains(accept, "application/json") && !strings.Contains(accept, "*/*")
-	w.WriteHeader(status)
 	if sseOnly {
 		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(status)
 		_, _ = fmt.Fprintf(w, "event: message\ndata: %s\n\n", body)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
 	_, _ = w.Write(body)
 }
 

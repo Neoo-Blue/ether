@@ -34,15 +34,10 @@ func (a *App) buildMCPPairing() (*mcp.Pairing, error) {
 	if err != nil {
 		return nil, err
 	}
-	quick, err := identity.NewQuickConnect(a.db, 10*time.Minute, 30*24*time.Hour, nil)
-	if err != nil {
-		return nil, err
-	}
 	return mcp.NewPairing(mcp.PairingOptions{
 		DB:           a.db,
 		AllowedHosts: mcpAllowedHosts(),
 		Grants:       grants,
-		QuickConnect: quick,
 		Logger:       a.log.With("component", "mcp-pairing"),
 		Authorize: func(ctx context.Context) (int64, error) {
 			if acc, ok := admin.RequestAccess(ctx); !ok || !acc.Owner {
@@ -67,7 +62,7 @@ func (a *App) mcpHandlers(m map[string]http.Handler) {
 	m["agent/mcp"] = pairing.Handler()
 }
 
-// mountMCP mounts /ether/mcp and /ether/mcp/exchange, the LAN-only MCP server
+// mountMCP mounts the LAN-only MCP and OAuth endpoints
 // over the tool catalogue (WS5).
 func (a *App) mountMCP(mux *http.ServeMux) {
 	if a.extendRT == nil || a.extendRT.tools == nil {
@@ -108,5 +103,9 @@ func (a *App) mountMCP(mux *http.ServeMux) {
 		return
 	}
 	mux.Handle("/ether/mcp", a.perf.wrap("mcp", lanOnly(srv.Handler(), a.cfg.TrustedProxyCIDRs)))
-	mux.Handle("/ether/mcp/exchange", a.perf.wrap("mcp", lanOnly(pairing.ExchangeHandler(), a.cfg.TrustedProxyCIDRs)))
+	oauth := lanOnly(pairing.OAuthHandler(), a.cfg.TrustedProxyCIDRs)
+	mux.Handle("/.well-known/oauth-protected-resource", oauth)
+	mux.Handle("/.well-known/oauth-protected-resource/ether/mcp", oauth)
+	mux.Handle("/.well-known/oauth-authorization-server", oauth)
+	mux.Handle("/ether/oauth/", oauth)
 }
