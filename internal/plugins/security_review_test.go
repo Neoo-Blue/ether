@@ -268,3 +268,50 @@ func TestPluginRuntimeErrorsDoNotExposeSavedSecrets(t *testing.T) {
 		t.Fatalf("runtime error exposed saved secret: %v", err)
 	}
 }
+
+type securityRuntime struct {
+	call func(context.Context, Request) (Response, error)
+}
+
+func (r securityRuntime) Call(ctx context.Context, req Request) (Response, error) {
+	return r.call(ctx, req)
+}
+func (r securityRuntime) Close() error { return nil }
+
+func TestHostedReadOnlyToolCannotWriteCollections(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	rec := env.installHello(t, "1.0.0")
+	rec.Manifest.Ether.Permissions.Collections = "write"
+	rec.ManifestRaw, _ = json.Marshal(rec.Manifest)
+	if err := env.m.store.upsert(ctx, rec); err != nil {
+		t.Fatal(err)
+	}
+	wrote := false
+	env.m.deps.Backends.CollectionsUpsert = func(context.Context, json.RawMessage) (json.RawMessage, error) { wrote = true; return nil, nil }
+	var hostErr error
+	env.m.mu.Lock()
+	env.m.runtimes[rec.ID] = securityRuntime{call: func(ctx context.Context, _ Request) (Response, error) {
+		hostErr = env.m.HostFor(rec.ID).CollectionsUpsert(ctx, json.RawMessage(`{}`))
+		return Response{Status: 200, Body: json.RawMessage(`{}`)}, nil
+	}}
+	env.m.mu.Unlock()
+	tool := env.m.pluginTool(rec, ToolMeta{Name: "read", Title: "Read", Description: "read", ReadOnly: true, InputSchema: json.RawMessage(`{"type":"object"}`)})
+	if _, err := tool.Execute(ctx, tools.Principal{}, map[string]any{}); err != nil {
+		t.Fatal(err)
+	}
+	if wrote || !errors.Is(hostErr, ErrPermissionDenied) {
+		t.Fatalf("read-only tool write: wrote=%v err=%v", wrote, hostErr)
+	}
+}
+
+func TestRemoteReadOnlyToolRequiresApproval(t *testing.T) {
+	env := newTestEnv(t)
+	rec := env.installHello(t, "1.0.0")
+	rec.Manifest.Ether.Runtime.Kind = "remote"
+	tool := env.m.pluginTool(rec, ToolMeta{Name: "read", Title: "Read", Description: "read", ReadOnly: true, InputSchema: json.RawMessage(`{"type":"object"}`)})
+	result, err := tool.Execute(context.Background(), tools.Principal{}, map[string]any{})
+	if err != nil || result.Proposal == nil || tool.ReadOnly {
+		t.Fatalf("remote read tool should propose: %+v %v", result, err)
+	}
+}

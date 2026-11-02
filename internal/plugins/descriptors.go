@@ -115,7 +115,7 @@ func DescriptorsFor(man Manifest) []extend.Descriptor {
 	}
 	for _, tl := range c.Tools {
 		add(extend.KindTool, tl.Name, textOf(id, tl.Title), map[string]any{
-			"name": ToolName(id, tl.Name), "readOnly": tl.ReadOnly, "destructive": tl.Destructive, "openWorld": tl.OpenWorld})
+			"name": ToolName(id, tl.Name), "readOnly": tl.ReadOnly && man.RuntimeKind() == "hosted", "destructive": tl.Destructive, "openWorld": tl.OpenWorld})
 	}
 	return out
 }
@@ -166,9 +166,12 @@ func (m *Manager) syncDescriptors(ctx context.Context, r Record) {
 
 // pluginTool adapts one contributed tool to the catalogue. Read-only tools
 // execute through /ether/tool/{name}; writes return a Proposal whose
-// Apply runs the call after owner approval (SPEC §5.10).
+// Apply runs the call after owner approval (SPEC §5.10). Hosted read-only
+// calls carry a host-enforced write restriction; remote tools always require
+// approval because a sidecar can write independently of the current call.
 func (m *Manager) pluginTool(r Record, tl ToolMeta) tools.Tool {
 	pluginID, name := r.ID, tl.Name
+	readOnly := tl.ReadOnly && r.Manifest.RuntimeKind() == "hosted"
 	title := tl.Title
 	if strings.HasPrefix(title, "$t:") {
 		title = name
@@ -207,7 +210,7 @@ func (m *Manager) pluginTool(r Record, tl ToolMeta) tools.Tool {
 	}
 	return tools.Tool{
 		Name: ToolName(pluginID, name), Title: title, Description: tl.Description,
-		InputSchema: tl.InputSchema, ReadOnly: tl.ReadOnly, Destructive: tl.Destructive,
+		InputSchema: tl.InputSchema, ReadOnly: readOnly, Destructive: tl.Destructive,
 		OpenWorld: tl.OpenWorld, Audience: tools.AudienceOwner, Owner: pluginID,
 		Execute: func(ctx context.Context, _ tools.Principal, input map[string]any) (tools.Result, error) {
 			encoded, err := json.Marshal(input)
@@ -221,8 +224,8 @@ func (m *Manager) pluginTool(r Record, tl ToolMeta) tools.Tool {
 			if err := agent.ValidateToolInput(tl.InputSchema, snapshot); err != nil {
 				return tools.Result{}, tools.Userf("Invalid tool input: %s", err)
 			}
-			if tl.ReadOnly {
-				return run(ctx, snapshot)
+			if readOnly {
+				return run(context.WithValue(ctx, readOnlyToolContextKey{}, true), snapshot)
 			}
 			return tools.Result{Proposal: &tools.Proposal{
 				Category:    fmt.Sprintf("Run %s from %s", title, r.Name),

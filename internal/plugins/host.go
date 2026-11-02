@@ -23,6 +23,16 @@ type host struct {
 	plugin string
 }
 
+type readOnlyToolContextKey struct{}
+
+func (h *host) requireWritableToolContext(ctx context.Context) error {
+	if readOnly, _ := ctx.Value(readOnlyToolContextKey{}).(bool); readOnly {
+		h.noteDenied("read-only tool")
+		return fmt.Errorf("%w: read-only tool cannot write", ErrPermissionDenied)
+	}
+	return nil
+}
+
 func (h *host) record(ctx context.Context) (Record, Grants, error) {
 	r, err := h.m.store.record(ctx, h.plugin)
 	if err != nil {
@@ -280,6 +290,9 @@ type collectionInverse struct {
 }
 
 func (h *host) SetWatchState(ctx context.Context, viewerID int64, titleID string, watched bool) error {
+	if err := h.requireWritableToolContext(ctx); err != nil {
+		return err
+	}
 	r, g, err := h.record(ctx)
 	if err != nil {
 		return err
@@ -302,6 +315,9 @@ func (h *host) SetWatchState(ctx context.Context, viewerID int64, titleID string
 }
 
 func (h *host) CollectionsUpsert(ctx context.Context, doc json.RawMessage) error {
+	if err := h.requireWritableToolContext(ctx); err != nil {
+		return err
+	}
 	r, g, err := h.record(ctx)
 	if err != nil {
 		return err
@@ -480,6 +496,9 @@ func (m *Manager) rateOK(bucket map[string][]time.Time, key string, limit int, w
 }
 
 func (h *host) NotifyOwner(ctx context.Context, text string) error {
+	if err := h.requireWritableToolContext(ctx); err != nil {
+		return err
+	}
 	if _, _, err := h.record(ctx); err != nil {
 		return err
 	}
