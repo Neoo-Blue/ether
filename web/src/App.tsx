@@ -104,6 +104,7 @@ const Cache = lazy(() => import("./pages/cache/Cache"));
 const Playback = lazy(() => import("./pages/playback/Playback"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Plugins = lazy(() => import("./pages/plugins/Plugins"));
+const PluginPage = lazy(() => import("./viewspec/PluginPage"));
 
 /** react-router links for every AppKit navigation primitive. */
 const RouterAnchor = forwardRef<
@@ -463,6 +464,7 @@ function Shell() {
               <Route path="/apps/:tab?/:section?" element={<Apps />} />
               <Route path="/services/:tab?" element={<ServicesPage />} />
               <Route path="/plugins/:tab?/*" element={<Plugins />} />
+              <Route path="/p/:plugin/:page/*" element={<PluginPage />} />
               <Route path="/cluster" element={<ClusterPage />} />
               <Route path="/maintenance/:tab?/:backupTab?" element={<MaintenancePage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
