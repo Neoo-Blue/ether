@@ -10,10 +10,8 @@ import (
 	"github.com/braedonsaunders/ether/internal/config"
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/extend"
-	"github.com/braedonsaunders/ether/internal/identity"
 	"github.com/braedonsaunders/ether/internal/playback"
 	"github.com/braedonsaunders/ether/internal/plugins"
-	"github.com/braedonsaunders/ether/internal/plugins/remote"
 	"github.com/braedonsaunders/ether/internal/plugins/studio"
 	"github.com/braedonsaunders/ether/internal/plugins/wasm"
 	"github.com/braedonsaunders/ether/internal/state"
@@ -23,10 +21,6 @@ import (
 type pluginRuntime struct {
 	mgr    *plugins.Manager
 	studio *studio.Studio
-	// tunnel and pluginHost are the remote runtime's endpoints
-	// (WS8b), mounted by mountPlugins.
-	tunnel     *remote.TunnelServer
-	pluginHost http.Handler
 }
 
 func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRuntime, error) {
@@ -76,43 +70,6 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 	engine := wasm.NewEngine(a.log.With("component", "plugins-wasm"))
 	mgr.RegisterRuntime("hosted", plugins.HostedRuntimeFactory(engine))
 	a.closers = append(a.closers, func() { _ = engine.Close() })
-
-	// Remote plugins run at a URL or in a sidecar that tunnels out
-	// to Ether (SPEC §5.3, WS8b). Plugin credentials are
-	// identity_grants rows on surface "plugin" whose device_id is
-	// the plugin id, minted at pairing.
-	grants, grantsErr := identity.NewGrants(a.db, a.users, 30*24*time.Hour, nil)
-	if grantsErr != nil {
-		a.log.Warn("plugin credentials unavailable; remote plugin auth is off", "err", grantsErr)
-	}
-	resolveCredential := remote.CredentialResolverFunc(func(ctx context.Context, credential string) (string, error) {
-		if grants == nil {
-			return "", remote.ErrUnavailable
-		}
-		_, device, _, err := grants.ResolveGrantDevice(ctx, "plugin", credential, "")
-		if err != nil || device.ID == "" {
-			return "", remote.ErrUnauthorized
-		}
-		rec, err := mgr.Get(ctx, device.ID)
-		if err != nil || !rec.Enabled {
-			return "", remote.ErrUnauthorized
-		}
-		return device.ID, nil
-	})
-	remoteLog := a.log.With("component", "plugins-remote")
-	tunnel := remote.NewTunnelServer(remote.TunnelOptions{Auth: resolveCredential, Logger: remoteLog})
-	factory := &remote.Factory{
-		Tunnel:     tunnel,
-		TrustedLAN: remote.GrantsLAN(mgr.GrantsOf),
-		Logger:     remoteLog,
-	}
-	mgr.RegisterRuntime("remote", factory.RuntimeFactory())
-	pluginHost := remote.NewHostHandler(remote.HostOptions{
-		Host:   remote.HostAdapter{HostFor: mgr.HostFor},
-		Auth:   resolveCredential,
-		Logger: remoteLog,
-	})
-	a.closers = append(a.closers, func() { _ = tunnel.Close() })
 	if err := mgr.Start(ctx); err != nil {
 		return nil, err
 	}
@@ -183,7 +140,7 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 		stopState()
 		unsubscribe()
 	})
-	return &pluginRuntime{mgr: mgr, studio: studioSvc, tunnel: tunnel, pluginHost: pluginHost}, nil
+	return &pluginRuntime{mgr: mgr, studio: studioSvc}, nil
 }
 
 // pluginHandlers mounts the owner plugin API under /api/plugins (WS7, WS11).
@@ -198,20 +155,7 @@ func (a *App) pluginHandlers(m map[string]http.Handler) {
 }
 
 // mountPlugins mounts the plugin tunnel and plugin host API (WS8b).
-// Both authenticate with plugin credentials, not owner tokens, and
-// stay LAN-only like the console (SPEC §5.3): a sidecar outside the
-// LAN reaches Ether the same way the owner does.
-func (a *App) mountPlugins(mux *http.ServeMux) {
-	if a.pluginsRT == nil {
-		return
-	}
-	if a.pluginsRT.tunnel != nil {
-		mux.Handle("GET "+remote.TunnelPath, lanOnly(a.pluginsRT.tunnel.Handler(), a.cfg.TrustedProxyCIDRs))
-	}
-	if a.pluginsRT.pluginHost != nil {
-		mux.Handle(remote.HostPath, lanOnly(a.pluginsRT.pluginHost, a.cfg.TrustedProxyCIDRs))
-	}
-}
+func (a *App) mountPlugins(mux *http.ServeMux) {}
 
 // pluginTextResolver resolves plugin strings for the registry (WS7).
 func (a *App) pluginTextResolver() extend.TextResolver {
