@@ -3360,16 +3360,8 @@ export function createFakeServer(opts: FakeOptions = {}) {
         }
       }
     }
-    // Per-viewer safety policy (Viewer › Limits). Presets fill a kids policy.
+    // Per-viewer safety policy (Viewer › Limits).
     if (seg[0] === "safety" && seg[1] === "policies") {
-      if (seg[2] === "presets" && seg[3] && method === "GET") {
-        const age = Number(q.get("age") ?? 10);
-        return json({
-          maxContentRating: age < 8 ? "G" : age < 13 ? "PG" : "PG-13",
-          blockedGenres: [],
-          blockedKeywords: [],
-        });
-      }
       const id = Number(seg[2]);
       if (Number.isFinite(id) && method === "GET") return json(safetyPolicies.get(id) ?? {});
       if (Number.isFinite(id) && method === "PUT") {
