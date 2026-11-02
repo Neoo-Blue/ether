@@ -14,7 +14,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../../app-context";
 import { Drawer } from "../../components/Drawer";
 import { ErrorPanel, MutationError } from "../../components/feedback";
-import { PasswordInput, TestButton, type TestState } from "../../components/fields";
+import { TestButton, type TestState } from "../../components/fields";
 import { IntegrationAppCard } from "../../components/IntegrationAppCard";
 import { secretConfigured } from "../../components/IntegrationAccount";
 import { SimklMark, TraktMark } from "../../components/integration-brands";
@@ -26,7 +26,7 @@ import { useAsync } from "../../lib/hooks";
 import type { EtherConfig } from "../../lib/types";
 import { PosterAccounts } from "./PosterAccounts";
 import { RatingSources, type RatingSettings } from "../metadata/Ratings";
-import { SimklIntegration, type SimklSettings } from "./SimklIntegration";
+import { SimklSettings } from "./SimklIntegration";
 import { LanguageFeatures } from "./LanguageFeatures";
 import { LanguageModelSettings } from "./LanguageModel";
 import { asObj, GenericFields, SchemaField, type FieldGroup } from "./SchemaForm";
@@ -78,8 +78,6 @@ interface Service {
   flag: "enabled" | "theIntroDb";
   label: string;
   groups: FieldGroup[];
-  /** Simkl keeps its own account form and save. */
-  custom?: boolean;
   form?: (props: {
     value: Obj;
     saved: Obj | undefined;
@@ -115,7 +113,9 @@ const SERVICES: Service[] = localized(() => [
     flag: "enabled",
     label: "Simkl",
     groups: [],
-    custom: true,
+    form: ({ value, onChange, errors, footer }) => (
+      <SimklSettings value={value} onChange={onChange} errors={errors} footer={footer} />
+    ),
     blockEnable: (v) => (String(v.clientId ?? "").trim() ? null : t("Needs a client ID")),
     requiredField: "clientId",
   },
@@ -229,14 +229,6 @@ function useExclusive() {
     return run;
   }, []);
   return { locked, enqueue };
-}
-
-function simklSettings(value: Obj | undefined): SimklSettings {
-  return {
-    enabled: value?.enabled === true,
-    clientId: String(value?.clientId ?? ""),
-    clientSecret: String(value?.clientSecret ?? ""),
-  };
 }
 
 function textField(section: Obj, key: string, fallback: string): string {
@@ -499,9 +491,7 @@ export function ConnectedServices({
       const storedNow = model.current.stored;
       if (!draftNow || !storedNow) return;
       const changed = SERVICES.filter(
-        (s) =>
-          !s.custom &&
-          JSON.stringify(draftNow[s.configKey]) !== JSON.stringify(storedNow[s.configKey]),
+        (s) => JSON.stringify(draftNow[s.configKey]) !== JSON.stringify(storedNow[s.configKey]),
       );
       const catalogChanged = JSON.stringify(draftNow.catalog) !== JSON.stringify(storedNow.catalog);
       if (!changed.length && !catalogChanged) return;
@@ -700,48 +690,7 @@ export function ConnectedServices({
         {sectionSetup && setupService ? (
           <div className="space-y-4">
             {sectionSetup.failure ? <MutationError error={sectionSetup.failure} /> : null}
-            {setupService.custom ? (
-              <div className="space-y-3">
-                <label className="block">
-                  {t("Client ID")}{" "}
-                  <input
-                    className="w-full rounded border border-border bg-surface px-2 py-1"
-                    value={String(sectionSetup.draft.clientId ?? "")}
-                    onChange={(e) =>
-                      setSectionSetup({
-                        ...sectionSetup,
-                        draft: {
-                          ...sectionSetup.draft,
-                          clientId: e.target.value,
-                        },
-                      })
-                    }
-                  />
-                </label>
-                {sectionSetup.errors[`${setupService.configKey}.clientId`] ? (
-                  <p role="alert" className="text-sm text-danger">
-                    {sectionSetup.errors[`${setupService.configKey}.clientId`]}
-                  </p>
-                ) : null}
-                <label className="block" htmlFor="setup-client-secret">
-                  {t("Client secret")}
-                </label>
-                <PasswordInput
-                  id="setup-client-secret"
-                  autoComplete="off"
-                  value={String(sectionSetup.draft.clientSecret ?? "")}
-                  onChange={(e) =>
-                    setSectionSetup({
-                      ...sectionSetup,
-                      draft: {
-                        ...sectionSetup.draft,
-                        clientSecret: e.target.value,
-                      },
-                    })
-                  }
-                />
-              </div>
-            ) : setupService.form ? (
+            {setupService.form ? (
               <setupService.form
                 value={sectionSetup.draft}
                 saved={stored?.[setupService.configKey]}
@@ -836,7 +785,7 @@ export function ConnectedServices({
           onToggle={(service, next) => void toggleService(service, next)}
         />
       </div>
-      {SERVICES.filter((s) => !s.custom).map((s) => {
+      {SERVICES.map((s) => {
         if (tab !== s.tab && !visited.has(s.tab)) return null;
         const value = draft[s.configKey] ?? {};
         const set = (next: Obj) => setDraft({ ...draft, [s.configKey]: next });
@@ -876,29 +825,6 @@ export function ConnectedServices({
           </div>
         );
       })}
-      {tab === "simkl" || visited.has("simkl") ? (
-        <div hidden={tab !== "simkl"}>
-          <SimklIntegration
-            settings={simklSettings(draft.simkl)}
-            onSettings={(next) => {
-              const draftNow = model.current.draft;
-              if (!draftNow) return;
-              const draftNext = { ...draftNow, simkl: next as unknown as Obj };
-              model.current.draft = draftNext;
-              setDraft(draftNext);
-            }}
-            onPersisted={(next) => {
-              const storedNow = model.current.stored;
-              const draftNow = model.current.draft;
-              if (!storedNow || !draftNow) return;
-              const section = { ...asObj(storedNow.simkl), ...(next as unknown as Obj) };
-              applySection("simkl", section, { ...draftNow, simkl: section });
-            }}
-            persist={enqueue}
-            disabled={locked}
-          />
-        </div>
-      ) : null}
       {tab === "ratings" || visited.has("ratings") ? (
         <div hidden={tab !== "ratings"}>
           <RatingSources

@@ -26,13 +26,15 @@ func init() {
 	store.Register("safety", 1, `CREATE TABLE safety_policies(user_id INTEGER PRIMARY KEY, policy TEXT NOT NULL);`)
 }
 
+// Policy is the owner's per-viewer content and playback policy. A viewer's
+// stream limit and content rating limit are not here: they live on the user
+// record (core.User.StreamLimit, core.User.MaxContentRating), which every
+// protocol already reads.
 type Policy struct {
-	StreamLimit      int      `json:"streamLimit"`
-	MaxContentRating string   `json:"maxContentRating"`
-	BlockedGenres    []string `json:"blockedGenres"`
-	BlockedKeywords  []string `json:"blockedKeywords"`
-	RemoteDisabled   bool     `json:"remoteDisabled"`
-	MaxBitrateKbps   int      `json:"maxBitrateKbps"`
+	BlockedGenres   []string `json:"blockedGenres"`
+	BlockedKeywords []string `json:"blockedKeywords"`
+	RemoteDisabled  bool     `json:"remoteDisabled"`
+	MaxBitrateKbps  int      `json:"maxBitrateKbps"`
 	// AllowedHours is empty for any time, otherwise hours 0..23 in Timezone.
 	AllowedHours []int  `json:"allowedHours"`
 	Timezone     string `json:"timezone"`
@@ -139,11 +141,8 @@ func (s *Service) Get(id int64) Policy {
 
 // Validate reports why p cannot be stored, if it cannot.
 func (p Policy) Validate() error {
-	if p.MaxBitrateKbps < 0 || p.StreamLimit < 0 {
+	if p.MaxBitrateKbps < 0 {
 		return fmt.Errorf("invalid viewer or bitrate")
-	}
-	if p.MaxContentRating != "" && contentrating.LevelOf(p.MaxContentRating) == contentrating.Unrated {
-		return fmt.Errorf("unrecognized rating limit")
 	}
 	for _, h := range p.AllowedHours {
 		if h < 0 || h > 23 {
@@ -204,7 +203,7 @@ func (s *Service) Allowed(u *core.User, t *core.Title) bool {
 		return false
 	}
 	compiled := shareFilterFor(t, s.compiledFor(u))
-	if ownerSetsRating(u, s.Get(u.ID)) {
+	if ownerSetsRating(u) {
 		compiled.allowRatings = nil
 		compiled.denyRatings = nil
 		compiled.maxRating = ""
@@ -222,7 +221,7 @@ func AllowedWithPolicy(u *core.User, t *core.Title, p Policy) bool {
 	if u == nil {
 		return true
 	}
-	if contentrating.Exceeds(t.ContentRating, u.MaxContentRating) || contentrating.Exceeds(t.ContentRating, p.MaxContentRating) {
+	if contentrating.Exceeds(t.ContentRating, u.MaxContentRating) {
 		return false
 	}
 	blocked := func(values, bans []string) bool {
@@ -299,7 +298,15 @@ func IsRemote(r *http.Request) bool {
 	ip := net.ParseIP(host)
 	return ip == nil || !(ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast())
 }
-func KidsPreset(age string) Policy {
+
+// Preset is a parental-controls starting point. MaxContentRating belongs on
+// the viewer's user record; Policy is stored here. JSON flattens both.
+type Preset struct {
+	MaxContentRating string `json:"maxContentRating"`
+	Policy
+}
+
+func KidsPreset(age string) Preset {
 	rating := "PG"
 	switch age {
 	case "preschool":
@@ -307,7 +314,7 @@ func KidsPreset(age string) Policy {
 	case "teens":
 		rating = "PG-13"
 	}
-	return Policy{MaxContentRating: rating, BlockedKeywords: []string{"pornography", "erotic movie"}}
+	return Preset{MaxContentRating: rating, Policy: Policy{BlockedKeywords: []string{"pornography", "erotic movie"}}}
 }
 func (s *Service) Handler() http.Handler {
 	m := http.NewServeMux()
@@ -348,13 +355,14 @@ func (s *Service) Handler() http.Handler {
 }
 
 // BrowseBlocks is the part of a viewer's policy that library SQL can apply
-// before pagination: blocked genres, blocked keywords, and the rating cap.
-func (s *Service) BrowseBlocks(u *core.User) (genres, keywords []string, maxRating string) {
+// before pagination: blocked genres and blocked keywords. The rating limit
+// is on the user record, which browse filters already read.
+func (s *Service) BrowseBlocks(u *core.User) (genres, keywords []string) {
 	if s == nil || u == nil {
-		return nil, nil, ""
+		return nil, nil
 	}
 	p := s.ForUser(u)
-	return append([]string(nil), p.BlockedGenres...), append([]string(nil), p.BlockedKeywords...), p.MaxContentRating
+	return append([]string(nil), p.BlockedGenres...), append([]string(nil), p.BlockedKeywords...)
 }
 
 // BrowseShareFilter is the parsed plex.tv share predicate for one library
@@ -369,7 +377,7 @@ func (s *Service) BrowseShareFilter(u *core.User, typ core.MediaType) core.Filte
 	if typ == core.TypeShow || typ == core.TypeSeason || typ == core.TypeEpisode {
 		f = c.tv
 	}
-	return f.forType(typ, ownerSetsRating(u, s.Get(u.ID)))
+	return f.forType(typ, ownerSetsRating(u))
 }
 
 // ForUser is u's policy.
@@ -379,22 +387,16 @@ func (s *Service) ForUser(u *core.User) Policy {
 	}
 	return s.Get(u.ID)
 }
-func (s *Service) UserPolicy(u *core.User) *core.User {
-	return UserPolicyWithPolicy(u, s.ForUser(u))
-}
 
-// UserPolicyWithPolicy applies restrictions from a caller-owned policy copy.
-func UserPolicyWithPolicy(u *core.User, p Policy) *core.User {
+// UserPolicy implements core.UserPolicySource: the viewer as policy-aware
+// code should see them. The stream and rating limits are already on the user
+// record, so this is an independent copy callers may modify.
+func (s *Service) UserPolicy(u *core.User) *core.User {
 	if u == nil {
 		return nil
 	}
 	out := *u
-	if p.MaxContentRating != "" && (out.MaxContentRating == "" || contentrating.LevelOf(p.MaxContentRating) < contentrating.LevelOf(out.MaxContentRating)) {
-		out.MaxContentRating = p.MaxContentRating
-	}
-	if p.StreamLimit > 0 && (out.StreamLimit <= 0 || p.StreamLimit < out.StreamLimit) {
-		out.StreamLimit = p.StreamLimit
-	}
+	out.AllowedSections = append([]int(nil), u.AllowedSections...)
 	return &out
 }
 func (s *Service) BitrateLimit(u *core.User) int { return s.ForUser(u).MaxBitrateKbps }
@@ -405,6 +407,6 @@ func (s *Service) Restricted(u *core.User) bool {
 	}
 	p := s.ForUser(u)
 	share := s.shareFor(u)
-	return u.MaxContentRating != "" || len(u.AllowedSections) > 0 || p.MaxContentRating != "" || len(p.BlockedGenres) > 0 || len(p.BlockedKeywords) > 0 ||
+	return u.MaxContentRating != "" || len(u.AllowedSections) > 0 || len(p.BlockedGenres) > 0 || len(p.BlockedKeywords) > 0 ||
 		share.FilterMovies != "" || share.FilterTelevision != ""
 }

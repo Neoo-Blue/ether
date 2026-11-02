@@ -21,7 +21,8 @@ func TestDLNAGuestIsPasswordlessAndSurfaceRestricted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	id, err := local.CreateDLNAGuest(ctx, "Living room guest")
+	preset := safety.KidsPreset("children")
+	id, err := local.CreateDLNAGuest(ctx, "Living room guest", preset.MaxContentRating)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +34,7 @@ func TestDLNAGuestIsPasswordlessAndSurfaceRestricted(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer policy.Close()
-	if err = policy.Put(ctx, id, safety.KidsPreset("children")); err != nil {
+	if err = policy.Put(ctx, id, preset.Policy); err != nil {
 		t.Fatal(err)
 	}
 	if err = local.ActivateDLNAGuest(ctx, id); err != nil {
@@ -181,7 +182,7 @@ func TestGuestCannotBeBackfilledOrPromotedToPlexOwner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	id, err := local.CreateDLNAGuest(ctx, "Guest")
+	id, err := local.CreateDLNAGuest(ctx, "Guest", "PG")
 	if err != nil {
 		t.Fatal(err)
 	}

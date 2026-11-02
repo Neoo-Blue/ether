@@ -11,7 +11,6 @@ import (
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/identity"
 	"github.com/braedonsaunders/ether/internal/plextv"
-	"github.com/braedonsaunders/ether/internal/safety"
 )
 
 // A cached browse page is a viewer's body. The next request after a rating
@@ -107,7 +106,8 @@ func TestPageCacheDropsBodyWhenRestrictionOrTokenChanges(t *testing.T) {
 	if restored.Code != 200 || !strings.Contains(restored.Body.String(), "Adult Film") {
 		t.Fatalf("restored %d %s", restored.Code, restored.Body)
 	}
-	if err = a.safety.Put(ctx, id, safety.Policy{MaxContentRating: "G"}); err != nil {
+	child.MaxContentRating = "G"
+	if err = a.users.UpdateUser(ctx, *child); err != nil {
 		t.Fatal(err)
 	}
 	policy := call("GET", list, "", signed.AccessToken)

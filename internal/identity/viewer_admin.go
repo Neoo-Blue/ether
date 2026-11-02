@@ -39,15 +39,16 @@ func (l *Local) CreateViewer(ctx context.Context, username, password string) (in
 	return id, nil
 }
 
-// CreateDLNAGuest creates an inactive, passwordless local guest. Callers must
-// install its safety policy before activating it.
-func (l *Local) CreateDLNAGuest(ctx context.Context, display string) (int64, error) {
+// CreateDLNAGuest creates an inactive, passwordless local guest with the
+// given content rating limit. Callers must install its safety policy before
+// activating it.
+func (l *Local) CreateDLNAGuest(ctx context.Context, display, maxRating string) (int64, error) {
 	if display == "" || len(display) > 128 || strings.TrimSpace(display) != display {
 		return 0, errors.New("identity: invalid display")
 	}
 	now := time.Now().Unix()
 	var id int64
-	err := l.db.QueryRowContext(ctx, `INSERT INTO auth_users(plex_id,username,title,is_owner,active,origin,created_at,updated_at) VALUES(NULL,'',?,0,0,'dlna_guest',?,?) RETURNING id`, display, now, now).Scan(&id)
+	err := l.db.QueryRowContext(ctx, `INSERT INTO auth_users(plex_id,username,title,is_owner,active,origin,max_content_rating,created_at,updated_at) VALUES(NULL,'',?,0,0,'dlna_guest',?,?,?) RETURNING id`, display, strings.TrimSpace(maxRating), now, now).Scan(&id)
 	return id, err
 }
 

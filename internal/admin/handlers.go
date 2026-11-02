@@ -10,12 +10,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/braedonsaunders/ether/internal/config"
+	"github.com/braedonsaunders/ether/internal/contentrating"
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/plextv"
 	"github.com/braedonsaunders/ether/internal/tmdb"
@@ -670,13 +672,25 @@ func (h *Handler) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "no such user")
 		return
 	}
+	// Languages belong to the viewer's Audio & subtitles rules, which mirror
+	// them onto the user record; this endpoint does not write them.
+	subtitles, audio := slices.Clone(u.SubtitleLanguages), slices.Clone(u.AudioLanguages)
 	if err := decodeJSONLenient(r, u); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_json", err.Error())
 		return
 	}
 	u.ID = id // path wins over body
+	u.SubtitleLanguages, u.AudioLanguages = subtitles, audio
+	u.MaxContentRating = strings.TrimSpace(u.MaxContentRating)
+	var invalid []FieldError
 	if u.StreamLimit < 0 {
-		writeValidationError(w, []FieldError{{Field: "streamLimit", Message: "must be >= 0"}})
+		invalid = append(invalid, FieldError{Field: "streamLimit", Message: "must be >= 0"})
+	}
+	if u.MaxContentRating != "" && contentrating.LevelOf(u.MaxContentRating) == contentrating.Unrated {
+		invalid = append(invalid, FieldError{Field: "maxContentRating", Message: "unrecognized rating"})
+	}
+	if len(invalid) > 0 {
+		writeValidationError(w, invalid)
 		return
 	}
 	if err := h.deps.Users.UpdateUser(r.Context(), *u); err != nil {

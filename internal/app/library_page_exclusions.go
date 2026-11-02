@@ -26,7 +26,7 @@ func newLibraryPageExclusions(a *App) func(context.Context, *core.User) experien
 		var out experience.LibraryPageExclusions
 		out.Keys = discoveryExclusions(ctx, a, &mu, &cached)
 		if a != nil && a.safety != nil {
-			out.ExcludeGenres, out.ExcludeKeywords, out.MaxContentRating = a.safety.BrowseBlocks(viewer)
+			out.ExcludeGenres, out.ExcludeKeywords = a.safety.BrowseBlocks(viewer)
 			out.Movie = a.safety.BrowseShareFilter(viewer, core.TypeMovie)
 			out.Television = a.safety.BrowseShareFilter(viewer, core.TypeShow)
 		}

@@ -549,14 +549,9 @@ func (s *Server) parseBrowse(ctx context.Context, sec Section, t core.MediaType,
 	}
 
 	if blocks, ok := s.d.AccessPolicy.(interface {
-		BrowseBlocks(*core.User) ([]string, []string, string)
+		BrowseBlocks(*core.User) ([]string, []string)
 	}); ok {
-		genres, keywords, rating := blocks.BrowseBlocks(u)
-		f.ExcludeGenres = genres
-		f.ExcludeKeywords = keywords
-		if rating != "" {
-			f.MaxContentRating = rating
-		}
+		f.ExcludeGenres, f.ExcludeKeywords = blocks.BrowseBlocks(u)
 	}
 	f.SaferPlexRating = s.plexMetaOn()
 	splitVals := func(v string) []string {
@@ -1022,7 +1017,7 @@ func (s *Server) browse(ctx context.Context, pr *Request, br browseRequest) ([]c
 		return nil, 0, offset, nil
 	}
 	_, hasBrowseBlocks := s.d.AccessPolicy.(interface {
-		BrowseBlocks(*core.User) ([]string, []string, string)
+		BrowseBlocks(*core.User) ([]string, []string)
 	})
 	needsPostPolicy := s.d.AccessPolicy != nil && !hasBrowseBlocks && s.viewerRestricted(pr.User)
 	needsStateScan := br.unwatched != nil || br.inProgress != nil || br.sortLastViewed || br.lastViewedAfter > 0 || br.lastViewedBefore > 0

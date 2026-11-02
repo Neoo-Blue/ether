@@ -12,11 +12,12 @@ func (a *App) createDLNAGuest(ctx context.Context) (*core.Viewer, error) {
 	if err != nil {
 		return nil, err
 	}
-	id, err := local.CreateDLNAGuest(ctx, "Living-room guest")
+	preset := safety.KidsPreset("children")
+	id, err := local.CreateDLNAGuest(ctx, "Living-room guest", preset.MaxContentRating)
 	if err != nil {
 		return nil, err
 	}
-	if err = a.safety.Put(ctx, id, safety.KidsPreset("children")); err != nil {
+	if err = a.safety.Put(ctx, id, preset.Policy); err != nil {
 		return nil, err
 	}
 	if err = local.ActivateDLNAGuest(ctx, id); err != nil {

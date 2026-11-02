@@ -32,12 +32,10 @@ function extraRoutes(route: Route) {
 }
 
 const POLICY = {
-  maxContentRating: "",
   blockedGenres: [],
   blockedKeywords: [],
   remoteDisabled: false,
   maxBitrateKbps: 0,
-  streamLimit: 0,
   allowedHours: [],
   timezone: "UTC",
 };
@@ -119,15 +117,54 @@ describe("Viewers", () => {
     ).toEqual([{ kind: "person", value: "108", weight: 1 }]);
   });
 
-  it("sets a viewer's stream limit and rating cap", async () => {
+  it("sets a viewer's streams at once on their user record", async () => {
     const { fake } = renderApp("/viewers/4/limits");
-    const limit = await screen.findByLabelText("Stream limit", {}, WAIT);
+    const limit = await screen.findByLabelText("Streams at once", {}, WAIT);
+    // One stream limit and one rating limit; no second copies, no account languages.
+    expect(screen.getAllByLabelText("Streams at once")).toHaveLength(1);
+    expect(screen.getAllByLabelText("Content rating limit")).toHaveLength(1);
+    expect(screen.queryByLabelText("Concurrent streams")).toBeNull();
+    expect(screen.queryByText("Account languages")).toBeNull();
+    expect(screen.getByRole("link", { name: "Change the server default" })).toHaveAttribute(
+      "href",
+      "/playback/transcoding",
+    );
     fireEvent.change(limit, { target: { value: "1" } });
     fireEvent.click(await screen.findByRole("button", { name: /Save changes/ }));
     await waitFor(() => expect(calls(fake, "PATCH", "/users/4")).toHaveLength(1), WAIT);
-    expect(calls(fake, "PATCH", "/users/4")[0]!.body).toMatchObject({ streamLimit: 1 });
+    expect(calls(fake, "PATCH", "/users/4")[0]!.body).toEqual({
+      streamLimit: 1,
+      maxContentRating: "",
+    });
     // Only the part that changed is written.
     expect(calls(fake, "PUT", "/safety/policies/4")).toHaveLength(0);
+  });
+
+  it("picks the allowed-times timezone from a searchable list", async () => {
+    const { fake } = renderApp("/viewers/4/limits");
+    fireEvent.click(await screen.findByLabelText("Playback timezone", {}, WAIT));
+    const search = await screen.findByRole("textbox", { name: "Search…" }, WAIT);
+    fireEvent.change(search, { target: { value: "Tokyo" } });
+    fireEvent.click(await screen.findByRole("option", { name: "Asia/Tokyo" }, WAIT));
+    fireEvent.click(await screen.findByRole("button", { name: /Save changes/ }));
+    await waitFor(() => expect(calls(fake, "PUT", "/safety/policies/4")).toHaveLength(1), WAIT);
+    expect(calls(fake, "PUT", "/safety/policies/4")[0]!.body).toMatchObject({
+      timezone: "Asia/Tokyo",
+    });
+  });
+
+  it("keeps the Live TV rating behind More options and links Simkl setup", async () => {
+    renderApp("/viewers/4/limits");
+    const more = await screen.findByRole("button", { name: "More options: Live TV" }, WAIT);
+    expect(screen.queryByLabelText("Different limit for Live TV")).toBeNull();
+    fireEvent.click(more);
+    expect(await screen.findByLabelText("Different limit for Live TV")).toBeInTheDocument();
+    // Simkl is off in the fake, so the viewer page links to its setup.
+    const hint = await screen.findByText(/to connect this viewer's account/, {}, WAIT);
+    expect(within(hint).getByRole("link", { name: "Integrations" })).toHaveAttribute(
+      "href",
+      "/services/simkl",
+    );
   });
 
   it("saves a viewer's parental controls from their Access tab", async () => {
@@ -136,21 +173,21 @@ describe("Viewers", () => {
       {},
       extraRoutes((method, path) => {
         if (method === "GET" && path === "/safety/policies/3") return POLICY;
-        if (method === "GET" && path === "/safety/policies/presets/kids?age=family")
-          return { maxContentRating: "PG", blockedKeywords: ["pornography"] };
         if (method === "PUT" && path === "/safety/policies/3") return { ok: true };
         return undefined;
       }),
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Family" }, WAIT));
-    await waitFor(() =>
-      expect(screen.getByLabelText("Blocked keywords")).toHaveValue("pornography"),
+    fireEvent.click(await screen.findByRole("button", { name: "Teens" }, WAIT));
+    await waitFor(
+      () =>
+        expect(screen.getByLabelText("Blocked keywords")).toHaveValue("pornography, erotic movie"),
+      WAIT,
     );
     fireEvent.change(screen.getByLabelText("Blocked genres"), {
       target: { value: "Horror, Thriller" },
     });
     fireEvent.click(screen.getByLabelText("Local network only"));
-    fireEvent.change(screen.getByLabelText("Concurrent streams"), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText("Streams at once"), { target: { value: "2" } });
     fireEvent.click(
       within(screen.getByRole("group", { name: "Allowed hours" })).getByRole("button", {
         name: "20:00",
@@ -158,16 +195,21 @@ describe("Viewers", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /Save changes/ }));
     await waitFor(() => expect(calls(fake, "PUT", "/safety/policies/3")).toHaveLength(1), WAIT);
-    expect(calls(fake, "PUT", "/safety/policies/3")[0]!.body).toMatchObject({
-      maxContentRating: "PG",
+    const saved = calls(fake, "PUT", "/safety/policies/3")[0]!.body as Record<string, unknown>;
+    expect(saved).toMatchObject({
       blockedGenres: ["Horror", "Thriller"],
-      blockedKeywords: ["pornography"],
+      blockedKeywords: ["pornography", "erotic movie"],
       remoteDisabled: true,
-      streamLimit: 2,
       allowedHours: [20],
     });
-    // The user record (stream limit, rating cap) was untouched.
-    expect(calls(fake, "PATCH", "/users/3")).toHaveLength(0);
+    expect(saved).not.toHaveProperty("maxContentRating");
+    expect(saved).not.toHaveProperty("streamLimit");
+    // The preset's rating limit and the stream limit go to the user record.
+    await waitFor(() => expect(calls(fake, "PATCH", "/users/3")).toHaveLength(1), WAIT);
+    expect(calls(fake, "PATCH", "/users/3")[0]!.body).toMatchObject({
+      maxContentRating: "PG-13",
+      streamLimit: 2,
+    });
     await waitFor(() => expect(screen.queryByText("You have unsaved changes")).toBeNull());
   });
 

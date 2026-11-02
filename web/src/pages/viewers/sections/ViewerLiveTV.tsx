@@ -8,6 +8,7 @@ import {
 } from "@braedonsaunders/appkit-ui";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { MoreOptions } from "../../../components/ConfigSection";
 import { ErrorPanel } from "../../../components/feedback";
 import { SaveBar, useDraft } from "../../../components/SaveBar";
 import { SettingsRow } from "../../../components/SettingsRow";
@@ -102,27 +103,34 @@ export function ViewerLiveTVAccess({ viewerId }: { viewerId: number }) {
             />
           }
         />
-        <SettingsRow
-          title={<label htmlFor={`livetv-rating-${viewerId}`}>{t("Live TV maximum rating")}</label>}
-          description={t(
-            "An extra limit for Live TV only, by age level. Their usual limit still applies.",
-          )}
-          control={
-            <Select
-              id={`livetv-rating-${viewerId}`}
-              className="sm:w-56"
-              value={canonicalRating(draft.maxRating || "")}
-              disabled={draft.disabled}
-              onChange={(e) => setDraft({ ...draft, maxRating: e.currentTarget.value })}
-            >
-              {CONTENT_RATINGS.map((r) => (
-                <option key={r.value} value={r.value}>
-                  {r.value ? r.label : t("No extra limit")}
-                </option>
-              ))}
-            </Select>
-          }
-        />
+        <MoreOptions
+          label={t("More options: {title}", { title: t("Live TV") })}
+          hasError={Boolean(draft.maxRating)}
+        >
+          <SettingsRow
+            title={
+              <label htmlFor={`livetv-rating-${viewerId}`}>
+                {t("Different limit for Live TV")}
+              </label>
+            }
+            description={t("A stricter rating limit for Live TV only.")}
+            control={
+              <Select
+                id={`livetv-rating-${viewerId}`}
+                className="sm:w-56"
+                value={canonicalRating(draft.maxRating || "")}
+                disabled={draft.disabled}
+                onChange={(e) => setDraft({ ...draft, maxRating: e.currentTarget.value })}
+              >
+                {CONTENT_RATINGS.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.value ? r.label : t("Same as the content rating limit")}
+                  </option>
+                ))}
+              </Select>
+            }
+          />
+        </MoreOptions>
       </SettingsSection>
       <SettingsSection
         title={t("Allowed channels")}

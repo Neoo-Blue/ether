@@ -1,26 +1,28 @@
-import { Button, Input, Select, SettingsSection, Switch, toast } from "@braedonsaunders/appkit-ui";
-import { useState } from "react";
+import { Button, SearchSelect, SettingsSection, Switch, toast } from "@braedonsaunders/appkit-ui";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChipGroup, NumberInput } from "../../components/fields";
 import { ErrorPanel, LoadingRows } from "../../components/feedback";
 import { SaveBar, useDraft } from "../../components/SaveBar";
 import { SettingsRow } from "../../components/SettingsRow";
 import {
-  CONTENT_RATINGS,
-  UserLimitRows,
+  RatingLimitRow,
+  StreamLimitRow,
   userLimits,
   type UserLimits,
 } from "../../components/UserLimits";
 import { viewerName } from "../../components/pickers";
 import { t } from "../../i18n";
+import { searchSelectLabels } from "../../i18n/appkit-labels";
 import { api, apiFetch, errorMessage } from "../../lib/api";
 import type { Viewer } from "../../lib/contract";
-import { canonicalRating } from "../../lib/contentRatings";
 import { useAsync } from "../../lib/hooks";
+import { timeZones } from "../livetv/model";
 import { MaxQuality } from "./MaxQuality";
 import { PlexWatchSync } from "./sections/PlexWatchSync";
 import { FromPlexDefaults } from "./FromPlexDefaults";
 import { ViewerLiveTVAccess } from "./sections/ViewerLiveTV";
+import { ViewerSimkl } from "./sections/ViewerSimkl";
 import { KID_PRESETS, ListText, normalizePolicy, type SafetyPolicy } from "./shared";
 
 const HOURS = Array.from({ length: 24 }, (_, h) => ({
@@ -28,10 +30,30 @@ const HOURS = Array.from({ length: 24 }, (_, h) => ({
   label: `${String(h).padStart(2, "0")}:00`,
 }));
 
+/** A searchable IANA timezone picker; a stored zone the browser lacks stays listed. */
+function TimeZoneSelect({ value, onChange }: { value: string; onChange: (zone: string) => void }) {
+  const options = useMemo(() => {
+    const zones = timeZones();
+    const list = value && !zones.includes(value) ? [value, ...zones] : zones;
+    return list.map((zone) => ({ value: zone, label: zone.replace(/_/g, " ") }));
+  }, [value]);
+  return (
+    <SearchSelect
+      value={value}
+      onChange={onChange}
+      options={options}
+      ariaLabel={t("Playback timezone")}
+      searchable
+      {...searchSelectLabels()}
+    />
+  );
+}
+
 /**
- * Everything that decides what one viewer may watch and when: their stream
- * limit and rating cap, parental controls, allowed times and Live TV access.
- * One in-place form; the save bar writes whichever parts changed.
+ * Everything that decides what one viewer may watch and when: streams at
+ * once, the content rating limit, parental controls, allowed times, Live TV
+ * and their connected accounts. One in-place form; the save bar writes
+ * whichever parts changed. Account actions run immediately.
  */
 export function ViewerAccess({ viewer }: { viewer: Viewer }) {
   const id = viewer.id;
@@ -56,8 +78,11 @@ export function ViewerAccess({ viewer }: { viewer: Viewer }) {
   const applyPreset = async (age: string) => {
     setPresetBusy(true);
     try {
-      const preset = await apiFetch<SafetyPolicy>(`/safety/policies/presets/kids?age=${age}`);
+      const { maxContentRating, ...preset } = await apiFetch<
+        Partial<SafetyPolicy> & { maxContentRating?: string }
+      >(`/safety/policies/presets/kids?age=${age}`);
       rules.setDraft(normalizePolicy(preset));
+      if (maxContentRating !== undefined) patchLimits({ maxContentRating });
     } catch (e) {
       toast.error(t("Couldn't load the preset"), { description: errorMessage(e) });
     } finally {
@@ -93,81 +118,29 @@ export function ViewerAccess({ viewer }: { viewer: Viewer }) {
 
   const l = limits.draft;
   const p = rules.draft;
+  const noUser = users.data && (!user || !l);
+  const simkl = config.data?.simkl;
   return (
     <div className="max-w-3xl space-y-6">
       {users.error ? (
         <ErrorPanel error={users.error} onRetry={() => void users.reload()} />
-      ) : !users.data ? (
-        <LoadingRows rows={2} />
-      ) : !user || !l ? (
-        <SettingsSection title={t("Streams and ratings")}>
-          <p className="py-3 text-sm text-fg-muted">
-            {t("This viewer has no user record on the server yet, so there are no limits to set.")}
-          </p>
-        </SettingsSection>
-      ) : (
-        <>
-          <SettingsSection title={t("Streams and ratings")}>
-            <UserLimitRows
-              value={l}
-              onChange={(next) => patchLimits(next)}
-              isOwner={user.isOwner}
-              defaultStreamLimit={config.data?.server.defaultStreamLimit}
-              streamLimitHint={
-                <Link to="/server" className="font-medium text-primary hover:underline">
-                  {t("Change the server default")}
-                </Link>
-              }
-            />
-          </SettingsSection>
-          <SettingsSection
-            title={t("Account languages")}
-            description={t(
-              "Preferred languages for this account. Track rules are on the Audio & subtitles tab.",
-            )}
-          >
-            <SettingsRow
-              title={t("Subtitle languages")}
-              description={t("Language codes in preference order, e.g. en, fr.")}
-              control={
-                <div className="w-56">
-                  <ListText
-                    ariaLabel={t("Account subtitle languages")}
-                    placeholder="en, fr"
-                    value={l.subtitleLanguages}
-                    onChange={(v) => patchLimits({ subtitleLanguages: v })}
-                  />
-                </div>
-              }
-            />
-            <SettingsRow
-              title={t("Audio languages")}
-              description={t("Preferred audio tracks in order.")}
-              control={
-                <div className="w-56">
-                  <ListText
-                    ariaLabel={t("Account audio languages")}
-                    placeholder="en"
-                    value={l.audioLanguages}
-                    onChange={(v) => patchLimits({ audioLanguages: v })}
-                  />
-                </div>
-              }
-            />
-          </SettingsSection>
-        </>
-      )}
-
-      {policy.error ? (
+      ) : policy.error ? (
         <ErrorPanel error={policy.error} onRetry={() => void policy.reload()} />
-      ) : !p ? (
+      ) : !users.data || !p ? (
         <LoadingRows rows={3} />
       ) : (
         <>
+          {noUser ? (
+            <p className="text-sm text-fg-muted">
+              {t(
+                "This viewer has no user record on the server yet, so there are no limits to set.",
+              )}
+            </p>
+          ) : null}
           <SettingsSection
             title={t("Parental controls")}
             description={t(
-              "Adult titles are always excluded. Unrated titles are blocked when a rating limit applies. Where this and the rating cap above differ, the stricter one wins.",
+              "Adult titles are always excluded. Unrated titles are blocked when a rating limit applies.",
             )}
           >
             <SettingsRow
@@ -191,24 +164,13 @@ export function ViewerAccess({ viewer }: { viewer: Viewer }) {
                 </div>
               }
             />
-            <SettingsRow
-              title={t("Maximum content rating")}
-              control={
-                <div className="w-56">
-                  <Select
-                    aria-label={t("Maximum content rating")}
-                    value={canonicalRating(p.maxContentRating)}
-                    onChange={(e) => patchPolicy({ maxContentRating: e.target.value })}
-                  >
-                    {CONTENT_RATINGS.map((r) => (
-                      <option key={r.value} value={r.value}>
-                        {r.label}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-              }
-            />
+            {user && l ? (
+              <RatingLimitRow
+                value={l.maxContentRating}
+                onChange={(maxContentRating) => patchLimits({ maxContentRating })}
+                isOwner={user.isOwner}
+              />
+            ) : null}
             <SettingsRow
               title={t("Blocked genres")}
               description={t("Comma-separated, e.g. Horror, Thriller.")}
@@ -238,6 +200,21 @@ export function ViewerAccess({ viewer }: { viewer: Viewer }) {
           </SettingsSection>
 
           <SettingsSection title={t("Playback restrictions")}>
+            {user && l ? (
+              <StreamLimitRow
+                value={l.streamLimit}
+                onChange={(streamLimit) => patchLimits({ streamLimit })}
+                defaultStreamLimit={config.data?.server.defaultStreamLimit}
+                hint={
+                  <Link
+                    to="/playback/transcoding"
+                    className="font-medium text-primary hover:underline"
+                  >
+                    {t("Change the server default")}
+                  </Link>
+                }
+              />
+            ) : null}
             <SettingsRow
               title={t("Local network only")}
               description={t("Block playback from outside your home network.")}
@@ -262,21 +239,6 @@ export function ViewerAccess({ viewer }: { viewer: Viewer }) {
                 />
               }
             />
-            <SettingsRow
-              title={t("Concurrent streams")}
-              description={t(
-                "0 adds no extra limit. Where this and the stream limit above differ, the lower one wins.",
-              )}
-              control={
-                <NumberInput
-                  aria-label={t("Concurrent streams")}
-                  className="w-24"
-                  min={0}
-                  value={p.streamLimit}
-                  onChange={(n) => patchPolicy({ streamLimit: Math.max(0, Math.round(n)) })}
-                />
-              }
-            />
           </SettingsSection>
 
           <SettingsSection
@@ -288,12 +250,12 @@ export function ViewerAccess({ viewer }: { viewer: Viewer }) {
             <SettingsRow
               title={t("Timezone")}
               control={
-                <Input
-                  aria-label={t("Playback timezone")}
-                  className="w-56"
-                  value={p.timezone}
-                  onChange={(e) => patchPolicy({ timezone: e.target.value })}
-                />
+                <div className="w-64">
+                  <TimeZoneSelect
+                    value={p.timezone}
+                    onChange={(timezone) => patchPolicy({ timezone })}
+                  />
+                </div>
               }
             />
             <SettingsRow stacked title={t("Allowed hours")}>
@@ -316,6 +278,10 @@ export function ViewerAccess({ viewer }: { viewer: Viewer }) {
       <ViewerLiveTVAccess viewerId={id} />
 
       <PlexWatchSync viewerId={id} plexId={viewer.plexId} />
+
+      {config.data ? (
+        <ViewerSimkl viewerId={id} ready={Boolean(simkl?.enabled && simkl.clientId.trim())} />
+      ) : null}
 
       <SaveBar
         dirty={limits.dirty || rules.dirty}
