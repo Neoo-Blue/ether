@@ -484,7 +484,7 @@ func (r *Runner) openWASMPlugin(manifest plugins.Manifest, files map[string][]by
 	}
 	decl := manifest.Ether.Runtime
 	eng := r.engine()
-	lim := wasm.Limits{}
+	lim := plugins.HotLimits(manifest)
 	switch {
 	case decl.Module != "":
 		mod, ok := files[decl.Module]

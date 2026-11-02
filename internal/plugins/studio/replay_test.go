@@ -651,3 +651,19 @@ func TestReplayHTTPEndpoint(t *testing.T) {
 		t.Fatalf("unexpected HTTP replay report: %+v", out)
 	}
 }
+
+func TestRankingReplayReportsManifestBudget(t *testing.T) {
+	db := store.OpenTest(t)
+	eng := wasm.NewEngine(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	t.Cleanup(func() { _ = eng.Close() })
+	runner := NewRunner(ReplayDeps{DB: db, Engine: eng})
+	t.Cleanup(func() { _ = runner.Close() })
+	manifest := json.RawMessage(`{"id":"org.example.budget","version":"1.0.0","name":"Budget","ether":{"protocol":1,"kind":"extension","summary":"Ranks releases","capabilities":["ranking_step"],"runtime":{"kind":"hosted","entry":"plugin.js"},"contributes":{"rankingSteps":[{"key":"rank","label":"Rank","budget":{"perCandidateMicros":500,"perBatchMillis":20}}]}}}`)
+	report, err := runner.Replay(context.Background(), ReplayRequest{DevInstance: &DevInstance{Manifest: manifest, Files: map[string]string{"plugin.js": "globalThis.rank_key = function() { return 0; };"}}, Kind: ReplayRanking})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Ranking == nil || report.Ranking.Budget.PerCandidateLimitMS != 0.5 || report.Ranking.Budget.BatchLimitMS != 20 {
+		t.Fatalf("budget = %+v", report.Ranking)
+	}
+}

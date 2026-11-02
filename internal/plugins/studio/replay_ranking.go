@@ -156,6 +156,7 @@ func (r *Runner) replayRanking(ctx context.Context, target *resolvedTarget, para
 		mode = "rule_condition"
 	}
 
+	budgets := plugins.EffectiveBudgets(plugins.HotLimits(target.manifest))
 	report := &RankingReplayReport{
 		Mode:         mode,
 		StepKey:      stepKey,
@@ -166,8 +167,8 @@ func (r *Runner) replayRanking(ctx context.Context, target *resolvedTarget, para
 		TracesLoaded: len(rows),
 		Changed:      []ChangedPick{},
 		Budget: RankingBudgetStats{
-			PerCandidateLimitMS: 2.0,
-			BatchLimitMS:        50.0,
+			PerCandidateLimitMS: float64(budgets.PerCandidate) / float64(time.Millisecond),
+			BatchLimitMS:        float64(budgets.PerBatch) / float64(time.Millisecond),
 		},
 	}
 
@@ -225,7 +226,7 @@ func (r *Runner) replayRanking(ctx context.Context, target *resolvedTarget, para
 		if isCondition {
 			var batchDur time.Duration
 			var batchUnits int64
-			batchCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+			batchCtx, cancel := context.WithTimeout(ctx, budgets.PerBatch)
 			for i, wc := range wasmCands {
 				matched, out, _ := target.wasmPlug.CondMatch(batchCtx, wc, operator, params.Value)
 				condMatched[i] = matched
