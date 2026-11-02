@@ -132,7 +132,7 @@ func BuiltinChannelKinds() []ChannelKind {
 	httpFields := func(endpointLabel, endpointHint extend.Text) []extend.SettingsField {
 		return []extend.SettingsField{
 			{Key: "endpoint", Kind: extend.FieldURL, Label: endpointLabel, Hint: endpointHint, Required: true, Secret: true, Wide: true},
-			{Key: "token", Kind: extend.FieldSecret, Label: extend.T("Access token"), Hint: extend.T("Optional. A Bearer [REDACTED], or the app key for Gotify."), Secret: true},
+			{Key: "token", Kind: extend.FieldSecret, Label: extend.T("Access token"), Hint: extend.T("Optional. A bearer token, or the app key for Gotify."), Secret: true},
 		}
 	}
 	endpoint := extend.T("Endpoint URL")
@@ -156,7 +156,7 @@ func BuiltinChannelKinds() []ChannelKind {
 		},
 		{
 			ID: "webhook", Owner: extend.Builtin, Label: extend.T("Webhook"), Icon: "webhook", Order: 10,
-			Hint:       extend.T("Ether sends a JSON POST with kind, title, message and at. Optionally add a Bearer [REDACTED] Only HTTP 2xx responses count as accepted."),
+			Hint:       extend.T("Ether sends a JSON POST with kind, title, message and at. Optionally add a bearer token. Only HTTP 2xx responses count as accepted."),
 			Fields:     httpFields(endpoint, extend.Text{}),
 			SendTest:   true,
 			Selectable: true,
@@ -229,7 +229,7 @@ func BuiltinChannelKinds() []ChannelKind {
 		},
 		{
 			ID: "ntfy", Owner: extend.Builtin, Label: extend.T("ntfy"), Icon: "bell", Order: 60,
-			Hint:       extend.T("Enter your complete topic URL. Subscribe to the same topic in the ntfy phone app. Add a Bearer [REDACTED] for private topics."),
+			Hint:       extend.T("Enter your complete topic URL. Subscribe to the same topic in the ntfy phone app. Add a bearer token for private topics."),
 			Fields:     httpFields(endpoint, extend.Text{}),
 			SendTest:   true,
 			Selectable: true,

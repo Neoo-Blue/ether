@@ -39,7 +39,7 @@
       "source": "Webhook"
     },
     "hint": {
-      "source": "Ether sends a JSON POST with kind, title, message and at. Optionally add a Bearer [REDACTED] Only HTTP 2xx responses count as accepted."
+      "source": "Ether sends a JSON POST with kind, title, message and at. Optionally add a bearer token. Only HTTP 2xx responses count as accepted."
     },
     "icon": "webhook",
     "order": 10,
@@ -63,7 +63,7 @@
             "source": "Access token"
           },
           "hint": {
-            "source": "Optional. A Bearer [REDACTED], or the app key for Gotify."
+            "source": "Optional. A bearer token, or the app key for Gotify."
           },
           "secret": true
         }
@@ -108,7 +108,7 @@
             "source": "Access token"
           },
           "hint": {
-            "source": "Optional. A Bearer [REDACTED], or the app key for Gotify."
+            "source": "Optional. A bearer token, or the app key for Gotify."
           },
           "secret": true
         }
@@ -153,7 +153,7 @@
             "source": "Access token"
           },
           "hint": {
-            "source": "Optional. A Bearer [REDACTED], or the app key for Gotify."
+            "source": "Optional. A bearer token, or the app key for Gotify."
           },
           "secret": true
         }
@@ -311,7 +311,7 @@
       "source": "ntfy"
     },
     "hint": {
-      "source": "Enter your complete topic URL. Subscribe to the same topic in the ntfy phone app. Add a Bearer [REDACTED] for private topics."
+      "source": "Enter your complete topic URL. Subscribe to the same topic in the ntfy phone app. Add a bearer token for private topics."
     },
     "icon": "bell",
     "order": 60,
@@ -335,7 +335,7 @@
             "source": "Access token"
           },
           "hint": {
-            "source": "Optional. A Bearer [REDACTED], or the app key for Gotify."
+            "source": "Optional. A bearer token, or the app key for Gotify."
           },
           "secret": true
         }
@@ -379,7 +379,7 @@
             "source": "Access token"
           },
           "hint": {
-            "source": "Optional. A Bearer [REDACTED], or the app key for Gotify."
+            "source": "Optional. A bearer token, or the app key for Gotify."
           },
           "secret": true
         }
