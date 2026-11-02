@@ -1,0 +1,1606 @@
+[
+  {
+    "kind": "command",
+    "id": "record-problem",
+    "owner": "builtin",
+    "label": {
+      "source": "Record a problem"
+    },
+    "hint": {},
+    "order": 10,
+    "meta": {
+      "route": "/maintenance/logs?record=1",
+      "keywords": {
+        "source": "support zip diagnostic capture"
+      }
+    }
+  },
+  {
+    "kind": "command",
+    "id": "add-indexer",
+    "owner": "builtin",
+    "label": {
+      "source": "Add an indexer"
+    },
+    "hint": {},
+    "order": 20,
+    "meta": {
+      "route": "/sources/indexers",
+      "keywords": {
+        "source": "newznab prowlarr"
+      }
+    }
+  },
+  {
+    "kind": "command",
+    "id": "add-usenet-provider",
+    "owner": "builtin",
+    "label": {
+      "source": "Add a Usenet provider"
+    },
+    "hint": {},
+    "order": 30,
+    "meta": {
+      "route": "/sources/usenet",
+      "keywords": {
+        "source": "nntp"
+      }
+    }
+  },
+  {
+    "kind": "command",
+    "id": "add-debrid-provider",
+    "owner": "builtin",
+    "label": {
+      "source": "Add a debrid provider"
+    },
+    "hint": {},
+    "order": 40,
+    "meta": {
+      "route": "/sources/debrid",
+      "keywords": {
+        "source": "real-debrid torbox alldebrid premiumize debrid-link debridlink offcloud torrent"
+      }
+    }
+  },
+  {
+    "kind": "command",
+    "id": "new-collection",
+    "owner": "builtin",
+    "label": {
+      "source": "New collection"
+    },
+    "hint": {},
+    "order": 50,
+    "meta": {
+      "route": "/collections/new",
+      "keywords": {
+        "source": "create"
+      }
+    }
+  },
+  {
+    "kind": "command",
+    "id": "new-notification-channel",
+    "owner": "builtin",
+    "label": {
+      "source": "New notification channel"
+    },
+    "hint": {},
+    "order": 60,
+    "meta": {
+      "route": "/notifications/channels",
+      "keywords": {
+        "source": "alert"
+      }
+    }
+  },
+  {
+    "kind": "command",
+    "id": "back-up-now",
+    "owner": "builtin",
+    "label": {
+      "source": "Back up now"
+    },
+    "hint": {},
+    "order": 70,
+    "meta": {
+      "route": "/maintenance/backups",
+      "keywords": {
+        "source": "backup snapshot"
+      }
+    }
+  },
+  {
+    "kind": "command",
+    "id": "ask.releases.why-pick",
+    "owner": "builtin",
+    "label": {
+      "source": "Why did this title pick this release?"
+    },
+    "hint": {},
+    "order": 110,
+    "meta": {
+      "keywords": {},
+      "agentSuggestion": true,
+      "routePatterns": [
+        "/releases",
+        "/releases/*"
+      ]
+    }
+  },
+  {
+    "kind": "command",
+    "id": "ask.livetv.failing",
+    "owner": "builtin",
+    "label": {
+      "source": "Which channels are failing?"
+    },
+    "hint": {},
+    "order": 120,
+    "meta": {
+      "keywords": {},
+      "agentSuggestion": true,
+      "routePatterns": [
+        "/livetv",
+        "/livetv/*"
+      ]
+    }
+  },
+  {
+    "kind": "command",
+    "id": "ask.sources.add-stremio",
+    "owner": "builtin",
+    "label": {
+      "source": "Add a Stremio add-on"
+    },
+    "hint": {},
+    "order": 130,
+    "meta": {
+      "keywords": {},
+      "agentSuggestion": true,
+      "routePatterns": [
+        "/sources",
+        "/sources/*"
+      ]
+    }
+  },
+  {
+    "kind": "command",
+    "id": "ask.activity.buffering",
+    "owner": "builtin",
+    "label": {
+      "source": "Why did playback buffer?"
+    },
+    "hint": {},
+    "order": 140,
+    "meta": {
+      "keywords": {},
+      "agentSuggestion": true,
+      "routePatterns": [
+        "/activity",
+        "/activity/*"
+      ]
+    }
+  },
+  {
+    "kind": "integration",
+    "id": "ratings",
+    "owner": "builtin",
+    "label": {
+      "source": "OMDb and MDBList"
+    },
+    "hint": {
+      "source": "IMDb, Rotten Tomatoes and other rating badges."
+    },
+    "group": "artwork-ratings",
+    "order": 90,
+    "meta": {
+      "category": "artwork-ratings",
+      "logo": "ratings",
+      "adds": [
+        {
+          "source": "Rating badges"
+        }
+      ],
+      "connect": "custom",
+      "tab": "ratings",
+      "requiredField": "apiKey",
+      "form": "ratings"
+    }
+  },
+  {
+    "kind": "integration",
+    "id": "opensubtitles",
+    "owner": "builtin",
+    "label": {
+      "source": "OpenSubtitles"
+    },
+    "hint": {
+      "source": "Fetch subtitles when a release doesn't include them."
+    },
+    "group": "playback-extras",
+    "order": 10,
+    "meta": {
+      "category": "playback-extras",
+      "logo": "opensubtitles",
+      "adds": [
+        {
+          "source": "Subtitles"
+        }
+      ],
+      "connect": "fields",
+      "tab": "opensubtitles",
+      "configKey": "openSubtitles",
+      "endpoint": "opensubtitles",
+      "test": "opensubtitles",
+      "flag": "enabled",
+      "readyField": "apiKey"
+    }
+  },
+  {
+    "kind": "integration",
+    "id": "introdb",
+    "owner": "builtin",
+    "label": {
+      "source": "TheIntroDB"
+    },
+    "hint": {
+      "source": "Intro and credits markers so viewers can skip them."
+    },
+    "group": "playback-extras",
+    "order": 20,
+    "meta": {
+      "category": "playback-extras",
+      "logo": "introdb",
+      "adds": [
+        {
+          "source": "Skip buttons"
+        }
+      ],
+      "connect": "fields",
+      "tab": "introdb",
+      "configKey": "markers",
+      "endpoint": "markers",
+      "test": "introdb",
+      "flag": "theIntroDb",
+      "readyField": "apiKey",
+      "publicFallback": true
+    }
+  },
+  {
+    "kind": "integration",
+    "id": "tmdb",
+    "owner": "builtin",
+    "label": {
+      "source": "TMDB"
+    },
+    "hint": {
+      "source": "Names titles, fetches artwork and fills the catalogue."
+    },
+    "group": "required",
+    "order": 10,
+    "meta": {
+      "category": "required",
+      "logo": "tmdb",
+      "adds": [
+        {
+          "source": "Catalogue"
+        },
+        {
+          "source": "Artwork"
+        }
+      ],
+      "connect": "fields",
+      "tab": "tmdb",
+      "configKey": "catalog",
+      "endpoint": "catalog",
+      "test": "tmdb",
+      "readyField": "tmdbKey"
+    }
+  },
+  {
+    "kind": "integration",
+    "id": "llm",
+    "owner": "builtin",
+    "label": {
+      "source": "Language model"
+    },
+    "hint": {
+      "source": "Describe-it collections, themed Home rows, natural-language search and recaps."
+    },
+    "group": "smart-features",
+    "order": 10,
+    "meta": {
+      "category": "smart-features",
+      "logo": "llm",
+      "adds": [
+        {
+          "source": "Collections"
+        },
+        {
+          "source": "Search"
+        },
+        {
+          "source": "Recaps"
+        }
+      ],
+      "connect": "custom",
+      "tab": "llm",
+      "configKey": "llm",
+      "endpoint": "llm",
+      "test": "llm",
+      "flag": "enabled",
+      "requiredField": "model",
+      "form": "llm"
+    }
+  },
+  {
+    "kind": "integration",
+    "id": "trakt",
+    "owner": "builtin",
+    "label": {
+      "source": "Trakt"
+    },
+    "hint": {
+      "source": "Sync watch history and lists with Trakt."
+    },
+    "group": "watch-tracking",
+    "order": 10,
+    "meta": {
+      "category": "watch-tracking",
+      "logo": "trakt",
+      "adds": [
+        {
+          "source": "Watch history"
+        },
+        {
+          "source": "Lists"
+        }
+      ],
+      "connect": "fields",
+      "tab": "trakt",
+      "configKey": "trakt",
+      "endpoint": "trakt",
+      "test": "trakt",
+      "flag": "enabled",
+      "requiredField": "clientId"
+    }
+  },
+  {
+    "kind": "integration",
+    "id": "simkl",
+    "owner": "builtin",
+    "label": {
+      "source": "Simkl"
+    },
+    "hint": {
+      "source": "Connect a viewer's Simkl account to import watched history and send completed playback."
+    },
+    "group": "watch-tracking",
+    "order": 20,
+    "meta": {
+      "category": "watch-tracking",
+      "logo": "simkl",
+      "adds": [
+        {
+          "source": "Watch history"
+        }
+      ],
+      "connect": "custom",
+      "tab": "simkl",
+      "configKey": "simkl",
+      "endpoint": "simkl",
+      "flag": "enabled",
+      "requiredField": "clientId",
+      "form": "simkl"
+    }
+  },
+  {
+    "kind": "navItem",
+    "id": "overview",
+    "owner": "builtin",
+    "label": {
+      "source": "Overview"
+    },
+    "hint": {},
+    "icon": "Gauge",
+    "order": 10,
+    "meta": {
+      "route": "/",
+      "page": "overview",
+      "mobile": true,
+      "exact": true
+    }
+  },
+  {
+    "kind": "navItem",
+    "id": "activity",
+    "owner": "builtin",
+    "label": {
+      "source": "Activity"
+    },
+    "hint": {},
+    "icon": "Activity",
+    "order": 20,
+    "meta": {
+      "route": "/activity",
+      "page": "activity",
+      "mobile": true
+    }
+  },
+  {
+    "kind": "navItem",
+    "id": "viewers",
+    "owner": "builtin",
+    "label": {
+      "source": "Viewers"
+    },
+    "hint": {},
+    "icon": "Users",
+    "order": 30,
+    "meta": {
+      "route": "/viewers",
+      "page": "viewers",
+      "mobile": true
+    }
+  },
+  {
+    "kind": "navItem",
+    "id": "catalog",
+    "owner": "builtin",
+    "label": {
+      "source": "Catalog"
+    },
+    "hint": {},
+    "icon": "Library",
+    "group": "library",
+    "order": 10,
+    "meta": {
+      "route": "/catalog",
+      "page": "catalog"
+    }
+  },
+  {
+    "kind": "navItem",
+    "id": "collections",
+    "owner": "builtin",
+    "label": {
+      "source": "Collections"
+    },
+    "hint": {},
+    "icon": "Layers",
+    "group": "library",
+    "order": 20,
+    "meta": {
+      "route": "/collections",
+      "page": "collections",
+      "mobile": true
+    }
+  },
+  {
+    "kind": "navItem",
+    "id": "home",
+    "owner": "builtin",
+    "label": {
+      "source": "Home"
+    },
+    "hint": {},
+    "icon": "LayoutTemplate",
+    "group": "library",
+    "order": 30,
+    "meta": {
+      "route": "/home",
+      "page": "home"
+    }
+  },
+  {
+    "kind": "navItem",
+    "id": "livetv",
+    "owner": "builtin",
+    "label": {
+      "source": "Live TV"
+    },
+    "hint": {},
+    "icon": "Tv",
+    "group": "library",
+    "order": 40,
+    "meta": {
+      "route": "/livetv",
+      "page": "livetv"
+    }
+  },
+  {
+    "kind": "navItem",
+    "id": "calendar",
+    "owner": "builtin",
+    "label": {
+      "source": "Calendar"
+    },
+    "hint": {},
+    "icon": "CalendarDays",
+    "group": "library",
+    "order": 50,
+    "meta": {
+      "route": "/calendar",
+      "page": "calendar"
+    }
+  },
+  {
+    "kind": "navItem",
+    "id": "metadata",
+    "owner": "builtin",
+    "label": {
+      "source": "Metadata"
+    },
+    "hint": {},
+    "icon": "Tags",
+    "group": "library",
+    "order": 60,
+    "meta": {
+      "route": "/metadata",
+      "page": "metadata"
+    }
+  },
+  {
+    "kind": "navItem",
+    "id": "general",
+    "owner": "builtin",
+    "label": {
+      "source": "General"
+    },
+    "hint": {},
+    "icon": "Server",
+    "group": "server",
+    "order": 10,
+    "meta": {
+      "route": "/server",
+      "page": "general"
+    }
+  },
+  {
+    "kind": "navItem",
+    "id": "apps",
+    "owner": "builtin",
+    "label": {
+      "source": "Apps"
+    },
+    "hint": {},
+    "icon": "Globe",
+    "group": "server",
+    "order": 20,
+    "meta": {
+      "route": "/apps",
+      "page": "apps"
+    }
+  },
+  {
+    "kind": "navItem",
+    "id": "integrations",
+    "owner": "builtin",
+    "label": {
+      "source": "Integrations"
+    },
+    "hint": {},
+    "icon": "Plug",
+    "group": "server",
+    "order": 30,
+    "meta": {
+      "route": "/services",
+      "page": "integrations"
+    }
+  },
+  {
+    "kind": "navItem",
+    "id": "plugins",
+    "owner": "builtin",
+    "label": {
+      "source": "Plugins"
+    },
+    "hint": {},
+    "icon": "Puzzle",
+    "group": "server",
+    "order": 40,
+    "meta": {
+      "route": "/plugins",
+      "page": "plugins"
+    }
+  },
+  {
+    "kind": "navItem",
+    "id": "notifications",
+    "owner": "builtin",
+    "label": {
+      "source": "Notifications"
+    },
+    "hint": {},
+    "icon": "Bell",
+    "group": "server",
+    "order": 50,
+    "meta": {
+      "route": "/notifications",
+      "page": "notifications"
+    }
+  },
+  {
+    "kind": "navItem",
+    "id": "cluster",
+    "owner": "builtin",
+    "label": {
+      "source": "Cluster"
+    },
+    "hint": {},
+    "icon": "Boxes",
+    "group": "server",
+    "order": 60,
+    "meta": {
+      "route": "/cluster",
+      "page": "cluster"
+    }
+  },
+  {
+    "kind": "navItem",
+    "id": "maintenance",
+    "owner": "builtin",
+    "label": {
+      "source": "Maintenance"
+    },
+    "hint": {},
+    "icon": "LifeBuoy",
+    "group": "server",
+    "order": 70,
+    "meta": {
+      "route": "/maintenance",
+      "page": "maintenance"
+    }
+  },
+  {
+    "kind": "navItem",
+    "id": "sources",
+    "owner": "builtin",
+    "label": {
+      "source": "Sources"
+    },
+    "hint": {},
+    "icon": "Network",
+    "group": "streaming",
+    "order": 10,
+    "meta": {
+      "route": "/sources",
+      "page": "sources"
+    }
+  },
+  {
+    "kind": "navItem",
+    "id": "releases",
+    "owner": "builtin",
+    "label": {
+      "source": "Releases"
+    },
+    "hint": {},
+    "icon": "ListFilter",
+    "group": "streaming",
+    "order": 20,
+    "meta": {
+      "route": "/releases",
+      "page": "releases"
+    }
+  },
+  {
+    "kind": "navItem",
+    "id": "cache",
+    "owner": "builtin",
+    "label": {
+      "source": "Cache"
+    },
+    "hint": {},
+    "icon": "HardDrive",
+    "group": "streaming",
+    "order": 30,
+    "meta": {
+      "route": "/cache",
+      "page": "cache"
+    }
+  },
+  {
+    "kind": "navItem",
+    "id": "playback",
+    "owner": "builtin",
+    "label": {
+      "source": "Playback"
+    },
+    "hint": {},
+    "icon": "MonitorPlay",
+    "group": "streaming",
+    "order": 40,
+    "meta": {
+      "route": "/playback",
+      "page": "playback"
+    }
+  },
+  {
+    "kind": "page",
+    "id": "overview",
+    "owner": "builtin",
+    "label": {
+      "source": "Overview"
+    },
+    "hint": {},
+    "icon": "Gauge",
+    "order": 10,
+    "meta": {
+      "route": "/",
+      "inNav": true,
+      "mobile": true,
+      "exact": true,
+      "keywords": {
+        "source": "home dashboard health attention status"
+      }
+    }
+  },
+  {
+    "kind": "page",
+    "id": "activity",
+    "owner": "builtin",
+    "label": {
+      "source": "Activity"
+    },
+    "hint": {},
+    "icon": "Activity",
+    "order": 20,
+    "meta": {
+      "route": "/activity",
+      "inNav": true,
+      "mobile": true,
+      "keywords": {},
+      "sections": [
+        {
+          "key": "now",
+          "label": {
+            "source": "Now playing"
+          },
+          "keywords": {
+            "source": "streams sessions stop live"
+          }
+        },
+        {
+          "key": "history",
+          "label": {
+            "source": "History"
+          },
+          "keywords": {
+            "source": "plays watched"
+          }
+        },
+        {
+          "key": "stats",
+          "label": {
+            "source": "Stats"
+          },
+          "keywords": {
+            "source": "statistics devices hours viewers titles"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "page",
+    "id": "viewers",
+    "owner": "builtin",
+    "label": {
+      "source": "Viewers"
+    },
+    "hint": {},
+    "icon": "Users",
+    "order": 30,
+    "meta": {
+      "route": "/viewers",
+      "inNav": true,
+      "mobile": true,
+      "keywords": {
+        "source": "users friends accounts people"
+      }
+    }
+  },
+  {
+    "kind": "page",
+    "id": "backups",
+    "owner": "builtin",
+    "label": {
+      "source": "Backups & import"
+    },
+    "hint": {},
+    "order": 71,
+    "meta": {
+      "route": "/maintenance/backups",
+      "keywords": {},
+      "sections": [
+        {
+          "key": "backups",
+          "label": {
+            "source": "Backups"
+          },
+          "keywords": {
+            "source": "snapshot restore schedule"
+          }
+        },
+        {
+          "key": "import",
+          "label": {
+            "source": "Import \u0026 export"
+          },
+          "keywords": {
+            "source": "migrate plex csv letterboxd trakt"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "page",
+    "id": "updates",
+    "owner": "builtin",
+    "label": {
+      "source": "Updates"
+    },
+    "hint": {},
+    "order": 72,
+    "meta": {
+      "route": "/maintenance/updates",
+      "keywords": {
+        "source": "version channel beta maintenance window update now install"
+      }
+    }
+  },
+  {
+    "kind": "page",
+    "id": "troubleshooting",
+    "owner": "builtin",
+    "label": {
+      "source": "Troubleshooting"
+    },
+    "hint": {},
+    "order": 73,
+    "meta": {
+      "route": "/maintenance/troubleshooting",
+      "keywords": {
+        "source": "local file test playback"
+      }
+    }
+  },
+  {
+    "kind": "page",
+    "id": "logs",
+    "owner": "builtin",
+    "label": {
+      "source": "Logs"
+    },
+    "hint": {},
+    "order": 74,
+    "meta": {
+      "route": "/maintenance/logs",
+      "keywords": {
+        "source": "errors debug support zip record a problem"
+      }
+    }
+  },
+  {
+    "kind": "page",
+    "id": "catalog",
+    "owner": "builtin",
+    "label": {
+      "source": "Catalog"
+    },
+    "hint": {},
+    "icon": "Library",
+    "group": "library",
+    "order": 10,
+    "meta": {
+      "route": "/catalog",
+      "navGroup": "library",
+      "inNav": true,
+      "keywords": {
+        "source": "catalogue movies shows browse search library"
+      },
+      "sections": [
+        {
+          "key": "settings",
+          "label": {
+            "source": "Catalog settings"
+          },
+          "keywords": {
+            "source": "tmdb language region popularity new releases playable digital"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "page",
+    "id": "collections",
+    "owner": "builtin",
+    "label": {
+      "source": "Collections"
+    },
+    "hint": {},
+    "icon": "Layers",
+    "group": "library",
+    "order": 20,
+    "meta": {
+      "route": "/collections",
+      "navGroup": "library",
+      "inNav": true,
+      "mobile": true,
+      "keywords": {
+        "source": "studio templates rows"
+      }
+    }
+  },
+  {
+    "kind": "page",
+    "id": "home",
+    "owner": "builtin",
+    "label": {
+      "source": "Home"
+    },
+    "hint": {},
+    "icon": "LayoutTemplate",
+    "group": "library",
+    "order": 30,
+    "meta": {
+      "route": "/home",
+      "navGroup": "library",
+      "inNav": true,
+      "keywords": {
+        "source": "designer rows layout overrides plex home"
+      }
+    }
+  },
+  {
+    "kind": "page",
+    "id": "livetv",
+    "owner": "builtin",
+    "label": {
+      "source": "Live TV"
+    },
+    "hint": {},
+    "icon": "Tv",
+    "group": "library",
+    "order": 40,
+    "meta": {
+      "route": "/livetv",
+      "navGroup": "library",
+      "inNav": true,
+      "keywords": {},
+      "sections": [
+        {
+          "key": "channels",
+          "label": {
+            "source": "Channels"
+          },
+          "keywords": {
+            "source": "virtual channel"
+          }
+        },
+        {
+          "key": "sources",
+          "label": {
+            "source": "IPTV sources"
+          },
+          "keywords": {
+            "source": "m3u xmltv playlist"
+          }
+        },
+        {
+          "key": "guide",
+          "label": {
+            "source": "Guide"
+          },
+          "keywords": {
+            "source": "epg schedule"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "page",
+    "id": "calendar",
+    "owner": "builtin",
+    "label": {
+      "source": "Calendar"
+    },
+    "hint": {},
+    "icon": "CalendarDays",
+    "group": "library",
+    "order": 50,
+    "meta": {
+      "route": "/calendar",
+      "navGroup": "library",
+      "inNav": true,
+      "keywords": {
+        "source": "upcoming episodes premieres finales releases airing tonight sonarr radarr schedule"
+      },
+      "sections": [
+        {
+          "key": "month",
+          "label": {
+            "source": "Month"
+          },
+          "keywords": {
+            "source": "schedule grid"
+          }
+        },
+        {
+          "key": "week",
+          "label": {
+            "source": "Week"
+          },
+          "keywords": {}
+        },
+        {
+          "key": "agenda",
+          "label": {
+            "source": "Agenda"
+          },
+          "keywords": {
+            "source": "list upcoming"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "page",
+    "id": "metadata",
+    "owner": "builtin",
+    "label": {
+      "source": "Metadata"
+    },
+    "hint": {},
+    "icon": "Tags",
+    "group": "library",
+    "order": 60,
+    "meta": {
+      "route": "/metadata",
+      "navGroup": "library",
+      "inNav": true,
+      "keywords": {},
+      "sections": [
+        {
+          "key": "ratings",
+          "label": {
+            "source": "Ratings"
+          },
+          "keywords": {
+            "source": "omdb mdblist imdb rotten badges"
+          }
+        },
+        {
+          "key": "artwork",
+          "label": {
+            "source": "Artwork"
+          },
+          "keywords": {
+            "source": "posters overlays backdrop"
+          }
+        },
+        {
+          "key": "episodes",
+          "label": {
+            "source": "Episode order"
+          },
+          "keywords": {
+            "source": "dvd absolute aired ordering"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "page",
+    "id": "general",
+    "owner": "builtin",
+    "label": {
+      "source": "General"
+    },
+    "hint": {},
+    "icon": "Server",
+    "group": "server",
+    "order": 10,
+    "meta": {
+      "route": "/server",
+      "navGroup": "server",
+      "inNav": true,
+      "keywords": {
+        "source": "settings"
+      },
+      "sections": [
+        {
+          "key": "server",
+          "label": {
+            "source": "Server"
+          },
+          "keywords": {
+            "source": "name port listen log level stream limit"
+          }
+        },
+        {
+          "key": "downloads",
+          "label": {
+            "source": "Downloads"
+          },
+          "keywords": {
+            "source": "offline sync friends remux"
+          }
+        },
+        {
+          "key": "personalize",
+          "label": {
+            "source": "Personalization"
+          },
+          "keywords": {
+            "source": "post-play up next match finish time clock"
+          }
+        },
+        {
+          "key": "extras",
+          "label": {
+            "source": "Trailers \u0026 extras"
+          },
+          "keywords": {
+            "source": "cinema trailers yt-dlp resolver"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "page",
+    "id": "apps",
+    "owner": "builtin",
+    "label": {
+      "source": "Apps"
+    },
+    "hint": {},
+    "icon": "Globe",
+    "group": "server",
+    "order": 20,
+    "meta": {
+      "route": "/apps",
+      "navGroup": "server",
+      "inNav": true,
+      "keywords": {
+        "source": "settings plex apps protocols"
+      },
+      "sections": [
+        {
+          "key": "remote",
+          "label": {
+            "source": "Remote access"
+          },
+          "keywords": {
+            "source": "upnp port forward public"
+          }
+        },
+        {
+          "key": "secure",
+          "label": {
+            "source": "Secure connections"
+          },
+          "keywords": {
+            "source": "certificate plex.direct tls"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "page",
+    "id": "integrations",
+    "owner": "builtin",
+    "label": {
+      "source": "Integrations"
+    },
+    "hint": {},
+    "icon": "Plug",
+    "group": "server",
+    "order": 30,
+    "meta": {
+      "route": "/services",
+      "navGroup": "server",
+      "inNav": true,
+      "keywords": {
+        "source": "settings integrations"
+      },
+      "sections": [
+        {
+          "key": "overview",
+          "label": {
+            "source": "Integrations"
+          },
+          "keywords": {
+            "source": "status tmdb debrid prowlarr ratings"
+          }
+        },
+        {
+          "key": "trakt",
+          "label": {
+            "source": "Trakt"
+          },
+          "keywords": {
+            "source": "sync history"
+          }
+        },
+        {
+          "key": "simkl",
+          "label": {
+            "source": "Simkl"
+          },
+          "keywords": {
+            "source": "simkl sync history"
+          }
+        },
+        {
+          "key": "llm",
+          "label": {
+            "source": "Language model"
+          },
+          "keywords": {
+            "source": "llm ollama openai recaps search"
+          }
+        },
+        {
+          "key": "opensubtitles",
+          "label": {
+            "source": "OpenSubtitles"
+          },
+          "keywords": {
+            "source": "subtitles"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "page",
+    "id": "plugins",
+    "owner": "builtin",
+    "label": {
+      "source": "Plugins"
+    },
+    "hint": {},
+    "icon": "Puzzle",
+    "group": "server",
+    "order": 40,
+    "meta": {
+      "route": "/plugins",
+      "navGroup": "server",
+      "inNav": true,
+      "keywords": {
+        "source": "plugins extensions addons studio"
+      }
+    }
+  },
+  {
+    "kind": "page",
+    "id": "notifications",
+    "owner": "builtin",
+    "label": {
+      "source": "Notifications"
+    },
+    "hint": {},
+    "icon": "Bell",
+    "group": "server",
+    "order": 50,
+    "meta": {
+      "route": "/notifications",
+      "navGroup": "server",
+      "inNav": true,
+      "keywords": {},
+      "sections": [
+        {
+          "key": "channels",
+          "label": {
+            "source": "Channels"
+          },
+          "keywords": {
+            "source": "email discord webhook push alerts watchlist"
+          }
+        },
+        {
+          "key": "report",
+          "label": {
+            "source": "Weekly report"
+          },
+          "keywords": {
+            "source": "newsletter digest"
+          }
+        },
+        {
+          "key": "deliveries",
+          "label": {
+            "source": "Delivery history"
+          },
+          "keywords": {}
+        }
+      ]
+    }
+  },
+  {
+    "kind": "page",
+    "id": "cluster",
+    "owner": "builtin",
+    "label": {
+      "source": "Cluster"
+    },
+    "hint": {},
+    "icon": "Boxes",
+    "group": "server",
+    "order": 60,
+    "meta": {
+      "route": "/cluster",
+      "navGroup": "server",
+      "inNav": true,
+      "keywords": {
+        "source": "high availability ha nodes failover postgres postgresql join token weight leader"
+      }
+    }
+  },
+  {
+    "kind": "page",
+    "id": "maintenance",
+    "owner": "builtin",
+    "label": {
+      "source": "Maintenance"
+    },
+    "hint": {},
+    "icon": "LifeBuoy",
+    "group": "server",
+    "order": 70,
+    "meta": {
+      "route": "/maintenance",
+      "navGroup": "server",
+      "inNav": true,
+      "keywords": {
+        "source": "server maintenance"
+      }
+    }
+  },
+  {
+    "kind": "page",
+    "id": "sources",
+    "owner": "builtin",
+    "label": {
+      "source": "Sources"
+    },
+    "hint": {},
+    "icon": "Network",
+    "group": "streaming",
+    "order": 10,
+    "meta": {
+      "route": "/sources",
+      "navGroup": "streaming",
+      "inNav": true,
+      "keywords": {},
+      "sections": [
+        {
+          "key": "debrid",
+          "label": {
+            "source": "Debrid"
+          },
+          "keywords": {
+            "source": "real-debrid realdebrid torbox alldebrid premiumize debrid-link debridlink offcloud torrent cached"
+          }
+        },
+        {
+          "key": "usenet",
+          "label": {
+            "source": "Usenet"
+          },
+          "keywords": {
+            "source": "nntp backfill connections"
+          }
+        },
+        {
+          "key": "indexers",
+          "label": {
+            "source": "Indexers"
+          },
+          "keywords": {
+            "source": "newznab torznab torrent built-in sites definitions cardigann flaresolverr prowlarr stremio addon budget api"
+          }
+        },
+        {
+          "key": "stats",
+          "label": {
+            "source": "Stats"
+          },
+          "keywords": {
+            "source": "quota price plan cost success speed plays failover"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "page",
+    "id": "releases",
+    "owner": "builtin",
+    "label": {
+      "source": "Releases"
+    },
+    "hint": {},
+    "icon": "ListFilter",
+    "group": "streaming",
+    "order": 20,
+    "meta": {
+      "route": "/releases",
+      "navGroup": "streaming",
+      "inNav": true,
+      "keywords": {},
+      "sections": [
+        {
+          "key": "profiles",
+          "label": {
+            "source": "Profiles"
+          },
+          "keywords": {
+            "source": "quality profiles resolution 4k 1080p remote cam scoring trash custom formats rules ranking"
+          }
+        },
+        {
+          "key": "devices",
+          "label": {
+            "source": "Device rules"
+          },
+          "keywords": {
+            "source": "device client profile"
+          }
+        },
+        {
+          "key": "searching",
+          "label": {
+            "source": "Searching"
+          },
+          "keywords": {
+            "source": "how ether searches versions cache health samples candidates"
+          }
+        },
+        {
+          "key": "blocklist",
+          "label": {
+            "source": "Blocklist"
+          },
+          "keywords": {
+            "source": "blocked bad release unblock terms groups"
+          }
+        },
+        {
+          "key": "pinned",
+          "label": {
+            "source": "Pinned"
+          },
+          "keywords": {
+            "source": "pin release override search interactive manual pick find"
+          }
+        },
+        {
+          "key": "history",
+          "label": {
+            "source": "History"
+          },
+          "keywords": {
+            "source": "traces resolver why release debug decisions"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "page",
+    "id": "cache",
+    "owner": "builtin",
+    "label": {
+      "source": "Cache"
+    },
+    "hint": {},
+    "icon": "HardDrive",
+    "group": "streaming",
+    "order": 30,
+    "meta": {
+      "route": "/cache",
+      "navGroup": "streaming",
+      "inNav": true,
+      "keywords": {
+        "source": "disk budget storage retention prefetch warming next episode"
+      },
+      "sections": [
+        {
+          "key": "overview",
+          "label": {
+            "source": "Overview"
+          },
+          "keywords": {
+            "source": "storage readiness policy"
+          }
+        },
+        {
+          "key": "explorer",
+          "label": {
+            "source": "Explorer"
+          },
+          "keywords": {
+            "source": "retained media releases pins"
+          }
+        },
+        {
+          "key": "preloading",
+          "label": {
+            "source": "Preloading"
+          },
+          "keywords": {
+            "source": "household selection popular movies tv warm arrivals"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "page",
+    "id": "playback",
+    "owner": "builtin",
+    "label": {
+      "source": "Playback"
+    },
+    "hint": {},
+    "icon": "MonitorPlay",
+    "group": "streaming",
+    "order": 40,
+    "meta": {
+      "route": "/playback",
+      "navGroup": "streaming",
+      "inNav": true,
+      "keywords": {},
+      "sections": [
+        {
+          "key": "transcoding",
+          "label": {
+            "source": "Transcoding"
+          },
+          "keywords": {
+            "source": "ffmpeg hardware gpu bitrate startup race health"
+          }
+        },
+        {
+          "key": "devices",
+          "label": {
+            "source": "App compatibility"
+          },
+          "keywords": {
+            "source": "compatibility codecs"
+          }
+        },
+        {
+          "key": "markers",
+          "label": {
+            "source": "Skip buttons"
+          },
+          "keywords": {
+            "source": "intro credits skip chapters"
+          }
+        },
+        {
+          "key": "subtitles",
+          "label": {
+            "source": "Audio \u0026 subtitles"
+          },
+          "keywords": {
+            "source": "audio languages subtitles timing sync opensubtitles household"
+          }
+        }
+      ]
+    }
+  }
+]

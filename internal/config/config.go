@@ -52,6 +52,7 @@ type Config struct {
 	LiveTV LiveTV `json:"liveTV,omitempty"`
 	LLM           LLM           `json:"llm"`
 	Updates       Updates       `json:"updates"`
+	Plugins       Plugins       `json:"plugins,omitempty"`
 	Spike         Spike         `json:"spike"`
 	Downloads     Downloads     `json:"downloads"`
 	Markers       Markers       `json:"markers"`

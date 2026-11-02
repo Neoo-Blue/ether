@@ -382,7 +382,7 @@ func TestHotDeterminism1000Runs(t *testing.T) {
 		}
 		return scores
 	}
-	p, err := e.LoadJS("test.hot", "2.0.0", hotJS, nil, Limits{})
+	p, err := e.LoadJS("test.hot", "2.0.0", hotJS, nil, roomyHot())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -393,7 +393,7 @@ func TestHotDeterminism1000Runs(t *testing.T) {
 			t.Fatalf("same-plugin rerun differs at %d: %d vs %d", i, got, want[i])
 		}
 	}
-	p2, err := e.LoadJS("test.hot", "2.0.0", hotJS, nil, Limits{})
+	p2, err := e.LoadJS("test.hot", "2.0.0", hotJS, nil, roomyHot())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -504,7 +504,9 @@ func TestHotJSBatchWithinBudget(t *testing.T) {
 
 func TestConcurrentCallsAndRanking(t *testing.T) {
 	e := testEngine(t)
-	p, err := e.LoadJS("test.hello", "1.0.0", helloJS, newFakeHost(), Limits{PoolSize: 3})
+	lim := roomyHot()
+	lim.PoolSize = 3
+	p, err := e.LoadJS("test.hello", "1.0.0", helloJS, newFakeHost(), lim)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -546,4 +548,11 @@ func TestLimitsClamp(t *testing.T) {
 	if lim.RankPerCandidate != 2*time.Millisecond || lim.RankBatch != 50*time.Millisecond {
 		t.Fatalf("hot budgets not clamped: %v %v", lim.RankPerCandidate, lim.RankBatch)
 	}
+}
+
+// roomyHot gives correctness tests budgets no loaded machine can miss, so
+// they check behaviour, not speed. Budget enforcement has its own tests
+// with the real limits.
+func roomyHot() Limits {
+	return Limits{RankPerCandidate: time.Second, RankBatch: time.Minute, unclamped: true}
 }

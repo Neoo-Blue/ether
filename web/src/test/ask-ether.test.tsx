@@ -173,7 +173,12 @@ describe("Ask Ether", () => {
 
     const pairing = await screen.findByRole("dialog", { name: "Connect an AI app" });
     expect(await within(pairing).findByText("482913")).toBeInTheDocument();
-    expect(within(pairing).getByText(/\/ether\/mcp/)).toBeInTheDocument();
+    expect(within(pairing).getByText("http://localhost:3000/ether/mcp")).toBeInTheDocument();
+    expect(within(pairing).getByText(/curl -sS -X POST/)).toHaveTextContent("/ether/mcp/exchange");
+    expect(within(pairing).getByText(/claude mcp add --transport http/)).toHaveTextContent(
+      "Authorization: Bearer <token>",
+    );
+    expect(within(pairing).getByText(/mcp-remote/)).toHaveTextContent("--allow-http");
     await user.click(within(pairing).getByRole("button", { name: "Copy pairing code" }));
     expect(writeText).toHaveBeenCalledWith("482913");
 

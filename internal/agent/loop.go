@@ -212,8 +212,12 @@ func (s *Service) executeTool(ctx context.Context, p tools.Principal, threadID, 
 		if prop.Details == nil {
 			details = json.RawMessage(`[]`)
 		}
+		approvalInput := input
+		if len(prop.Input) > 0 {
+			approvalInput = prop.Input
+		}
 		appr, aerr := s.store.CreateApproval(ctx, Approval{
-			ThreadID: threadID, MessageID: turnID, ToolName: call.Name, Input: input,
+			ThreadID: threadID, MessageID: turnID, ToolName: call.Name, Input: approvalInput,
 			Category: prop.Category, Description: prop.Description, Details: details,
 		})
 		status = "proposal"
@@ -347,6 +351,26 @@ func (s *Service) applyApproval(ctx context.Context, p tools.Principal, appr *Ap
 	result, err := tool.Execute(ctx, p, input)
 	if err != nil {
 		_ = s.store.Audit(ctx, appr.ThreadID, appr.ToolName, principalLabel(p), "error", tools.SafeMessage(err), time.Since(start))
+		return err
+	}
+	if result.Secret != nil {
+		sec := result.Secret
+		if sec.Store == nil {
+			return tools.Userf("The secret request is no longer available.")
+		}
+		req, err := s.store.CreateSecret(ctx, SecretReq{ThreadID: appr.ThreadID, MessageID: appr.MessageID, ProviderLabel: sec.ProviderLabel, CredentialLabel: sec.CredentialLabel, Purpose: sec.Purpose, HelpURL: sec.HelpURL})
+		if err != nil {
+			return err
+		}
+		s.mu.Lock()
+		s.secrets[req.ID] = sec.Store
+		s.mu.Unlock()
+		parts := []map[string]any{{"type": "secret-request", "requestId": req.ID, "providerLabel": sec.ProviderLabel, "credentialLabel": sec.CredentialLabel, "purpose": sec.Purpose, "status": "pending"}}
+		raw, err := json.Marshal(parts)
+		if err != nil {
+			return err
+		}
+		_, err = s.store.AppendMessage(ctx, appr.ThreadID, "assistant", raw)
 		return err
 	}
 	if result.Proposal == nil || result.Proposal.Apply == nil {
