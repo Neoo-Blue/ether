@@ -755,7 +755,20 @@ func effectiveHomePolicy(d core.HomeLayout, user int64, section string, row core
 	return matchingPolicy(pageFor(d.Global, section), row), "global"
 }
 
+// selectedCollections lists the collections the layout places on a page for
+// this viewer and moment (When and days-per-week applied).
 func selectedCollections(d core.HomeLayout, user int64, section string, hc core.HubContext) []string {
+	return layoutCollections(d, user, section, &hc)
+}
+
+// placedCollections lists every collection the layout places on a page for
+// this viewer, whatever the hour, daypart or day. Owner rows are fetched for
+// this set so a new daypart never finds its rows unfetched.
+func placedCollections(d core.HomeLayout, user int64, section string) []string {
+	return layoutCollections(d, user, section, nil)
+}
+
+func layoutCollections(d core.HomeLayout, user int64, section string, hc *core.HubContext) []string {
 	ids := []string{}
 	seen := map[string]bool{}
 	pages := append([]core.LayoutPage{}, d.Global...)
@@ -774,7 +787,10 @@ func selectedCollections(d core.HomeLayout, user int64, section string, hc core.
 				continue
 			}
 			p, _ := effectiveHomePolicy(d, user, section, core.HomeRow{HubID: "collection." + key, Kind: "collection:" + key})
-			if p != nil && p.Status != "off" && whenMatches(p.When, hc) && weekEligible(user, p.Row, hc, p.MaxDaysPerWeek) && !seen[key] {
+			if p == nil || p.Status == "off" || seen[key] {
+				continue
+			}
+			if hc == nil || whenMatches(p.When, *hc) && weekEligible(user, p.Row, *hc, p.MaxDaysPerWeek) {
 				seen[key] = true
 				ids = append(ids, key)
 			}
