@@ -1,9 +1,9 @@
 /**
- * Mock plugin host (WS7): stateful fixture data for every /api/plugins
- * route the real host serves, so WS10a can build Server › Plugins against
- * the same shapes. Three installed plugins: a verified Live TV source
- * with an update waiting, an Unverified ranking-step extension, and a
- * verified extension with a page, a list source and an attention health.
+ * Mock plugin host (WS7, extended by WS10a): stateful fixture data for every
+ * /api/plugins route the real host serves, so Server › Plugins works against
+ * the same shapes. Three installed plugins: a verified Live TV source with an
+ * update waiting, an Unverified ranking-step extension, and a verified
+ * extension with a page, a list source and an attention health.
  */
 import type { Descriptor } from "../../lib/extend";
 import type { ExtendHandler } from "./index";
@@ -47,7 +47,7 @@ export interface PluginDetail extends PluginSummary {
   permissions: {
     lines: string[];
     declared: Record<string, unknown>;
-    grants: { viewers?: number[]; folders?: string[]; revoked?: string[] };
+    grants: { viewers?: number[]; folders?: string[]; revoked?: string[]; lan?: boolean };
     needsViewers: boolean;
     needsFolders: boolean;
   };
@@ -69,6 +69,29 @@ export interface PluginDetail extends PluginSummary {
     restarts: number;
   };
   addedPermissions?: string[];
+  changelog?: string;
+}
+
+export interface CatalogueEntry {
+  id: string;
+  name: string;
+  version: string;
+  kind: string;
+  category: string;
+  summary: string;
+  description?: string;
+  author?: { name?: string; url?: string };
+  repo?: string;
+  icon?: string;
+  verified: boolean;
+  capabilities?: string[];
+  permissions: string[];
+  needsViewers?: boolean;
+  needsFolders?: boolean;
+  screenshots?: string[];
+  limits?: string[];
+  url: string;
+  manifest: Record<string, unknown>;
 }
 
 interface Fixture {
@@ -84,11 +107,159 @@ interface Fixture {
 
 const NOW = 1_762_000_000;
 
+function catalogueFixtures(): CatalogueEntry[] {
+  return [
+    {
+      id: "community.plutotv.ether",
+      name: "Pluto TV",
+      version: "1.3.0",
+      kind: "livetv_source",
+      category: "live_tv",
+      summary: "Free Pluto TV channels with their guide",
+      description: "Adds regional Pluto TV live channels and a six-day programme guide.",
+      author: { name: "Ether Community", url: "https://github.com/ether-plugins/pluto" },
+      repo: "https://github.com/ether-plugins/pluto",
+      verified: true,
+      capabilities: ["livetv_channels"],
+      permissions: ["Connects to api.pluto.tv", "Connects to *.pluto.tv"],
+      url: "https://plugins.ether.video/plutotv/manifest.json",
+      manifest: {
+        id: "community.plutotv.ether",
+        version: "1.3.0",
+        name: "Pluto TV",
+        description: "Free Pluto TV channels with their guide.",
+        ether: {
+          protocol: 1,
+          kind: "livetv_source",
+          summary: "Free Pluto TV channels with their guide",
+          author: { name: "Ether Community", url: "https://github.com/ether-plugins/pluto" },
+          repo: "https://github.com/ether-plugins/pluto",
+          capabilities: ["livetv_channels"],
+          permissions: { network: ["api.pluto.tv", "*.pluto.tv"] },
+          contributes: { channels: { refresh: "6h", test: true } },
+        },
+      },
+    },
+    {
+      id: "community.subdl.subtitles",
+      name: "SubDL Subtitles",
+      version: "1.1.0",
+      kind: "integration",
+      category: "subtitles",
+      summary: "Regional subtitles fetched on demand when picked",
+      description: "Searches SubDL for subtitles in your preferred languages when a viewer asks.",
+      author: { name: "Ether Community", url: "https://github.com/ether-plugins/subdl" },
+      repo: "https://github.com/ether-plugins/subdl",
+      verified: true,
+      capabilities: ["subtitles"],
+      permissions: ["Connects to api.subdl.com", "Stores an access token"],
+      limits: ["Requires a free SubDL API key", "Rate limited to 60 lookups per minute"],
+      url: "https://plugins.ether.video/subdl/manifest.json",
+      manifest: {
+        id: "community.subdl.subtitles",
+        version: "1.1.0",
+        name: "SubDL Subtitles",
+        ether: {
+          protocol: 1,
+          kind: "integration",
+          summary: "Regional subtitles fetched on demand when picked",
+          author: { name: "Ether Community", url: "https://github.com/ether-plugins/subdl" },
+          repo: "https://github.com/ether-plugins/subdl",
+          capabilities: ["subtitles"],
+          permissions: { network: ["api.subdl.com"], secrets: ["apiKey"] },
+          contributes: {
+            subtitles: { languages: "any", formats: ["srt", "vtt"] },
+            integration: {
+              category: "subtitles",
+              adds: ["On-demand regional subtitles"],
+              connect: "fields",
+              test: true,
+            },
+          },
+        },
+      },
+    },
+    {
+      id: "community.local.folders",
+      name: "Local folders",
+      version: "1.0.2",
+      kind: "source",
+      category: "sources",
+      summary: "Plays media files from folders you pick on this server",
+      description: "Scans folders you choose and matches files to titles in your catalogue.",
+      author: { name: "Ether Community", url: "https://github.com/ether-plugins/local-folders" },
+      repo: "https://github.com/ether-plugins/local-folders",
+      verified: true,
+      capabilities: ["stream_source", "ui"],
+      permissions: ["Reads folders you choose", "Reads your catalogue"],
+      needsFolders: true,
+      url: "https://plugins.ether.video/local-folders/manifest.json",
+      manifest: {
+        id: "community.local.folders",
+        version: "1.0.2",
+        name: "Local folders",
+        ether: {
+          protocol: 1,
+          kind: "source",
+          summary: "Plays media files from folders you pick on this server",
+          author: {
+            name: "Ether Community",
+            url: "https://github.com/ether-plugins/local-folders",
+          },
+          repo: "https://github.com/ether-plugins/local-folders",
+          capabilities: ["stream_source", "ui"],
+          permissions: { folders: "read", catalog: "read" },
+          contributes: {
+            source: { class: "direct", abilities: ["movies", "tv"] },
+            pages: [{ key: "unmatched", label: "Unmatched files", route: "/ether/view/unmatched" }],
+          },
+        },
+      },
+    },
+    {
+      id: "community.homeassistant.notify",
+      name: "Home Assistant",
+      version: "0.9.0",
+      kind: "notification_channel",
+      category: "automation",
+      summary: "Sends household alerts and playback events to Home Assistant",
+      description: "Delivers playback and release events to your Home Assistant webhook.",
+      author: { name: "Ether Community", url: "https://github.com/ether-plugins/homeassistant" },
+      repo: "https://github.com/ether-plugins/homeassistant",
+      verified: true,
+      capabilities: ["notify", "events"],
+      permissions: [
+        "Connects to homeassistant.local",
+        "Gets play and new-release events",
+        "Stores an access token",
+      ],
+      url: "https://plugins.ether.video/homeassistant/manifest.json",
+      manifest: {
+        id: "community.homeassistant.notify",
+        version: "0.9.0",
+        name: "Home Assistant",
+        ether: {
+          protocol: 1,
+          kind: "notification_channel",
+          summary: "Sends household alerts and playback events to Home Assistant",
+          capabilities: ["notify", "events"],
+          permissions: { network: ["homeassistant.local"], secrets: ["webhookToken"] },
+          contributes: {
+            notification: { sendTest: true, formats: ["text"] },
+            events: { subscribe: ["playback.started", "playback.stopped"] },
+          },
+        },
+      },
+    },
+  ];
+}
+
 function fixturePlugins(): Fixture[] {
   const pluto: PluginDetail = {
     id: "community.plutotv.ether",
     name: "Pluto TV",
     version: "1.2.0",
+    prevVersion: "1.1.0",
     kind: "livetv_source",
     summary: "Free Pluto TV channels with their guide",
     enabled: true,
@@ -100,6 +271,7 @@ function fixturePlugins(): Fixture[] {
     capabilities: ["livetv_channels"],
     sourceKind: "catalogue",
     installedAt: NOW - 86400 * 30,
+    changelog: "Adds regional guide categories and faster channel refreshes.",
     manifest: {
       id: "community.plutotv.ether",
       version: "1.2.0",
@@ -109,14 +281,18 @@ function fixturePlugins(): Fixture[] {
       ether: {
         protocol: 1,
         kind: "livetv_source",
+        summary: "Free Pluto TV channels with their guide",
+        author: { name: "Ether Community", url: "https://github.com/ether-plugins/pluto" },
+        repo: "https://github.com/ether-plugins/pluto",
+        license: "MIT",
         capabilities: ["livetv_channels"],
-        permissions: { network: ["api.pluto.tv", "*.pluto.tv"] },
+        permissions: { network: ["api.pluto.tv", "*.pluto.tv"], secrets: ["token"] },
         contributes: { channels: { refresh: "6h", test: true } },
       },
     },
     permissions: {
-      lines: ["Connects to api.pluto.tv", "Connects to *.pluto.tv"],
-      declared: { network: ["api.pluto.tv", "*.pluto.tv"] },
+      lines: ["Connects to api.pluto.tv", "Connects to *.pluto.tv", "Stores an access token"],
+      declared: { network: ["api.pluto.tv", "*.pluto.tv"], secrets: ["token"] },
       grants: {},
       needsViewers: false,
       needsFolders: false,
@@ -167,6 +343,9 @@ function fixturePlugins(): Fixture[] {
       ether: {
         protocol: 1,
         kind: "extension",
+        summary: "Prefers releases dubbed in your language",
+        author: { name: "Alex Rivera", url: "https://github.com/example/dub" },
+        repo: "https://github.com/example/dub",
         capabilities: ["ranking_step", "rule_condition"],
         runtime: { kind: "hosted", entry: "dist/plugin.js" },
         contributes: {
@@ -200,6 +379,7 @@ function fixturePlugins(): Fixture[] {
     id: "community.example.wrapped",
     name: "Ether Wrapped",
     version: "1.0.1",
+    prevVersion: "1.0.0",
     kind: "extension",
     summary: "Your year in viewing, with a shelf to match",
     enabled: true,
@@ -217,8 +397,15 @@ function fixturePlugins(): Fixture[] {
       ether: {
         protocol: 1,
         kind: "extension",
+        summary: "Your year in viewing, with a shelf to match",
+        author: { name: "Ether Community", url: "https://github.com/ether-plugins/wrapped" },
+        repo: "https://github.com/ether-plugins/wrapped",
         capabilities: ["ui", "list_source", "events"],
-        permissions: { catalog: "read", viewers: { watch_history: "granted_viewers" } },
+        permissions: {
+          catalog: "read",
+          viewers: { watch_history: "granted_viewers" },
+          collections: "write",
+        },
         contributes: {
           pages: [{ key: "wrapped", label: "Ether Wrapped", route: "/ether/view/wrapped" }],
           listSources: [
@@ -235,8 +422,17 @@ function fixturePlugins(): Fixture[] {
       },
     },
     permissions: {
-      lines: ["Reads your catalogue", "Reads watch history"],
-      declared: { catalog: "read", viewers: { watch_history: "granted_viewers" } },
+      lines: [
+        "Reads your catalogue",
+        "Reads watch history",
+        "Creates and updates collections",
+        "Gets play and new-release events",
+      ],
+      declared: {
+        catalog: "read",
+        viewers: { watch_history: "granted_viewers" },
+        collections: "write",
+      },
       grants: { viewers: [1] },
       needsViewers: true,
       needsFolders: false,
@@ -244,6 +440,7 @@ function fixturePlugins(): Fixture[] {
     healthDetail: {
       status: "attention",
       reason: "Recent calls were slow.",
+      lastError: "GET /ether/view/wrapped took 1900 ms",
       restarts: 1,
       slow: 3,
       drops: 2,
@@ -267,8 +464,18 @@ function fixturePlugins(): Fixture[] {
   return [
     {
       detail: pluto,
-      settings: { region: "us" },
-      schema: { fields: [{ key: "region", kind: "select", label: "Region" }] },
+      settings: { region: "us", token: "Saved" },
+      schema: {
+        fields: [
+          { key: "region", kind: "select", label: "Region", required: true },
+          {
+            key: "token",
+            kind: "secret",
+            label: "Access token",
+            hint: "Optional token for regional channels.",
+          },
+        ],
+      },
       descriptors: [
         {
           kind: "liveTVSource",
@@ -305,7 +512,9 @@ function fixturePlugins(): Fixture[] {
     {
       detail: dub,
       settings: { language: "fr" },
-      schema: { fields: [{ key: "language", kind: "language", label: "Dub language" }] },
+      schema: {
+        fields: [{ key: "language", kind: "language", label: "Dub language", required: true }],
+      },
       descriptors: [
         {
           kind: "rankingStep",
@@ -324,7 +533,7 @@ function fixturePlugins(): Fixture[] {
       ],
       journal: [],
       shadowJournal: [],
-      logs: [],
+      logs: ["info: loaded ranking step dub"],
       calls: [],
     },
     {
@@ -401,9 +610,102 @@ function summary(d: PluginDetail): PluginSummary {
     privacy: _pr,
     impact: _i,
     addedPermissions: _a,
+    changelog: _c,
     ...s
   } = d;
   return { ...s, health: healthDetail.status };
+}
+
+function descriptorsFromManifest(
+  id: string,
+  name: string,
+  manifest: Record<string, unknown>,
+): Descriptor[] {
+  const text = (s: string) => ({ resolved: s, plugin: id });
+  const ether = (manifest.ether ?? {}) as {
+    kind?: string;
+    capabilities?: string[];
+    contributes?: {
+      pages?: { key: string; label: string; route: string }[];
+      listSources?: { key: string; label: string }[];
+      rankingSteps?: { key: string; label: string }[];
+      ruleConditions?: { key: string; label: string }[];
+    };
+  };
+  const out: Descriptor[] = [];
+  for (const p of ether.contributes?.pages ?? []) {
+    out.push({
+      kind: "page",
+      id: `plugin:${id}/${p.key}`,
+      owner: id,
+      label: text(p.label),
+      meta: { route: p.route },
+    });
+  }
+  for (const ls of ether.contributes?.listSources ?? []) {
+    out.push({
+      kind: "collectionSource",
+      id: `plugin:${id}/${ls.key}`,
+      owner: id,
+      label: text(ls.label),
+      meta: {},
+    });
+  }
+  for (const rs of ether.contributes?.rankingSteps ?? []) {
+    out.push({
+      kind: "rankingStep",
+      id: `plugin:${id}/${rs.key}`,
+      owner: id,
+      label: text(rs.label),
+      meta: {},
+    });
+  }
+  if (ether.capabilities?.includes("livetv_channels")) {
+    out.push({
+      kind: "liveTVSource",
+      id: `plugin:${id}/channels`,
+      owner: id,
+      label: text(name),
+      meta: {},
+    });
+  }
+  if (ether.capabilities?.includes("subtitles")) {
+    out.push({
+      kind: "subtitleProvider",
+      id: `plugin:${id}/subtitles`,
+      owner: id,
+      label: text(name),
+      meta: {},
+    });
+  }
+  if (ether.capabilities?.includes("stream_source")) {
+    out.push({
+      kind: "sourceKind",
+      id: `plugin:${id}/stream`,
+      owner: id,
+      label: text(name),
+      meta: {},
+    });
+  }
+  if (ether.capabilities?.includes("notify")) {
+    out.push({
+      kind: "channelKind",
+      id: `plugin:${id}/notify`,
+      owner: id,
+      label: text(name),
+      meta: {},
+    });
+  }
+  if (out.length === 0) {
+    out.push({
+      kind: "page",
+      id: `plugin:${id}/home`,
+      owner: id,
+      label: text(name),
+      meta: { route: "/ether/view/home" },
+    });
+  }
+  return out;
 }
 
 export function createPluginsMock(): {
@@ -413,9 +715,96 @@ export function createPluginsMock(): {
 } {
   let version = 1;
   const fixtures = fixturePlugins();
+  const pairings = new Map<
+    string,
+    { id: string; created: number; lastUsed: number; expires: number }[]
+  >();
+  const catalogue = catalogueFixtures();
   const bump = () => version++;
   const byId = (id: string) => fixtures.find((f) => f.detail.id === id);
   const studio = createStudioMock(() => bump());
+
+  function buildPreview(body: unknown) {
+    const req = (body && typeof body === "object" ? body : {}) as {
+      url?: string;
+      kind?: string;
+      manifest?: Record<string, unknown>;
+    };
+    const rawUrl = (req.url ?? "").trim();
+    const catMatch = catalogue.find((c) => c.url === rawUrl || c.id === rawUrl);
+    if (catMatch) {
+      const existing = byId(catMatch.id);
+      return {
+        manifest: catMatch.manifest,
+        permissions: catMatch.permissions,
+        needsViewers: Boolean(catMatch.needsViewers),
+        needsFolders: Boolean(catMatch.needsFolders),
+        verified: catMatch.verified,
+        stremioOnly: false,
+        alreadyInstalled: Boolean(existing),
+        installedVersion: existing?.detail.version,
+      };
+    }
+    if (!rawUrl && !req.manifest) {
+      // Uploaded .etherpkg binary body
+      const man = {
+        id: "community.example.pkg",
+        version: "1.0.0",
+        name: "Packaged plugin",
+        ether: {
+          protocol: 1,
+          kind: "extension",
+          summary: "Installed from a package file",
+          capabilities: ["ui"],
+          contributes: {
+            pages: [{ key: "home", label: "Packaged plugin", route: "/ether/view/home" }],
+          },
+        },
+      };
+      return {
+        manifest: man,
+        permissions: ["Needs no access to your server or the network"],
+        needsViewers: false,
+        needsFolders: false,
+        verified: false,
+        stremioOnly: false,
+      };
+    }
+    const isFolderUrl = rawUrl.includes("folder");
+    const isViewerUrl = rawUrl.includes("viewer");
+    const host = safeHost(rawUrl);
+    const permissions = [`Connects to ${host}`];
+    if (isViewerUrl) permissions.push("Reads watch history");
+    if (isFolderUrl) permissions.push("Reads folders you choose");
+    const man = req.manifest ?? {
+      id: "community.example.preview",
+      version: "1.0.0",
+      name: "Preview plugin",
+      ether: {
+        protocol: 1,
+        kind: "extension",
+        summary: "A plugin from a link",
+        author: { name: "Community author", url: rawUrl },
+        capabilities: ["ui"],
+        permissions: {
+          network: [host],
+          ...(isViewerUrl ? { viewers: { watch_history: "granted_viewers" } } : {}),
+          ...(isFolderUrl ? { folders: "read" } : {}),
+        },
+        contributes: {
+          pages: [{ key: "home", label: "Preview plugin", route: "/ether/view/home" }],
+        },
+      },
+    };
+    return {
+      manifest: man,
+      permissions,
+      needsViewers: isViewerUrl,
+      needsFolders: isFolderUrl,
+      verified: false,
+      stremioOnly: rawUrl.includes("stremio"),
+    };
+  }
 
   const handle: ExtendHandler = (method, seg, q, body) => {
     if (seg[0] !== "plugins") return null;
@@ -424,50 +813,212 @@ export function createPluginsMock(): {
     if (method === "GET" && seg.length === 1) {
       return json({ plugins: fixtures.map((f) => summary(f.detail)) });
     }
+    if (method === "GET" && seg[1] === "catalogue" && seg.length === 2) {
+      if (q.get("empty") === "1") return json({ entries: [] });
+      return json({ entries: catalogue });
+    }
     if (method === "POST" && seg[1] === "install" && seg[2] === "preview") {
-      const req = (body ?? {}) as { url?: string };
-      return json({
-        manifest: {
-          id: "community.example.preview",
-          version: "1.0.0",
-          name: "Preview plugin",
-          ether: { protocol: 1, kind: "extension", summary: "A plugin from a link" },
-        },
-        permissions: ["Connects to " + safeHost(req.url ?? "")],
-        needsViewers: false,
-        needsFolders: false,
-        verified: false,
-        stremioOnly: false,
-      });
+      const req = (body && typeof body === "object" ? body : {}) as { url?: string };
+      if (req.url === "invalid") {
+        return json(
+          {
+            error: {
+              code: "validation",
+              message: "Could not read a plugin manifest from that address.",
+              fields: [{ field: "url", message: "Enter a valid manifest or repository URL." }],
+            },
+          },
+          400,
+        );
+      }
+      return json(buildPreview(body));
     }
     if (method === "POST" && seg[1] === "install" && seg.length === 2) {
-      return json(
-        {
-          error: {
-            code: "validation",
-            message: "Preview a plugin first, then confirm.",
-            fields: [],
+      const options =
+        body instanceof FormData ? JSON.parse(String(body.get("options") ?? "{}")) : body;
+      const req = (options && typeof options === "object" ? options : {}) as {
+        url?: string;
+        kind?: string;
+        lan?: boolean;
+        grants?: PluginDetail["permissions"]["grants"];
+        settings?: Record<string, unknown>;
+        autoUpdate?: boolean;
+        shadow?: boolean;
+      };
+      if (req.url === "invalid") {
+        return json(
+          {
+            error: {
+              code: "validation",
+              message: "Preview a plugin first, then confirm.",
+              fields: [],
+            },
           },
+          400,
+        );
+      }
+      const prev = buildPreview(body);
+      const man = prev.manifest as {
+        id: string;
+        version: string;
+        name: string;
+        ether?: {
+          kind?: string;
+          summary?: string;
+          icon?: string;
+          capabilities?: string[];
+          permissions?: Record<string, unknown>;
+        };
+      };
+      const id = man.id || "community.example.preview";
+      const name = man.name || "Preview plugin";
+      const declared = (man.ether?.permissions ?? {}) as { network?: string[] };
+      const detail: PluginDetail = {
+        id,
+        name,
+        version: man.version || "1.0.0",
+        kind: man.ether?.kind ?? "extension",
+        summary: man.ether?.summary ?? "A plugin from a link",
+        icon: man.ether?.icon,
+        enabled: true,
+        verified: prev.verified,
+        shadow: Boolean(req.shadow),
+        autoUpdate: Boolean(req.autoUpdate),
+        health: "ok",
+        capabilities: man.ether?.capabilities ?? ["ui"],
+        sourceKind: req.kind || (req.url ? "url" : "pkg"),
+        stremioOnly: prev.stremioOnly,
+        installedAt: NOW,
+        manifest: prev.manifest,
+        permissions: {
+          lines: prev.permissions,
+          declared: man.ether?.permissions ?? {},
+          grants: req.grants ?? {},
+          needsViewers: prev.needsViewers,
+          needsFolders: prev.needsFolders,
         },
-        400,
-      );
+        healthDetail: {
+          status: "ok",
+          restarts: 0,
+          slow: 0,
+          drops: 0,
+          observed: {},
+          egressBytes: 0,
+        },
+        privacy: {
+          declaredHosts: declared.network ?? [],
+          observedHosts: {},
+        },
+        impact: {
+          calls: 0,
+          errors: 0,
+          p50Ms: 0,
+          p95Ms: 0,
+          egressBytes: 0,
+          kvBytes: 0,
+          slow: 0,
+          eventDrops: 0,
+          restarts: 0,
+        },
+      };
+      const existingIdx = fixtures.findIndex((f) => f.detail.id === id);
+      const newFixture: Fixture = {
+        detail,
+        settings: req.settings ?? {},
+        schema: {},
+        descriptors: descriptorsFromManifest(id, name, prev.manifest),
+        journal: [],
+        shadowJournal: [],
+        logs: [`info: installed ${name} ${detail.version}`],
+        calls: [],
+      };
+      if (existingIdx >= 0) {
+        fixtures[existingIdx] = newFixture;
+      } else {
+        fixtures.push(newFixture);
+      }
+      bump();
+      return json(summary(detail), 201);
     }
     const f = byId(seg[1] ?? "");
     if (!f) {
       return json({ error: { code: "not_found", message: "That plugin is not installed." } }, 404);
     }
     const d = f.detail;
+    if (method === "POST" && seg[2] === "pair") {
+      return json({
+        code: "PAIR-1234",
+        expiresAt: new Date(Date.now() + 600000).toISOString(),
+        tunnelUrl: "wss://ether.example.test/tunnel",
+        exchangePath: "/api/plugins/pair/exchange",
+      });
+    }
+    if (method === "GET" && seg[2] === "pairings")
+      return json({ pairings: pairings.get(d.id) ?? [] });
+    if (method === "DELETE" && seg[2] === "pairings" && seg[3]) {
+      pairings.set(
+        d.id,
+        (pairings.get(d.id) ?? []).filter((p) => p.id !== seg[3]),
+      );
+      return json({ status: "revoked" });
+    }
     if (method === "GET" && seg.length === 2) return json(d);
     if (method === "GET" && seg[2] === "settings") {
       return json({ settings: f.settings, schema: f.schema });
     }
     if (method === "PUT" && seg[2] === "settings") {
       const b = (body ?? {}) as { settings?: Record<string, unknown> };
-      f.settings = b.settings ?? {};
+      const incoming = b.settings ?? {};
+      const schemaFields =
+        (f.schema as { fields?: { key: string; kind?: string; required?: boolean }[] }).fields ??
+        [];
+      const fieldErrors: { field: string; message: string }[] = [];
+      for (const sf of schemaFields) {
+        const val = incoming[sf.key];
+        if (
+          (sf.required && (val === "" || val === undefined || val === null)) ||
+          val === "invalid"
+        ) {
+          fieldErrors.push({
+            field: `/${sf.key}`,
+            message: val === "invalid" ? "This value is not supported." : "is required",
+          });
+        }
+      }
+      for (const [k, v] of Object.entries(incoming)) {
+        if (v === "invalid" && !fieldErrors.some((e) => e.field === `/${k}`)) {
+          fieldErrors.push({ field: `/${k}`, message: "This value is not supported." });
+        }
+      }
+      if (fieldErrors.length > 0) {
+        return json(
+          {
+            error: {
+              code: "validation",
+              message: "The plugin did not accept these settings.",
+              fields: fieldErrors,
+            },
+          },
+          400,
+        );
+      }
+      const nextSettings: Record<string, unknown> = { ...incoming };
+      for (const sf of schemaFields) {
+        if (sf.kind === "secret" && nextSettings[sf.key] && nextSettings[sf.key] !== "") {
+          nextSettings[sf.key] = "Saved";
+        }
+      }
+      f.settings = nextSettings;
       return json({ status: "saved" });
     }
     if (method === "GET" && seg[2] === "options") {
-      return json({ options: [{ value: "us", label: "United States" }] });
+      return json({
+        options: [
+          { value: "us", label: "United States" },
+          { value: "ca", label: "Canada" },
+          { value: "uk", label: "United Kingdom" },
+        ],
+      });
     }
     if (method === "POST" && seg[2] === "test") {
       return json({ ok: d.enabled, message: d.enabled ? "Works" : "Turned off", details: [] });
@@ -493,14 +1044,19 @@ export function createPluginsMock(): {
     if (method === "GET" && seg[2] === "shadow") {
       return json({ entries: f.shadowJournal, count: f.shadowJournal.length });
     }
+    if (method === "GET" && seg[2] === "auto-update") return json({ autoUpdate: d.autoUpdate });
+    if (method === "PUT" && seg[2] === "auto-update") {
+      d.autoUpdate = Boolean((body as { autoUpdate?: boolean } | null)?.autoUpdate);
+      return json({ autoUpdate: d.autoUpdate });
+    }
     if (method === "GET" && seg[2] === "journal") {
       const entries = q.get("shadow") === "1" ? f.shadowJournal : f.journal;
       return json({ entries });
     }
     if (method === "POST" && seg[2] === "undo") {
-      const n = f.journal.length;
-      f.journal = [];
-      return json({ undone: n });
+      const live = f.journal.filter((e) => !e.undone);
+      for (const e of live) e.undone = true;
+      return json({ undone: live.length });
     }
     if (method === "GET" && seg[2] === "logs") return json({ lines: f.logs });
     if (method === "GET" && seg[2] === "calls") return json({ calls: f.calls });
@@ -550,6 +1106,9 @@ export function createPluginsMock(): {
       return json(summary(d));
     }
     if (method === "DELETE" && seg.length === 2) {
+      if (q.get("undo") === "1") {
+        f.journal = [];
+      }
       fixtures.splice(fixtures.indexOf(f), 1);
       bump();
       return json({ status: "removed" });

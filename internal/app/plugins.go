@@ -15,15 +15,17 @@ import (
 	"github.com/braedonsaunders/ether/internal/identity"
 	"github.com/braedonsaunders/ether/internal/playback"
 	"github.com/braedonsaunders/ether/internal/plugins"
+	"github.com/braedonsaunders/ether/internal/plugins/catalogue"
 	"github.com/braedonsaunders/ether/internal/plugins/remote"
 	"github.com/braedonsaunders/ether/internal/plugins/studio"
 	"github.com/braedonsaunders/ether/internal/plugins/wasm"
 	"github.com/braedonsaunders/ether/internal/state"
 )
 
-// pluginRuntime is the plugin host and its adapters (WS7, WS8, WS9, WS11).
+// pluginRuntime is the plugin host and its adapters.
 type pluginRuntime struct {
 	mgr        *plugins.Manager
+	cat        *catalogue.Service
 	studio     *studio.Studio
 	tunnel     *remote.TunnelServer
 	pairing    *remote.Pairing
@@ -67,15 +69,34 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 			},
 			Notice: func(text string) {
 				a.log.Warn("plugin notice", "text", text)
+				if a.streamRT != nil {
+					_ = a.streamRT.Publish(context.Background(), admin.StreamNotice, map[string]any{"text": text})
+				}
 			},
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
+	cat, err := catalogue.New(catalogue.Options{
+		DB:        a.db,
+		Manager:   mgr,
+		IndexURL:  cfg.Plugins.IndexURL,
+		PublicKey: cfg.Plugins.PublicKey,
+		Log:       a.log.With("component", "plugins-catalogue"),
+	})
+	if err != nil {
+		return nil, err
+	}
+	mgr.SetCatalogue(cat)
+
 	// Hosted plugins run sandboxed in-process (SPEC §5.2).
 	engine := wasm.NewEngine(a.log.With("component", "plugins-wasm"))
 	mgr.RegisterRuntime("hosted", plugins.HostedRuntimeFactory(engine))
+	if err := cat.EnforceCachedRevocations(ctx); err != nil {
+		_ = engine.Close()
+		return nil, err
+	}
 	a.closers = append(a.closers, func() { _ = engine.Close() })
 	grants, err := identity.NewGrants(a.db, a.users, 30*24*time.Hour, nil)
 	if err != nil {
@@ -199,13 +220,14 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 
 	runCtx, cancelRun := context.WithCancel(context.Background())
 	go mgr.Run(runCtx)
+	go cat.Run(runCtx, catalogue.DefaultRefreshInterval)
 	a.closers = append(a.closers, func() {
 		cancelRun()
 		stopPlayback()
 		stopState()
 		unsubscribe()
 	})
-	return &pluginRuntime{mgr: mgr, studio: studioSvc, tunnel: tunnel, pairing: pairing, pluginHost: host}, nil
+	return &pluginRuntime{mgr: mgr, cat: cat, studio: studioSvc, tunnel: tunnel, pairing: pairing, pluginHost: host}, nil
 }
 
 // pluginHandlers mounts the owner plugin API under /api/plugins (WS7, WS11).
