@@ -235,12 +235,9 @@ func (m *Manager) ResolveText(ctx context.Context, plugin, key, locale string) (
 // --- runtime plumbing ---
 
 func (m *Manager) runtimeFor(ctx context.Context, r Record) (Runtime, error) {
-	if r.Manifest.Ether == nil {
-		return nil, ErrNoRuntime
-	}
 	m.mu.Lock()
 	rt, ok := m.runtimes[r.ID]
-	f, hasFactory := m.fatories[r.Manifest.Ether.Runtime.Kind]
+	f, hasFactory := m.fatories[r.Manifest.RuntimeKind()]
 	m.mu.Unlock()
 	if ok {
 		return rt, nil
