@@ -1,6 +1,21 @@
 package app
 
-import "github.com/braedonsaunders/ether/internal/extend"
+import (
+	"github.com/braedonsaunders/ether/internal/collections"
+	"github.com/braedonsaunders/ether/internal/extend"
+	"github.com/braedonsaunders/ether/internal/personalize"
+)
 
-// registerCollectionDescriptors registers built-in collection and Home row source kinds (WS1b).
-func (a *App) registerCollectionDescriptors(r *extend.Registry) error { return nil }
+// registerCollectionDescriptors registers the built-in collection source
+// kinds and Home Designer row source kinds (WS1b). The descriptors come
+// from the same kind registries that validate and run the kinds, so the
+// console can never offer a kind the server cannot run. Plugin list
+// sources (WS9) and Stremio catalogs (WS3) register their kinds on the
+// collections and personalize registries and publish descriptors the same
+// way, with their plugin id as Owner.
+func (a *App) registerCollectionDescriptors(r *extend.Registry) error {
+	if err := r.Register(collections.BuiltinDescriptors()...); err != nil {
+		return err
+	}
+	return r.Register(personalize.BuiltinRowDescriptors()...)
+}

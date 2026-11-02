@@ -35,22 +35,28 @@ type LLMProvider struct {
 	// KeyHint is the API-key placeholder; ModelHint explains model IDs.
 	KeyHint   string `json:"keyHint,omitempty"`
 	ModelHint string `json:"modelHint,omitempty"`
+	// SupportsTools reports whether the provider family carries streaming
+	// tool calling (Ask Ether). Individual models may still refuse tools;
+	// that surfaces at request time as a clean unsupported error.
+	SupportsTools bool `json:"supportsTools"`
+	// SupportsStreaming reports whether the family streams responses.
+	SupportsStreaming bool `json:"supportsStreaming"`
 }
 
 // LLMProviders lists the supported services, hosted first.
 var LLMProviders = []LLMProvider{
-	{ID: "anthropic", Label: "Anthropic — Claude", API: LLMAPIAnthropic, BaseURL: "https://api.anthropic.com/v1", NeedsKey: true, KeyHint: "sk-ant-…"},
-	{ID: "openai", Label: "OpenAI — GPT", API: LLMAPIOpenAI, BaseURL: "https://api.openai.com/v1", NeedsKey: true, KeyHint: "sk-…"},
-	{ID: "google", Label: "Google — Gemini", API: LLMAPIGoogle, BaseURL: "https://generativelanguage.googleapis.com/v1beta", NeedsKey: true, KeyHint: "AIza…"},
-	{ID: "openrouter", Label: "OpenRouter — any model, one key", API: LLMAPIOpenAI, BaseURL: "https://openrouter.ai/api/v1", NeedsKey: true, KeyHint: "sk-or-…",
+	{ID: "anthropic", Label: "Anthropic — Claude", API: LLMAPIAnthropic, BaseURL: "https://api.anthropic.com/v1", NeedsKey: true, KeyHint: "sk-ant-…", SupportsTools: true, SupportsStreaming: true},
+	{ID: "openai", Label: "OpenAI — GPT", API: LLMAPIOpenAI, BaseURL: "https://api.openai.com/v1", NeedsKey: true, KeyHint: "sk-…", SupportsTools: true, SupportsStreaming: true},
+	{ID: "google", Label: "Google — Gemini", API: LLMAPIGoogle, BaseURL: "https://generativelanguage.googleapis.com/v1beta", NeedsKey: true, KeyHint: "AIza…", SupportsTools: true, SupportsStreaming: true},
+	{ID: "openrouter", Label: "OpenRouter — any model, one key", API: LLMAPIOpenAI, BaseURL: "https://openrouter.ai/api/v1", NeedsKey: true, KeyHint: "sk-or-…", SupportsTools: true, SupportsStreaming: true,
 		ModelHint: "Models are vendor/model slugs, e.g. openai/gpt-4o."},
-	{ID: "groq", Label: "Groq — fast inference", API: LLMAPIOpenAI, BaseURL: "https://api.groq.com/openai/v1", NeedsKey: true, KeyHint: "gsk_…"},
-	{ID: "xai", Label: "xAI — Grok", API: LLMAPIOpenAI, BaseURL: "https://api.x.ai/v1", NeedsKey: true, KeyHint: "xai-…"},
-	{ID: "deepseek", Label: "DeepSeek", API: LLMAPIOpenAI, BaseURL: "https://api.deepseek.com", NeedsKey: true, KeyHint: "sk-…"},
-	{ID: "mistral", Label: "Mistral", API: LLMAPIOpenAI, BaseURL: "https://api.mistral.ai/v1", NeedsKey: true, KeyHint: "Your Mistral API key"},
-	{ID: "ollama", Label: "Ollama — on your network", API: LLMAPIOpenAI, BaseURL: "http://localhost:11434/v1", Local: true, KeyHint: "Not needed"},
-	{ID: "lmstudio", Label: "LM Studio — on your network", API: LLMAPIOpenAI, BaseURL: "http://localhost:1234/v1", Local: true, KeyHint: "Not needed"},
-	{ID: LLMProviderCustom, Label: "Custom (OpenAI-compatible)", API: LLMAPIOpenAI, Local: true, RequiresBaseURL: true, KeyHint: "Your provider API key",
+	{ID: "groq", Label: "Groq — fast inference", API: LLMAPIOpenAI, BaseURL: "https://api.groq.com/openai/v1", NeedsKey: true, KeyHint: "gsk_…", SupportsTools: true, SupportsStreaming: true},
+	{ID: "xai", Label: "xAI — Grok", API: LLMAPIOpenAI, BaseURL: "https://api.x.ai/v1", NeedsKey: true, KeyHint: "xai-…", SupportsTools: true, SupportsStreaming: true},
+	{ID: "deepseek", Label: "DeepSeek", API: LLMAPIOpenAI, BaseURL: "https://api.deepseek.com", NeedsKey: true, KeyHint: "sk-…", SupportsTools: true, SupportsStreaming: true},
+	{ID: "mistral", Label: "Mistral", API: LLMAPIOpenAI, BaseURL: "https://api.mistral.ai/v1", NeedsKey: true, KeyHint: "Your Mistral API key", SupportsTools: true, SupportsStreaming: true},
+	{ID: "ollama", Label: "Ollama — on your network", API: LLMAPIOpenAI, BaseURL: "http://localhost:11434/v1", Local: true, KeyHint: "Not needed", SupportsTools: true, SupportsStreaming: true},
+	{ID: "lmstudio", Label: "LM Studio — on your network", API: LLMAPIOpenAI, BaseURL: "http://localhost:1234/v1", Local: true, KeyHint: "Not needed", SupportsTools: true, SupportsStreaming: true},
+	{ID: LLMProviderCustom, Label: "Custom (OpenAI-compatible)", API: LLMAPIOpenAI, Local: true, RequiresBaseURL: true, KeyHint: "Your provider API key", SupportsTools: true, SupportsStreaming: true,
 		ModelHint: "Any OpenAI-compatible endpoint, such as Together, Fireworks, vLLM or llama.cpp."},
 }
 

@@ -1,7 +1,6 @@
 package personalize
 
 import (
-	"sort"
 	"strings"
 
 	"github.com/braedonsaunders/ether/internal/core"
@@ -248,18 +247,6 @@ func priorKind(kind string) string {
 		return "collection"
 	}
 	return kind
-}
-
-// descriptors lists every row kind for the Home Designer, with the pages
-// each can appear on and its designer group.
-func descriptors(extra []core.RowDescriptor) []core.RowDescriptor {
-	out := make([]core.RowDescriptor, 0, len(kinds)+len(extra))
-	for _, k := range kinds {
-		out = append(out, core.RowDescriptor{HubID: k.kind, Title: k.title, Kind: k.kind, Description: k.description,
-			Sections: append([]string(nil), kindFits(k)...), Group: k.group})
-	}
-	sort.SliceStable(extra, func(i, j int) bool { return extra[i].Title < extra[j].Title })
-	return append(out, extra...)
 }
 
 // sectionPrefix returns the hub id / context prefix for a section type.

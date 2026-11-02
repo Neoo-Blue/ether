@@ -71,7 +71,7 @@ type cand struct {
 func (s *Service) evaluate(ctx context.Context, spIn core.CollectionSpec, opt evalOptions) (*buildResult, error) {
 	sp := cloneSpec(spIn)
 	Normalize(&sp)
-	if err := Validate(&sp); err != nil {
+	if err := s.validate(&sp); err != nil {
 		return nil, err
 	}
 	rules, err := compileRules(sp.Rules)

@@ -1,0 +1,590 @@
+package plugins
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"sort"
+	"strconv"
+	"strings"
+)
+
+// Handler serves the owner API. It is mounted at /api/plugins by the app,
+// behind owner auth; paths here are relative to that mount.
+func (m *Manager) Handler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /", m.handleList)
+	mux.HandleFunc("POST /install/preview", m.handlePreview)
+	mux.HandleFunc("POST /install", m.handleInstall)
+	mux.HandleFunc("GET /{id}", m.handleGet)
+	mux.HandleFunc("GET /{id}/settings", m.handleGetSettings)
+	mux.HandleFunc("PUT /{id}/settings", m.handlePutSettings)
+	mux.HandleFunc("GET /{id}/options/{field}", m.handleOptions)
+	mux.HandleFunc("POST /{id}/test", m.handleTest)
+	mux.HandleFunc("POST /{id}/enable", m.handleEnable)
+	mux.HandleFunc("POST /{id}/disable", m.handleDisable)
+	mux.HandleFunc("PUT /{id}/grants", m.handleGrants)
+	mux.HandleFunc("POST /{id}/shadow", m.handleShadow)
+	mux.HandleFunc("GET /{id}/shadow", m.handleShadowReport)
+	mux.HandleFunc("GET /{id}/journal", m.handleJournal)
+	mux.HandleFunc("POST /{id}/undo", m.handleUndo)
+	mux.HandleFunc("GET /{id}/logs", m.handleLogs)
+	mux.HandleFunc("GET /{id}/calls", m.handleCalls)
+	mux.HandleFunc("POST /{id}/update/check", m.handleUpdateCheck)
+	mux.HandleFunc("POST /{id}/update", m.handleUpdate)
+	mux.HandleFunc("POST /{id}/rollback", m.handleRollback)
+	mux.HandleFunc("DELETE /{id}", m.handleRemove)
+	mux.HandleFunc("GET /{id}/views/{page}", m.handleView)
+	mux.HandleFunc("POST /{id}/actions/{action}", m.handleAction)
+	return mux
+}
+
+// Summary is one row of the installed list.
+type Summary struct {
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	Version       string   `json:"version"`
+	Kind          string   `json:"kind,omitempty"`
+	Summary       string   `json:"summary,omitempty"`
+	Icon          string   `json:"icon,omitempty"`
+	Enabled       bool     `json:"enabled"`
+	Verified      bool     `json:"verified"`
+	Shadow        bool     `json:"shadow"`
+	AutoUpdate    bool     `json:"autoUpdate"`
+	UpdateVersion string   `json:"updateVersion,omitempty"`
+	PrevVersion   string   `json:"prevVersion,omitempty"`
+	Health        string   `json:"health"`
+	Capabilities  []string `json:"capabilities,omitempty"`
+	SourceKind    string   `json:"sourceKind,omitempty"`
+	StremioOnly   bool     `json:"stremioOnly,omitempty"`
+	InstalledAt   int64    `json:"installedAt"`
+}
+
+func (m *Manager) summary(r Record, health string) Summary {
+	s := Summary{ID: r.ID, Name: r.Name, Version: r.Version, Kind: r.Kind, Enabled: r.Enabled,
+		Verified: r.Verified, Shadow: r.Shadow, AutoUpdate: r.AutoUpdate, UpdateVersion: r.UpdateVersion,
+		PrevVersion: r.PrevVersion, Health: health, SourceKind: r.SourceKind,
+		StremioOnly: r.Manifest.IsStremioOnly(), InstalledAt: r.InstalledAt.Unix()}
+	if r.Manifest.Ether != nil {
+		s.Summary = r.Manifest.Ether.Summary
+		s.Icon = r.Manifest.Ether.Icon
+		for _, c := range r.Manifest.Ether.Capabilities {
+			s.Capabilities = append(s.Capabilities, string(c))
+		}
+	}
+	return s
+}
+
+// Detail is the plugin drawer payload: overview, permissions, health, the
+// privacy label and impact.
+type Detail struct {
+	Summary
+	Manifest    Manifest `json:"manifest"`
+	Permissions struct {
+		Lines        []string    `json:"lines"`
+		Declared     Permissions `json:"declared"`
+		Grants       Grants      `json:"grants"`
+		NeedsViewers bool        `json:"needsViewers"`
+		NeedsFolders bool        `json:"needsFolders"`
+	} `json:"permissions"`
+	HealthDetail Health `json:"healthDetail"`
+	Privacy      struct {
+		DeclaredHosts []string       `json:"declaredHosts"`
+		ObservedHosts map[string]int `json:"observedHosts"`
+		Undeclared    []string       `json:"undeclared,omitempty"`
+	} `json:"privacy"`
+	Impact struct {
+		Calls       int   `json:"calls"`
+		Errors      int   `json:"errors"`
+		P50MS       int64 `json:"p50Ms"`
+		P95MS       int64 `json:"p95Ms"`
+		EgressBytes int64 `json:"egressBytes"`
+		KVBytes     int64 `json:"kvBytes"`
+		Slow        int64 `json:"slow"`
+		EventDrops  int64 `json:"eventDrops"`
+		Restarts    int64 `json:"restarts"`
+	} `json:"impact"`
+	// AddedPermissions is set when an update is waiting and asks for more.
+	AddedPermissions []string `json:"addedPermissions,omitempty"`
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func writeErr(w http.ResponseWriter, status int, code, msg string, fields []FieldError) {
+	body := map[string]any{"error": map[string]any{"code": code, "message": msg}}
+	if len(fields) > 0 {
+		body["error"].(map[string]any)["fields"] = fields
+	}
+	writeJSON(w, status, body)
+}
+
+func (m *Manager) fail(w http.ResponseWriter, err error) {
+	var ve *ValidationError
+	var pie *PermissionIncreaseError
+	switch {
+	case errors.Is(err, ErrNotFound):
+		writeErr(w, http.StatusNotFound, "not_found", "That plugin is not installed.", nil)
+	case errors.As(err, &ve):
+		writeErr(w, http.StatusBadRequest, "validation", "Some fields need attention.", ve.Fields)
+	case errors.As(err, &pie):
+		fields := make([]FieldError, len(pie.Added))
+		for i, a := range pie.Added {
+			fields[i] = FieldError{"permissions", a}
+		}
+		writeErr(w, http.StatusConflict, "permission_increase", "This update asks for more access. Review it, then confirm.", fields)
+	case errors.Is(err, ErrPermissionDenied):
+		writeErr(w, http.StatusForbidden, "permission_denied", "That access was not granted.", nil)
+	case errors.Is(err, ErrNoRuntime):
+		writeErr(w, http.StatusServiceUnavailable, "no_runtime", "This plugin cannot run yet because its runtime is not available.", nil)
+	case errors.Is(err, ErrDisabled):
+		writeErr(w, http.StatusConflict, "disabled", "This plugin is turned off.", nil)
+	default:
+		m.log.Warn("plugins api", "err", err)
+		writeErr(w, http.StatusInternalServerError, "error", "Something went wrong. Details are in the server log.", nil)
+	}
+}
+
+func decode(r *http.Request, v any) error {
+	defer r.Body.Close() //nolint:errcheck
+	return json.NewDecoder(io.LimitReader(r.Body, 4<<20)).Decode(v)
+}
+
+func (m *Manager) handleList(w http.ResponseWriter, r *http.Request) {
+	recs, err := m.store.list(r.Context())
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	out := make([]Summary, 0, len(recs))
+	for _, rec := range recs {
+		h, _ := m.store.health(r.Context(), rec.ID)
+		out = append(out, m.summary(rec, h.Status))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"plugins": out})
+}
+
+func (m *Manager) handleGet(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	rec, err := m.store.record(r.Context(), id)
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	h, _ := m.store.health(r.Context(), id)
+	g, _ := m.store.grants(r.Context(), id)
+	d := Detail{Summary: m.summary(rec, h.Status), Manifest: rec.Manifest, HealthDetail: h}
+	d.Permissions.Lines, d.Permissions.NeedsViewers, d.Permissions.NeedsFolders = PermissionSheet(rec.Manifest)
+	if rec.Manifest.Ether != nil {
+		d.Permissions.Declared = rec.Manifest.Ether.Permissions
+		d.Privacy.DeclaredHosts = rec.Manifest.Ether.Permissions.Network
+	}
+	d.Permissions.Grants = g
+	d.Privacy.ObservedHosts = h.Observed
+	for host := range h.Observed {
+		if rec.Manifest.Ether == nil || !hostAllowed(rec.Manifest.Ether.Permissions.Network, host) {
+			d.Privacy.Undeclared = append(d.Privacy.Undeclared, host)
+		}
+	}
+	sort.Strings(d.Privacy.Undeclared)
+	count, errs, p50, p95, _ := m.store.callStats(r.Context(), id)
+	d.Impact.Calls, d.Impact.Errors, d.Impact.P50MS, d.Impact.P95MS = count, errs, p50, p95
+	d.Impact.EgressBytes, d.Impact.Slow, d.Impact.EventDrops, d.Impact.Restarts = h.EgressBytes, h.Slow, h.Drops, h.Restarts
+	d.Impact.KVBytes, _ = m.store.kvUsed(r.Context(), id)
+	if rec.UpdateVersion != "" && rec.updateManifest != "" {
+		if next, err := ParseManifest([]byte(rec.updateManifest)); err == nil {
+			d.AddedPermissions = PermissionDiff(rec.Manifest, next)
+		}
+	}
+	writeJSON(w, http.StatusOK, d)
+}
+
+type installRequest struct {
+	URL                    string                     `json:"url"`
+	Kind                   string                     `json:"kind"`
+	LAN                    bool                       `json:"lan"`
+	Manifest               json.RawMessage            `json:"manifest,omitempty"`
+	Files                  map[string]json.RawMessage `json:"files,omitempty"`
+	Grants                 Grants                     `json:"grants"`
+	Settings               map[string]any             `json:"settings,omitempty"`
+	AutoUpdate             bool                       `json:"autoUpdate"`
+	Shadow                 bool                       `json:"shadow"`
+	AcceptAddedPermissions bool                       `json:"acceptAddedPermissions"`
+}
+
+func (req installRequest) source() Source {
+	src := Source{Kind: req.Kind, URL: req.URL, LAN: req.LAN}
+	if len(req.Manifest) > 0 {
+		src.Kind = "studio"
+		src.Manifest = req.Manifest
+		src.Files = map[string][]byte{}
+		for k, v := range req.Files {
+			var s string
+			if json.Unmarshal(v, &s) == nil {
+				src.Files[k] = []byte(s)
+			} else {
+				src.Files[k] = v
+			}
+		}
+	}
+	return src
+}
+
+func (m *Manager) handlePreview(w http.ResponseWriter, r *http.Request) {
+	var req installRequest
+	// An uploaded .etherpkg arrives as the raw body.
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/octet-stream") ||
+		strings.HasPrefix(r.Header.Get("Content-Type"), "application/zip") {
+		b, err := io.ReadAll(io.LimitReader(r.Body, 64<<20))
+		if err != nil {
+			m.fail(w, err)
+			return
+		}
+		p, err := m.PreviewInstall(r.Context(), Source{Kind: "pkg", Pkg: b})
+		if err != nil {
+			m.fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, p)
+		return
+	}
+	if err := decode(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid", "The request was not understood.", nil)
+		return
+	}
+	p, err := m.PreviewInstall(r.Context(), req.source())
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, p)
+}
+
+func (m *Manager) handleInstall(w http.ResponseWriter, r *http.Request) {
+	var src Source
+	var opts InstallOptions
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/octet-stream") ||
+		strings.HasPrefix(r.Header.Get("Content-Type"), "application/zip") {
+		b, err := io.ReadAll(io.LimitReader(r.Body, 64<<20))
+		if err != nil {
+			m.fail(w, err)
+			return
+		}
+		src = Source{Kind: "pkg", Pkg: b}
+	} else {
+		var req installRequest
+		if err := decode(r, &req); err != nil {
+			writeErr(w, http.StatusBadRequest, "invalid", "The request was not understood.", nil)
+			return
+		}
+		src = req.source()
+		opts = InstallOptions{Grants: req.Grants, Settings: req.Settings, AutoUpdate: req.AutoUpdate, Shadow: req.Shadow, AcceptAddedPermissions: req.AcceptAddedPermissions}
+	}
+	p, err := m.PreviewInstall(r.Context(), src)
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	rec, err := m.Install(r.Context(), p, opts)
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	h, _ := m.store.health(r.Context(), rec.ID)
+	writeJSON(w, http.StatusCreated, m.summary(rec, h.Status))
+}
+
+func (m *Manager) handleGetSettings(w http.ResponseWriter, r *http.Request) {
+	settings, schema, err := m.GetSettings(r.Context(), r.PathValue("id"))
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	if len(schema) == 0 {
+		schema = json.RawMessage("{}")
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"settings": settings, "schema": schema})
+}
+
+func (m *Manager) handlePutSettings(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Settings map[string]any `json:"settings"`
+	}
+	if err := decode(r, &body); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid", "The request was not understood.", nil)
+		return
+	}
+	fieldErrors, err := m.Configure(r.Context(), r.PathValue("id"), body.Settings)
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	if len(fieldErrors) > 0 {
+		fields := make([]FieldError, 0, len(fieldErrors))
+		for k, v := range fieldErrors {
+			fields = append(fields, FieldError{k, v})
+		}
+		sort.Slice(fields, func(i, j int) bool { return fields[i].Field < fields[j].Field })
+		writeErr(w, http.StatusBadRequest, "validation", "The plugin did not accept these settings.", fields)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "saved"})
+}
+
+func (m *Manager) handleOptions(w http.ResponseWriter, r *http.Request) {
+	body, err := m.Options(r.Context(), r.PathValue("id"), r.PathValue("field"))
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	if len(body) == 0 {
+		body = json.RawMessage("[]")
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"options": body})
+}
+
+func (m *Manager) handleTest(w http.ResponseWriter, r *http.Request) {
+	out, err := m.Test(r.Context(), r.PathValue("id"))
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (m *Manager) handleEnable(w http.ResponseWriter, r *http.Request) {
+	if err := m.SetEnabled(r.Context(), r.PathValue("id"), true); err != nil {
+		m.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "enabled"})
+}
+
+func (m *Manager) handleDisable(w http.ResponseWriter, r *http.Request) {
+	if err := m.SetEnabled(r.Context(), r.PathValue("id"), false); err != nil {
+		m.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "disabled"})
+}
+
+func (m *Manager) handleGrants(w http.ResponseWriter, r *http.Request) {
+	var g Grants
+	if err := decode(r, &g); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid", "The request was not understood.", nil)
+		return
+	}
+	if err := m.SetGrants(r.Context(), r.PathValue("id"), g); err != nil {
+		m.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "saved", "grants": g})
+}
+
+func (m *Manager) handleShadow(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Shadow bool `json:"shadow"`
+	}
+	if err := decode(r, &body); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid", "The request was not understood.", nil)
+		return
+	}
+	if err := m.SetShadow(r.Context(), r.PathValue("id"), body.Shadow); err != nil {
+		m.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"shadow": body.Shadow})
+}
+
+// ShadowReport lists what a shadow-mode plugin would have done.
+func (m *Manager) handleShadowReport(w http.ResponseWriter, r *http.Request) {
+	entries, err := m.Journal(r.Context(), r.PathValue("id"), 200, true)
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"entries": entries, "count": len(entries)})
+}
+
+// Journal returns a plugin's journal (liveOnly: applied and not undone;
+// shadowOnly is handled by the caller through Journal).
+func (m *Manager) Journal(ctx context.Context, id string, limit int, shadowOnly bool) ([]JournalEntry, error) {
+	if _, err := m.store.record(ctx, id); err != nil {
+		return nil, err
+	}
+	entries, err := m.store.journalList(ctx, id, limit, false)
+	if err != nil || !shadowOnly {
+		return entries, err
+	}
+	out := entries[:0:0]
+	for _, e := range entries {
+		if e.Shadow {
+			out = append(out, e)
+		}
+	}
+	return out, nil
+}
+
+func limitOf(r *http.Request, def int) int {
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 1000 {
+			return n
+		}
+	}
+	return def
+}
+
+func (m *Manager) handleJournal(w http.ResponseWriter, r *http.Request) {
+	entries, err := m.Journal(r.Context(), r.PathValue("id"), limitOf(r, 200), r.URL.Query().Get("shadow") == "1")
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	if entries == nil {
+		entries = []JournalEntry{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
+}
+
+func (m *Manager) handleUndo(w http.ResponseWriter, r *http.Request) {
+	n, err := m.UndoAll(r.Context(), r.PathValue("id"))
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"undone": n})
+}
+
+func (m *Manager) handleLogs(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if _, err := m.store.record(r.Context(), id); err != nil {
+		m.fail(w, err)
+		return
+	}
+	lines, err := m.store.logs(r.Context(), id, limitOf(r, LogsCap))
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	if lines == nil {
+		lines = []string{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"lines": lines})
+}
+
+func (m *Manager) handleCalls(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if _, err := m.store.record(r.Context(), id); err != nil {
+		m.fail(w, err)
+		return
+	}
+	calls, err := m.store.calls(r.Context(), id, limitOf(r, CallsCap))
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	if calls == nil {
+		calls = []CallRecord{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"calls": calls})
+}
+
+func (m *Manager) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
+	p, available, err := m.CheckUpdate(r.Context(), r.PathValue("id"))
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"updateAvailable": available, "version": p.Manifest.Version,
+		"addedPermissions": p.AddedPermissions,
+	})
+}
+
+func (m *Manager) handleUpdate(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		AcceptAddedPermissions bool `json:"acceptAddedPermissions"`
+	}
+	_ = decode(r, &body)
+	rec, err := m.ApplyUpdate(r.Context(), r.PathValue("id"), body.AcceptAddedPermissions)
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	h, _ := m.store.health(r.Context(), rec.ID)
+	writeJSON(w, http.StatusOK, m.summary(rec, h.Status))
+}
+
+func (m *Manager) handleRollback(w http.ResponseWriter, r *http.Request) {
+	rec, err := m.Rollback(r.Context(), r.PathValue("id"))
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	h, _ := m.store.health(r.Context(), rec.ID)
+	writeJSON(w, http.StatusOK, m.summary(rec, h.Status))
+}
+
+func (m *Manager) handleRemove(w http.ResponseWriter, r *http.Request) {
+	undo := r.URL.Query().Get("undo") == "1"
+	if err := m.Remove(r.Context(), r.PathValue("id"), undo); err != nil {
+		m.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "removed"})
+}
+
+// handleView relays a plugin page request (SPEC §5.6): WS9j and WS10
+// render the {spec,data} the plugin returns.
+func (m *Manager) handleView(w http.ResponseWriter, r *http.Request) {
+	id, page := r.PathValue("id"), r.PathValue("page")
+	rec, err := m.store.record(r.Context(), id)
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	route := ""
+	if rec.Manifest.Ether != nil {
+		for _, p := range rec.Manifest.Ether.Contributes.Pages {
+			if p.Key == page {
+				route = p.Route
+			}
+		}
+	}
+	if route == "" {
+		writeErr(w, http.StatusNotFound, "not_found", "That page does not exist.", nil)
+		return
+	}
+	query := map[string]string{}
+	for k := range r.URL.Query() {
+		query[k] = r.URL.Query().Get(k)
+	}
+	resp, err := m.Call(r.Context(), id, Request{Method: "GET", Path: route, Query: query, Locale: query["locale"]})
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_, _ = w.Write(resp.Body)
+}
+
+func (m *Manager) handleAction(w http.ResponseWriter, r *http.Request) {
+	id, action := r.PathValue("id"), r.PathValue("action")
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	resp, err := m.Call(r.Context(), id, Request{Method: "POST", Path: "/ether/action/" + action, Body: body})
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_, _ = w.Write(resp.Body)
+}

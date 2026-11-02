@@ -15,6 +15,8 @@ import { useEffect, useState } from "react";
 import { Field, SecretInput, Segmented } from "../../components/fields";
 import { localized, t } from "../../i18n";
 import { errorMessage } from "../../lib/api";
+import { isPluginDescriptor, textOf, useRegistry, type Descriptor } from "../../lib/extend";
+import type { ParamField } from "../../lib/rules";
 import { formatNumber, relativeTime } from "../../lib/format";
 import {
   dayClock,
@@ -28,6 +30,28 @@ import {
 } from "./model";
 
 export type SourceKind = "playlist" | "guide";
+
+/** Mirrors internal/extend.LiveTVSourceMeta. */
+interface LiveTVSourceMeta {
+  params?: ParamField[];
+  editor?: string;
+  yieldsChannels?: boolean;
+  yieldsGuide?: boolean;
+  test?: boolean;
+}
+
+type LiveTVDescriptor = Descriptor<LiveTVSourceMeta>;
+
+function kindIcon(d: LiveTVDescriptor | undefined, size = 13) {
+  switch (d?.icon) {
+    case "calendar-range":
+      return <CalendarRange size={size} />;
+    case "key-round":
+      return <KeyRound size={size} />;
+    default:
+      return <ListVideo size={size} />;
+  }
+}
 
 const playlistCap = 64 * 1024 * 1024;
 const guideCap = 2 * 1024 * 1024 * 1024;
@@ -61,6 +85,21 @@ export function SourceEditor({
     playlist: null,
     guide: null,
   });
+  // Source kinds come from the descriptor registry; the editor families
+  // (playlist, guide, xtream) are named by each kind's meta.editor.
+  const registry = useRegistry<LiveTVSourceMeta>("liveTVSource");
+  const kindDescriptors: LiveTVDescriptor[] = registry.descriptors;
+  const byEditor = (editor: string) => kindDescriptors.find((d) => d.meta?.editor === editor);
+  const typeDescriptors = kindDescriptors.filter(
+    (d) => d.meta?.editor === "playlist" || d.meta?.editor === "guide",
+  );
+  const pluginKinds = kindDescriptors.filter(
+    (d) =>
+      isPluginDescriptor(d) &&
+      d.meta?.editor !== "playlist" &&
+      d.meta?.editor !== "guide" &&
+      d.meta?.editor !== "xtream",
+  );
   useEffect(() => {
     setDraft(
       source
@@ -206,9 +245,10 @@ export function SourceEditor({
             {source ? source.name : kind === "guide" ? t("New guide source") : t("New IPTV source")}
           </h2>
           <p className="text-sm text-fg-muted">
-            {kind === "guide"
-              ? t("An XMLTV guide on its own. Map any channel to it for listings.")
-              : t("An M3U playlist of live streams, with an optional XMLTV guide.")}
+            {textOf(byEditor(kind === "guide" ? "guide" : "playlist")?.hint) ||
+              (kind === "guide"
+                ? t("An XMLTV guide on its own. Map any channel to it for listings.")
+                : t("An M3U playlist of live streams, with an optional XMLTV guide."))}
           </p>
         </div>
         {source ? (
@@ -283,19 +323,37 @@ export function SourceEditor({
 
       <section className="space-y-4 rounded-2xl border border-border bg-surface p-5">
         {!source ? (
-          <Segmented
-            ariaLabel={t("Source type")}
-            value={kind}
-            onChange={setKind}
-            options={[
-              { value: "playlist", label: t("M3U playlist"), icon: <ListVideo size={13} /> },
-              {
-                value: "guide",
-                label: t("Guide only (XMLTV)"),
-                icon: <CalendarRange size={13} />,
-              },
-            ]}
-          />
+          <div className="space-y-2">
+            <Segmented
+              ariaLabel={t("Source type")}
+              value={kind}
+              onChange={setKind}
+              options={typeDescriptors.map((d) => ({
+                value: (d.meta?.editor === "guide" ? "guide" : "playlist") as SourceKind,
+                label: textOf(d.label),
+                icon: kindIcon(d),
+              }))}
+            />
+            {registry.error ? (
+              <p role="alert" className="text-sm text-danger">
+                {t("Source kinds could not be loaded.")}{" "}
+                <Button type="button" variant="ghost" size="sm" onClick={registry.reload}>
+                  {t("Try again")}
+                </Button>
+              </p>
+            ) : registry.loading ? (
+              <p className="text-sm text-fg-muted">{t("Loading source kinds…")}</p>
+            ) : null}
+            {pluginKinds.length ? (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {pluginKinds.map((d) => (
+                  <Badge key={d.id} variant="secondary">
+                    {t("{label} (from {owner})", { label: textOf(d.label), owner: d.owner })}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
+          </div>
         ) : null}
         <Field label={t("Source name")} htmlFor="src-name">
           <Input
@@ -324,7 +382,11 @@ export function SourceEditor({
               }
               options={[
                 { value: "url", label: t("Playlist URL or file"), icon: <Link2 size={13} /> },
-                { value: "xtream", label: t("Xtream Codes login"), icon: <KeyRound size={13} /> },
+                {
+                  value: "xtream",
+                  label: textOf(byEditor("xtream")?.label) || t("Xtream Codes login"),
+                  icon: <KeyRound size={13} />,
+                },
               ]}
             />
           </Field>

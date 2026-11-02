@@ -1399,7 +1399,7 @@ export function createFakeServer(opts: FakeOptions = {}) {
       },
       {
         hubId: "new-releases",
-        title: "New Releases",
+        title: "New & Noteworthy",
         kind: "new-releases",
         description: "The newest released titles in the catalogue.",
       },

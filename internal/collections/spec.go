@@ -27,11 +27,6 @@ const (
 )
 
 var (
-	sourceKinds = map[string]bool{
-		"catalog": true, "tmdbList": true, "tmdbCollection": true, "tmdbDiscover": true,
-		"tmdbKeyword": true, "tmdbCompany": true, "tmdbNetwork": true, "tmdbPerson": true,
-		"watchProvider": true, "traktList": true, "letterboxdList": true, "mdblist": true, "anilistList": true, "stevenlu": true, "titles": true,
-	}
 	tmdbLists = map[string]bool{
 		"trending_day": true, "trending_week": true, "popular": true, "top_rated": true,
 		"now_playing": true, "upcoming": true, "airing_today": true, "on_the_air": true,
@@ -167,7 +162,9 @@ func Normalize(s *core.CollectionSpec) {
 }
 
 // Validate checks a normalized spec. It returns a *ValidationError.
-func Validate(s *core.CollectionSpec) error {
+func Validate(s *core.CollectionSpec) error { return validateWith(defaultKinds, s) }
+
+func validateWith(reg *KindRegistry, s *core.CollectionSpec) error {
 	ve := &ValidationError{}
 	switch s.ReleaseMode {
 	case "", "released":
@@ -213,7 +210,7 @@ func Validate(s *core.CollectionSpec) error {
 		ve.add("sources", "at most 25 sources")
 	}
 	for i, src := range s.Sources {
-		validateSource(ve, fmt.Sprintf("sources[%d]", i), src)
+		validateSourceIn(reg, ve, fmt.Sprintf("sources[%d]", i), src)
 	}
 	if s.Match != MatchAll && s.Match != MatchAny {
 		ve.add("match", `must be "all" or "any"`)
@@ -303,76 +300,16 @@ var tmdbPathRe = regexp.MustCompile(`^/[A-Za-z0-9_\-]{1,128}\.(jpg|jpeg|png|webp
 func ValidTMDBImagePath(p string) bool { return tmdbPathRe.MatchString(p) }
 
 func validateSource(ve *ValidationError, path string, src core.CollectionSource) {
-	if !sourceKinds[src.Kind] {
+	validateSourceIn(defaultKinds, ve, path, src)
+}
+
+func validateSourceIn(reg *KindRegistry, ve *ValidationError, path string, src core.CollectionSource) {
+	k, ok := reg.Lookup(src.Kind)
+	if !ok {
 		ve.add(path+".kind", "unknown source "+strconv.Quote(src.Kind))
 		return
 	}
-	switch src.Kind {
-	case "tmdbList":
-		if !tmdbLists[src.List] {
-			ve.add(path+".list", "unknown TMDB list "+strconv.Quote(src.List))
-		}
-		if src.MediaType != "" && src.MediaType != MediaMovie && src.MediaType != MediaShow {
-			ve.add(path+".mediaType", `must be "movie" or "show"`)
-		}
-	case "tmdbCollection", "tmdbKeyword", "tmdbCompany", "tmdbNetwork", "tmdbPerson":
-		if src.ID <= 0 && src.Label == "" {
-			ve.add(path+".id", "choose a TMDB entry (an id or a name to look up)")
-		}
-		if src.Kind == "tmdbPerson" && !personRoles[src.Role] {
-			ve.add(path+".role", "role is cast, director, writer or crew")
-		}
-	case "watchProvider":
-		if src.ID <= 0 && src.Label == "" {
-			ve.add(path+".id", "choose a streaming service")
-		}
-		if src.Region != "" && !regionRe.MatchString(src.Region) {
-			ve.add(path+".region", "use a two-letter country code such as US or GB")
-		}
-	case "tmdbDiscover":
-		if len(src.Params) == 0 {
-			ve.add(path+".params", "add at least one discover parameter")
-		}
-		for k := range src.Params {
-			if !discoverParamRe.MatchString(k) {
-				ve.add(path+".params", "unsupported discover parameter "+strconv.Quote(k))
-			}
-		}
-	case "traktList":
-		if _, err := parseTraktURL(src.URL); err != nil {
-			ve.add(path+".url", err.Error())
-		}
-	case "letterboxdList":
-		if _, err := parseLetterboxdURL(src.URL); err != nil {
-			ve.add(path+".url", err.Error())
-		}
-	case "mdblist":
-		if _, err := parseMDBListURL(src.URL); err != nil {
-			ve.add(path+".url", err.Error())
-		}
-	case "anilistList":
-		if _, _, err := parseAniListURL(src.URL); err != nil {
-			ve.add(path+".url", err.Error())
-		}
-	case "stevenlu":
-		if _, err := stevenLuList(src.List); err != nil {
-			ve.add(path+".list", err.Error())
-		}
-	case "titles":
-		if len(src.Keys) == 0 {
-			ve.add(path+".keys", "pick at least one title")
-		}
-		if len(src.Keys) > maxMembers {
-			ve.add(path+".keys", fmt.Sprintf("at most %d titles", maxMembers))
-		}
-		for _, k := range src.Keys {
-			rk, err := core.ParseRatingKey(k)
-			if err != nil || (rk.Kind() != core.KindMovie && rk.Kind() != core.KindShow) {
-				ve.add(path+".keys", "only movies and shows can be hand-picked ("+k+")")
-				break
-			}
-		}
-	}
+	k.Validate(ve, path, src)
 }
 
 var (

@@ -40,6 +40,9 @@ Installers and the Docker image bundle `ffmpeg` and `ffprobe` from the
 | `github.com/dlclark/regexp2` | Bounded native custom-format expressions, `internal/resolver` | MIT (© Doug Clark) |
 | `github.com/skip2/go-qrcode` | Pure-Go QR code generation for device connection instructions | MIT (© Tom Harwood) |
 | `github.com/go-chi/chi/v5` | HTTP routing (wired by other packages) | MIT |
+| `github.com/tetratelabs/wazero` | Pure-Go WebAssembly runtime for hosted plugins, `internal/plugins/wasm` (pinned to v1.9.0: `fastschema/qjs` v0.0.6 is incompatible with wazero v1.12 function-signature checking) | Apache-2.0 |
+| `github.com/fastschema/qjs` | JavaScript for hosted plugins: QuickJS-NG compiled to WebAssembly (its embedded `qjs.wasm`, ~1 MiB), run on wazero, no cgo, `internal/plugins/wasm` | MIT (© Nguyen Ngoc Phuong and contributors); the embedded QuickJS-NG engine is MIT (© Fabrice Bellard and the QuickJS-NG contributors) |
+| `github.com/evanw/esbuild` | TypeScript-to-JavaScript compilation for hosted plugins (Go API), `internal/plugins/wasm` | MIT (© Evan Wallace) |
 | `github.com/PuerkitoBio/goquery` | HTML/XML selection for built-in indexer definitions, `internal/cardigann` | BSD-3-Clause (© Martin Angers and contributors) |
 | `github.com/andybalholm/cascadia` | CSS selector engine used with goquery, `internal/cardigann` | BSD-2-Clause (© Andy Balholm) |
 | `golang.org/x/net` (`html`) | HTML parsing for built-in indexer definitions, `internal/cardigann` | BSD-3-Clause |

@@ -1,0 +1,34 @@
+data: {"messageId":"msg_42f3a3f507e6adace0cf7c20","type":"start"}
+
+data: {"type":"start-step"}
+
+data: {"id":"txt_1","type":"text-start"}
+
+data: {"delta":"Checking the server. ","id":"txt_1","type":"text-delta"}
+
+data: {"toolCallId":"call_1","toolName":"server_status","type":"tool-input-start"}
+
+data: {"inputTextDelta":"{}","toolCallId":"call_1","type":"tool-input-delta"}
+
+data: {"input":{},"toolCallId":"call_1","toolName":"server_status","type":"tool-input-available"}
+
+data: {"id":"txt_1","type":"text-end"}
+
+data: {"output":{"healthy":true},"toolCallId":"call_1","type":"tool-output-available"}
+
+data: {"type":"finish-step"}
+
+data: {"type":"start-step"}
+
+data: {"id":"txt_2","type":"text-start"}
+
+data: {"delta":"The server is healthy.","id":"txt_2","type":"text-delta"}
+
+data: {"id":"txt_2","type":"text-end"}
+
+data: {"type":"finish-step"}
+
+data: {"finishReason":"stop","type":"finish"}
+
+data: [DONE]
+
