@@ -23,6 +23,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/subtitles"
 	"github.com/braedonsaunders/ether/internal/tmdb"
 	"github.com/braedonsaunders/ether/internal/trakt"
+	"github.com/braedonsaunders/ether/internal/transcode"
 	"github.com/braedonsaunders/ether/internal/usenet"
 )
 
@@ -147,7 +148,11 @@ func (a *App) buildAdmin() http.Handler {
 			if a.transcoder == nil {
 				return map[string]string{"error": "ffmpeg not found"}
 			}
-			hw := map[string]any{"hwaccel": a.transcoder.HWAccel(), "ffmpeg": a.transcoder.Version(), "enhancement": a.transcoder.EnhancementStatus()}
+			accel := a.transcoder.HWAccel()
+			hw := map[string]any{"hwaccel": accel, "ffmpeg": a.transcoder.Version(), "enhancement": a.transcoder.EnhancementStatus()}
+			if vendor := transcode.GPUVendor(accel.Device); vendor != "" {
+				hw["vendor"] = vendor
+			}
 			cap := a.transcoder.Capability()
 			if cap.Notice != "" {
 				hw["notice"] = cap.Notice

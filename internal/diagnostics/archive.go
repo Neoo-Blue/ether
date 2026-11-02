@@ -159,7 +159,13 @@ func buildZip(snap finishSnap, extra []archived, coverage []Gap, uses []secretUs
 	if skipped > 0 {
 		pre = append(pre, Gap{Collector: "events.jsonl", Status: "omitted", Detail: "Some events were omitted because the redaction check did not accept them."})
 	}
-	add("events.jsonl", []byte(eventsBody))
+	if eventsBody == "" && skipped == 0 {
+		// Nothing was recorded (browsing, not playing): say so instead of
+		// reporting a redaction failure.
+		pre = append(pre, Gap{Collector: "events.jsonl", Status: "empty", Detail: "No playback events were recorded during the capture."})
+	} else {
+		add("events.jsonl", []byte(eventsBody))
+	}
 	files = append(files, extra...)
 	base := append(append([]Gap{}, coverage...), pre...)
 	packed, added := sealArchive(files, base, snap, uses)

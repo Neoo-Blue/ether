@@ -3519,6 +3519,7 @@
   "m_15364765e67f5a": "URL des eigenen Bildes",
   "m_153824e8dc2503": "Die Zustellwarteschlange ist voll; einige Abschlüsse wurden nicht eingereiht.",
   "m_153a49b5cbdb2d": "Der importierte Eintrag nutzt die Anmeldung seiner Quelle; hinzugefügte Backups nutzen keine",
+  "m_153a60303fb806": "VA-API",
   "m_153b158679b645": {
     "one": "Der Stream wird beendet. Er kann in etwa einer Minute wieder gestartet werden.",
     "other": "Diese Streams werden beendet. Sie können in etwa einer Minute wieder gestartet werden."
@@ -3719,6 +3720,7 @@
   "m_1667b6eab4ed93": "Benutzt",
   "m_166862fb32e906": "Vorlagenkategorie",
   "m_166a5e9e166c52": "Klicke auf ein Poster, um es für alle festzulegen. Markiere Poster mit den Genres oder Personen, die sie zeigen, damit der Geschmacksabgleich pro Zuschauer eines auswählen kann.",
+  "m_166bac23ab098e": "Intel VA-API",
   "m_166ca4aa4ef047": "Lernt",
   "m_166dbc83ba73fc": "Debrid-Konto hinzufügen",
   "m_16745cd45e3b9e": "Rund um Serien und Staffeln aufgebaut",
@@ -5239,6 +5241,7 @@
   "m_1f7d73ca4b3ad5": "Erlaubte Stunden",
   "m_1f7d90899f2705": "E-Mail (SMTP)",
   "m_1f7da5720f1c4a": "Nach Updates suchen",
+  "m_1f7df306954bfe": "Sortiert nach {sort}",
   "m_1f7e57718515d2": "Fehlend ({count})",
   "m_1f7e78461783a1": "Standard",
   "m_1f832d1c8e2ac4": "Nichts passt",

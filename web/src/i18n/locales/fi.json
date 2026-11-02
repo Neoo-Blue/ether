@@ -3519,6 +3519,7 @@
   "m_15364765e67f5a": "Oman kuvan URL-osoite",
   "m_153824e8dc2503": "Toimitusjono on täynnä, joten kaikkia valmistumisia ei lisätty jonoon.",
   "m_153a49b5cbdb2d": "Tuotu merkintä käyttää lähteensä kirjautumistietoja; lisätyt varalähteet eivät käytä mitään",
+  "m_153a60303fb806": "VA-API",
   "m_153b158679b645": {
     "one": "Toisto pysähtyy. Sen voi aloittaa uudelleen noin minuutin kuluttua.",
     "other": "Nämä toistot pysähtyvät. Ne voi aloittaa uudelleen noin minuutin kuluttua."
@@ -3719,6 +3720,7 @@
   "m_1667b6eab4ed93": "Käytetty",
   "m_166862fb32e906": "Mallin luokka",
   "m_166a5e9e166c52": "Napsauta julistetta kiinnittääksesi sen kaikille. Merkitse julisteisiin niissä esiintyvät lajityypit tai henkilöt, jotta makuun sovittaminen voi valita yhden katselijaa kohti.",
+  "m_166bac23ab098e": "Intel VA-API",
   "m_166ca4aa4ef047": "Oppii",
   "m_166dbc83ba73fc": "Lisää debrid-tili",
   "m_16745cd45e3b9e": "Rakennettu sarjojen ja tuotantokausien ympärille",
@@ -5239,6 +5241,7 @@
   "m_1f7d73ca4b3ad5": "Sallitut tunnit",
   "m_1f7d90899f2705": "Sähköposti (SMTP)",
   "m_1f7da5720f1c4a": "Tarkista päivitykset",
+  "m_1f7df306954bfe": "Lajittelu: {sort}",
   "m_1f7e57718515d2": "Puuttuvat ({count})",
   "m_1f7e78461783a1": "Oletus",
   "m_1f832d1c8e2ac4": "Ei osumia",

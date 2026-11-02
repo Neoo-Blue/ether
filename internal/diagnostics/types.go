@@ -31,8 +31,8 @@ const (
 	deviceRecent    = 30 * time.Minute
 	maxUncompressed = 2 << 20
 	maxZip          = 2 << 20
-	maxLogBytes     = 64 << 10
-	maxLogLines     = 200
+	maxLogBytes     = 1 << 20
+	maxLogLines     = 3000
 	redactMask      = "[redacted]"
 )
 

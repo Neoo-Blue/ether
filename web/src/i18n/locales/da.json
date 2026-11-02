@@ -3519,6 +3519,7 @@
   "m_15364765e67f5a": "Brugerdefineret billed-URL",
   "m_153824e8dc2503": "Leveringskøen er fuld; nogle afslutninger blev ikke sat i kø.",
   "m_153a49b5cbdb2d": "Importeret post bruger sin kildes login; tilføjede backups bruger intet",
+  "m_153a60303fb806": "VA-API",
   "m_153b158679b645": {
     "one": "Streamen stopper. Den kan startes igen om cirka et minut.",
     "other": "Disse streams stopper. De kan startes igen om cirka et minut."
@@ -3719,6 +3720,7 @@
   "m_1667b6eab4ed93": "Brugt",
   "m_166862fb32e906": "Skabelonkategori",
   "m_166a5e9e166c52": "Klik på en plakat for at fastgøre den for alle. Mærk plakater med de genrer eller personer, de viser, så smagsmatchning kan vælge én pr. seer.",
+  "m_166bac23ab098e": "Intel VA-API",
   "m_166ca4aa4ef047": "Lærer",
   "m_166dbc83ba73fc": "Tilføj debrid-konto",
   "m_16745cd45e3b9e": "Bygget op omkring serier og sæsoner",
@@ -5239,6 +5241,7 @@
   "m_1f7d73ca4b3ad5": "Tilladte timer",
   "m_1f7d90899f2705": "E-mail (SMTP)",
   "m_1f7da5720f1c4a": "Søg efter opdateringer",
+  "m_1f7df306954bfe": "Sorteret efter {sort}",
   "m_1f7e57718515d2": "Mangler ({count})",
   "m_1f7e78461783a1": "Standard",
   "m_1f832d1c8e2ac4": "Intet matcher",

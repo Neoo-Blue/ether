@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/releaseparse"
+	"strconv"
 	"strings"
 )
 
@@ -150,6 +151,13 @@ func (s *Service) attachRetained(ctx context.Context, titles map[core.RatingKey]
 		rows.Close()
 	}
 	policy := input.policy
+	type observed struct {
+		r    core.Release
+		t    *core.Title
+		feed core.ReleaseFeed
+		p    pending
+	}
+	var found []observed
 	for _, p := range work {
 		f, ok := feeds[p.source]
 		if !ok || f.Generation != p.gen || !input.usable(f.Protocol) {
@@ -178,8 +186,67 @@ func (s *Service) attachRetained(ctx context.Context, titles map[core.RatingKey]
 			if _, reason, err := s.d.Validator.FeedCandidate(ctx, t, r); err != nil || reason != "" {
 				continue
 			}
-			// Same-generation observations preserve invalidation and their original date.
-			_, _ = s.db.ExecContext(ctx, `INSERT INTO availability_releases(id,rating_key,source_id,generation,payload,title,name,protocol,first_seen,last_seen,priority,policy,policy_digest) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id,rating_key,source_id) DO UPDATE SET generation=excluded.generation,payload=excluded.payload,policy_digest=excluded.policy_digest,first_seen=excluded.first_seen,last_seen=excluded.last_seen,state='observed',verified_at=0,first_verified=0,next_check=0,revision=availability_releases.revision+1 WHERE availability_releases.generation<>excluded.generation`, r.ID, t.Key, f.ID, f.Generation, p.raw, t.Title, r.Name, r.Protocol, p.seen, p.seen, t.Popularity, policy, releasePolicyDigest(r))
+			found = append(found, observed{r: r, t: t, feed: f, p: p})
 		}
 	}
+	if len(found) == 0 {
+		return
+	}
+	// This runs on browse requests (Home rows filter new releases), so it
+	// must not write what is already recorded: an observation of the same
+	// feed generation is a no-op for the upsert below. Reading the stored
+	// generations first keeps a repeat request write-free, and the rest
+	// share one transaction instead of one commit each (#238: 668 no-op
+	// writes made one Home request take 41 s on a NAS hard drive).
+	stored := s.storedGenerations(ctx, titles)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return
+	}
+	defer tx.Rollback()
+	wrote := false
+	for _, o := range found {
+		if gen, ok := stored[observationKey(o.r.ID, o.t.Key, o.feed.ID)]; ok && gen == o.feed.Generation {
+			continue
+		}
+		// Same-generation observations preserve invalidation and their original date.
+		if _, err := tx.ExecContext(ctx, `INSERT INTO availability_releases(id,rating_key,source_id,generation,payload,title,name,protocol,first_seen,last_seen,priority,policy,policy_digest) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id,rating_key,source_id) DO UPDATE SET generation=excluded.generation,payload=excluded.payload,policy_digest=excluded.policy_digest,first_seen=excluded.first_seen,last_seen=excluded.last_seen,state='observed',verified_at=0,first_verified=0,next_check=0,revision=availability_releases.revision+1 WHERE availability_releases.generation<>excluded.generation`, o.r.ID, o.t.Key, o.feed.ID, o.feed.Generation, o.p.raw, o.t.Title, o.r.Name, o.r.Protocol, o.p.seen, o.p.seen, o.t.Popularity, policy, releasePolicyDigest(o.r)); err != nil {
+			return
+		}
+		wrote = true
+	}
+	if wrote {
+		_ = tx.Commit()
+	}
+}
+
+func observationKey(id string, key core.RatingKey, source string) string {
+	return id + "\x00" + strconv.FormatInt(int64(key), 10) + "\x00" + source
+}
+
+// storedGenerations returns the recorded feed generation of every release
+// observation for titles.
+func (s *Service) storedGenerations(ctx context.Context, titles map[core.RatingKey]*core.Title) map[string]string {
+	keys := make([]any, 0, len(titles))
+	for k := range titles {
+		keys = append(keys, int64(k))
+	}
+	out := map[string]string{}
+	for start := 0; start < len(keys); start += 500 {
+		batch := keys[start:min(start+500, len(keys))]
+		marks := strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")
+		rows, err := s.db.QueryContext(ctx, `SELECT id,rating_key,source_id,generation FROM availability_releases WHERE rating_key IN (`+marks+`)`, batch...)
+		if err != nil {
+			return out
+		}
+		for rows.Next() {
+			var id, source, gen string
+			var key int64
+			if rows.Scan(&id, &key, &source, &gen) == nil {
+				out[observationKey(id, core.RatingKey(key), source)] = gen
+			}
+		}
+		rows.Close()
+	}
+	return out
 }

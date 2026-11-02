@@ -3623,6 +3623,7 @@
   "m_15364765e67f5a": "URL de imagen personalizada",
   "m_153824e8dc2503": "La cola de envío está llena; algunas reproducciones completadas no se pusieron en cola.",
   "m_153a49b5cbdb2d": "La entrada importada usa el inicio de sesión de su fuente; las copias de respaldo añadidas no usan ninguno",
+  "m_153a60303fb806": "VA-API",
   "m_153b158679b645": {
     "many": "Estos streams se detienen. Podrán volver a iniciarse en un minuto aproximadamente.",
     "one": "El stream se detiene. Podrá volver a iniciarse en un minuto aproximadamente.",
@@ -3829,6 +3830,7 @@
   "m_1667b6eab4ed93": "Usado",
   "m_166862fb32e906": "Categoría de plantilla",
   "m_166a5e9e166c52": "Haz clic en un póster para fijarlo para todos. Etiqueta los pósters con los géneros o las personas que aparecen para que la afinidad de gustos pueda elegir uno por espectador.",
+  "m_166bac23ab098e": "Intel VA-API",
   "m_166ca4aa4ef047": "Aprendiendo",
   "m_166dbc83ba73fc": "Añadir cuenta debrid",
   "m_16745cd45e3b9e": "Basadas en series y temporadas",
@@ -5388,6 +5390,7 @@
   "m_1f7d73ca4b3ad5": "Horas permitidas",
   "m_1f7d90899f2705": "Correo electrónico (SMTP)",
   "m_1f7da5720f1c4a": "Buscar actualizaciones",
+  "m_1f7df306954bfe": "Ordenado por {sort}",
   "m_1f7e57718515d2": "Faltan ({count})",
   "m_1f7e78461783a1": "Predeterminado",
   "m_1f832d1c8e2ac4": "Nada coincide",

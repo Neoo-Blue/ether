@@ -494,8 +494,13 @@ func sortCands(cs []*cand, mode string, desc bool, seed uint64) {
 			return a.e.pop < b.e.pop, a.e.pop == b.e.pop
 		}
 	}
-	if mode == "personal" {
+	switch mode {
+	case "personal":
 		desc = true
+	case "source":
+		// The list's own order has no direction. The editor hides the
+		// switch, so a spec may carry the default "descending" (#264).
+		desc = false
 	}
 	sort.SliceStable(cs, func(i, j int) bool {
 		if mode == "latestEpisode" || mode == "latestSeasonPremiere" {

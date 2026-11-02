@@ -140,7 +140,7 @@ func openPayloadStore(ctx context.Context, db *sql.DB, dir string) (*payloadStor
 		return nil, err
 	}
 	if !reliable {
-		return nil, errPayloadFilesystem
+		return nil, payloadFilesystemError(dir)
 	}
 	locks := filepath.Join(dir, ".owners")
 	if err := os.MkdirAll(locks, 0700); err != nil {
@@ -427,7 +427,7 @@ func (p *payloadStore) releaseOwnedLater(ctx context.Context, o payloadOwner, de
 		return p.releaseOwned(ctx, o, forSource, onGone)
 	}
 	if err := p.releaseOwned(ctx, o, forSource, onGone); err != nil {
-		_ = p.release(context.Background(), hold)
+		p.releaseOrQueue(hold)
 		return err
 	}
 	park := &payloadPark{owner: hold}
@@ -446,10 +446,19 @@ func (p *payloadStore) releaseOwnedLater(ctx context.Context, o payloadOwner, de
 		}
 		delete(p.parks, hold.state.id)
 		p.mu.Unlock()
-		_ = p.release(context.Background(), hold)
+		p.releaseOrQueue(hold)
 	})
 	p.mu.Unlock()
 	return nil
+}
+
+// releaseOrQueue drops a grace hold. A failed release (a database timeout
+// under load) goes to the retry queue: dropped, it would leave the payload
+// retiring and refuse every later open of that release until restart (#262).
+func (p *payloadStore) releaseOrQueue(hold payloadOwner) {
+	if err := p.release(context.Background(), hold); err != nil {
+		p.queueRelease(hold)
+	}
 }
 func dropPayloadOwner(ctx context.Context, db *sql.DB, tx *sql.Tx, o payloadOwner) (string, error) {
 	if err := capability.LockHeaderScopeInTx(ctx, db, tx, o.header.HeaderScope); err != nil {
@@ -852,7 +861,7 @@ func (p *payloadStore) verifyProof(f *os.File, incarnation string) error {
 		return err
 	}
 	if !reliable {
-		return errPayloadFilesystem
+		return payloadFilesystemError(p.dir)
 	}
 	if f == nil {
 		return core.ErrNotAvailable
@@ -909,7 +918,7 @@ func (p *payloadStore) reconcileSlots(ctx context.Context) error {
 		return err
 	}
 	if !reliable {
-		return errPayloadFilesystem
+		return payloadFilesystemError(p.dir)
 	}
 	p.mu.Lock()
 	first := p.cursor

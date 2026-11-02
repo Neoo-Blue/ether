@@ -3,6 +3,7 @@ package diagnostics
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -165,16 +166,28 @@ func parseKV(line string) map[string]string {
 }
 
 type exportLog struct {
-	At       time.Time `json:"at"`
-	Level    string    `json:"level,omitempty"`
-	Device   string    `json:"device,omitempty"`
-	Session  string    `json:"session,omitempty"`
-	Attempt  string    `json:"attempt,omitempty"`
-	Status   string    `json:"status,omitempty"`
-	Kind     string    `json:"kind,omitempty"`
-	Username string    `json:"username,omitempty"`
-	Peer     string    `json:"peer,omitempty"`
-	Title    string    `json:"title,omitempty"`
+	At      time.Time `json:"at"`
+	Level   string    `json:"level,omitempty"`
+	Device  string    `json:"device,omitempty"`
+	Session string    `json:"session,omitempty"`
+	Attempt string    `json:"attempt,omitempty"`
+	Status  string    `json:"status,omitempty"`
+	Kind    string    `json:"kind,omitempty"`
+	// Method, Route and Dur describe a request line: which endpoint the
+	// device asked for and how long it took, with identifying segments masked.
+	// Msg is the log line's message, a fixed string in Ether's code. Err
+	// is its error or reason, secrets and URL queries removed; it often
+	// names a release, so it is kept only when titles are included.
+	Msg       string `json:"msg,omitempty"`
+	Err       string `json:"err,omitempty"`
+	Method    string `json:"method,omitempty"`
+	Route     string `json:"route,omitempty"`
+	Dur       string `json:"dur,omitempty"`
+	PageStart string `json:"pageStart,omitempty"`
+	PageSize  string `json:"pageSize,omitempty"`
+	Username  string `json:"username,omitempty"`
+	Peer      string `json:"peer,omitempty"`
+	Title     string `json:"title,omitempty"`
 }
 
 type logIdentity struct {
@@ -189,7 +202,7 @@ func projectLogs(records []LogRecord, q LogQuery, flags [3]bool, uses []secretUs
 	gaps = append(gaps, Gap{
 		Collector: "logs",
 		Status:    "omitted",
-		Detail:    "Free-text log messages, paths, and unrecognized fields were omitted. Usernames, addresses, and titles are included only when the summary lists them.",
+		Detail:    "Debug lines are included. Free-text log messages are kept only as fixed phrases; file paths and unrecognized fields were omitted. Request routes are kept with identifying parts masked, and error text only when titles are included. Usernames, addresses, and titles are included only when the summary lists them.",
 	})
 	limit := q.MaxLines
 	if limit <= 0 || limit > maxLogLines {
@@ -217,6 +230,19 @@ func projectLogs(records []LogRecord, q LogQuery, flags [3]bool, uses []secretUs
 		}
 		row.Status = boundToken(attrFold(rec.Attrs, "status"))
 		row.Kind = boundToken(attrFold(rec.Attrs, "kind"))
+		row.Msg = plainMessage(redactString(rec.Message, uses))
+		if flags[0] {
+			if e := firstPresent(rec.Attrs, "err", "error", "reason"); e != "" {
+				row.Err = boundText(stripURLQueries(redactString(e, uses)), 400)
+			}
+		}
+		if rec.Message == "request" || rec.Message == "hls request" {
+			row.Method = boundToken(attrFold(rec.Attrs, "method"))
+			row.Route = requestRoute(attrFold(rec.Attrs, "path"))
+			row.Dur = boundToken(attrFold(rec.Attrs, "dur"))
+			row.PageStart = digitsOnly(attrFold(rec.Attrs, "pageStart"))
+			row.PageSize = digitsOnly(attrFold(rec.Attrs, "pageSize"))
+		}
 		if flags[1] {
 			if u := firstPresent(rec.Attrs, "user", "username"); u != "" {
 				u = redactString(u, uses)
@@ -255,6 +281,81 @@ func projectLogs(records []LogRecord, q LogQuery, flags [3]bool, uses []secretUs
 		gaps = append(gaps, Gap{Collector: "logs", Status: "truncated", Detail: "The log extract was shortened to the line limit. No line was cut in the middle."})
 	}
 	return []byte(b.String()), ident, truncated, gaps
+}
+
+// plainMessage keeps a log message that reads as a fixed phrase: no paths,
+// addresses, key=value pairs or long runs.
+func plainMessage(m string) string {
+	if m == "" || len(m) > 120 || strings.ContainsAny(m, "/\\@=?&\n") {
+		return ""
+	}
+	return m
+}
+
+var urlQuery = regexp.MustCompile(`(https?://[^\s"'?#]+)[?#][^\s"']*`)
+
+// stripURLQueries drops query strings and fragments from URLs, where
+// addon and debrid links carry their keys.
+func stripURLQueries(s string) string { return urlQuery.ReplaceAllString(s, "$1") }
+
+func boundText(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
+}
+
+// requestRoute keeps the shape of an HTTP request path, such as
+// /hubs/promoted or /library/metadata/123/children. A segment is kept only
+// when each of its dot, colon, dash or underscore separated parts is a
+// plain word or all digits; anything else (GUIDs, tokens, encoded addon
+// configuration, file names) becomes "*".
+func requestRoute(p string) string {
+	if !strings.HasPrefix(p, "/") || len(p) > 512 {
+		return ""
+	}
+	segs := strings.Split(p[1:], "/")
+	for i, seg := range segs {
+		if !plainSegment(seg) {
+			segs[i] = "*"
+		}
+	}
+	return "/" + strings.Join(segs, "/")
+}
+
+func plainSegment(seg string) bool {
+	if seg == "" || len(seg) > 64 {
+		return seg == ""
+	}
+	for _, part := range strings.FieldsFunc(seg, func(r rune) bool { return r == '.' || r == ':' || r == '-' || r == '_' }) {
+		letters, upper, digits := 0, 0, 0
+		for _, r := range part {
+			switch {
+			case r >= 'a' && r <= 'z':
+				letters++
+			case r >= 'A' && r <= 'Z':
+				letters++
+				upper++
+			case r >= '0' && r <= '9':
+				digits++
+			default:
+				return false
+			}
+		}
+		// Words and camelCase names pass; encoded blobs (many capitals,
+		// long runs) and mixed letter-digit ids do not.
+		if letters > 0 && (digits > 0 || upper > 3 || letters > 32) {
+			return false
+		}
+	}
+	return true
+}
+
+func digitsOnly(s string) string {
+	if s == "" || len(s) > 12 || strings.Trim(s, "0123456789") != "" {
+		return ""
+	}
+	return s
 }
 
 func boundToken(s string) string {
