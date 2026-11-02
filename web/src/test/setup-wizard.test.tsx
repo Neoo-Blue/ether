@@ -993,7 +993,7 @@ describe("setup wizard", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Playback quality: 1080p at home · change" }),
     );
-    expect(await screen.findByRole("heading", { name: "Releases" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Quality" })).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Overview" }).length).toBeGreaterThan(0);
   });
 

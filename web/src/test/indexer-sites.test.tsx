@@ -243,7 +243,9 @@ describe("Sources › Indexers sites", () => {
     expect(screen.queryByText(/ships none/)).toBeNull();
     expect(screen.queryByText(/ships no/)).toBeNull();
     expect(
-      await screen.findByText("Add a definitions source to search tracker sites"),
+      await screen.findByText(
+        "Add a definitions source under More options to search tracker sites",
+      ),
     ).toBeInTheDocument();
   });
 });
@@ -251,7 +253,11 @@ describe("Sources › Indexers sites", () => {
 describe("Sources › Indexers definitions", () => {
   it("edits the definitions source and FlareSolverr in place", async () => {
     const { fake } = renderApp("/sources/indexers");
-    const flare = await screen.findByLabelText("FlareSolverr", {}, WAIT);
+    expect(screen.queryByLabelText("FlareSolverr")).toBeNull();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "More options: Site definitions" }, WAIT),
+    );
+    const flare = screen.getByLabelText("FlareSolverr");
     expect(screen.queryByRole("button", { name: /Save changes/ })).toBeNull();
     fireEvent.change(flare, { target: { value: "http://localhost:8191" } });
     fireEvent.change(screen.getByLabelText("Definitions source"), {

@@ -171,7 +171,7 @@ export function CatalogSettings() {
                 />
               ) : null}
               {groups.map((g, i) => (
-                <SettingsSection key={g.title ?? i} title={g.title}>
+                <SettingsSection key={g.id ?? i} title={g.title}>
                   {g.id === "browsable" ? (
                     <ObscureTitles draft={draft} onChange={setDraft} />
                   ) : null}
