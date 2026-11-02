@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
@@ -162,8 +163,8 @@ func (e *Engine) LoadWASM(id, version string, module []byte, host Host, lim Limi
 		return nil, err
 	}
 	p := &Plugin{id: id, version: version, eng: e, host: host, lim: lim, memo: newMemo(4096)}
-	makeSvc := func() (instance, error) { return newRawInstance(rr, cm, false) }
-	makeHot := func() (instance, error) { return newRawInstance(rr, cm, true) }
+	makeSvc := func(ctx context.Context) (instance, error) { return newRawInstance(ctx, rr, cm, false, lim.Deadline) }
+	makeHot := func(ctx context.Context) (instance, error) { return newRawInstance(ctx, rr, cm, true, lim.Deadline) }
 	p.svc = newPool(lim.PoolSize, makeSvc)
 	p.hot = newPool(lim.PoolSize, makeHot)
 	probe, err := p.svc.get(context.Background())
@@ -201,8 +202,10 @@ type rawInstance struct {
 	hot               bool
 }
 
-func newRawInstance(rr *rawRuntime, cm wazero.CompiledModule, hot bool) (*rawInstance, error) {
-	mod, err := rr.rt.InstantiateModule(context.Background(), cm,
+func newRawInstance(ctx context.Context, rr *rawRuntime, cm wazero.CompiledModule, hot bool, deadline time.Duration) (*rawInstance, error) {
+	ctx, cancel := context.WithTimeout(ctx, deadline)
+	defer cancel()
+	mod, err := rr.rt.InstantiateModule(ctx, cm,
 		wazero.NewModuleConfig().WithName(""))
 	if err != nil {
 		return nil, &Error{Status: StatusError, Message: "instantiate module: " + err.Error(), Trap: true}

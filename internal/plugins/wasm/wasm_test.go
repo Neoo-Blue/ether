@@ -570,3 +570,11 @@ func TestCondBatchExecutesRepeatedFactsWithoutMemo(t *testing.T) {
 		t.Fatalf("results=%v outcome=%+v err=%v", got, out, err)
 	}
 }
+
+func TestJSInitializationRespectsDeadline(t *testing.T) {
+	e := testEngine(t)
+	_, err := e.LoadJS("test.loop", "1", `while (true) {}`, nil, Limits{Deadline: 100 * time.Millisecond})
+	if err == nil {
+		t.Fatal("unbounded initialization accepted")
+	}
+}

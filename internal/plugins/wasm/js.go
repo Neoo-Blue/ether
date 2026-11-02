@@ -180,13 +180,17 @@ type jsInstance struct {
 	cs           *callState // set for the duration of one call
 }
 
-func newJSInstance(source string, lim *Limits, hot bool) (in *jsInstance, err error) {
+func newJSInstance(ctx context.Context, source string, lim *Limits, hot bool) (in *jsInstance, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			in, err = nil, &Error{Status: StatusError, Message: fmt.Sprintf("create JS instance: %v", r), Trap: true}
 		}
 	}()
 	swap := newSwapCtx()
+	initCtx, cancel := context.WithTimeout(ctx, lim.Deadline)
+	defer cancel()
+	swap.set(initCtx)
+	defer swap.reset()
 	rt, err2 := qjs.New(qjs.Option{Context: swap, CloseOnContextDone: true,
 		MemoryLimit: int(lim.MemoryBytes), MaxStackSize: 1 << 20,
 		Stdout: io.Discard, Stderr: io.Discard})
@@ -390,8 +394,8 @@ func (in *jsInstance) condOne(ctx context.Context, cs *callState, cand []byte, o
 func (e *Engine) LoadJS(id, version, source string, host Host, lim Limits) (*Plugin, error) {
 	lim.normalize()
 	p := &Plugin{id: id, version: version, eng: e, host: host, lim: lim, memo: newMemo(4096), source: source}
-	makeSvc := func() (instance, error) {
-		in, err := newJSInstance(source, &p.lim, false)
+	makeSvc := func(ctx context.Context) (instance, error) {
+		in, err := newJSInstance(ctx, source, &p.lim, false)
 		if err != nil {
 			return nil, err
 		}
@@ -401,7 +405,7 @@ func (e *Engine) LoadJS(id, version, source string, host Host, lim Limits) (*Plu
 		}
 		return in, nil
 	}
-	makeHot := func() (instance, error) { return newJSInstance(source, &p.lim, true) }
+	makeHot := func(ctx context.Context) (instance, error) { return newJSInstance(ctx, source, &p.lim, true) }
 	p.svc = newPool(lim.PoolSize, makeSvc)
 	p.hot = newPool(lim.PoolSize, makeHot)
 	probe, err := p.svc.get(context.Background())
