@@ -40,6 +40,9 @@ import type {
   LLMModel,
   LLMProvider,
   LogEntry,
+  QualityAnswer,
+  QualityClient,
+  QualityQuestion,
   SiteDefinition,
   SiteTestResult,
   SiteTestStatus,
@@ -300,6 +303,12 @@ export const api = {
     (await put<{ config: EtherConfig }>("/config", config)).config,
   putSection: (section: string, value: unknown) =>
     put<{ section: string; value: unknown }>(`/config/${section}`, value),
+
+  // ---- Quality: who gets what -------------------------------------------------
+  qualityClients: async () =>
+    (await apiFetch<{ clients: QualityClient[] }>("/quality/clients")).clients,
+  explainQuality: (question: QualityQuestion, signal?: AbortSignal) =>
+    post<QualityAnswer>("/quality/explain", question, signal),
 
   // ---- Integration tests ----------------------------------------------------
   testUsenet: (p: UsenetProvider) => post<TestResult>("/test/usenet", p),
