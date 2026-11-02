@@ -174,12 +174,12 @@ test("plugin router dispatches all standard and capability endpoints", async () 
             ],
           };
         },
-        subtitles({ id, pickToken }) {
+        subtitles({ id }) {
           return {
             subtitles: [
               {
                 id: `${id}:en`,
-                url: `https://subs.example.invalid/${id}.vtt?pick=${encodeURIComponent(pickToken)}`,
+                url: `https://subs.example.invalid/${id}.vtt`,
                 lang: "en",
               },
             ],
@@ -288,13 +288,9 @@ test("plugin router dispatches all standard and capability endpoints", async () 
   assert.equal(streamRes.status, 200);
   assert.equal(streamRes.body.streams.length, 1);
 
-  // Subtitles without X-Ether-Pick must fail with 403 pick_required
-  const subDenied = await harness.subtitles("movie", "tt0133093");
-  assert.equal(subDenied.status, 403);
-  assert.equal(
-    (subDenied.body as unknown as { error: { code: string } }).error.code,
-    "pick_required",
-  );
+  // Listing does not download and does not require a pick.
+  const subListing = await harness.subtitles("movie", "tt0133093");
+  assert.equal(subListing.status, 200);
 
   // Subtitles with X-Ether-Pick succeeds
   const pick = fixtures.pickToken("tt0133093");
@@ -606,4 +602,21 @@ test("the exported ether client selects HTTP in a sidecar", async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("subtitle listing is separate from viewer-picked downloads", async () => {
+  const instance = plugin({
+    manifest: { id: "org.example.subtitles", version: "1.0.0", name: "Subtitles", ether: { protocol: 1, kind: "integration", capabilities: ["subtitles"] } } as any,
+    routes: {
+      subtitles: () => ({ subtitles: [] }),
+      subtitlesDownload: ({ id }) => ({ format: "srt", encoding: "utf8", data: id }),
+    },
+  });
+  const list = await instance.handle({ method: "GET", path: "/subtitles/movie/tt1.json" });
+  assert.equal(list.status, 200);
+  const denied = await instance.handle({ method: "POST", path: "/ether/subtitles/download", body: { id: "a", lang: "en", format: "srt" } });
+  assert.equal(denied.status, 403);
+  const download = await instance.handle({ method: "POST", path: "/ether/subtitles/download", headers: { "X-Ether-Pick": "pick" }, body: { id: "a", lang: "en", format: "srt" } });
+  assert.equal(download.status, 200);
+  assert.deepEqual(download.body, { format: "srt", encoding: "utf8", data: "a" });
 });

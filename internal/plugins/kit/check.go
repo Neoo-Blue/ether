@@ -8,7 +8,6 @@ import (
 	"image"
 	"image/color"
 	"math"
-	"net/http"
 	"net/url"
 	"sort"
 	"strings"
@@ -842,12 +841,12 @@ func checkRoutes(ctx context.Context, rep *Report, man plugins.Manifest, plug *w
 		})
 	}
 
-	// Listing is a search; only the download requires a pick.
+	// Listing is public to the host; download requires a viewer pick.
 	if man.HasCapability(plugins.CapSubtitles) {
 		subPath := "/subtitles/movie/tt0012349/videoHash=0123456789abcdef.json"
-		// The plugin must refuse a download without a pick.
+		// Download must refuse a missing pick token.
 		callNoPick(ctx, rep, plug, "/ether/subtitles/download")
-		// Listing must succeed without a pick.
+		// Listing succeeds without a pick and returns a subtitles array.
 		fixtures = append(fixtures, routeFixture{
 			method: "GET",
 			path:   subPath,
@@ -1008,7 +1007,6 @@ func callNoPick(ctx context.Context, rep *Report, plug *wasm.Plugin, subPath str
 	resp, _, err := plug.CallDetailed(cctx, wasm.Request{
 		Method:  "POST",
 		Path:    subPath,
-		Body:    json.RawMessage(`{"id":"fixture","lang":"en","format":"srt"}`),
 		Headers: map[string]string{"X-Ether-Request-Id": "kit-nopick"},
 	})
 	dur := time.Since(t0)
@@ -1032,7 +1030,7 @@ func callNoPick(ctx context.Context, rep *Report, plug *wasm.Plugin, subPath str
 		rep.addErr("subtitles", subPath, rt.Error)
 		return
 	}
-	if resp.Status != http.StatusForbidden {
+	if resp.Status != 403 {
 		rt.Error = "subtitle route must refuse calls without X-Ether-Pick (expected HTTP 403)"
 		rep.Routes = append(rep.Routes, rt)
 		rep.addErr("subtitles", subPath, rt.Error)

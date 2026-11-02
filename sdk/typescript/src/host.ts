@@ -14,12 +14,14 @@ export interface HostFetchRequest {
   url: string;
   headers?: Record<string, string>;
   body?: string;
+  bodyBase64?: string;
 }
 
 export interface HostFetchResponse {
   status: number;
   headers: Record<string, string>;
   body: string;
+  bodyBase64?: string;
 }
 
 export interface FolderEntry {
@@ -194,7 +196,7 @@ export function createHostedClient(): EtherHost {
           method: req.method ?? "GET",
           url: req.url,
           headers: req.headers ?? {},
-          body: req.body ?? "",
+          ...(req.bodyBase64 !== undefined ? { bodyBase64: req.bodyBase64 } : { body: req.body ?? "" }),
         };
         if (g.ether?.http) return g.ether.http.fetch(normalized);
         return callHost<HostFetchResponse>("http.fetch", [normalized]);

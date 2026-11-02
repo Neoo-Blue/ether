@@ -85,6 +85,7 @@ export interface PluginRoutes<S = Record<string, unknown>> {
   stream?: (req: StreamRequest, ctx: PluginContext<S>) => MaybePromise<StreamResponse>;
   openStream?: (req: OpenStreamRequest, ctx: PluginContext<S>) => MaybePromise<OpenStreamResponse>;
   subtitles?: (req: SubtitlesRequest, ctx: PluginContext<S>) => MaybePromise<SubtitlesResponse>;
+  subtitlesDownload?: (req: { id: string; lang: string; format: string }, ctx: PluginContext<S>) => MaybePromise<{ format: string; encoding: "utf8" | "base64"; data: string }>;
   markers?: (req: MarkersRequest, ctx: PluginContext<S>) => MaybePromise<MarkersResponse>;
   channels?: (ctx: PluginContext<S>) => MaybePromise<ChannelsResponse>;
   guide?: (req: GuideRequest, ctx: PluginContext<S>) => MaybePromise<GuideResponse>;
@@ -409,6 +410,13 @@ export function plugin<S = Record<string, unknown>>(
       return okResponse({ errors: {} });
     }
 
+    if (method === "POST" && path === "/ether/subtitles/download") {
+      if (!ctx.pickToken?.trim()) return errorResponse(403, "pick_required", "A subtitle pick is required.");
+      if (!routes.subtitlesDownload) return errorResponse(404, "not_found", "Subtitle download handler is not registered.");
+      const body = parseJsonBody(req.body);
+      return mapResult(routes.subtitlesDownload({ id: String(body.id || ""), lang: String(body.lang || ""), format: String(body.format || "") }, ctx));
+    }
+
     if (method === "POST" && path === "/ether/test") {
       if (routes.test) {
         return mapResult(routes.test(ctx));
@@ -607,13 +615,6 @@ export function plugin<S = Record<string, unknown>>(
       const stremio = matchStremioRoute(path, query);
       if (stremio) {
         if (stremio.resource === "subtitles") {
-          if (!ctx.pickToken || ctx.pickToken.trim() === "") {
-            return errorResponse(
-              403,
-              "pick_required",
-              "Subtitles requests require an X-Ether-Pick token.",
-            );
-          }
           if (!routes.subtitles) {
             return errorResponse(404, "not_found", "Subtitles handler is not registered.");
           }

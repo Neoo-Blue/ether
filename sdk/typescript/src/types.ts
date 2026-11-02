@@ -432,7 +432,7 @@ export interface SubtitlesRequest {
   type: string;
   id: string;
   extra: Record<string, string>;
-  pickToken: string;
+  pickToken?: string;
   videoHash?: string;
   videoSize?: number;
   filename?: string;

@@ -1,0 +1,10 @@
+{
+  "fields": [
+    {
+      "key": "apiKey",
+      "kind": "secret",
+      "label": "$t:api_key",
+      "required": true
+    }
+  ]
+}
