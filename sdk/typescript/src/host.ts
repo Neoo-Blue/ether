@@ -293,7 +293,10 @@ export function createHostedClient(): EtherHost {
 }
 
 export const createHostedHostClient = createHostedClient;
-export const ether: EtherHost = createHostedClient();
+// Choose the host transport for the runtime that loaded this plugin.
+export const ether: EtherHost = isHostedRuntime()
+  ? createHostedClient()
+  : createRemoteHostClient();
 
 export interface RemoteHostOptions {
   /** Base URL of the Ether server (for example "http://127.0.0.1:32450"). */

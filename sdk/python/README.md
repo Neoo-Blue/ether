@@ -49,3 +49,6 @@ hello = plugin(
 if __name__ == "__main__":
     serve(hello, background=False)
 ```
+
+Tunnel mode makes one connection and returns when it drops. Use a process
+supervisor to restart the sidecar after a disconnection.

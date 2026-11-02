@@ -1,6 +1,9 @@
 import http.server
 import json
 import socketserver
+import socket
+from unittest import mock
+import ether_plugin
 import threading
 import unittest
 import urllib.request
@@ -29,6 +32,24 @@ from ether_plugin import (
 
 
 class EtherPluginSDKTest(unittest.TestCase):
+    def test_tunnel_uses_tls_and_pong_preserves_payload(self) -> None:
+        instance = plugin({"id": "test", "name": "test", "version": "1"}, {})
+        fake_socket = mock.Mock()
+        tls_context = mock.Mock()
+        tls_context.wrap_socket.side_effect = OSError("TLS failed")
+        with mock.patch.object(ether_plugin.socket, "create_connection", return_value=fake_socket), mock.patch.object(ether_plugin.ssl, "create_default_context", return_value=tls_context):
+            with self.assertRaisesRegex(OSError, "TLS failed"):
+                serve(instance, mode="tunnel", tunnel_url="wss://example.test/tunnel")
+        tls_context.wrap_socket.assert_called_once_with(fake_socket, server_hostname="example.test")
+        fake_socket.close.assert_called_once()
+        a, b = socket.socketpair()
+        try:
+            ether_plugin._ws_send_frame(a, 0x0A, b"ping payload")
+            self.assertEqual(ether_plugin._ws_recv_frame(b), (0x0A, b"ping payload"))
+        finally:
+            a.close()
+            b.close()
+
     def test_settings_decode_and_lint(self) -> None:
         schema = {
             "fields": [

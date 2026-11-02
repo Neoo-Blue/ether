@@ -6,7 +6,7 @@ Go authoring package (`github.com/braedonsaunders/ether/sdk/go`) for Ether Plugi
 
 1. **Native HTTP or WebSocket tunnel sidecar (`ether.runtime.kind: "remote"`)**:
    Compile a standard Go binary and call `p.Serve(ctx, etherplugin.ServeOptions{})` (or mount `p` as an `http.Handler`). Host calls go over HTTP to `/ether/plugin-host/*` authenticated with `X-Ether-Plugin-Credential`.
-2. **Hosted WebAssembly guest**: not yet supported. The experimental `RegisterWASM` implementation uses imports that Ether's hosted runtime rejects. Standard Go `wasip1` also emits WASI imports, which the runtime forbids. Use a sidecar until a guest is built and tested against Ether's raw WASM ABI.
+2. **Hosted WebAssembly guest**: not yet supported. Go 1.27.3 `GOOS=wasip1 GOARCH=wasm` emits `wasi_snapshot_preview1` imports (including `proc_exit`, `clock_time_get`, and `fd_write`), which the runtime forbids. TinyGo is not installed here, so a compatible TinyGo build has not been verified. Use a sidecar until a guest is built and tested against Ether's raw WASM ABI.
 
 ## Usage
 
@@ -54,3 +54,12 @@ func main() {
 	_ = p.Serve(ctx, etherplugin.ServeOptions{})
 }
 ```
+
+## WS8b interoperability test
+
+Once `internal/plugins/remote` is present, run
+`go test -tags ws8b ./sdk/examples/hello/go -run TestWS8bSDKInterop`.
+It starts Ether's tunnel server and exercises the Go, Python, and TypeScript
+hello sidecars. It requires Python 3 and a Node version with TypeScript support
+and WebSocket. The SDK sidecars currently make one tunnel connection; if it
+drops, a process supervisor must restart the sidecar.

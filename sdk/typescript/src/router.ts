@@ -118,7 +118,7 @@ export interface PluginInstance<S = Record<string, unknown>> {
   readonly routes: PluginRoutes<S>;
   getSettings(): S;
   setSettings(incoming: Record<string, unknown>): { settings: S; errors: Record<string, string> };
-  handle(req: RawRequest): RawResponse;
+  handle(req: RawRequest): MaybePromise<RawResponse>;
   dispatch(req: RawRequest): Promise<RawResponse>;
   rank_key(candidate: CandidateFacts, config?: S): number;
   cond_match(candidate: CandidateFacts, operator: string, value: unknown): boolean;
@@ -258,7 +258,7 @@ function matchStremioRoute(path: string, query: Record<string, string>): ParsedS
   }
   const type = decodeURIComponent(parts[1] ?? "");
   const id = decodeURIComponent(parts[2] ?? "");
-  const extra = parseExtraSegment(parts[3] ? decodeURIComponent(parts[3]) : undefined);
+  const extra = parseExtraSegment(parts[3]);
   for (const [k, v] of Object.entries(query)) {
     if (extra[k] === undefined) {
       extra[k] = v;
@@ -695,18 +695,11 @@ export function plugin<S = Record<string, unknown>>(
     return errorResponse(500, "internal_error", message || "Internal plugin error.");
   }
 
-  function handleSync(req: RawRequest): RawResponse {
+  function handleRequest(req: RawRequest): MaybePromise<RawResponse> {
     try {
       const ctx = buildContext(req);
       const res = dispatchCore(req, ctx);
-      if (res instanceof Promise) {
-        throw new PluginHttpError(
-          500,
-          "async_in_sync_runtime",
-          "Hosted QuickJS runtime requires synchronous route handlers.",
-        );
-      }
-      return res;
+      return res instanceof Promise ? res.catch(handleRouteError) : res;
     } catch (err) {
       return handleRouteError(err);
     }
@@ -742,7 +735,7 @@ export function plugin<S = Record<string, unknown>>(
       }
       return decoded;
     },
-    handle: handleSync,
+    handle: handleRequest,
     dispatch,
     rank_key: rankKey,
     cond_match: condMatch,
@@ -750,7 +743,7 @@ export function plugin<S = Record<string, unknown>>(
 
   if (isHostedRuntime()) {
     const g = globalThis as Record<string, unknown>;
-    g.handle = handleSync;
+    g.handle = handleRequest;
     g.rank_key = rankKey;
     g.cond_match = condMatch;
   }

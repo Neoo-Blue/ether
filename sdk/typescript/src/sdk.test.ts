@@ -336,7 +336,7 @@ test("plugin router dispatches all standard and capability endpoints", async () 
   assert.equal(harness.condMatch(cand, "eq", true), true);
   assert.equal(harness.condMatch(cand, "eq", false), false);
 
-  const rankHttp = harness.requestHosted({
+  const rankHttp = await harness.requestHosted({
     method: "POST",
     path: "/ether/rank-key",
     body: JSON.stringify({ candidate: cand }),
@@ -360,7 +360,7 @@ test("plugin router dispatches all standard and capability endpoints", async () 
   assert.equal(badFile.status, 400);
 });
 
-test("hosted QuickJS mode rethrows __ETHER_FAULT__ errors and routes PluginRouteError", () => {
+test("hosted QuickJS mode rethrows __ETHER_FAULT__ errors and routes PluginRouteError", async () => {
   const p = plugin({
     manifest: {
       id: "org.ether.fault",
@@ -396,7 +396,7 @@ test("hosted QuickJS mode rethrows __ETHER_FAULT__ errors and routes PluginRoute
     /__ETHER_FAULT__:forbidden/,
   );
 
-  const customRes = p.handle({
+  const customRes = await p.handle({
     method: "GET",
     path: "/catalog/movie/custom.json",
   });
@@ -587,4 +587,23 @@ test("starter templates construct valid plugins for every capability", async () 
   );
   assert.equal(condHarness.condMatch(fixtures.candidate({ cached: true }), "eq", true), true);
   assert.equal(condHarness.condMatch(fixtures.candidate({ cached: false }), "eq", true), false);
+});
+
+test("the exported ether client selects HTTP in a sidecar", async () => {
+  const originalFetch = globalThis.fetch;
+  let requested = "";
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    requested = String(input);
+    return new Response(JSON.stringify({ key: "greeting", value: "hello" }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as typeof fetch;
+  try {
+    const url = new URL("./host.ts?sidecar-test", import.meta.url).href;
+    const mod = await import(url) as typeof import("./host.ts");
+    assert.equal(await mod.ether.kv.get("greeting"), "hello");
+    assert.ok(requested.endsWith("/ether/plugin-host/kv/greeting"));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

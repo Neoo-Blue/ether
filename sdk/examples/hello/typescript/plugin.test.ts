@@ -39,3 +39,32 @@ test("hello typescript plugin responds identically in hosted and HTTP sidecar mo
     await sidecar.close();
   }
 });
+
+test("the sidecar entry serves a valid remote manifest", async () => {
+  const { spawn } = await import("node:child_process");
+  const { once } = await import("node:events");
+  const child = spawn(process.execPath, [new URL("./sidecar.ts", import.meta.url).pathname], {
+    env: { ...process.env, ETHER_PLUGIN_PORT: "0", ETHER_TUNNEL_URL: "" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const exited = once(child, "exit");
+  try {
+    const [data] = await Promise.race([
+      once(child.stdout!, "data"),
+      exited.then(() => { throw new Error("sidecar exited before listening"); }),
+      new Promise<never>((_, reject) => {
+        const timer = setTimeout(() => reject(new Error("sidecar did not start")), 30000);
+        timer.unref();
+      }),
+    ]);
+    const url = String(data).trim().replace("Hello plugin listening at ", "");
+    const response = await fetch(`${url}/manifest.json`);
+    const manifest = await response.json() as { ether: { runtime: { kind: string }; capabilities: string[] } };
+    assert.equal(response.status, 200);
+    assert.equal(manifest.ether.runtime.kind, "remote");
+    assert.ok(!manifest.ether.capabilities.includes("ranking_step"));
+  } finally {
+    child.kill();
+    await exited.catch(() => {});
+  }
+});

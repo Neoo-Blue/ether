@@ -78,3 +78,6 @@ export default hello;
 - `tool` (`POST /ether/tool/{name}`) and `job` (`POST /ether/job/{name}`)
 - `file` (`GET /ether/file/{path...}`)
 - `rankKey` and `condMatch` hot-path exports (`rank_key`, `cond_match`)
+
+Tunnel mode currently makes one connection. Use a process supervisor to
+restart the sidecar after a disconnection.

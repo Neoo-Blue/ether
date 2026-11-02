@@ -352,8 +352,7 @@ func matchStremioRoute(path string, query map[string]string) *parsedStremioRoute
 	id, _ := url.PathUnescape(parts[2])
 	extra := map[string]string{}
 	if len(parts) == 4 && parts[3] != "" {
-		rawExtra, _ := url.PathUnescape(parts[3])
-		if vals, err := url.ParseQuery(rawExtra); err == nil {
+		if vals, err := url.ParseQuery(parts[3]); err == nil {
 			for k, list := range vals {
 				if len(list) > 0 {
 					extra[k] = list[0]
@@ -859,7 +858,7 @@ func (p *Plugin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	res := p.Dispatch(r.Context(), RawRequest{
 		Method:  r.Method,
-		Path:    r.URL.Path,
+		Path:    r.URL.EscapedPath(),
 		Query:   query,
 		Headers: hdrs,
 		Body:    bodyBytes,
@@ -889,6 +888,8 @@ type ServeOptions struct {
 
 // ServeHandle represents a running HTTP or tunnel sidecar session.
 type ServeHandle struct {
+	// Done closes when the tunnel disconnects. It is nil for HTTP servers.
+	Done  <-chan struct{}
 	Mode  string
 	URL   string
 	Port  int
@@ -960,6 +961,18 @@ func (p *Plugin) Serve(ctx context.Context, opts ServeOptions) error {
 	h, err := p.Start(ctx, opts)
 	if err != nil {
 		return err
+	}
+	if h.Done != nil {
+		select {
+		case <-ctx.Done():
+			return h.Close()
+		case <-h.Done:
+			_ = h.Close()
+			if ctx.Err() != nil {
+				return nil
+			}
+			return errors.New("tunnel disconnected")
+		}
 	}
 	<-ctx.Done()
 	return h.Close()

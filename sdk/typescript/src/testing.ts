@@ -8,6 +8,7 @@ import type {
   EventResponse,
   FieldOption,
   Manifest,
+  MaybePromise,
   MarkersResponse,
   MetaItem,
   MetaResponse,
@@ -254,7 +255,7 @@ export interface TestHarness<S = Record<string, unknown>> {
   readonly instance: PluginInstance<S>;
   readonly host: MockHostClient;
   request(req: RawRequest): Promise<RawResponse>;
-  requestHosted(req: RawRequest): RawResponse;
+  requestHosted(req: RawRequest): MaybePromise<RawResponse>;
   manifest(): Promise<Manifest>;
   health(): Promise<{ status: number; body: unknown }>;
   configure(settings: Record<string, unknown>): Promise<{ status: number; body: ConfigureResponse }>;

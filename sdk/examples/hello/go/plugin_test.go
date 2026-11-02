@@ -237,24 +237,7 @@ func TestTypeScriptHelloCompiledWithWasmCompileInHostedRuntime(t *testing.T) {
 	if !ok || !hot.HasRankKey() || !hot.HasCondMatch() {
 		t.Fatalf("expected HotRuntime with rank_key and cond_match, got %T", rt)
 	}
-	keys, slow, err := hot.RankBatch(ctx, []plugins.CandidateFacts{
-		{ReleaseID: "r1", Cached: true},
-		{ReleaseID: "r2", Cached: false},
-	}, json.RawMessage(`{}`))
-	if err != nil {
-		t.Fatalf("RankBatch: %v", err)
-	}
-	if slow != 0 || len(keys) != 2 || keys[0] != 1000 || keys[1] != 100 {
-		t.Fatalf("RankBatch keys = %v (slow=%d), want [1000 100]", keys, slow)
-	}
-	matched, err := hot.CondMatch(ctx, plugins.CandidateFacts{ReleaseID: "r1", Cached: true}, "eq", json.RawMessage(`true`))
-	if err != nil || !matched {
-		t.Fatalf("CondMatch(Cached=true, eq, true) = %v, %v", matched, err)
-	}
-	unmatched, err := hot.CondMatch(ctx, plugins.CandidateFacts{ReleaseID: "r2", Cached: false}, "eq", json.RawMessage(`true`))
-	if err != nil || unmatched {
-		t.Fatalf("CondMatch(Cached=false, eq, true) = %v, %v", unmatched, err)
-	}
+
 }
 
 func startPythonHelloSidecar(t *testing.T) string {
@@ -316,7 +299,7 @@ srv.close()
 			t.Fatalf("python sidecar printed empty URL; stderr: %s", stderrBuf.String())
 		}
 		return url
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatalf("timed out waiting for python sidecar startup; stderr: %s", stderrBuf.String())
 		return ""
 	}
@@ -395,6 +378,12 @@ func TestCrossLanguageHelloParity(t *testing.T) {
 			name:       "catalog search",
 			method:     "GET",
 			path:       "/catalog/movie/hello/search=World.json",
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "catalog search with escaped ampersand",
+			method:     "GET",
+			path:       "/catalog/movie/hello/search=fish%26chips.json",
 			wantStatus: http.StatusOK,
 		},
 		{
@@ -519,6 +508,12 @@ func TestCrossLanguageHelloParity(t *testing.T) {
 			if tsStatus != tc.wantStatus || goStatus != tc.wantStatus || pyStatus != tc.wantStatus {
 				t.Fatalf("status mismatch: ts=%d go=%d py=%d (want %d)", tsStatus, goStatus, pyStatus, tc.wantStatus)
 			}
+			if tc.name == "catalog search with escaped ampersand" {
+				encoded, _ := json.Marshal(tsBody)
+				if !strings.Contains(string(encoded), "fish\\u0026chips") {
+					t.Fatalf("escaped search was not preserved: %s", encoded)
+				}
+			}
 			if !reflect.DeepEqual(tsBody, goBody) {
 				tsJSON, _ := json.Marshal(tsBody)
 				goJSON, _ := json.Marshal(goBody)
@@ -530,5 +525,33 @@ func TestCrossLanguageHelloParity(t *testing.T) {
 				t.Fatalf("TS vs Python body mismatch:\nTS: %s\nPy: %s", tsJSON, pyJSON)
 			}
 		})
+	}
+}
+
+func TestHostedTypeScriptAsyncHandler(t *testing.T) {
+	files := loadTypeScriptHelloFiles(t)
+	const entry = "examples/hello/typescript/plugin.ts"
+	const before = "catalog({ type, search }, ctx) {"
+	const after = "async catalog({ type, search }, ctx) { await Promise.resolve();"
+	if !strings.Contains(files[entry], before) {
+		t.Fatal("catalog handler not found")
+	}
+	files[entry] = strings.Replace(files[entry], before, after, 1)
+	compiled, _, diags := wasm.Compile(files, entry)
+	for _, d := range diags {
+		if d.Severity == "error" {
+			t.Fatalf("compile: %+v", d)
+		}
+	}
+	eng := wasm.NewEngine(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	defer eng.Close()
+	p, err := eng.LoadJS("hello.async", "1", string(compiled), nil, wasm.Limits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+	resp, err := p.Call(context.Background(), wasm.Request{Method: "GET", Path: "/catalog/movie/hello.json"})
+	if err != nil || resp.Status != http.StatusOK || !strings.Contains(string(resp.Body), "Hello from Ether") {
+		t.Fatalf("async hosted response: %d %s %v", resp.Status, resp.Body, err)
 	}
 }

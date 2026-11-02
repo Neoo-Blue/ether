@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/coder/websocket"
 )
@@ -191,33 +192,64 @@ func (p *Plugin) startTunnel(ctx context.Context, tunnelURL, credential string) 
 	}
 
 	loopCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	var mu sync.Mutex
+	active := make(map[string]context.CancelFunc)
 	go func() {
+		defer close(done)
 		defer cancel()
+		defer func() {
+			mu.Lock()
+			defer mu.Unlock()
+			for _, stop := range active {
+				stop()
+			}
+		}()
 		for {
 			_, msgBytes, err := conn.Read(loopCtx)
 			if err != nil {
 				return
 			}
 			var frame TunnelFrame
-			if err := json.Unmarshal(msgBytes, &frame); err != nil {
+			if json.Unmarshal(msgBytes, &frame) != nil {
 				continue
 			}
-			if frame.Type == "request" {
-				replies := p.DispatchTunnelFrame(loopCtx, frame, maxChunk)
-				for _, reply := range replies {
+			if frame.Type == "cancel" {
+				mu.Lock()
+				stop := active[frame.ID]
+				mu.Unlock()
+				if stop != nil {
+					stop()
+				}
+				continue
+			}
+			if frame.Type != "request" {
+				continue
+			}
+			requestCtx, stop := context.WithCancel(loopCtx)
+			mu.Lock()
+			active[frame.ID] = stop
+			mu.Unlock()
+			go func(frame TunnelFrame) {
+				defer func() { mu.Lock(); delete(active, frame.ID); mu.Unlock(); stop() }()
+				for _, reply := range p.DispatchTunnelFrame(requestCtx, frame, maxChunk) {
+					if requestCtx.Err() != nil {
+						return
+					}
 					b, err := json.Marshal(reply)
 					if err != nil {
-						continue
+						return
 					}
-					if err := conn.Write(loopCtx, websocket.MessageText, b); err != nil {
+					if err := conn.Write(requestCtx, websocket.MessageText, b); err != nil {
 						return
 					}
 				}
-			}
+			}(frame)
 		}
 	}()
 
 	return &ServeHandle{
+		Done: done,
 		Mode: "tunnel",
 		URL:  tunnelURL,
 		Close: func() error {

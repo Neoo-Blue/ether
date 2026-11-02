@@ -22,6 +22,7 @@ import os
 import re
 import socket
 import socketserver
+import ssl
 import struct
 import threading
 import urllib.error
@@ -604,7 +605,7 @@ def _match_stremio_route(path: str, query: Dict[str, str]) -> Optional[Dict[str,
     item_id = urllib.parse.unquote(parts[2])
     extra: Dict[str, str] = {}
     if len(parts) == 4 and parts[3]:
-        raw_extra = urllib.parse.unquote(parts[3])
+        raw_extra = parts[3]
         for k, vals in urllib.parse.parse_qs(raw_extra, keep_blank_values=True).items():
             if vals:
                 extra[k] = vals[0]
@@ -1264,10 +1265,9 @@ def _serve_http(
     return ServeHandle(mode="http", url=url, port=actual_port)
 
 
-def _ws_send_text(sock: socket.socket, text: str) -> None:
-    payload = text.encode("utf-8")
+def _ws_send_frame(sock: socket.socket, opcode: int, payload: bytes) -> None:
     mask_key = os.urandom(4)
-    header = bytearray([0x81])
+    header = bytearray([0x80 | opcode])
     length = len(payload)
     if length < 126:
         header.append(0x80 | length)
@@ -1282,6 +1282,10 @@ def _ws_send_text(sock: socket.socket, text: str) -> None:
     for i, b in enumerate(payload):
         masked[i] = b ^ mask_key[i & 3]
     sock.sendall(bytes(header) + bytes(masked))
+
+
+def _ws_send_text(sock: socket.socket, text: str) -> None:
+    _ws_send_frame(sock, 0x01, text.encode("utf-8"))
 
 
 def _ws_recv_exact(sock: socket.socket, n: int) -> bytes:
@@ -1318,13 +1322,21 @@ def _serve_tunnel(
     background: bool,
 ) -> ServeHandle:
     parsed = urllib.parse.urlparse(tunnel_url)
-    host = parsed.hostname or "127.0.0.1"
+    if parsed.scheme not in ("ws", "wss") or not parsed.hostname:
+        raise ValueError("Tunnel URL must use ws:// or wss:// and include a host")
+    host = parsed.hostname
     port = parsed.port or (443 if parsed.scheme == "wss" else 80)
     path = parsed.path or "/ether/plugins/tunnel"
     if parsed.query:
         path = f"{path}?{parsed.query}"
 
     sock = socket.create_connection((host, port), timeout=10)
+    if parsed.scheme == "wss":
+        try:
+            sock = ssl.create_default_context().wrap_socket(sock, server_hostname=host)
+        except Exception:
+            sock.close()
+            raise
     ws_key = base64.b64encode(os.urandom(16)).decode("ascii")
     lines = [
         f"GET {path} HTTP/1.1",
@@ -1342,8 +1354,8 @@ def _serve_tunnel(
 
     resp_buf = b""
     while b"\r\n\r\n" not in resp_buf:
-        chunk = sock.recv(1024)
-        if not chunk:
+        chunk = sock.recv(1)
+        if not chunk or len(resp_buf) >= 16384:
             sock.close()
             raise ConnectionError("Failed WebSocket tunnel handshake")
         resp_buf += chunk
@@ -1379,33 +1391,68 @@ def _serve_tunnel(
     max_chunk_bytes = int(welcome.get("maxChunkBytes") or DEFAULT_MAX_CHUNK_BYTES)
 
     stop_event = threading.Event()
+    write_lock = threading.Lock()
+    active_lock = threading.Lock()
+    active: Dict[str, threading.Event] = {}
+
+    def _reply(frame: Dict[str, Any], cancelled: threading.Event) -> None:
+        frame_id = str(frame.get("id", ""))
+        try:
+            replies = dispatch_over_tunnel_frame(instance, frame, max_chunk_bytes)
+            for reply in replies:
+                if cancelled.is_set() or stop_event.is_set():
+                    return
+                with write_lock:
+                    _ws_send_text(sock, json.dumps(reply))
+        except Exception:
+            if not cancelled.is_set() and not stop_event.is_set():
+                with write_lock:
+                    _ws_send_text(sock, json.dumps({"type": "error", "id": frame_id,
+                        "error": {"code": "internal_error", "message": "Plugin request failed"}}))
+        finally:
+            with active_lock:
+                active.pop(frame_id, None)
 
     def _loop() -> None:
-        while not stop_event.is_set():
-            try:
+        try:
+            while not stop_event.is_set():
                 op, raw = _ws_recv_frame(sock)
-            except Exception:
-                break
-            if op == 0x08:
-                break
-            if op == 0x09:
-                # Ping -> Pong
-                sock.sendall(bytes([0x8A, 0x80, 0, 0, 0, 0]))
-                continue
-            if op != 0x01:
-                continue
-            frame = json.loads(raw.decode("utf-8"))
-            if frame.get("type") == "request":
-                replies = dispatch_over_tunnel_frame(instance, frame, max_chunk_bytes)
-                for reply in replies:
-                    _ws_send_text(sock, json.dumps(reply))
+                if op == 0x08:
+                    break
+                if op == 0x09:
+                    with write_lock:
+                        _ws_send_frame(sock, 0x0A, raw)
+                    continue
+                if op != 0x01:
+                    continue
+                frame = json.loads(raw.decode("utf-8"))
+                frame_id = str(frame.get("id", ""))
+                if frame.get("type") == "cancel":
+                    with active_lock:
+                        cancelled = active.get(frame_id)
+                    if cancelled:
+                        cancelled.set()
+                elif frame.get("type") == "request":
+                    cancelled = threading.Event()
+                    with active_lock:
+                        active[frame_id] = cancelled
+                    threading.Thread(target=_reply, args=(frame, cancelled), daemon=True).start()
+        except (OSError, ConnectionError, ValueError):
+            pass
+        finally:
+            stop_event.set()
+            with active_lock:
+                for cancelled in active.values():
+                    cancelled.set()
+            sock.close()
 
     def _close() -> None:
         stop_event.set()
         try:
-            sock.close()
-        except Exception:
+            sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
             pass
+        sock.close()
 
     if background:
         thread = threading.Thread(target=_loop, daemon=True)
