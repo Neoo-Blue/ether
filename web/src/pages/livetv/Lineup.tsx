@@ -12,6 +12,7 @@ import {
 import { useState } from "react";
 import { t, tn } from "../../i18n";
 import { formatNumber, relativeTime } from "../../lib/format";
+import { LiveTVOptions } from "./LiveTVOptions";
 import { ChannelLogo } from "./ChannelLogo";
 import {
   clock,
@@ -202,6 +203,9 @@ function ChannelRow({
             <span className={cn("truncate text-sm font-medium", on ? "text-primary" : "text-fg")}>
               {c.name}
             </span>
+            {c.health === "unavailable" ? (
+              <Badge variant="secondary">{t("Unavailable")}</Badge>
+            ) : null}
             {c.favorite ? (
               <Star
                 size={11}
@@ -281,6 +285,7 @@ export function SourceList({
   const circ = 2 * Math.PI * r;
   return (
     <div className="space-y-4 p-3 sm:p-4">
+      <LiveTVOptions />
       <button
         type="button"
         onClick={() => onSelect({ kind: "coverage" })}

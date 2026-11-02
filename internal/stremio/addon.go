@@ -62,13 +62,59 @@ func BaseURL(raw string) (*url.URL, error) {
 type Manifest struct {
 	ID            string            `json:"id"`
 	Name          string            `json:"name"`
+	Description   string            `json:"description,omitempty"`
+	Logo          string            `json:"logo,omitempty"`
 	Version       string            `json:"version"`
 	Types         []string          `json:"types"`
 	IDPrefixes    []string          `json:"idPrefixes"`
 	Resources     []json.RawMessage `json:"resources"`
-	BehaviorHints struct {
-		ConfigurationRequired bool `json:"configurationRequired"`
-	} `json:"behaviorHints"`
+	Catalogs      []CatalogDef      `json:"catalogs,omitempty"`
+	BehaviorHints BehaviorHints     `json:"behaviorHints"`
+}
+
+// BehaviorHints is the part of a manifest's behaviorHints Ether reads.
+// EPGProvider opts into dated native guide catalogs. EpgURL is an
+// optional XMLTV extension used by some add-ons.
+type BehaviorHints struct {
+	ConfigurationRequired bool   `json:"configurationRequired"`
+	Configurable          bool   `json:"configurable,omitempty"`
+	EpgURL                string `json:"epgUrl,omitempty"`
+	EPGProvider           bool   `json:"epgProvider,omitempty"`
+}
+
+// GuideURL returns the add-on's native guide URL, if it declares one.
+func (m Manifest) GuideURL() string {
+	if m.BehaviorHints.EpgURL != "" {
+		return m.BehaviorHints.EpgURL
+	}
+	return ""
+}
+
+// CatalogDef is one catalog an add-on offers (manifest "catalogs").
+type CatalogDef struct {
+	Type   string      `json:"type"`
+	ID     string      `json:"id"`
+	Name   string      `json:"name,omitempty"`
+	Genres []string    `json:"genres,omitempty"`
+	Extra  []ExtraProp `json:"extra,omitempty"`
+}
+
+// ExtraProp is one extra property of a catalog (search, genre, skip, …).
+type ExtraProp struct {
+	Name         string   `json:"name"`
+	IsRequired   bool     `json:"isRequired,omitempty"`
+	Options      []string `json:"options,omitempty"`
+	OptionsLimit int      `json:"optionsLimit,omitempty"`
+}
+
+// SupportsSkip reports whether the catalog can be paged with skip.
+func (c CatalogDef) SupportsSkip() bool {
+	for _, e := range c.Extra {
+		if e.Name == "skip" {
+			return true
+		}
+	}
+	return c.Type == "tv"
 }
 
 // resource is a manifest resource given as an object; a plain string
@@ -79,18 +125,18 @@ type resource struct {
 	IDPrefixes []string `json:"idPrefixes"`
 }
 
-// streamResource returns the addon's stream resource, if it has one.
-func (m Manifest) streamResource() (resource, bool) {
+// resourceNamed returns the addon's named resource, if it has one.
+func (m Manifest) resourceNamed(want string) (resource, bool) {
 	for _, raw := range m.Resources {
 		var name string
 		if json.Unmarshal(raw, &name) == nil {
-			if name == "stream" {
+			if name == want {
 				return resource{Name: name, Types: m.Types, IDPrefixes: m.IDPrefixes}, true
 			}
 			continue
 		}
 		var r resource
-		if json.Unmarshal(raw, &r) == nil && r.Name == "stream" {
+		if json.Unmarshal(raw, &r) == nil && r.Name == want {
 			if r.Types == nil {
 				r.Types = m.Types
 			}
@@ -108,7 +154,7 @@ func (m Manifest) Check() error {
 	if m.BehaviorHints.ConfigurationRequired {
 		return errors.New("the addon must be configured first: open its configure page and paste the install link it gives you")
 	}
-	r, ok := m.streamResource()
+	r, ok := m.resourceNamed("stream")
 	if !ok {
 		return errors.New("the addon does not provide streams")
 	}
@@ -131,7 +177,7 @@ func (m Manifest) Check() error {
 // prefix ("tt", "tmdb", "kitsu"). An addon that lists no prefixes is
 // asked by IMDb id only, as before prefixes were read.
 func (m Manifest) takesIDs(prefix string) bool {
-	r, ok := m.streamResource()
+	r, ok := m.resourceNamed("stream")
 	if !ok {
 		return false
 	}
@@ -148,7 +194,7 @@ func (m Manifest) takesIDs(prefix string) bool {
 
 // serves reports whether the addon answers stream requests of a type.
 func (m Manifest) serves(kind string) bool {
-	r, ok := m.streamResource()
+	r, ok := m.resourceNamed("stream")
 	return ok && (len(r.Types) == 0 || contains(r.Types, kind))
 }
 
@@ -159,6 +205,44 @@ func contains(list []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// HasResource reports whether the add-on serves resource name for type
+// typ (typ "" accepts any type).
+func (m Manifest) HasResource(name, typ string) bool {
+	r, ok := m.resourceNamed(name)
+	return ok && (typ == "" || len(r.Types) == 0 || contains(r.Types, typ))
+}
+
+// CatalogsOfType returns the manifest catalogs of one type.
+func (m Manifest) CatalogsOfType(typ string) []CatalogDef {
+	var out []CatalogDef
+	for _, c := range m.Catalogs {
+		if c.Type == typ {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// FetchManifestAny reads the manifest without the stream-indexer check,
+// for catalog, tv and subtitle roles.
+func FetchManifestAny(ctx context.Context, client *http.Client, rawURL string) (Manifest, error) {
+	base, err := BaseURL(rawURL)
+	if err != nil {
+		return Manifest{}, err
+	}
+	var m Manifest
+	if err := getJSON(ctx, client, base, "/manifest.json", maxManifest, &m); err != nil {
+		return Manifest{}, err
+	}
+	if m.ID == "" && len(m.Resources) == 0 && len(m.Catalogs) == 0 {
+		return Manifest{}, fmt.Errorf("stremio: %s did not answer with an addon manifest", base.Host)
+	}
+	if m.BehaviorHints.ConfigurationRequired {
+		return m, errors.New("the addon must be configured first: open its configure page and paste the install link it gives you")
+	}
+	return m, nil
 }
 
 // FetchManifest reads and checks the manifest of the addon at rawURL.
@@ -207,14 +291,10 @@ func getJSON(ctx context.Context, client *http.Client, base *url.URL, suffix str
 	req.Header.Set("User-Agent", userAgent)
 	resp, err := client.Do(req)
 	if err != nil {
-		var ue *url.Error
-		if errors.As(err, &ue) {
-			err = ue.Err
-		}
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return fmt.Errorf("stremio: %s: %w", base.Host, err)
+		return fmt.Errorf("stremio: %s: request failed", base.Host)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
@@ -224,7 +304,7 @@ func getJSON(ctx context.Context, client *http.Client, base *url.URL, suffix str
 	body := io.LimitReader(resp.Body, limit+1)
 	data, err := io.ReadAll(body)
 	if err != nil {
-		return fmt.Errorf("stremio: %s: %w", base.Host, err)
+		return fmt.Errorf("stremio: %s: response read failed", base.Host)
 	}
 	if int64(len(data)) > limit {
 		return fmt.Errorf("stremio: %s answered with more than %d bytes", base.Host, limit)

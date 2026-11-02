@@ -203,10 +203,18 @@ func (s *Service) CachedSidecars(title *core.Title, user *core.User, embedded []
 }
 
 // SearchOnDemand is the viewer-driven search behind Plex's subtitle
-// "Search": ranked OpenSubtitles candidates for one language (releaseName,
-// when a session knows it, improves the ranking). Results are remembered
-// for an hour so DownloadOnDemand only fetches files offered for the title.
+// "Search": ranked candidates from configured providers for one language
+// (releaseName, when a session knows it, improves the ranking). Results
+// are remembered for an hour so DownloadOnDemand only fetches files
+// offered for the title.
 func (s *Service) SearchOnDemand(ctx context.Context, title *core.Title, lang, releaseName string) ([]Candidate, error) {
+	movieHash, videoSize := s.lookupVideoHash(title, releaseName)
+	return s.SearchOnDemandWithHash(ctx, title, lang, releaseName, movieHash, videoSize)
+}
+
+// SearchOnDemandWithHash is SearchOnDemand when the caller already has a
+// movieHash and videoSize from cached ranges.
+func (s *Service) SearchOnDemandWithHash(ctx context.Context, title *core.Title, lang, releaseName, movieHash string, videoSize int64) ([]Candidate, error) {
 	if title == nil || !s.Enabled() {
 		return nil, nil
 	}
@@ -214,7 +222,7 @@ func (s *Service) SearchOnDemand(ctx context.Context, title *core.Title, lang, r
 	if lang == "" {
 		return nil, fmt.Errorf("subtitle search needs a language")
 	}
-	cands, err := s.SearchWithHash(ctx, title, lang, releaseName, "")
+	cands, err := s.searchProviders(ctx, title, lang, releaseName, movieHash, videoSize)
 	if err != nil {
 		return nil, err
 	}

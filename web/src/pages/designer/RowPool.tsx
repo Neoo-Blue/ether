@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+import { newCollectionHref } from "../collections/links";
 import { Drawer } from "../../components/Drawer";
 import { Badge, Button, Input, cn } from "@braedonsaunders/appkit-ui";
 import { ChevronDown, Plus, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
@@ -34,7 +36,6 @@ import { isPluginDescriptor, textOf, useRegistry, type Descriptor } from "../../
 import { useLocale } from "../../i18n/react";
 import { useNavigate } from "react-router-dom";
 import { blankSpec, newSourceFromDescriptor, type CollectionSourceMeta } from "../../lib/rules";
-import { newCollectionHref } from "../collections/links";
 
 interface PoolEntry {
   row: string;
@@ -196,6 +197,17 @@ export function RowPool({
           className="h-8 pl-8"
         />
       </div>
+      {registry.descriptors
+        .filter((d) => d.meta?.collectionSource === "stremioCatalog")
+        .map((d) => (
+          <Link
+            key={d.id}
+            to={newCollectionHref({ source: "stremioCatalog" })}
+            className="block rounded-lg border border-border bg-surface p-3 text-sm text-primary"
+          >
+            {t("Create a Home row from a Stremio catalog")}
+          </Link>
+        ))}
       {GROUPS.map((g) => {
         const rows = shown.filter((e) => e.group === g.key);
         if (!rows.length) return null;

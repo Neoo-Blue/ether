@@ -545,6 +545,14 @@ export function newSourceFromDescriptor(
  * shape, not kind lists, decides, so plugin kinds work unchanged. */
 export function isSourceComplete(s: Source): boolean {
   const v = s as unknown as Record<string, unknown>;
+  if (s.kind === "stremioCatalog")
+    return (
+      typeof v.url === "string" &&
+      (/^https?:\/\/\S+$/.test(v.url.trim()) ||
+        /^https?:\/\/[^\s]+ \(saved\)$/.test(v.url.trim())) &&
+      typeof v.list === "string" &&
+      v.list.trim() !== ""
+    );
   if (typeof v.url === "string") return /^https?:\/\/\S+$/.test(v.url.trim());
   if (Array.isArray(v.keys)) return v.keys.length > 0;
   if (v.params && typeof v.params === "object") return Object.keys(v.params).length > 0;

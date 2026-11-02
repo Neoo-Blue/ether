@@ -8,6 +8,7 @@ import { HardwareStatus } from "./Hardware";
 import { MarkerCoverage } from "./Markers";
 import { SkipButtons } from "./SkipButtons";
 import { HouseholdAudio } from "./HouseholdAudio";
+import { SubtitleProviders } from "./SubtitleProviders";
 import { SubtitleTiming } from "./SubtitleTiming";
 
 const TABS = localized(
@@ -52,6 +53,7 @@ export default function Playback() {
               },
             )}
           </p>
+          <SubtitleProviders />
           <SubtitleTiming />
         </>
       ) : null}

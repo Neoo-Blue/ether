@@ -22,6 +22,8 @@ func (s *Service) Enrich(ctx context.Context, title *core.Title, user *core.User
 		hash, err = MovieHash(src, src.Size())
 		if err != nil {
 			s.log.Debug("local subtitle hash unavailable", "error", err)
+		} else if title != nil {
+			s.RememberVideoHash(title.Key, release, hash, src.Size())
 		}
 	}
 	sidecars, err := s.SidecarsWithHash(ctx, title, user, info.Streams, release, hash, prefs...)

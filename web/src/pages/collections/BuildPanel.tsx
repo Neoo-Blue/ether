@@ -187,6 +187,7 @@ export function BuildPanel({
               key={i}
               index={i}
               source={s}
+              collectionId={spec.id}
               region={region}
               removable={spec.sources.length > 1}
               descriptor={sourceDescriptor(descriptors, s.kind)}

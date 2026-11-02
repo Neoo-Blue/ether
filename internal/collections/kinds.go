@@ -82,6 +82,10 @@ type previewContextKey struct{}
 // IsPreview reports whether a gather belongs to an owner-initiated preview.
 func IsPreview(ctx context.Context) bool { return ctx.Value(previewContextKey{}) == true }
 
+// PreviewItems is how many items an owner preview of a remote list source
+// reads (SPEC: preview is the first 20).
+const PreviewItems = 20
+
 // ExternalRef identifies one item from an external or plugin list source.
 type ExternalRef struct {
 	TMDB  int64
@@ -323,6 +327,7 @@ func builtinSourceKinds() []SourceKind {
 				return s.fetchAniList(ctx, src.URL)
 			}},
 		stevenLuKind{},
+		stremioCatalogKind{},
 	}
 }
 

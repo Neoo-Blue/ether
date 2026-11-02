@@ -222,8 +222,8 @@ func (k *listSourceKind) Gather(g *collections.Gather) {
 	if maxItems <= 0 || maxItems > MaxPluginListItems {
 		maxItems = MaxPluginListItems
 	}
-	if collections.IsPreview(g.Ctx) && maxItems > 20 {
-		maxItems = 20
+	if collections.IsPreview(g.Ctx) && maxItems > collections.PreviewItems {
+		maxItems = collections.PreviewItems
 	}
 	targets := k.catalogTargets(g)
 	var refs []collections.ExternalRef

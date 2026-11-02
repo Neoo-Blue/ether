@@ -98,6 +98,15 @@ func (s *Service) UpdateSpec(ctx context.Context, id string, sp core.CollectionS
 
 func (s *Service) afterSave(ctx context.Context, row *specRow) (*core.CollectionSpec, error) {
 	if row.enabled {
+		if hasBackgroundOnlySource(row.spec) {
+			go func() {
+				bctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+				defer cancel()
+				_, _ = s.build(bctx, row)
+			}()
+			v := row.view()
+			return &v, nil
+		}
 		bctx, cancel := context.WithTimeout(ctx, s.buildBudget)
 		_, err := s.build(bctx, row)
 		cancel()
@@ -170,7 +179,7 @@ func (s *Service) Preview(ctx context.Context, sp core.CollectionSpec, n int) (*
 	}
 	pluginPreview := false
 	for _, src := range named.Sources {
-		if strings.HasPrefix(src.Kind, "plugin:") {
+		if backgroundOnlySource(src) {
 			pluginPreview = true
 			var cancel context.CancelFunc
 			ctx, cancel = context.WithTimeout(ctx, 10*time.Second)

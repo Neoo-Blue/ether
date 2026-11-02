@@ -45,15 +45,20 @@ type Config struct {
 	Trakt         Trakt         `json:"trakt"`
 	Simkl         Simkl         `json:"simkl"`
 	OpenSubtitles OpenSubtitles `json:"openSubtitles"`
-	LLM           LLM           `json:"llm"`
-	Updates       Updates       `json:"updates"`
-	Plugins       Plugins       `json:"plugins,omitempty"`
-	Spike         Spike         `json:"spike"`
-	Downloads     Downloads     `json:"downloads"`
-	Markers       Markers       `json:"markers"`
-	Personalize   Personalize   `json:"personalize"`
-	Extras        Extras        `json:"extras"`
-	Debrid        Debrid        `json:"debrid"`
+	// Subtitles is the ordered subtitle provider list (OpenSubtitles and
+	// Stremio subtitle add-ons). Empty means OpenSubtitles alone, as before.
+	Subtitles Subtitles `json:"subtitles,omitempty"`
+	// LiveTV holds owner Live TV options (logo index, health sweep).
+	LiveTV      LiveTV      `json:"liveTV,omitempty"`
+	LLM         LLM         `json:"llm"`
+	Updates     Updates     `json:"updates"`
+	Plugins     Plugins     `json:"plugins,omitempty"`
+	Spike       Spike       `json:"spike"`
+	Downloads   Downloads   `json:"downloads"`
+	Markers     Markers     `json:"markers"`
+	Personalize Personalize `json:"personalize"`
+	Extras      Extras      `json:"extras"`
+	Debrid      Debrid      `json:"debrid"`
 	// Clients holds owner overrides of the capability registry.
 	Clients ClientCompatibility `json:"clients"`
 	// Database is node-local storage selection (SQLite or PostgreSQL).
@@ -417,6 +422,41 @@ type OpenSubtitles struct {
 	APIKey   string `json:"apiKey"`
 	Username string `json:"username"`
 	Password string `json:"password"`
+}
+
+// Subtitle provider kinds (SubtitleProvider.Kind).
+const (
+	SubtitleProviderOpenSubtitles = "opensubtitles"
+	SubtitleProviderStremio       = "stremio"
+)
+
+// SubtitleProvider is one entry of the owner's subtitle provider order.
+// For kind "stremio", URL is the add-on install URL: a secret, sealed at
+// rest (credentials.go secretIn) and redacted in API responses.
+type SubtitleProvider struct {
+	ID      string `json:"id"`
+	Name    string `json:"name,omitempty"`
+	Kind    string `json:"kind"`
+	URL     string `json:"url,omitempty"`
+	Enabled bool   `json:"enabled"`
+}
+
+// Subtitles is the owner's subtitle provider order. Search results from
+// every enabled provider merge into one ranked list; the order breaks
+// ties. Empty means OpenSubtitles alone.
+type Subtitles struct {
+	Providers []SubtitleProvider `json:"providers,omitempty"`
+}
+
+// LiveTV holds owner Live TV options.
+type LiveTV struct {
+	// LogoIndexURL is an owner-enabled channel logo index (an
+	// iptv-org-style JSON list). Ether ships no list; empty disables
+	// logo matching.
+	LogoIndexURL string `json:"logoIndexUrl,omitempty"`
+	// HealthSweepMinutes is the channel health sweep interval: 0 uses
+	// the default (15), negative disables the sweep.
+	HealthSweepMinutes int `json:"healthSweepMinutes,omitempty"`
 }
 
 type LLM struct {

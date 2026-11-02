@@ -3091,6 +3091,19 @@ export function createFakeServer(opts: FakeOptions = {}) {
         return json({ days: activity() });
     }
 
+    if (
+      seg[0] === "collections" &&
+      seg[1] === "stremio" &&
+      seg[2] === "manifest" &&
+      method === "POST"
+    ) {
+      return json({
+        id: "example.catalog",
+        name: "Example catalog",
+        catalogs: [{ id: "top", type: "movie", name: "Top movies" }],
+      });
+    }
+
     // Parameterised routes
     if (seg[0] === "collections" && seg[1]) {
       const id = decodeURIComponent(seg[1]);

@@ -1,6 +1,53 @@
 [
   {
     "kind": "liveTVSource",
+    "id": "stremio",
+    "owner": "builtin",
+    "label": {
+      "source": "Stremio add-on"
+    },
+    "hint": {
+      "source": "Live channels from a Stremio add-on."
+    },
+    "icon": "tv",
+    "order": 15,
+    "meta": {
+      "params": [
+        {
+          "name": "name",
+          "kind": "text",
+          "label": {
+            "source": "Source name"
+          },
+          "hint": {},
+          "required": true
+        },
+        {
+          "name": "playlistUrl",
+          "kind": "secret",
+          "label": {
+            "source": "Add-on URL"
+          },
+          "hint": {},
+          "required": true
+        },
+        {
+          "name": "refreshHours",
+          "kind": "number",
+          "label": {
+            "source": "Keep it fresh"
+          },
+          "hint": {}
+        }
+      ],
+      "editor": "stremio",
+      "yieldsChannels": true,
+      "yieldsGuide": true,
+      "test": true
+    }
+  },
+  {
+    "kind": "liveTVSource",
     "id": "xtream",
     "owner": "builtin",
     "label": {

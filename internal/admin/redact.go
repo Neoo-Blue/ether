@@ -26,6 +26,45 @@ func redact(s string) string {
 
 func isRedacted(s string) bool { return s == RedactedSecret }
 
+// A Stremio add-on install URL is a secret (its path carries the owner's
+// add-on settings, often a debrid key), so the browser only ever sees the
+// scheme and host plus a saved marker. The full URL round-trips through
+// UnredactConfig when the marker comes back for the same entry and host.
+const redactedSavedSuffix = " (saved)"
+
+func redactStremioURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	trimmed := raw
+	if rest, ok := strings.CutPrefix(trimmed, "stremio://"); ok {
+		trimmed = "https://" + rest
+	}
+	u, err := url.Parse(trimmed)
+	if err != nil || u.Host == "" {
+		return RedactedSecret
+	}
+	return u.Scheme + "://" + u.Host + redactedSavedSuffix
+}
+
+func isRedactedStremioURL(s string) bool {
+	return isRedacted(s) || strings.HasSuffix(strings.TrimSpace(s), redactedSavedSuffix)
+}
+
+// stremioURLHost is the host of a full or redacted add-on URL.
+func stremioURLHost(raw string) string {
+	raw = strings.TrimSuffix(strings.TrimSpace(raw), redactedSavedSuffix)
+	if rest, ok := strings.CutPrefix(raw, "stremio://"); ok {
+		raw = "https://" + rest
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(u.Host)
+}
+
 // RedactConfig returns a copy of cfg with every secret replaced by
 // RedactedSecret ("••••"). Empty secrets stay empty so the UI can tell
 // "unset" from "set". The input is not modified.
@@ -39,6 +78,15 @@ func RedactConfig(cfg config.Config) config.Config {
 	out.Trakt.ClientSecret = redact(out.Trakt.ClientSecret)
 	out.Simkl.ClientSecret = redact(out.Simkl.ClientSecret)
 	out.OpenSubtitles = redactOpenSubtitles(out.OpenSubtitles)
+	if cfg.Subtitles.Providers != nil {
+		out.Subtitles.Providers = make([]config.SubtitleProvider, len(cfg.Subtitles.Providers))
+		for i, p := range cfg.Subtitles.Providers {
+			if p.Kind == config.SubtitleProviderStremio {
+				p.URL = redactStremioURL(p.URL)
+			}
+			out.Subtitles.Providers[i] = p
+		}
+	}
 	out.LLM = redactLLM(out.LLM)
 	out.Outbound.Password = redact(out.Outbound.Password)
 	out.Prowlarr.APIKey = redact(out.Prowlarr.APIKey)
@@ -55,6 +103,9 @@ func RedactConfig(cfg config.Config) config.Config {
 		for i, ix := range cfg.Indexers {
 			ix.APIKey = redact(ix.APIKey)
 			ix.SecretSettings = redactMap(ix.SecretSettings)
+			if ix.IsStremio() {
+				ix.URL = redactStremioURL(ix.URL)
+			}
 			out.Indexers[i] = ix
 		}
 	}
@@ -219,6 +270,26 @@ func UnredactConfig(next, prev config.Config) (config.Config, []FieldError) {
 	out.Trakt = errs.unredactTrakt(next.Trakt, prev.Trakt)
 	out.Simkl.ClientSecret = errs.restore("simkl.clientSecret", next.Simkl.ClientSecret, prev.Simkl.ClientSecret, strings.TrimSpace(next.Simkl.ClientID) == strings.TrimSpace(prev.Simkl.ClientID))
 	out.OpenSubtitles = errs.unredactOpenSubtitles(next.OpenSubtitles, prev.OpenSubtitles)
+	if next.Subtitles.Providers != nil {
+		out.Subtitles.Providers = make([]config.SubtitleProvider, len(next.Subtitles.Providers))
+		for i, p := range next.Subtitles.Providers {
+			if p.Kind == config.SubtitleProviderStremio && isRedactedStremioURL(p.URL) {
+				restored := ""
+				for _, o := range prev.Subtitles.Providers {
+					if p.ID != "" && o.ID == p.ID && o.Kind == config.SubtitleProviderStremio &&
+						(isRedacted(p.URL) || stremioURLHost(p.URL) == stremioURLHost(o.URL)) {
+						restored = o.URL
+						break
+					}
+				}
+				if restored == "" {
+					errs.add(fmt.Sprintf("subtitles.providers[%d].url", i))
+				}
+				p.URL = restored
+			}
+			out.Subtitles.Providers[i] = p
+		}
+	}
 	out.LLM = errs.unredactLLM(next.LLM, prev.LLM)
 	out.Outbound.Password = errs.restore("outbound.password", next.Outbound.Password, prev.Outbound.Password, strings.TrimSpace(next.Outbound.URL) == strings.TrimSpace(prev.Outbound.URL))
 	out.Prowlarr.APIKey = errs.restore("prowlarr.apiKey", next.Prowlarr.APIKey, prev.Prowlarr.APIKey, sameProwlarrURL(next.Prowlarr.URL, prev.Prowlarr.URL))
@@ -283,13 +354,26 @@ func (e *placeholderErrors) unredactProvider(field string, p config.UsenetProvid
 // FlareSolverr URL ix will be used with.
 func (e *placeholderErrors) unredactIndexer(field string, ix config.Indexer, flareSolverr string, prev config.Config) config.Indexer {
 	var old config.Indexer
-	bound := false
+	found := false
 	for _, o := range prev.Indexers {
 		if ix.ID != "" && o.ID == ix.ID {
-			old, bound = o, indexerIdentity(o, prev.IndexerSites.FlareSolverrURL) == indexerIdentity(ix, flareSolverr)
+			old, found = o, true
 			break
 		}
 	}
+	// A redacted Stremio install URL restores only for the same entry
+	// still pointing at the same host; anything else must be pasted again.
+	if ix.IsStremio() && isRedactedStremioURL(ix.URL) {
+		if found && old.IsStremio() && stremioURLHost(ix.URL) != "" && stremioURLHost(ix.URL) == stremioURLHost(old.URL) {
+			ix.URL = old.URL
+		} else if found && isRedacted(ix.URL) && old.IsStremio() {
+			ix.URL = old.URL
+		} else {
+			e.add(field + ".url")
+			ix.URL = ""
+		}
+	}
+	bound := found && indexerIdentity(old, prev.IndexerSites.FlareSolverrURL) == indexerIdentity(ix, flareSolverr)
 	ix.APIKey = e.restore(field+".apiKey", ix.APIKey, old.APIKey, bound)
 	ix.SecretSettings = e.restoreMap(field+".secretSettings", ix.SecretSettings, old.SecretSettings, bound)
 	return ix
