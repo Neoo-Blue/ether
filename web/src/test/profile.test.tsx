@@ -16,7 +16,7 @@ it("opens the owner's own viewer page from the header, with their sign-in tab", 
   await waitFor(() => expect(account).toHaveAttribute("href", "/viewers/1"), WAIT);
   fireEvent.click(account);
   expect(await screen.findByRole("heading", { name: /Alex Rivera/ }, WAIT)).toBeInTheDocument();
-  fireEvent.click(await screen.findByRole("tab", { name: "Sign-in methods & devices" }, WAIT));
+  fireEvent.click(await screen.findByRole("tab", { name: "Sign-in & devices" }, WAIT));
   expect(await screen.findByRole("heading", { name: "Connect apps" }, WAIT)).toBeInTheDocument();
   expect(await screen.findByRole("heading", { name: "Sign-in methods" }, WAIT)).toBeInTheDocument();
   expect(screen.getByLabelText("New password")).toBeInTheDocument();

@@ -110,4 +110,3 @@ it("copies a friendly message for a local viewer", async () => {
   expect(message).toContain("Jellyfin:");
   expect(message).toContain("http://192.168.1.2:8096");
 });
-

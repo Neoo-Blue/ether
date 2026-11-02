@@ -212,18 +212,18 @@ export type ViewerAccessStatus = "owner" | "active" | "imported" | "inactive";
 
 export type ViewerSource = "owner" | "local" | "invite" | "plex" | "plexHome" | "dlnaGuest";
 
-/** How a viewer came to be here and which lifecycle actions Ether may take. */
+/** What the owner may do with this viewer, and who manages the account. */
 export interface ViewerLifecycle {
   source: ViewerSource;
-  /** Access is paused by the owner (everything is kept, they are signed out). */
+  /** Access is paused: everything is kept, but they cannot sign in anywhere. */
   paused: boolean;
-  /** Plex rows only: plex.tv still shares this server with them. */
+  /** Plex rows only: plex.tv still shares the server with them. */
   plexShared?: boolean;
-  /** "plex" when the account is managed on plex.tv, "" otherwise. */
-  managedBy: "plex" | "";
-  canPause: boolean;
   canRemove: boolean;
   canMerge: boolean;
+  canPause: boolean;
+  /** "plex" when the account is managed on plex.tv, never in Ether. */
+  managedBy: "plex" | "";
 }
 
 export interface Viewer {
