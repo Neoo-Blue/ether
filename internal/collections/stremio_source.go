@@ -105,16 +105,6 @@ func backgroundOnlySource(src core.CollectionSource) bool {
 	return strings.HasPrefix(src.Kind, "plugin:") || src.Kind == "stremioCatalog"
 }
 
-// hasBackgroundOnlySource reports whether a spec reads any remote list.
-func hasBackgroundOnlySource(sp core.CollectionSpec) bool {
-	for _, src := range sp.Sources {
-		if backgroundOnlySource(src) {
-			return true
-		}
-	}
-	return false
-}
-
 func hasStremioCatalog(sp core.CollectionSpec) bool {
 	for _, src := range sp.Sources {
 		if src.Kind == "stremioCatalog" {

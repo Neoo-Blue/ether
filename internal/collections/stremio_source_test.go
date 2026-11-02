@@ -114,8 +114,10 @@ func TestStremioCatalogGatherAndUnmatchedCount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Preview: %v", err)
 	}
-	if len(preview.Items) != 0 || len(preview.Warnings) == 0 {
-		t.Fatalf("preview should not fetch: %+v", preview)
+	// Owner preview reads the first page only (at most PreviewItems) and
+	// reports unmatched items.
+	if len(preview.Items) == 0 || len(preview.Items) > collections.PreviewItems || len(preview.Warnings) == 0 {
+		t.Fatalf("preview should show the first page with match warnings: %+v", preview)
 	}
 
 	created, err := e.svc.CreateSpec(e.ctx, sp)
