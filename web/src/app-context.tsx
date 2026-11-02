@@ -12,6 +12,8 @@ import { api } from "./lib/api";
 import { computeHealth, overallLevel, type HealthItem, type HealthLevel } from "./lib/health";
 import type { Bootstrap, DashboardData } from "./lib/types";
 import { useLocale } from "./i18n/react";
+import { useStreamEvent } from "./lib/stream";
+import { invalidateRegistry } from "./lib/extend";
 
 interface AppState {
   boot: Bootstrap;
@@ -27,8 +29,10 @@ interface AppState {
 
 const Ctx = createContext<AppState | null>(null);
 
-const SLOW_MS = 30_000;
-const FAST_MS = 5_000;
+/** Live screens refresh at this cadence; everything else trusts the stream. */
+const LIVE_MS = 30_000;
+/** Safety net when the stream drops events or never connects. */
+const SAFETY_MS = 300_000;
 
 export function AppProvider({
   boot,
@@ -60,8 +64,21 @@ export function AppProvider({
   useEffect(() => {
     void refreshDashboard();
   }, [refreshDashboard]);
+  // Push updates arrive over the console stream; polling is only the safety
+  // net. A pushed payload replaces state directly, so a change lands within
+  // a second instead of waiting for the next tick.
+  useStreamEvent<DashboardData>("dashboard", (event) => {
+    const data = event.data;
+    if (data && typeof data === "object" && "sections" in data && "names" in data) {
+      inflight.current = false;
+      setDashboard(data);
+      setDashboardError(null);
+    }
+  });
+  useStreamEvent("extend.changed", () => invalidateRegistry());
+
   useEffect(() => {
-    const ms = live > 0 ? FAST_MS : SLOW_MS;
+    const ms = live > 0 ? LIVE_MS : SAFETY_MS;
     const t = window.setInterval(() => {
       if (document.visibilityState !== "hidden") void refreshDashboard();
     }, ms);
