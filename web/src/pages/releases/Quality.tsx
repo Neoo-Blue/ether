@@ -9,7 +9,7 @@ import {
   toast,
   confirmDialog,
 } from "@braedonsaunders/appkit-ui";
-import { ChevronDown, Download, Plus, SlidersHorizontal } from "lucide-react";
+import { ChevronDown, Download, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { MoreOptions } from "../../components/ConfigSection";
@@ -23,7 +23,6 @@ import { searchSelectLabels } from "../../i18n/appkit-labels";
 import { api } from "../../lib/api";
 import { qualityGateLabel } from "../../lib/releases";
 import type { QualityProfile, ReleaseRule } from "../../lib/types";
-import { QUALITY_AUDIO, QUALITY_CODECS, QUALITY_SOURCES } from "../settings/schema";
 import { TieBreakerSection } from "../sources/EqualQuality";
 import {
   BoolRow,
@@ -35,15 +34,21 @@ import {
   swap,
   type Errors,
 } from "../sources/form";
+import { isPluginDescriptor, textOf } from "../../lib/extend";
 import {
-  DEFAULT_BUILTIN_RANKING,
   FilterRulesEditor,
+  PluginBadge,
   RuleEditorCard,
   RulePreview,
+  descriptorLabel,
+  descriptorOwnerName,
   insertPreferRuleInRanking,
+  insertStepAtDefaultPosition,
   normalizeRanking,
   releaseRuleConflict,
   syncRulesWithRanking,
+  useRankingRegistry,
+  type RankingStepDescriptor,
 } from "./ReleasePreferences";
 import { parseScoring, scoringText, type ResolverPolicy } from "./resolverDraft";
 import { TrashImport } from "./TrashImport";
@@ -52,7 +57,7 @@ import { useQuality, type Quality } from "./useQuality";
 function blankProfile(n: number): QualityProfile {
   return {
     name: t("Profile {n}", { n }),
-    ranking: [...DEFAULT_BUILTIN_RANKING],
+    ranking: [],
     maxHeight: 1080,
     minHeight: 720,
     allowHdr: false,
@@ -260,8 +265,10 @@ function WhatMattersMostSection({
   patch: (p: Partial<QualityProfile>) => void;
   rankingError?: string;
 }) {
+  const { steps, fields, loading, error, reload } = useRankingRegistry();
   const [expanded, setExpanded] = useState<string | null>(null);
-  const ladder = normalizeRanking(draft);
+  const [stepToAdd, setStepToAdd] = useState("");
+  const ladder = normalizeRanking(draft, steps);
   const rules = draft.releaseRules ?? [];
 
   function updateRanking(nextRanking: string[]) {
@@ -294,119 +301,115 @@ function WhatMattersMostSection({
     });
   }
 
-  function renderBuiltinStep(step: string, handle: DragHandleProps, index: number) {
-    const fixed = step === "connection" || step === "verified";
-    const stepMeta: Record<string, { title: string; summary: string; expandable?: boolean }> = {
-      language: {
-        title: t("Audio language"),
-        summary: draft.preferredLanguages?.length
+  /** The step's current setting in one line, from the profile field its editor edits. */
+  function stepSummary(desc: RankingStepDescriptor | undefined): string {
+    switch (desc?.meta?.configKey) {
+      case "preferredLanguages":
+        return draft.preferredLanguages?.length
           ? draft.preferredLanguages.join(" › ")
-          : t("Any language"),
-        expandable: true,
-      },
-      connection: {
-        title: t("Connection fit"),
-        summary: t("Fits the viewer's bandwidth"),
-      },
-      resolution: {
-        title: t("Resolution"),
-        summary:
-          draft.minHeight === draft.maxHeight
-            ? heightLabel(draft.maxHeight)
-            : t("{min} to {max}, highest first", {
-                min: heightLabel(draft.minHeight),
-                max: heightLabel(draft.maxHeight),
-              }),
-      },
-      releaseType: {
-        title: t("Release type"),
-        summary: draft.preferredSources?.length
+          : t("Any language");
+      case "heightRange":
+        return draft.minHeight === draft.maxHeight
+          ? heightLabel(draft.maxHeight)
+          : t("{min} to {max}, highest first", {
+              min: heightLabel(draft.minHeight),
+              max: heightLabel(draft.maxHeight),
+            });
+      case "preferredSources":
+        return draft.preferredSources?.length
           ? draft.preferredSources.join(" › ")
-          : t("No preference"),
-        expandable: true,
-      },
-      hdr: {
-        title: t("HDR"),
-        summary: draft.allowDolbyVision
+          : t("No preference");
+      case "hdr":
+        return draft.allowDolbyVision
           ? t("Dolby Vision › HDR10 › SDR")
           : draft.allowHdr
             ? t("HDR10 › SDR")
-            : t("SDR only"),
-      },
-      verified: {
-        title: t("Played fine recently"),
-        summary: t("Verified streams rank ahead of untested ones"),
-      },
-      videoCodec: {
-        title: t("Video codec"),
-        summary: draft.preferredCodecs?.length
+            : t("SDR only");
+      case "preferredCodecs":
+        return draft.preferredCodecs?.length
           ? draft.preferredCodecs.join(" › ")
-          : t("No preference"),
-        expandable: true,
-      },
-      audioFormat: {
-        title: t("Audio format"),
-        summary: draft.preferredAudio?.length
-          ? draft.preferredAudio.join(" › ")
-          : t("No preference"),
-        expandable: true,
-      },
-      size: {
-        title: t("Larger file"),
-        summary: draft.preferLargest
+          : t("No preference");
+      case "preferredAudio":
+        return draft.preferredAudio?.length ? draft.preferredAudio.join(" › ") : t("No preference");
+      case "preferLargest":
+        return draft.preferLargest
           ? t("Ranks larger files higher within the allowed size range")
-          : t("Off"),
-      },
-    };
-    const meta = stepMeta[step] ?? { title: step, summary: "" };
+          : t("Off");
+      default:
+        return textOf(desc?.hint) || (typeof desc?.meta?.hint === "string" ? desc.meta.hint : "");
+    }
+  }
+
+  function renderDescriptorStep(step: string, handle: DragHandleProps, index: number) {
+    const desc = steps.find((d) => d.id === step);
+    const meta = desc?.meta;
+    const canMove = meta?.canMove ?? true;
+    const plugin = desc ? isPluginDescriptor(desc) : step.startsWith("plugin:");
+    const title = desc ? textOf(desc.label) || step : step;
+    const summary = stepSummary(desc);
+    const expandable = meta?.editor === "ordered_list" && !!meta.configKey;
     const isExpanded = expanded === step;
+    const options = (meta?.options ?? meta?.choices ?? []).map((o) => o.value);
 
     return (
       <div
         data-ranking-step={step}
-        className={`space-y-3 px-3 py-3 ${fixed ? "bg-bg-subtle/40 opacity-70" : ""}`}
+        className={`space-y-3 px-3 py-3 ${canMove ? "" : "bg-bg-subtle/40 opacity-70"}`}
       >
         <div className="flex items-center gap-2">
-          {fixed ? (
-            <span className="size-8 shrink-0" aria-hidden />
+          {canMove ? (
+            <DragHandle handle={handle} label={t("Move {name}", { name: title })} />
           ) : (
-            <DragHandle handle={handle} label={t("Move {name}", { name: meta.title })} />
+            <span className="size-8 shrink-0" aria-hidden />
           )}
           <span className="w-5 text-xs tabular-nums text-fg-muted">{index + 1}</span>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-fg">{meta.title}</p>
-            <p className="truncate text-xs text-fg-muted">{meta.summary}</p>
+            <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-fg">
+              {title}
+              {desc && plugin ? <PluginBadge owner={descriptorOwnerName(desc)} /> : null}
+            </p>
+            <p className="truncate text-xs text-fg-muted">{summary}</p>
           </div>
-          {fixed ? <Badge variant="secondary">{t("Automatic")}</Badge> : null}
-          {step === "size" ? (
+          {!canMove ? <Badge variant="secondary">{t("Automatic")}</Badge> : null}
+          {meta?.editor === "toggle" && meta.configKey === "preferLargest" ? (
             <Switch
-              aria-label={t("Larger file")}
+              aria-label={title}
               checked={draft.preferLargest ?? false}
               onChange={(e) => patch({ preferLargest: e.currentTarget.checked })}
             />
           ) : null}
-          {meta.expandable ? (
+          {expandable ? (
             <Button
               variant="ghost"
               size="sm"
               aria-expanded={isExpanded}
-              aria-label={t("Configure {name}", { name: meta.title })}
+              aria-label={t("Configure {name}", { name: title })}
               onClick={() => setExpanded(isExpanded ? null : step)}
             >
               {t("Values")}
               <ChevronDown size={13} />
             </Button>
           ) : null}
-          {!fixed ? (
+          {canMove ? (
             <OrderButtons
-              label={meta.title}
+              label={title}
               i={index}
               n={ladder.length}
               onMove={(d) => updateRanking(swap(ladder, index, index + d))}
             />
           ) : null}
+          {plugin ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t("Remove step")}
+              onClick={() => updateRanking(ladder.filter((s) => s !== step))}
+            >
+              <Trash2 size={14} />
+            </Button>
+          ) : null}
         </div>
-        {isExpanded && step === "language" ? (
+        {isExpanded && meta?.configKey === "preferredLanguages" ? (
           <div className="space-y-1.5 border-t border-border pt-3">
             <ListInput
               ariaLabel={t("Languages")}
@@ -419,31 +422,31 @@ function WhatMattersMostSection({
             </p>
           </div>
         ) : null}
-        {isExpanded && step === "releaseType" ? (
+        {isExpanded && meta?.configKey === "preferredSources" ? (
           <div className="border-t border-border pt-3">
             <PreferenceList
-              label={t("Release type")}
-              all={QUALITY_SOURCES}
+              label={title}
+              all={options}
               value={draft.preferredSources}
               onChange={(v) => patch({ preferredSources: v })}
             />
           </div>
         ) : null}
-        {isExpanded && step === "videoCodec" ? (
+        {isExpanded && meta?.configKey === "preferredCodecs" ? (
           <div className="border-t border-border pt-3">
             <PreferenceList
-              label={t("Video codec")}
-              all={QUALITY_CODECS}
+              label={title}
+              all={options}
               value={draft.preferredCodecs}
               onChange={(v) => patch({ preferredCodecs: v })}
             />
           </div>
         ) : null}
-        {isExpanded && step === "audioFormat" ? (
+        {isExpanded && meta?.configKey === "preferredAudio" ? (
           <div className="border-t border-border pt-3">
             <PreferenceList
-              label={t("Audio format")}
-              all={QUALITY_AUDIO}
+              label={title}
+              all={options}
               value={draft.preferredAudio}
               onChange={(v) => patch({ preferredAudio: v })}
             />
@@ -452,6 +455,9 @@ function WhatMattersMostSection({
       </div>
     );
   }
+
+  const addable = steps.filter((d) => !ladder.includes(d.id));
+  const chosen = addable.some((d) => d.id === stepToAdd) ? stepToAdd : (addable[0]?.id ?? "");
 
   return (
     <SettingsSection
@@ -464,34 +470,67 @@ function WhatMattersMostSection({
             {rankingError}
           </p>
         ) : null}
-        <SortableList
-          items={ladder}
-          getId={(step) => step}
-          onReorder={(next) => updateRanking(next)}
-          className="divide-y divide-border overflow-hidden rounded-lg border border-border"
-          renderItem={(step, handle, index) => {
-            if (step.startsWith("rule:")) {
-              const id = step.slice(5);
-              const r = rules.find((x) => x.id === id);
-              if (!r) return null;
-              return (
-                <div data-ranking-step={step}>
-                  <RuleEditorCard
-                    rule={r}
-                    handle={handle}
-                    stepNumber={index + 1}
-                    canMoveUp={index > 0}
-                    canMoveDown={index < ladder.length - 1}
-                    onMove={(d) => updateRanking(swap(ladder, index, index + d))}
-                    onChange={(rulePatch) => updatePreferRule(r.id, rulePatch)}
-                    onRemove={() => removePreferRule(r.id)}
+        {error && steps.length === 0 ? (
+          <ErrorPanel error={error} onRetry={reload} />
+        ) : loading && steps.length === 0 ? (
+          <LoadingRows rows={4} />
+        ) : (
+          <>
+            <SortableList
+              items={ladder}
+              getId={(step) => step}
+              onReorder={(next) => updateRanking(next)}
+              className="divide-y divide-border overflow-hidden rounded-lg border border-border"
+              renderItem={(step, handle, index) => {
+                if (step.startsWith("rule:")) {
+                  const id = step.slice(5);
+                  const r = rules.find((x) => x.id === id);
+                  if (!r) return null;
+                  return (
+                    <div data-ranking-step={step}>
+                      <RuleEditorCard
+                        rule={r}
+                        fields={fields}
+                        handle={handle}
+                        stepNumber={index + 1}
+                        canMoveUp={index > 0}
+                        canMoveDown={index < ladder.length - 1}
+                        onMove={(d) => updateRanking(swap(ladder, index, index + d))}
+                        onChange={(rulePatch) => updatePreferRule(r.id, rulePatch)}
+                        onRemove={() => removePreferRule(r.id)}
+                      />
+                    </div>
+                  );
+                }
+                return renderDescriptorStep(step, handle, index);
+              }}
+            />
+            {addable.length > 0 ? (
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="min-w-0 sm:flex-1">
+                  <SearchSelect
+                    {...searchSelectLabels()}
+                    ariaLabel={t("Step to add")}
+                    value={chosen}
+                    options={addable.map((d) => ({
+                      value: d.id,
+                      label: descriptorLabel(d),
+                    }))}
+                    onChange={setStepToAdd}
                   />
                 </div>
-              );
-            }
-            return renderBuiltinStep(step, handle, index);
-          }}
-        />
+                <Button
+                  size="sm"
+                  disabled={!chosen}
+                  onClick={() => updateRanking(insertStepAtDefaultPosition(ladder, steps, chosen))}
+                >
+                  <Plus size={14} />
+                  {t("Add a step")}
+                </Button>
+              </div>
+            ) : null}
+          </>
+        )}
       </div>
       <RulePreview profile={draft} />
     </SettingsSection>
@@ -526,6 +565,7 @@ function ProfileList({
   commit: Commit;
   refresh: () => Promise<void>;
 }) {
+  const { steps, fields } = useRankingRegistry();
   const profiles = quality.profiles ?? [];
   const [importing, setImporting] = useState(false);
   const rules = quality.rules ?? [];
@@ -547,7 +587,7 @@ function ProfileList({
     setError(null);
     setTieBreakerError(null);
     const cloned = structuredClone(draft);
-    cloned.ranking = normalizeRanking(cloned);
+    cloned.ranking = normalizeRanking(cloned, steps);
     setEditing({ index, draft: cloned });
     const isExisting = index < profiles.length;
     setDefaultFor({
@@ -584,7 +624,7 @@ function ProfileList({
     const { index, draft: profileDraft } = editing;
     let draft: QualityProfile = {
       ...profileDraft,
-      ranking: normalizeRanking(profileDraft),
+      ranking: normalizeRanking(profileDraft, steps),
     };
     let parsed: ReturnType<typeof parseScoring> | null = null;
     if (scoring && hasImportedRules(profileDraft, resolver)) {
@@ -629,7 +669,7 @@ function ProfileList({
         ? rules.map((r) => (r.profile === renamed ? { ...r, profile: draft.name } : r))
         : rules,
     };
-    const conflict = releaseRuleConflict(draft.releaseRules ?? []);
+    const conflict = releaseRuleConflict(draft.releaseRules ?? [], fields);
     if (conflict) {
       setErrors({ releaseRules: conflict });
       return;

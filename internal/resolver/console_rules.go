@@ -25,16 +25,16 @@ func (h *consoleAPI) previewRules(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &in) {
 		return
 	}
-	policy, err := releasepolicy.Compile(in.Profile.ReleaseRules)
+	policy, err := h.s.compileRules(in.Profile.ReleaseRules)
 	if err != nil {
 		consoleError(w, 400, "invalid", err.Error())
 		return
 	}
-	if err := core.ValidateRanking(in.Profile.Ranking, in.Profile.ReleaseRules); err != nil {
+	if err := h.s.validateRanking(in.Profile.Ranking, in.Profile.ReleaseRules); err != nil {
 		consoleError(w, 400, "invalid", err.Error())
 		return
 	}
-	warning := releasepolicy.Conflict(in.Profile.ReleaseRules)
+	warning := releasepolicy.ConflictWith(in.Profile.ReleaseRules, h.s.fieldLookup())
 	if len(in.Names) > 100 {
 		consoleError(w, 400, "invalid", "at most 100 filenames")
 		return
