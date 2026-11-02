@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor, within } from "@testing-library/rea
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, it, expect, vi } from "vitest";
 import { setToken } from "../lib/api";
+import { descriptors as notifyDescriptors } from "../mock/extend/descriptors/notify";
 import Activity from "../pages/activity/Activity";
 import Notifications from "../pages/notifications/Notifications";
 import { HardwareStatus } from "../pages/playback/Hardware";
@@ -37,7 +38,8 @@ function backend() {
       const url = String(input);
       calls.push({ url, init });
       let v: unknown = { ok: true };
-      if (url.includes("/stats/summary")) v = emptySummary;
+      if (url.includes("/extend/registry")) v = { version: 1, descriptors: notifyDescriptors };
+      else if (url.includes("/stats/summary")) v = emptySummary;
       else if (url.includes("/stats/history")) v = [];
       else if (url.endsWith("/users"))
         v = {
@@ -109,8 +111,7 @@ function backend() {
           naturalSearch: false,
           recaps: false,
         };
-      else if (url.endsWith("/notifications/"))
-        v = { channels: [], events: ["playback.error", "newsletter.weekly"], deliveries: [] };
+      else if (url.endsWith("/notifications/")) v = { channels: [], deliveries: [] };
       else if (url.endsWith("/status/hwaccel"))
         v = { value: { hwaccel: { name: "none", encoders: [] } } };
       else if (url.endsWith("/newsletter/settings") && !init?.method) v = schedule;
@@ -249,7 +250,7 @@ describe("Notifications", () => {
     renderAt("/notifications");
     fireEvent.click(await screen.findByRole("button", { name: "New channel" }, WAIT));
     const drawer = await screen.findByRole("dialog", { name: "New notification channel" });
-    fireEvent.change(within(drawer).getByLabelText("Endpoint URL"), {
+    fireEvent.change(await within(drawer).findByLabelText("Endpoint URL"), {
       target: { value: "https://notify.example/hook" },
     });
     fireEvent.click(within(drawer).getByRole("button", { name: "Clear" }));
@@ -262,7 +263,7 @@ describe("Notifications", () => {
           (c) =>
             c.url.includes("/notifications/") &&
             c.init?.method === "PUT" &&
-            body(c).endpoint === "https://notify.example/hook" &&
+            body(c).secrets?.endpoint === "https://notify.example/hook" &&
             body(c).events.includes("playback.error"),
         ),
       ).toBe(true),

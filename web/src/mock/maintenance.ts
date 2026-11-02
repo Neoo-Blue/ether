@@ -15,40 +15,12 @@ export function createMaintenance() {
       kind: "discord",
       enabled: true,
       events: ["playback.error", "provider.outage", "indexer.outage", "update.available"],
-      endpoint: "https://discord.example/webhook",
-      token: "",
-      target: "",
-      username: "",
-      password: "",
-      from: "",
-      to: "",
+      secrets: { endpoint: "[configured]" },
       perMinute: 5,
       digestMinutes: 0,
     },
   ];
   let heartbeat = { enabled: false, endpoint: "" };
-  const events = [
-    "server.started",
-    "server.stopping",
-    "server.crash",
-    "provider.recovered",
-    "indexer.recovered",
-    "cache.recovered",
-    "playback.start",
-    "playback.stop",
-    "playback.error",
-    "playback.failover",
-    "provider.outage",
-    "indexer.outage",
-    "indexer.budget",
-    "cache.full",
-    "cert.renewed",
-    "update.available",
-    "backup.failed",
-    "user.joined",
-    "title.available",
-    "newsletter.weekly",
-  ];
   const deliveries = Array.from({ length: 12 }, (_, i) => ({
     id: i + 1,
     channel: "ch-discord",
@@ -113,7 +85,7 @@ export function createMaintenance() {
     const route = `${method} ${path}`;
     switch (route) {
       case "GET /notifications":
-        return { status: 200, body: { channels, events, deliveries, crashWatcher: true } };
+        return { status: 200, body: { channels, deliveries, crashWatcher: true } };
       case "GET /notifications/heartbeat":
         return { status: 200, body: heartbeat };
       case "PUT /notifications/heartbeat":

@@ -33,13 +33,25 @@ import { RatingSources, type RatingSettings } from "../metadata/Ratings";
 import { SimklIntegration, type SimklSettings } from "./SimklIntegration";
 import { LanguageFeatures } from "./LanguageFeatures";
 import { LanguageModelSettings } from "./LanguageModel";
-import { asObj, GenericFields, SchemaField, type FieldGroup } from "./SchemaForm";
-import * as S from "./schema";
+import {
+  asObj,
+  GenericFields,
+  SchemaField,
+  useSettingsSchema,
+  type FieldGroup,
+} from "./SchemaForm";
 
 type Obj = Record<string, unknown>;
 
 export type ServiceTab =
-  "overview" | "tmdb" | "trakt" | "simkl" | "llm" | "opensubtitles" | "ratings" | "introdb";
+  | "overview"
+  | "tmdb"
+  | "trakt"
+  | "simkl"
+  | "llm"
+  | "opensubtitles"
+  | "ratings"
+  | "introdb";
 
 const TAB_ORDER: ServiceTab[] = [
   "overview",
@@ -82,6 +94,8 @@ interface Service {
   flag: "enabled" | "theIntroDb";
   label: string;
   groups: FieldGroup[];
+  /** Served settingsSchema id whose groups replace `groups` once loaded. */
+  schemaId?: string;
   /** Simkl keeps its own account form and save. */
   custom?: boolean;
   form?: (props: {
@@ -106,6 +120,7 @@ interface Service {
  */
 interface ServiceBehaviour {
   groups: () => FieldGroup[];
+  schemaId?: string;
   testLabel?: () => string;
   test?: (value: Obj) => ReturnType<TestFn>;
   form?: Service["form"];
@@ -113,7 +128,8 @@ interface ServiceBehaviour {
 
 const SERVICE_BEHAVIOUR: Record<string, ServiceBehaviour> = {
   trakt: {
-    groups: () => S.TRAKT,
+    groups: () => [],
+    schemaId: "trakt",
     testLabel: () => t("Test Trakt"),
     test: (v) => api.testTrakt(v as EtherConfig["trakt"]),
   },
@@ -133,12 +149,14 @@ const SERVICE_BEHAVIOUR: Record<string, ServiceBehaviour> = {
     test: (v) => api.testLLM(v as EtherConfig["llm"]),
   },
   opensubtitles: {
-    groups: () => S.OPENSUBTITLES,
+    groups: () => [],
+    schemaId: "openSubtitles",
     testLabel: () => t("Test OpenSubtitles"),
     test: (v) => api.testOpenSubtitles(v as EtherConfig["openSubtitles"]),
   },
   introdb: {
-    groups: () => S.MARKERS,
+    groups: () => [],
+    schemaId: "markers",
     testLabel: () => t("Test TheIntroDB"),
     test: (v) => api.testIntroDB(String(v.apiKey ?? "")),
   },
@@ -171,6 +189,7 @@ function servicesFrom(descriptors: Descriptor<IntegrationMeta>[]): Service[] {
       flag: meta.flag as Service["flag"],
       label: textOf(d.label),
       groups: behaviour.groups(),
+      schemaId: behaviour.schemaId,
       custom: meta.form === "simkl" || undefined,
       form: behaviour.form,
       testLabel: behaviour.testLabel?.(),
@@ -1102,10 +1121,19 @@ function SchemaGroups({
   errors: Record<string, string>;
   footer?: ReactNode;
 }) {
-  const known = new Set(service.groups.flatMap((g) => g.fields.map((f) => f.key)));
+  const served = useSettingsSchema(service.schemaId ?? "");
+  const groups = service.schemaId ? served.groups : service.groups;
+  if (!groups) {
+    return (
+      <div className="py-10 text-center">
+        <Spinner size={20} label={t("Loading settings")} />
+      </div>
+    );
+  }
+  const known = new Set(groups.flatMap((g) => g.fields.map((f) => f.key)));
   const extra = Object.keys(value).filter((k) => !known.has(k));
-  return service.groups.map((g, i) => {
-    const last = i === service.groups.length - 1;
+  return groups.map((g, i) => {
+    const last = i === groups.length - 1;
     return (
       <SettingsSection
         key={`${service.configKey}-${g.title ?? i}`}

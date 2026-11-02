@@ -38,12 +38,12 @@ func TestRulesRedactionRateLimitAndDigest(t *testing.T) {
 	}))
 	defer up.Close()
 	s := New(db, Options{Now: func() time.Time { return now }})
-	c := Channel{ID: "test", Kind: "webhook", Enabled: true, Endpoint: up.URL + "/secret-hook", Token: "secret", Events: []string{"playback.error"}, PerMinute: 1, DigestMinutes: 5}
+	c := Channel{ID: "test", Kind: "webhook", Enabled: true, Secrets: map[string]string{"endpoint": up.URL + "/secret-hook", "token": "secret"}, Events: []string{"playback.error"}, PerMinute: 1, DigestMinutes: 5}
 	if err := s.Save(ctx, c); err != nil {
 		t.Fatal(err)
 	}
 	cs, err := s.Channels(ctx)
-	if err != nil || cs[0].Endpoint != Redacted || cs[0].Token != Redacted {
+	if err != nil || cs[0].Secret("endpoint") != Redacted || cs[0].Secret("token") != Redacted {
 		t.Fatalf("unredacted channels %+v %v", cs, err)
 	}
 	if err := s.Save(ctx, cs[0]); err != nil {
@@ -88,7 +88,7 @@ func TestFailedDeliveryDoesNotLeakSecrets(t *testing.T) {
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Error(w, "secret in response", 500) }))
 	defer up.Close()
 	s := New(db, Options{})
-	if err := s.Save(ctx, Channel{ID: "one", Kind: "discord", Endpoint: up.URL + "/secret", Enabled: true, Events: []string{"*"}}); err != nil {
+	if err := s.Save(ctx, Channel{ID: "one", Kind: "discord", Secrets: map[string]string{"endpoint": up.URL + "/secret"}, Enabled: true, Events: []string{"*"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Emit(ctx, Event{Kind: "playback.error"}); err != nil {
@@ -137,17 +137,17 @@ func TestTransportFormatsAndNoRedirect(t *testing.T) {
 			}))
 			defer up.Close()
 			s := New(db, Options{})
-			if err := s.deliver(ctx, Channel{Kind: kind, Endpoint: up.URL}, Event{Title: "Test", Message: "hello"}); err == nil {
+			if err := s.deliver(ctx, Channel{Kind: kind, Secrets: map[string]string{"endpoint": up.URL}}, Event{Title: "Test", Message: "hello"}); err == nil {
 				t.Fatal("followed redirect or accepted 302")
 			}
 		})
 	}
 }
 func TestValidateSMTPAndTelegram(t *testing.T) {
-	if validateChannel(Channel{Kind: "smtp", Endpoint: "smtp.example:587", From: "a@example\r\nBcc: x", To: "b@example"}) == nil {
+	if validateChannel(Channel{Kind: "smtp", Secrets: map[string]string{"endpoint": "smtp.example:587"}, Settings: map[string]string{"from": "a@example\r\nBcc: x", "to": "b@example"}}) == nil {
 		t.Fatal("header injection accepted")
 	}
-	if validateChannel(Channel{Kind: "telegram", Token: "abc/other", Target: "123"}) == nil {
+	if validateChannel(Channel{Kind: "telegram", Secrets: map[string]string{"token": "abc/other"}, Settings: map[string]string{"target": "123"}}) == nil {
 		t.Fatal("invalid token accepted")
 	}
 }
@@ -164,7 +164,7 @@ func TestNewsletterRequiresSelectedSMTPChannel(t *testing.T) {
 	if err := s.Emit(ctx, e); err == nil {
 		t.Fatal("reported queue success with no SMTP channel")
 	}
-	if err := s.Save(ctx, Channel{ID: "mail", Kind: "smtp", Endpoint: "smtp.example:587", From: "owner@example", To: "viewer@example", Enabled: true, Events: []string{"newsletter.weekly"}}); err != nil {
+	if err := s.Save(ctx, Channel{ID: "mail", Kind: "smtp", Secrets: map[string]string{"endpoint": "smtp.example:587"}, Settings: map[string]string{"from": "owner@example", "to": "viewer@example"}, Enabled: true, Events: []string{"newsletter.weekly"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Emit(ctx, e); err != nil {
@@ -187,7 +187,7 @@ func TestImmediateRateLimit(t *testing.T) {
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls++; w.WriteHeader(204) }))
 	defer up.Close()
 	s := New(db, Options{Now: func() time.Time { return now }})
-	if err := s.Save(ctx, Channel{ID: "one", Kind: "webhook", Endpoint: up.URL, Enabled: true, Events: []string{"*"}, PerMinute: 1}); err != nil {
+	if err := s.Save(ctx, Channel{ID: "one", Kind: "webhook", Secrets: map[string]string{"endpoint": up.URL}, Enabled: true, Events: []string{"*"}, PerMinute: 1}); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 2; i++ {
@@ -228,7 +228,7 @@ func TestDigestBatchesEventsAcrossTheWindow(t *testing.T) {
 	}))
 	defer up.Close()
 	s := New(db, Options{Now: func() time.Time { return now }})
-	if err := s.Save(ctx, Channel{ID: "d", Kind: "webhook", Enabled: true, Endpoint: up.URL, Events: []string{"*"}, PerMinute: 5, DigestMinutes: 5}); err != nil {
+	if err := s.Save(ctx, Channel{ID: "d", Kind: "webhook", Enabled: true, Secrets: map[string]string{"endpoint": up.URL}, Events: []string{"*"}, PerMinute: 5, DigestMinutes: 5}); err != nil {
 		t.Fatal(err)
 	}
 	for _, m := range []string{"one", "two", "three"} {
@@ -259,7 +259,7 @@ func TestIndexerOutageAlertsOncePerOutage(t *testing.T) {
 	}
 	defer db.Close()
 	s := New(db, Options{})
-	if err := s.Save(ctx, Channel{ID: "x", Kind: "webhook", Enabled: true, Endpoint: "https://hooks.example/x", Events: []string{"indexer.outage", "indexer.budget"}}); err != nil {
+	if err := s.Save(ctx, Channel{ID: "x", Kind: "webhook", Enabled: true, Secrets: map[string]string{"endpoint": "https://hooks.example/x"}, Events: []string{"indexer.outage", "indexer.budget"}}); err != nil {
 		t.Fatal(err)
 	}
 	queued := func() int {

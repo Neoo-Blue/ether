@@ -1,7 +1,6 @@
 import { localized, t } from "../../i18n";
 import { ConfigSection } from "../../components/ConfigSection";
 import { DomainPage, useRouteTab } from "../../components/layout";
-import { PLAY_VERSIONS, RELEASE_SEARCH } from "../settings/schema";
 import { BlocklistTab } from "./Blocklist";
 import { ClientRulesTab } from "./ClientRules";
 import { HistoryTab } from "./History";
@@ -31,7 +30,7 @@ export default function Releases() {
         <ConfigSection
           configKey="resolver"
           endpoint="resolver"
-          groups={[...RELEASE_SEARCH, ...PLAY_VERSIONS]}
+          schemaId={["releaseSearch", "playVersions"]}
           label={t("Searching")}
         />
       ) : null}

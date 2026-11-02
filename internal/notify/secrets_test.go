@@ -37,8 +37,15 @@ func rawChannel(t *testing.T, db *sql.DB, id string) string {
 }
 
 func smtpChannel() Channel {
-	return Channel{ID: "mail", Name: "Mail", Kind: "smtp", Enabled: true, Events: []string{"test"}, Endpoint: "smtp.test:587",
-		Username: "smtp-user-value", Password: "smtp-password-value", From: "ether@example.test", To: "owner@example.test"}
+	return Channel{ID: "mail", Name: "Mail", Kind: "smtp", Enabled: true, Events: []string{"test"},
+		Secrets:  map[string]string{"endpoint": "smtp.test:587", "username": "smtp-user-value", "password": "smtp-password-value"},
+		Settings: map[string]string{"from": "ether@example.test", "to": "owner@example.test"}}
+}
+
+func withEndpoint(c Channel, id, endpoint string) Channel {
+	c.ID = id
+	c.Secrets["endpoint"] = endpoint
+	return c
 }
 
 func TestChannelSecretsSealedAtRest(t *testing.T) {
@@ -49,9 +56,9 @@ func TestChannelSecretsSealedAtRest(t *testing.T) {
 	}
 	defer db.Close()
 	s := New(db, Options{Sealer: upgradedSealer(t)})
-	hook := Channel{ID: "hook", Name: "Hook", Kind: "webhook", Enabled: true, Events: []string{"test"}, Endpoint: "https://hooks.test/secret-hook-path", Token: "hook-token-value"}
-	push := Channel{ID: "push", Name: "Push", Kind: "webpush", Enabled: true, Events: []string{"test"},
-		Subscription: &PushSubscription{Endpoint: "https://push.test/secret-subscription", Keys: PushKeys{Auth: "AAAAAAAAAAAAAAAAAAAAAA", P256dh: validP256dh(t)}}}
+	hook := Channel{ID: "hook", Name: "Hook", Kind: "webhook", Enabled: true, Events: []string{"test"}, Secrets: map[string]string{"endpoint": "https://hooks.test/secret-hook-path", "token": "hook-token-value"}}
+	push := Channel{ID: "push", Name: "Push", Kind: "webpush", Enabled: true, Events: []string{"test"}}
+	push.SetSubscription(&PushSubscription{Endpoint: "https://push.test/secret-subscription", Keys: PushKeys{Auth: "AAAAAAAAAAAAAAAAAAAAAA", P256dh: validP256dh(t)}})
 	for _, c := range []Channel{smtpChannel(), hook, push} {
 		if err := s.Save(ctx, c); err != nil {
 			t.Fatalf("save %s: %v", c.ID, err)
@@ -73,7 +80,11 @@ func TestChannelSecretsSealedAtRest(t *testing.T) {
 	for _, c := range cs {
 		byID[c.ID] = c
 	}
-	if byID["mail"].Password != "smtp-password-value" || byID["mail"].Username != "smtp-user-value" || byID["hook"].Endpoint != "https://hooks.test/secret-hook-path" || byID["push"].Subscription.Endpoint != "https://push.test/secret-subscription" {
+	pushSub, err := byID["push"].Subscription()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if byID["mail"].Secret("password") != "smtp-password-value" || byID["mail"].Secret("username") != "smtp-user-value" || byID["hook"].Secret("endpoint") != "https://hooks.test/secret-hook-path" || pushSub.Endpoint != "https://push.test/secret-subscription" {
 		t.Fatalf("round trip: %+v", byID)
 	}
 	// The VAPID private key is sealed, bound to its public key.
@@ -103,17 +114,17 @@ func TestChannelPlaceholderNotCarriedToNewEndpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	same := smtpChannel()
-	same.Password, same.Name = Redacted, "Renamed"
+	same.Secrets["password"], same.Name = Redacted, "Renamed"
 	if err := s.Save(ctx, same); err != nil {
 		t.Fatalf("placeholder with the same server: %v", err)
 	}
 	moved := smtpChannel()
-	moved.Password, moved.Endpoint = Redacted, "evil.test:587"
+	moved.Secrets["password"], moved.Secrets["endpoint"] = Redacted, "evil.test:587"
 	if err := s.Save(ctx, moved); !errors.Is(err, errSecretNeedsDestination) {
 		t.Fatalf("placeholder carried to another server: %v", err)
 	}
 	cs, _ := s.channels(ctx)
-	if cs[0].Endpoint != "smtp.test:587" || cs[0].Password != "smtp-password-value" || cs[0].Name != "Renamed" {
+	if cs[0].Secret("endpoint") != "smtp.test:587" || cs[0].Secret("password") != "smtp-password-value" || cs[0].Name != "Renamed" {
 		t.Fatalf("stored channel: %+v", cs[0])
 	}
 }
@@ -127,7 +138,7 @@ func TestChannelMigrationAndTampering(t *testing.T) {
 	defer db.Close()
 	// Rows written before sealing.
 	legacy := New(db, Options{})
-	for _, c := range []Channel{smtpChannel(), func() Channel { c := smtpChannel(); c.ID, c.Endpoint = "mail2", "other.test:587"; return c }()} {
+	for _, c := range []Channel{smtpChannel(), withEndpoint(smtpChannel(), "mail2", "other.test:587")} {
 		if err := legacy.Save(ctx, c); err != nil {
 			t.Fatal(err)
 		}
@@ -154,8 +165,8 @@ func TestChannelMigrationAndTampering(t *testing.T) {
 		t.Fatal(err)
 	}
 	sealed, _ := s.sealChannel(c)
-	other, _ := s.sealChannel(func() Channel { c := smtpChannel(); c.ID, c.Endpoint = "mail2", "other.test:587"; return c }())
-	other.Password = sealed.Password
+	other, _ := s.sealChannel(withEndpoint(smtpChannel(), "mail2", "other.test:587"))
+	other.Secrets["password"] = sealed.Secrets["password"]
 	tampered, _ := jsonString(other)
 	if _, err := db.Exec(`UPDATE notify_channels SET config=? WHERE id='mail2'`, tampered); err != nil {
 		t.Fatal(err)

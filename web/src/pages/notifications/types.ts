@@ -1,21 +1,56 @@
-import { localized, t } from "../../i18n";
+import { t } from "../../i18n";
 import { newId } from "../../lib/api";
+import { textOf, type Descriptor, type ExtendText } from "../../lib/extend";
+
+/** Mirrors internal/extend.SettingsOption. */
+export interface SettingsOption {
+  value: string;
+  label: ExtendText;
+}
+
+/** Mirrors internal/extend.SettingsField (SPEC.md §5.5). */
+export interface SettingsField {
+  key: string;
+  kind: "text" | "secret" | "url" | "select" | "number" | "boolean" | "hidden";
+  label: ExtendText;
+  hint?: ExtendText;
+  placeholder?: string;
+  required?: boolean;
+  secret?: boolean;
+  wide?: boolean;
+  default?: string;
+  min?: number;
+  max?: number;
+  options?: SettingsOption[];
+}
+
+/** Mirrors internal/extend.ChannelKindMeta. */
+export interface ChannelKindMeta {
+  fields?: SettingsField[];
+  sendTest?: boolean;
+  selectable?: boolean;
+  formats?: string[];
+  maxLength?: number;
+}
+
+/** Mirrors internal/extend.EventKindMeta. */
+export interface EventKindMeta {
+  automatic?: boolean;
+  critical?: boolean;
+  channelKinds?: string[];
+}
+
+export type ChannelKindDescriptor = Descriptor<ChannelKindMeta>;
+export type EventKindDescriptor = Descriptor<EventKindMeta>;
 
 export type Channel = {
-  smtpMode?: string;
-  subscription?: PushSubscriptionJSON;
   id: string;
   name: string;
   kind: string;
   enabled: boolean;
   events: string[];
-  endpoint: string;
-  token: string;
-  target: string;
-  username: string;
-  password: string;
-  from: string;
-  to: string;
+  settings?: Record<string, string>;
+  secrets?: Record<string, string>;
   perMinute: number;
   digestMinutes: number;
 };
@@ -33,9 +68,7 @@ export type Delivery = {
 
 export type NotificationsData = {
   channels: Channel[];
-  events: string[];
   deliveries: Delivery[];
-  eventCatalog?: { kind: string; description: string; automatic: boolean }[];
   crashWatcher?: boolean;
 };
 
@@ -49,93 +82,90 @@ export type NewsletterSettings = {
   lastStatus: string;
 };
 
-export const CRITICAL_EVENTS = [
-  "server.crash",
-  "playback.error",
-  "provider.outage",
-  "indexer.outage",
-  "cache.full",
-  "backup.failed",
-];
-export const TRANSPORT_HELP: Record<string, string> = localized(() => ({
-  smtp: t(
-    "Use your mail provider’s SMTP server and app password. STARTTLS usually uses port 587; implicit TLS uses 465. Authentication is optional for a trusted TLS relay. Recipients can be separated by commas.",
-  ),
-  ntfy: t(
-    "Enter your complete topic URL. Subscribe to the same topic in the ntfy phone app. Add a bearer token for private topics.",
-  ),
-  gotify: t(
-    "Enter your server’s /message URL and an application token. Connect the Gotify app on your phone to receive alerts.",
-  ),
-  telegram: t(
-    "Create a bot with BotFather, message it first, then enter its bot token and the destination chat ID. Group chat IDs may be negative.",
-  ),
-  discord: t(
-    "Create an incoming webhook in the destination Discord channel and paste its full webhook URL. Mentions are disabled.",
-  ),
-  slack: t("Create an incoming webhook for the destination Slack channel and paste its full URL."),
-  webhook: t(
-    "Ether sends a JSON POST with kind, title, message and at. Optionally add a bearer token. Only HTTP 2xx responses count as accepted.",
-  ),
-  webpush: t(
-    "This subscription belongs to one browser profile on one device. Use Connect this device on each device you want to receive alerts.",
-  ),
-}));
-const EVENT_LABELS: Record<string, string> = localized(() => ({
-  "server.started": t("Server online"),
-  "server.stopping": t("Server stopping"),
-  "server.crash": t("Server crashed"),
-  "provider.recovered": t("Provider recovered"),
-  "indexer.recovered": t("Indexer recovered"),
-  "cache.recovered": t("Cache space available"),
-  "*": t("All events"),
-  "playback.start": t("Playback started"),
-  "playback.stop": t("Playback ended"),
-  "playback.error": t("Playback failed"),
-  "playback.failover": t("Playback switched source"),
-  "provider.outage": t("Provider unavailable"),
-  "indexer.outage": t("Indexer unavailable"),
-  "indexer.budget": t("Indexer budget reached"),
-  "cache.full": t("Cache full"),
-  "cert.renewed": t("Certificate renewed"),
-  "update.available": t("Update available"),
-  "backup.failed": t("Backup failed"),
-  "user.joined": t("Viewer joined"),
-  "title.available": t("Watchlist title available"),
-  "newsletter.weekly": t("Weekly newsletter"),
-  test: t("Test notification"),
-}));
-export const eventLabel = (kind: string) => EVENT_LABELS[kind] ?? kind;
+export function channelKindDescriptors(
+  descriptors: readonly Descriptor[] = [],
+): ChannelKindDescriptor[] {
+  return descriptors.filter((d): d is ChannelKindDescriptor => d.kind === "channelKind");
+}
 
-export const TRANSPORTS = ["webhook", "discord", "slack", "telegram", "smtp", "ntfy", "gotify"];
-const TRANSPORT_LABELS: Record<string, string> = localized(() => ({
-  webpush: t("Browser push"),
-  webhook: t("Webhook"),
-  discord: "Discord",
-  slack: "Slack",
-  telegram: "Telegram",
-  smtp: t("Email (SMTP)"),
-  ntfy: "ntfy",
-  gotify: "Gotify",
-}));
-export const transportLabel = (kind: string) => TRANSPORT_LABELS[kind] ?? kind;
+export function eventKindDescriptors(
+  descriptors: readonly Descriptor[] = [],
+): EventKindDescriptor[] {
+  return descriptors.filter((d): d is EventKindDescriptor => d.kind === "eventKind");
+}
 
-export const channelName = (c: Channel) => c.name || transportLabel(c.kind);
+export function channelKindDescriptor(
+  descriptors: readonly Descriptor[] = [],
+  kind: string,
+): ChannelKindDescriptor | undefined {
+  return channelKindDescriptors(descriptors).find((d) => d.id === kind);
+}
 
-export const blankChannel = (): Channel => ({
-  id: newId("notify"),
-  name: "",
-  kind: "webhook",
-  smtpMode: "starttls",
-  enabled: true,
-  events: [...CRITICAL_EVENTS],
-  endpoint: "",
-  token: "",
-  target: "",
-  username: "",
-  password: "",
-  from: "",
-  to: "",
-  perMinute: 5,
-  digestMinutes: 0,
-});
+export function eventKindDescriptor(
+  descriptors: readonly Descriptor[] = [],
+  kind: string,
+): EventKindDescriptor | undefined {
+  return eventKindDescriptors(descriptors).find((d) => d.id === kind);
+}
+
+export function transportLabel(kind: string, descriptors: readonly Descriptor[] = []): string {
+  const d = channelKindDescriptor(descriptors, kind);
+  return d ? textOf(d.label) : kind;
+}
+
+export function eventLabel(kind: string, descriptors: readonly Descriptor[] = []): string {
+  if (kind === "*") return t("All events");
+  if (kind === "test") return t("Test notification");
+  const d = eventKindDescriptor(descriptors, kind);
+  return d ? textOf(d.label) : kind;
+}
+
+export function channelName(c: Channel, descriptors: readonly Descriptor[] = []): string {
+  return c.name || transportLabel(c.kind, descriptors);
+}
+
+export function criticalEventIds(descriptors: readonly Descriptor[] = []): string[] {
+  return eventKindDescriptors(descriptors)
+    .filter((d) => d.meta?.critical)
+    .map((d) => d.id);
+}
+
+export function eventAllowedForKind(
+  ev: EventKindDescriptor | undefined,
+  channelKind: string,
+): boolean {
+  return !ev?.meta?.channelKinds?.length || ev.meta.channelKinds.includes(channelKind);
+}
+
+export function defaultSettingsForKind(
+  descriptors: readonly Descriptor[],
+  kind: string,
+  current?: Record<string, string>,
+  secrets?: Record<string, string>,
+): Record<string, string> {
+  const next: Record<string, string> = { ...current };
+  const fields = channelKindDescriptor(descriptors, kind)?.meta?.fields ?? [];
+  for (const f of fields) {
+    if (!f.secret && f.default && !next[f.key]) {
+      next[f.key] = f.key === "smtpMode" && secrets?.endpoint?.endsWith(":465") ? "tls" : f.default;
+    }
+  }
+  return next;
+}
+
+export const blankChannel = (
+  descriptors: readonly Descriptor[] = [],
+  kind = "webhook",
+): Channel => {
+  const settings = defaultSettingsForKind(descriptors, kind);
+  return {
+    id: newId("notify"),
+    name: "",
+    kind,
+    enabled: true,
+    events: criticalEventIds(descriptors),
+    ...(Object.keys(settings).length ? { settings } : {}),
+    perMinute: 5,
+    digestMinutes: 0,
+  };
+};
