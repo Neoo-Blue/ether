@@ -339,6 +339,11 @@ func (m *Manager) PreviewInstall(ctx context.Context, src Source) (*Preview, err
 	if err := p.resolve(); err != nil {
 		return nil, err
 	}
+	if m.deps.CheckPackage != nil {
+		if err := m.deps.CheckPackage(ctx, raw, files); err != nil {
+			return nil, err
+		}
+	}
 	if cur, err := m.store.record(ctx, man.ID); err == nil {
 		p.AlreadyInstalled = true
 		p.InstalledVersion = cur.Version

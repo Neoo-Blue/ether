@@ -6,6 +6,7 @@ package kit
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -72,17 +73,18 @@ type HotTiming struct {
 
 // Report is the structured result of Check.
 type Report struct {
-	PluginID      string        `json:"pluginId,omitempty"`
-	Version       string        `json:"version,omitempty"`
-	Kind          string        `json:"kind,omitempty"`
-	OK            bool          `json:"ok"`
-	Errors        []Issue       `json:"errors,omitempty"`
-	Warnings      []Issue       `json:"warnings,omitempty"`
-	Routes        []RouteTiming `json:"routes,omitempty"`
-	HotPath       *HotTiming    `json:"hotPath,omitempty"`
-	DeclaredHosts []string      `json:"declaredHosts,omitempty"`
-	ObservedHosts []string      `json:"observedHosts,omitempty"`
-	DurationMS    float64       `json:"durationMs"`
+	PluginID      string          `json:"pluginId,omitempty"`
+	Version       string          `json:"version,omitempty"`
+	Kind          string          `json:"kind,omitempty"`
+	OK            bool            `json:"ok"`
+	Exports       map[string]bool `json:"exports,omitempty"`
+	Errors        []Issue         `json:"errors,omitempty"`
+	Warnings      []Issue         `json:"warnings,omitempty"`
+	Routes        []RouteTiming   `json:"routes,omitempty"`
+	HotPath       *HotTiming      `json:"hotPath,omitempty"`
+	DeclaredHosts []string        `json:"declaredHosts,omitempty"`
+	ObservedHosts []string        `json:"observedHosts,omitempty"`
+	DurationMS    float64         `json:"durationMs"`
 }
 
 func (r *Report) addErr(rule, field, msg string) {
@@ -443,4 +445,17 @@ func cachedCompile(sources map[string]string, entry string) ([]byte, []byte, []w
 	compCache[sum] = compResult{js: js, smap: smap, diags: diags}
 	compMu.Unlock()
 	return js, smap, diags
+}
+
+// CheckInstall adapts the conformance report to the plugin host's validation error.
+func CheckInstall(ctx context.Context, manifest []byte, files map[string][]byte) error {
+	report := Check(ctx, &Package{ManifestRaw: manifest, Files: files})
+	if report.OK {
+		return nil
+	}
+	fields := make([]plugins.FieldError, 0, len(report.Errors))
+	for _, issue := range report.Errors {
+		fields = append(fields, plugins.FieldError{Field: issue.Field, Message: issue.Message})
+	}
+	return &plugins.ValidationError{Fields: fields}
 }

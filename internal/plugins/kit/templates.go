@@ -45,6 +45,13 @@ func Scaffold(opts TemplateOptions) error {
 	if opts.Dir == "" {
 		return fmt.Errorf("target directory is required")
 	}
+	if entries, err := os.ReadDir(opts.Dir); err == nil {
+		if len(entries) != 0 {
+			return fmt.Errorf("target directory %q is not empty", opts.Dir)
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
 	base := strings.ToLower(filepath.Base(opts.Dir))
 	slug := strings.Trim(slugCleanRe.ReplaceAllString(base, "-"), "-")
 	if slug == "" || !(slug[0] >= 'a' && slug[0] <= 'z') {

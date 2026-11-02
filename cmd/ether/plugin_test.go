@@ -35,11 +35,12 @@ func (s *stubRuntime) Close() error { return nil }
 func newTestPluginManager(t *testing.T) *plugins.Manager {
 	t.Helper()
 	m, err := plugins.New(plugins.Deps{
-		DB:       store.OpenTest(t),
-		Registry: extend.New(),
-		Tools:    tools.NewCatalogue(),
-		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
-		IsLeader: func() bool { return true },
+		DB:           store.OpenTest(t),
+		CheckPackage: kit.CheckInstall,
+		Registry:     extend.New(),
+		Tools:        tools.NewCatalogue(),
+		Logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
+		IsLeader:     func() bool { return true },
 	})
 	if err != nil {
 		t.Fatalf("plugins.New: %v", err)
@@ -162,6 +163,18 @@ func TestPluginCLICheckFailsOnInvalidPlugin(t *testing.T) {
 	if !strings.Contains(out.String(), "FAIL:") {
 		t.Fatalf("expected FAIL in output, got:\n%s", out.String())
 	}
+
+	pkg, err := kit.LoadDir(plugDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := kit.Pack(pkg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := newTestPluginManager(t).PreviewInstall(context.Background(), plugins.Source{Kind: "pkg", Pkg: raw}); err == nil {
+		t.Fatal("install preview accepted copy rejected by the kit")
+	}
 }
 
 func TestPluginCLIDevHotReloadAndLogs(t *testing.T) {
@@ -174,13 +187,14 @@ func TestPluginCLIDevHotReloadAndLogs(t *testing.T) {
 
 	mgr := newTestPluginManager(t)
 	mux := http.NewServeMux()
-	mux.Handle("/api/plugins/", http.StripPrefix("/api/plugins", mgr.Handler()))
+	mux.Handle("/ether/api/plugins/", http.StripPrefix("/ether/api/plugins", mgr.Handler()))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
 	out.Reset()
 	errBuf.Reset()
-	code := runPlugin([]string{"dev", "--server", srv.URL, "--token", "dev-token", "--once", plugDir}, &out, &errBuf)
+	t.Setenv("ETHER_TOKEN", "dev-token")
+	code := runPlugin([]string{"dev", "--server", srv.URL, "--once", plugDir}, &out, &errBuf)
 	if code != 0 {
 		t.Fatalf("plugin dev --once exited %d: stdout=%s stderr=%s", code, out.String(), errBuf.String())
 	}
@@ -188,21 +202,38 @@ func TestPluginCLIDevHotReloadAndLogs(t *testing.T) {
 		t.Fatalf("expected Reloaded message in output, got: %s", out.String())
 	}
 
-	// Also test continuous watch mode reloading when a file changes before ctx cancels.
-	ctx, cancel := context.WithTimeout(context.Background(), 350*time.Millisecond)
+	// The output events drive the test; the deadline is only a hang guard.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	go func() {
-		time.Sleep(80 * time.Millisecond)
-		readme := filepath.Join(plugDir, "README.md")
-		_ = os.WriteFile(readme, []byte("# Updated\n"), 0o644)
-	}()
 	out.Reset()
 	errBuf.Reset()
-	code = runPluginWithContext(ctx, []string{"dev", "--server", srv.URL, "--interval", "40ms", plugDir}, &out, &errBuf)
-	if code != 0 {
-		t.Fatalf("plugin dev watch exited %d: stderr=%s", code, errBuf.String())
+	writer := &reloadTestWriter{buffer: &out, onFirst: func() {
+		if err := os.WriteFile(filepath.Join(plugDir, "README.md"), []byte("# Updated\n"), 0o644); err != nil {
+			t.Error(err)
+			cancel()
+		}
+	}, onSecond: cancel}
+	code = runPluginWithContext(ctx, []string{"dev", "--server", srv.URL, "--interval", "40ms", plugDir}, writer, &errBuf)
+	if code != 0 || writer.count < 2 {
+		t.Fatalf("plugin dev watch: code=%d reloads=%d stderr=%s", code, writer.count, errBuf.String())
 	}
-	if strings.Count(out.String(), "Reloaded community.example.devplug") < 2 {
-		t.Fatalf("expected at least 2 reloads (initial + file change), got:\n%s", out.String())
+}
+
+type reloadTestWriter struct {
+	buffer            *bytes.Buffer
+	count             int
+	onFirst, onSecond func()
+}
+
+func (w *reloadTestWriter) Write(p []byte) (int, error) {
+	n, err := w.buffer.Write(p)
+	if strings.Contains(string(p), "Reloaded ") {
+		w.count++
+		if w.count == 1 {
+			w.onFirst()
+		} else if w.count == 2 {
+			w.onSecond()
+		}
 	}
+	return n, err
 }

@@ -547,3 +547,17 @@ func TestLimitsClamp(t *testing.T) {
 		t.Fatalf("hot budgets not clamped: %v %v", lim.RankPerCandidate, lim.RankBatch)
 	}
 }
+
+func TestCondBatchExecutesRepeatedFactsWithoutMemo(t *testing.T) {
+	e := testEngine(t)
+	p, err := e.LoadJS("test.condition-batch", "1.0.0", `let toggle = false; globalThis.cond_match = function() { toggle = !toggle; return toggle; };`, nil, Limits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+	c := Candidate{ReleaseID: "same", Facts: json.RawMessage(`{"cached":true}`)}
+	got, out, err := p.CondBatch(context.Background(), []Candidate{c, c}, "is", json.RawMessage(`true`))
+	if err != nil || out.SlowCandidates != 0 || len(got) != 2 || !got[0] || got[1] {
+		t.Fatalf("results=%v outcome=%+v err=%v", got, out, err)
+	}
+}

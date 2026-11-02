@@ -53,8 +53,10 @@ type Deps struct {
 	// FetchClient fetches manifests and artifacts; nil builds one from
 	// safefetch and egress CapPlugins. Tests inject an httptest client.
 	FetchClient *http.Client
-	Backends    Backends
-	Now         func() time.Time
+	// CheckPackage runs the conformance kit during install previews.
+	CheckPackage func(context.Context, []byte, map[string][]byte) error
+	Backends     Backends
+	Now          func() time.Time
 }
 
 // Manager is the plugin host. It is safe for concurrent use.

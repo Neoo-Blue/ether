@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/braedonsaunders/ether/internal/config"
 	"github.com/braedonsaunders/ether/internal/plugins"
 	"github.com/braedonsaunders/ether/internal/plugins/wasm"
 )
@@ -214,9 +215,9 @@ func runFixtureCase(ctx context.Context, plug *wasm.Plugin, tc FixtureCase) Case
 	return res
 }
 
-func runHeadlessEtherIntegration(ctx context.Context, pkg *Package, etherBin string) CaseResult {
+func runHeadlessEtherIntegration(ctx context.Context, pkg *Package, etherBin string) (res CaseResult) {
 	t0 := time.Now()
-	res := CaseResult{Name: "headless-ether", OK: true}
+	res = CaseResult{Name: "headless-ether", OK: true}
 	defer func() {
 		res.DurationMS = float64(time.Since(t0).Microseconds()) / 1000.0
 	}()
@@ -242,14 +243,15 @@ func runHeadlessEtherIntegration(ctx context.Context, pkg *Package, etherBin str
 		res.Error = err.Error()
 		return res
 	}
-	token := "test-admin-token-conformance"
-	cfg := map[string]any{
-		"server": map[string]any{
-			"listen":     fmt.Sprintf("127.0.0.1:%d", port),
-			"adminToken": token,
-			"logLevel":   "error",
-		},
-	}
+	cfg := config.Defaults(tmpDir)
+	cfg.Server.Port = port
+	cfg.Server.BindAddress = "127.0.0.1"
+	cfg.Server.LogLevel = "error"
+	cfg.Plex.UseUPnP = false
+	const token = "headless-fixture-owner-token"
+	cfg.Plex.Token = token
+	cfg.Plex.OwnerPlexID = 12345
+	cfg.Plex.OwnerUsername = "fixture-owner"
 	cfgBytes, _ := json.Marshal(cfg)
 	if err := os.WriteFile(filepath.Join(tmpDir, "config.json"), cfgBytes, 0o600); err != nil {
 		res.OK = false
@@ -257,7 +259,7 @@ func runHeadlessEtherIntegration(ctx context.Context, pkg *Package, etherBin str
 		return res
 	}
 
-	runCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	runCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(runCtx, etherBin, "--data-dir", tmpDir)
@@ -278,8 +280,8 @@ func runHeadlessEtherIntegration(ctx context.Context, pkg *Package, etherBin str
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	client := &http.Client{Timeout: 3 * time.Second}
 	ready := false
-	for i := 0; i < 40; i++ {
-		req, _ := http.NewRequestWithContext(runCtx, http.MethodGet, baseURL+"/api/plugins", nil)
+	for i := 0; i < 200; i++ {
+		req, _ := http.NewRequestWithContext(runCtx, http.MethodGet, baseURL+"/ether/api/plugins/", nil)
 		req.Header.Set("X-Ether-Admin-Token", token)
 		req.Header.Set("X-Ether-Request", "1")
 		if resp, err := client.Do(req); err == nil {
@@ -297,7 +299,7 @@ func runHeadlessEtherIntegration(ctx context.Context, pkg *Package, etherBin str
 		return res
 	}
 
-	req, err := http.NewRequestWithContext(runCtx, http.MethodPost, baseURL+"/api/plugins/install", bytes.NewReader(pkgBytes))
+	req, err := http.NewRequestWithContext(runCtx, http.MethodPost, baseURL+"/ether/api/plugins/install", bytes.NewReader(pkgBytes))
 	if err != nil {
 		res.OK = false
 		res.Error = err.Error()

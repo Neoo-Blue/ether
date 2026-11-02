@@ -443,7 +443,7 @@ func TestCheckFailureRules(t *testing.T) {
 				files["dist/plugin.js"] = []byte(strings.ReplaceAll(
 					string(files["dist/plugin.js"]),
 					`function rank_key(candidate, config) {`,
-					`function rank_key(candidate, config) { var s = 0; for (var j = 0; j < 200000; j++) { s += j; }`,
+					`function rank_key(candidate, config) { while (true) {}`,
 				))
 			},
 			wantRule: "hot_path",
@@ -524,5 +524,20 @@ func TestPackDigestTamperDetection(t *testing.T) {
 	gotDigest := strings.TrimSpace(string(loaded.Files["digest"]))
 	if gotDigest != wantDigest {
 		t.Fatalf("digest mismatch: got %q, want %q", gotDigest, wantDigest)
+	}
+}
+
+func TestScaffoldDoesNotOverwriteExistingFiles(t *testing.T) {
+	dir := t.TempDir()
+	name := filepath.Join(dir, "manifest.json")
+	if err := os.WriteFile(name, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Scaffold(TemplateOptions{Kind: "livetv_source", Dir: dir}); err == nil {
+		t.Fatal("expected nonempty directory to be refused")
+	}
+	data, err := os.ReadFile(name)
+	if err != nil || string(data) != "keep" {
+		t.Fatalf("existing file changed: %q, %v", data, err)
 	}
 }

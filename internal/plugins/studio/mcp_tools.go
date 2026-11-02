@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path"
 	"slices"
 	"strings"
 
 	"github.com/braedonsaunders/ether/internal/agent/tools"
 	"github.com/braedonsaunders/ether/internal/extend"
 	"github.com/braedonsaunders/ether/internal/plugins"
+	"github.com/braedonsaunders/ether/internal/plugins/kit"
 	"github.com/braedonsaunders/ether/internal/plugins/wasm"
 	"github.com/braedonsaunders/ether/internal/viewspec"
 )
@@ -668,168 +668,17 @@ type ToolCheckReport struct {
 
 // Check validates a plugin's manifest, copy rules, settings schema, ViewSpec
 // files, and hosted TypeScript or JavaScript entry code.
-func Check(_ context.Context, eng *wasm.Engine, req CheckRequest) (ToolCheckReport, error) {
-	report := ToolCheckReport{
-		Issues:  []plugins.FieldError{},
-		Exports: map[string]bool{},
+func Check(ctx context.Context, _ *wasm.Engine, req CheckRequest) (ToolCheckReport, error) {
+	files := make(map[string][]byte, len(req.Files))
+	for name, contents := range req.Files {
+		files[name] = []byte(contents)
 	}
-	if len(req.Manifest) == 0 {
-		report.Issues = append(report.Issues, plugins.FieldError{
-			Field:   "manifest",
-			Message: "manifest is required",
-		})
-		return report, nil
+	rep := kit.Check(ctx, &kit.Package{ManifestRaw: req.Manifest, Files: files})
+	out := ToolCheckReport{OK: rep.OK, Issues: []plugins.FieldError{}, Exports: rep.Exports}
+	for _, issue := range rep.Errors {
+		out.Issues = append(out.Issues, plugins.FieldError{Field: issue.Field, Message: issue.Message})
 	}
-	m, err := plugins.ParseManifest(req.Manifest)
-	if err != nil {
-		report.Issues = append(report.Issues, plugins.FieldError{
-			Field:   "manifest",
-			Message: err.Error(),
-		})
-		return report, nil
-	}
-	if err := m.Validate(); err != nil {
-		if ve, ok := err.(*plugins.ValidationError); ok {
-			report.Issues = append(report.Issues, ve.Fields...)
-		} else {
-			report.Issues = append(report.Issues, plugins.FieldError{Field: "manifest", Message: err.Error()})
-		}
-	}
-
-	var enStrings map[string]string
-	if m.Ether != nil && len(m.Ether.Strings) > 0 {
-		if rawEn, ok := m.Ether.Strings["en"]; ok {
-			var pathRef string
-			if json.Unmarshal(rawEn, &pathRef) == nil {
-				if content, exists := req.Files[pathRef]; exists {
-					_ = json.Unmarshal([]byte(content), &enStrings)
-				}
-			} else {
-				_ = json.Unmarshal(rawEn, &enStrings)
-			}
-		}
-	}
-	for k, v := range enStrings {
-		if msg := plugins.LintCopy(v, 300); msg != "" {
-			report.Issues = append(report.Issues, plugins.FieldError{
-				Field:   "ether.strings.en." + k,
-				Message: msg,
-			})
-		}
-	}
-
-	if m.Ether != nil && len(m.Ether.Settings) > 0 {
-		settingsRaw := m.Ether.Settings
-		var ref struct {
-			Ref string `json:"$ref"`
-		}
-		if json.Unmarshal(settingsRaw, &ref) == nil && ref.Ref != "" {
-			if content, ok := req.Files[ref.Ref]; ok {
-				settingsRaw = json.RawMessage(content)
-			} else {
-				report.Issues = append(report.Issues, plugins.FieldError{
-					Field:   "ether.settings.$ref",
-					Message: fmt.Sprintf("referenced file %q is missing", ref.Ref),
-				})
-				settingsRaw = nil
-			}
-		}
-		if len(settingsRaw) > 0 {
-			if err := plugins.LintSettingsSchema(settingsRaw); err != nil {
-				if ve, ok := err.(*plugins.ValidationError); ok {
-					report.Issues = append(report.Issues, ve.Fields...)
-				} else {
-					report.Issues = append(report.Issues, plugins.FieldError{
-						Field:   "ether.settings",
-						Message: err.Error(),
-					})
-				}
-			}
-		}
-	}
-
-	for name, content := range req.Files {
-		lower := strings.ToLower(name)
-		if strings.HasSuffix(lower, ".viewspec.json") || (strings.HasPrefix(lower, "views/") && strings.HasSuffix(lower, ".json")) {
-			vr := viewspec.ValidatePlugin([]byte(content))
-			for _, verr := range vr.Errors {
-				report.Issues = append(report.Issues, plugins.FieldError{
-					Field:   name,
-					Message: verr,
-				})
-			}
-		}
-	}
-
-	if m.Ether != nil && m.Ether.Runtime.Kind == "hosted" && m.Ether.Runtime.Entry != "" {
-		entry := m.Ether.Runtime.Entry
-		src, ok := req.Files[entry]
-		if !ok {
-			report.Issues = append(report.Issues, plugins.FieldError{
-				Field:   "ether.runtime.entry",
-				Message: fmt.Sprintf("entry file %q is missing from files", entry),
-			})
-		} else {
-			jsCode := src
-			ext := strings.ToLower(path.Ext(entry))
-			if ext == ".ts" || ext == ".tsx" || ext == ".mts" {
-				out, _, diags := wasm.Compile(req.Files, entry)
-				hasErr := false
-				for _, d := range diags {
-					if d.Severity == "error" {
-						hasErr = true
-						report.Issues = append(report.Issues, plugins.FieldError{
-							Field:   entry,
-							Message: d.Text,
-						})
-					}
-				}
-				if !hasErr {
-					jsCode = string(out)
-				} else {
-					jsCode = ""
-				}
-			}
-			if jsCode != "" {
-				ownEng := false
-				if eng == nil {
-					eng = wasm.NewEngine(nil)
-					ownEng = true
-				}
-				if ownEng {
-					defer func() { _ = eng.Close() }()
-				}
-				plug, lerr := eng.LoadJS(m.ID, m.Version, jsCode, nil, wasm.Limits{})
-				if lerr != nil {
-					report.Issues = append(report.Issues, plugins.FieldError{
-						Field:   entry,
-						Message: lerr.Error(),
-					})
-				} else {
-					report.Exports["handle"] = plug.HasHandle()
-					report.Exports["rank_key"] = plug.HasRankKey()
-					report.Exports["cond_match"] = plug.HasCondMatch()
-					_ = plug.Close()
-
-					if m.HasCapability(plugins.CapRankingStep) && !report.Exports["rank_key"] {
-						report.Issues = append(report.Issues, plugins.FieldError{
-							Field:   entry,
-							Message: "ranking_step capability requires a rank_key export",
-						})
-					}
-					if m.HasCapability(plugins.CapRuleCondition) && !report.Exports["cond_match"] {
-						report.Issues = append(report.Issues, plugins.FieldError{
-							Field:   entry,
-							Message: "rule_condition capability requires a cond_match export",
-						})
-					}
-				}
-			}
-		}
-	}
-
-	report.OK = len(report.Issues) == 0
-	return report, nil
+	return out, nil
 }
 
 func pluginCheckTool(deps ToolDeps) tools.Tool {

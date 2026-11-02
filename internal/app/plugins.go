@@ -12,6 +12,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/extend"
 	"github.com/braedonsaunders/ether/internal/playback"
 	"github.com/braedonsaunders/ether/internal/plugins"
+	"github.com/braedonsaunders/ether/internal/plugins/kit"
 	"github.com/braedonsaunders/ether/internal/plugins/studio"
 	"github.com/braedonsaunders/ether/internal/plugins/wasm"
 	"github.com/braedonsaunders/ether/internal/state"
@@ -26,7 +27,8 @@ type pluginRuntime struct {
 func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRuntime, error) {
 	mgr, err := plugins.New(plugins.Deps{
 		DB: a.db, Sealer: a.cfg,
-		Registry: a.extendRT.registry, Tools: a.extendRT.tools,
+		CheckPackage: kit.CheckInstall,
+		Registry:     a.extendRT.registry, Tools: a.extendRT.tools,
 		Logger:   a.log.With("component", "plugins"),
 		IsLeader: func() bool { return a.cluster == nil || a.cluster.IsLeader() },
 		Bus:      clusterbus.FromCluster(a.cluster),

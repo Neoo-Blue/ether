@@ -33,7 +33,7 @@ const pluginUsage = `usage:
   ether plugin pack [-o <out.etherpkg>] <dir>
       Compile TypeScript, verify conformance, and bundle a verified .etherpkg.
 
-  ether plugin dev <dir> --server <url> [--token <tok>] [--once]
+  ether plugin dev <dir> --server <url> [--once]
       Watch files in <dir>, hot-reload into a running Ether server via the
       Studio API, and stream plugin logs.
 
@@ -214,7 +214,7 @@ func runPluginDev(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	fs := flag.NewFlagSet("ether plugin dev", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	serverURL := fs.String("server", "http://localhost:32400", "Ether server URL")
-	token := fs.String("token", os.Getenv("ETHER_TOKEN"), "owner admin token")
+	token := os.Getenv("ETHER_TOKEN")
 	once := fs.Bool("once", false, "reload once, stream current logs, and exit")
 	interval := fs.Duration("interval", 750*time.Millisecond, "watch poll interval")
 
@@ -231,7 +231,7 @@ func runPluginDev(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	seenLogs := map[string]bool{}
+	var seenLogs []string
 
 	reload := func() (string, error) {
 		pkg, err := kit.LoadDir(dir)
@@ -242,15 +242,15 @@ func runPluginDev(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		if err != nil {
 			return "", err
 		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/api/plugins/install", bytes.NewReader(pkgBytes))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/ether/api/plugins/install", bytes.NewReader(pkgBytes))
 		if err != nil {
 			return "", err
 		}
 		req.Header.Set("Content-Type", "application/octet-stream")
 		req.Header.Set("X-Ether-Request", "1")
-		if *token != "" {
-			req.Header.Set("X-Ether-Admin-Token", *token)
-			req.Header.Set("Authorization", "Bearer "+*token)
+		if token != "" {
+			req.Header.Set("X-Ether-Admin-Token", token)
+			req.Header.Set("Authorization", "Bearer "+token)
 		}
 		resp, err := client.Do(req)
 		if err != nil {
@@ -268,14 +268,14 @@ func runPluginDev(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		if pluginID == "" {
 			return
 		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/plugins/"+pluginID+"/logs", nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/ether/api/plugins/"+pluginID+"/logs", nil)
 		if err != nil {
 			return
 		}
 		req.Header.Set("X-Ether-Request", "1")
-		if *token != "" {
-			req.Header.Set("X-Ether-Admin-Token", *token)
-			req.Header.Set("Authorization", "Bearer "+*token)
+		if token != "" {
+			req.Header.Set("X-Ether-Admin-Token", token)
+			req.Header.Set("Authorization", "Bearer "+token)
 		}
 		resp, err := client.Do(req)
 		if err != nil {
@@ -291,14 +291,28 @@ func runPluginDev(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		if json.NewDecoder(resp.Body).Decode(&payload) != nil {
 			return
 		}
-		for _, line := range payload.Lines {
-			if !seenLogs[line] {
-				seenLogs[line] = true
-				fmt.Fprintf(stdout, "[log] %s\n", line)
+		// Preserve repeated lines while avoiding replaying the overlapping log window.
+		overlap := 0
+		for n := 1; n <= len(seenLogs) && n <= len(payload.Lines); n++ {
+			match := true
+			for i := 0; i < n; i++ {
+				if seenLogs[len(seenLogs)-n+i] != payload.Lines[i] {
+					match = false
+					break
+				}
+			}
+			if match {
+				overlap = n
 			}
 		}
+		for _, line := range payload.Lines[overlap:] {
+			fmt.Fprintf(stdout, "[log] %s\n", line)
+		}
+		seenLogs = append(seenLogs[:0], payload.Lines...)
+
 	}
 
+	lastSnap := dirSnapshot(dir)
 	pluginID, err := reload()
 	if err != nil {
 		fmt.Fprintln(stderr, "ether plugin dev:", err)
@@ -310,7 +324,6 @@ func runPluginDev(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		return 0
 	}
 
-	lastSnap := dirSnapshot(dir)
 	ticker := time.NewTicker(*interval)
 	defer ticker.Stop()
 	for {

@@ -134,10 +134,12 @@ func templateStremioRemix() Template {
 		},
 	}
 	stringsEN := map[string]string{
-		"summary":    "Wraps a Stremio add-on with settings and a native status page.",
-		"list_label": "Remixed catalogue shelf",
-		"list_hint":  "Curated titles pulled and filtered from the upstream add-on.",
-		"page_label": "Remix overview",
+		"summary":        "Wraps a Stremio add-on with settings and a native status page.",
+		"list_label":     "Remixed catalogue shelf",
+		"list_hint":      "Curated titles pulled and filtered from the upstream add-on.",
+		"page_label":     "Remix overview",
+		"matched_titles": "Matched titles",
+		"remixed_items":  "Remixed items",
 	}
 	code := `// Stremio remix plugin: wraps an upstream Stremio add-on with settings and a page.
 type Request = {
@@ -194,12 +196,12 @@ export function handle(req: Request) {
               kind: "stat-tile",
               iconKey: "layers",
               accent: "primary",
-              label: "Matched titles",
+              label: "$t:matched_titles",
               value: { $: "matchedCount" },
             },
             {
               kind: "panel",
-              title: "Remixed items",
+              title: "$t:remixed_items",
               blocks: [
                 {
                   kind: "text",
@@ -287,8 +289,10 @@ func templateChannels() Template {
 		},
 	}
 	stringsEN := map[string]string{
-		"summary":      "Live channels and six-day programme guide for Live TV.",
-		"lineup_label": "Channel lineup",
+		"summary":         "Live channels and six-day programme guide for Live TV.",
+		"lineup_label":    "Channel lineup",
+		"active_channels": "Active channels",
+		"guide_channels":  "Guide channels",
 	}
 	code := `// Live TV channels plugin (SPEC §5.1.2 / WS11a Channels template).
 type Request = {
@@ -388,12 +392,12 @@ export function handle(req: Request) {
               kind: "stat-tile",
               iconKey: "tv",
               accent: "primary",
-              label: "Active channels",
+              label: "$t:active_channels",
               value: { $: "channelCount" },
             },
             {
               kind: "panel",
-              title: "Guide channels",
+              title: "$t:guide_channels",
               blocks: [
                 {
                   kind: "repeat",
@@ -497,8 +501,12 @@ func templateLocalFiles() Template {
 		},
 	}
 	stringsEN := map[string]string{
-		"summary":       "Attaches files in folders you choose as direct releases on catalogue titles.",
-		"folders_label": "Unmatched folders",
+		"summary":            "Attaches files in folders you choose as direct releases on catalogue titles.",
+		"folders_label":      "Unmatched folders",
+		"matched_files":      "Matched files",
+		"match_folder_title": "Match a folder to a title",
+		"match_folder":       "Match folder",
+		"search_title":       "Search for a movie or show",
 	}
 	code := `// Local files source plugin (SPEC D6 / WS11a Local files template).
 type Request = {
@@ -510,6 +518,7 @@ type Request = {
 };
 
 export function handle(req: Request) {
+  if (req.path === "/ether/configure") { return { status: 200, body: { errors: {} } }; }
   if (req.path === "/ether/health") {
     return { status: 200, body: { status: "ok", reason: "" } };
   }
@@ -563,20 +572,20 @@ export function handle(req: Request) {
               kind: "stat-tile",
               iconKey: "folder",
               accent: "primary",
-              label: "Matched files",
+              label: "$t:matched_files",
               value: { $: "matchedCount" },
             },
             {
               kind: "panel",
-              title: "Match a folder to a title",
+              title: "$t:match_folder_title",
               blocks: [
                 {
                   kind: "widget",
                   widget: "ether.titleMatch",
                   props: {
                     action: "matchFolder",
-                    label: "Match folder",
-                    placeholder: "Search for a movie or show",
+                    label: "$t:match_folder",
+                    placeholder: "$t:search_title",
                   },
                 },
               ],
@@ -664,10 +673,13 @@ func templateList() Template {
 		},
 	}
 	stringsEN := map[string]string{
-		"summary":     "Curated festival winners for Collection Studio and Home shelves.",
-		"list_label":  "Festival winners",
-		"list_hint":   "Award-winning films refreshed twice a day.",
-		"shelf_label": "Festival shelf",
+		"summary":           "Curated festival winners for Collection Studio and Home shelves.",
+		"list_label":        "Festival winners",
+		"list_hint":         "Award-winning films refreshed twice a day.",
+		"shelf_label":       "Festival shelf",
+		"catalogue_matches": "Catalogue matches",
+		"collection_sync":   "Collection sync",
+		"sync_collection":   "Sync collection now",
 	}
 	code := `// List source plugin (SPEC §5.1.3 / WS11a List template).
 type Request = {
@@ -685,6 +697,7 @@ const ITEMS = [
 ];
 
 export function handle(req: Request) {
+  if (req.path === "/ether/configure") { return { status: 200, body: { errors: {} } }; }
   if (req.path === "/ether/health") {
     return { status: 200, body: { status: "ok", reason: "" } };
   }
@@ -719,18 +732,18 @@ export function handle(req: Request) {
               kind: "stat-tile",
               iconKey: "sparkles",
               accent: "primary",
-              label: "Catalogue matches",
+              label: "$t:catalogue_matches",
               value: { $: "count" },
             },
             {
               kind: "panel",
-              title: "Collection sync",
+              title: "$t:collection_sync",
               blocks: [
                 {
                   kind: "widget",
                   widget: "ether.actionButton",
                   props: {
-                    label: "Sync collection now",
+                    label: "$t:sync_collection",
                     action: "syncShelf",
                   },
                 },
@@ -985,9 +998,12 @@ func templatePage() Template {
 		},
 	}
 	stringsEN := map[string]string{
-		"summary":    "Adds a native ViewSpec v1 page and slot panel to the console.",
-		"page_label": "Curator notes",
-		"slot_label": "Curator panel",
+		"summary":            "Adds a native ViewSpec v1 page and slot panel to the console.",
+		"page_label":         "Curator notes",
+		"slot_label":         "Curator panel",
+		"featured_picks":     "Featured picks",
+		"curator_commentary": "Curator commentary",
+		"publish_highlight":  "Publish highlight shelf",
 	}
 	code := `// ViewSpec v1 UI page and slot plugin (SPEC §5.6 / WS11a Page template).
 type Request = {
@@ -999,6 +1015,7 @@ type Request = {
 };
 
 export function handle(req: Request) {
+  if (req.path === "/ether/configure") { return { status: 200, body: { errors: {} } }; }
   if (req.path === "/ether/health") {
     return { status: 200, body: { status: "ok", reason: "" } };
   }
@@ -1033,12 +1050,12 @@ export function handle(req: Request) {
               kind: "stat-tile",
               iconKey: "sparkles",
               accent: "primary",
-              label: "Featured picks",
+              label: "$t:featured_picks",
               value: { $: "featuredCount" },
             },
             {
               kind: "panel",
-              title: "Curator commentary",
+              title: "$t:curator_commentary",
               blocks: [
                 {
                   kind: "text",
@@ -1048,7 +1065,7 @@ export function handle(req: Request) {
                   kind: "widget",
                   widget: "ether.actionButton",
                   props: {
-                    label: "Publish highlight shelf",
+                    label: "$t:publish_highlight",
                     action: "createHighlight",
                   },
                 },
@@ -1139,6 +1156,7 @@ type Request = {
 };
 
 export function handle(req: Request) {
+  if (req.path === "/ether/configure") { return { status: 200, body: { errors: {} } }; }
   if (req.path === "/ether/health") {
     return { status: 200, body: { status: "ok", reason: "" } };
   }

@@ -160,7 +160,7 @@ func checkStringsAndCopy(rep *Report, man plugins.Manifest, files map[string][]b
 	}
 	for i, tl := range c.Tools {
 		base := fmt.Sprintf("ether.contributes.tools[%d]", i)
-		recordRef(base+".title", tl.Title, 60, false)
+		recordRef(base+".title", tl.Title, 40, false)
 	}
 	for i, pg := range c.Pages {
 		base := fmt.Sprintf("ether.contributes.pages[%d]", i)
@@ -228,6 +228,7 @@ func checkStringsAndCopy(rep *Report, man plugins.Manifest, files map[string][]b
 	sort.Strings(refKeys)
 	for _, k := range refKeys {
 		if enDoc == nil {
+			rep.addErr("strings", usages[k][0].field, fmt.Sprintf("missing en strings for $t:%s", k))
 			continue
 		}
 		if _, ok := enDoc[k]; !ok {
@@ -613,6 +614,7 @@ func checkHostedRuntime(ctx context.Context, rep *Report, man plugins.Manifest, 
 		return
 	}
 	defer func() { _ = plug.Close() }()
+	rep.Exports = map[string]bool{"handle": plug.HasHandle(), "rank_key": plug.HasRankKey(), "cond_match": plug.HasCondMatch()}
 
 	// Exercise declared routes and capabilities.
 	checkRoutes(ctx, rep, man, plug, stringsByLocale)
@@ -1017,18 +1019,24 @@ func callNoPick(ctx context.Context, rep *Report, plug *wasm.Plugin, subPath str
 		DeadlineMS: deadline.Milliseconds(),
 	}
 	if err != nil {
-		// An abort/forbidden or error rejection is acceptable for missing pick token.
-		rt.OK = true
+		var guestErr *wasm.Error
+		if errors.As(err, &guestErr) && (guestErr.Status == wasm.StatusForbidden || guestErr.Status == wasm.StatusAborted) {
+			rt.OK = true
+			rep.Routes = append(rep.Routes, rt)
+			return
+		}
+		rt.Error = fmt.Sprintf("subtitle refusal failed: %v", err)
 		rep.Routes = append(rep.Routes, rt)
+		rep.addErr("subtitles", subPath, rt.Error)
 		return
 	}
-	if resp.Status < 400 {
-		rt.OK = false
+	if resp.Status < 400 || resp.Status >= 500 {
 		rt.Error = "subtitle route must refuse calls without X-Ether-Pick (expected HTTP 4xx)"
 		rep.Routes = append(rep.Routes, rt)
 		rep.addErr("subtitles", subPath, rt.Error)
 		return
 	}
+
 	if msg := checkErrorShape(resp.Body); msg != "" {
 		rt.OK = false
 		rt.Error = msg
@@ -1270,8 +1278,10 @@ func sampleInputForSchema(raw json.RawMessage) json.RawMessage {
 // checkHotPath validates determinism and budget on a generated 10,000-candidate
 // corpus (SPEC §5.2, WS11g).
 func checkHotPath(ctx context.Context, rep *Report, man plugins.Manifest, p1 *wasm.Plugin) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
 	const corpusSize = 10000
-	const batchSize = 200
+	const batchSize = 25
 
 	if man.HasCapability(plugins.CapRankingStep) && !p1.HasRankKey() {
 		rep.addErr("hot_path", "rank_key", "plugin declares ranking_step capability but does not export rank_key")
@@ -1300,21 +1310,18 @@ func checkHotPath(ctx context.Context, rep *Report, man plugins.Manifest, p1 *wa
 		for b := 0; b < corpusSize; b += batchSize {
 			batch := corpusA[b : b+batchSize]
 			bt0 := time.Now()
-			sc, out, err := p1.RankBatch(ctx, batch, cfg)
+			sc, out, err := rankWithRetries(ctx, p1, batch, cfg)
 			bdur := float64(time.Since(bt0).Microseconds()) / 1000.0
 			batchDurs = append(batchDurs, bdur)
 			if bdur > ht.MaxBatchMS {
 				ht.MaxBatchMS = bdur
 			}
 			ht.SlowCount += out.SlowCandidates
-			if err != nil {
-				rep.addErr("hot_path", "rank_key", fmt.Sprintf("batch %d failed: %v", b/batchSize, err))
+			if err != nil || out.SlowCandidates != 0 {
+				rep.addErr("hot_path", "rank_key", fmt.Sprintf("batch %d exceeded budget or failed: %v", b/batchSize, err))
 				return
 			}
-			if b == 0 && out.SlowCandidates > 0 && out.SlowCandidates < batchSize/4 {
-				// Fill in any single-candidate GC blip on batch 0 before determinism comparison.
-				sc, _, _ = p1.RankBatch(ctx, batch, cfg)
-			}
+
 			scoresA = append(scoresA, sc...)
 		}
 		ht.TotalMS = float64(time.Since(t0).Microseconds()) / 1000.0
@@ -1327,24 +1334,23 @@ func checkHotPath(ctx context.Context, rep *Report, man plugins.Manifest, p1 *wa
 			rep.addErr("hot_path", "rank_key", fmt.Sprintf("%d of %d candidates exceeded the 2ms per-candidate or 50ms per-batch budget", ht.SlowCount, corpusSize))
 		}
 
-		// Determinism check: re-run on the same instance with unmemoized release IDs (catches module-level mutable state).
-		scB, outB, err := p1.RankBatch(ctx, corpusB[:batchSize], cfg)
-		if err != nil {
-			ht.Deterministic = false
-			rep.addErr("determinism", "rank_key", fmt.Sprintf("second pass failed: %v", err))
-			return
-		}
-		if outB.SlowCandidates > 0 && outB.SlowCandidates < batchSize/4 {
-			scB, _, _ = p1.RankBatch(ctx, corpusB[:batchSize], cfg)
-		}
-		for i, got := range scB {
-			want := scoresA[i]
-			if got != want {
+		// Different memo keys ensure that every candidate is executed again.
+		for b := 0; b < corpusSize; b += batchSize {
+			scB, outB, err := rankWithRetries(ctx, p1, corpusB[b:b+batchSize], cfg)
+			if err != nil || outB.SlowCandidates != 0 {
 				ht.Deterministic = false
-				rep.addErr("determinism", "rank_key", fmt.Sprintf("nondeterministic rank_key at candidate %d: first pass returned %d, second pass returned %d", i, want, got))
-				break
+				rep.addErr("hot_path", "rank_key", fmt.Sprintf("second pass batch %d failed or exceeded budget: %v", b/batchSize, err))
+				return
+			}
+			for i, got := range scB {
+				if got != scoresA[b+i] {
+					ht.Deterministic = false
+					rep.addErr("determinism", "rank_key", fmt.Sprintf("nondeterministic rank_key at candidate %d: first pass returned %d, second pass returned %d", b+i, scoresA[b+i], got))
+					return
+				}
 			}
 		}
+
 	}
 
 	if p1.HasCondMatch() {
@@ -1353,35 +1359,64 @@ func checkHotPath(ctx context.Context, rep *Report, man plugins.Manifest, p1 *wa
 			op = man.Ether.Contributes.RuleConditions[0].Operators[0]
 		}
 		val := json.RawMessage(`"en"`)
-		// Check determinism & budget over an odd-sized sample of candidates with distinct IDs.
-		const condSample = 9
-		first := make([]bool, condSample)
-		var condSlow int
-		for i := 0; i < condSample; i++ {
-			ok, out, err := p1.CondMatch(ctx, corpusA[i], op, val)
-			if err != nil {
-				rep.addErr("hot_path", "cond_match", fmt.Sprintf("cond_match failed at %d: %v", i, err))
+		// Adjacent duplicate facts detect stateful hooks, with no memoization.
+		for b := 0; b < corpusSize; b += batchSize {
+			candidates := make([]wasm.Candidate, 0, 2*batchSize)
+			for i := b; i < b+batchSize; i++ {
+				candidates = append(candidates, corpusA[i], corpusB[i])
+			}
+			results, out, err := condBatchWithRetries(ctx, p1, candidates, op, val)
+			if err != nil || out.SlowCandidates != 0 {
+				rep.addErr("hot_path", "cond_match", fmt.Sprintf("condition batch %d exceeded budget or failed: %v", b/batchSize, err))
 				return
 			}
-			if out.SlowCandidates > 0 {
-				condSlow += out.SlowCandidates
-				ht.SlowCount += out.SlowCandidates
-				if condSlow > 3 {
-					rep.addErr("hot_path", "cond_match", fmt.Sprintf("cond_match exceeded budget at candidate %d", i))
+			for i := 0; i < len(results); i += 2 {
+				if results[i] != results[i+1] {
+					ht.Deterministic = false
+					rep.addErr("determinism", "cond_match", fmt.Sprintf("nondeterministic cond_match at candidate %d: %v vs %v", b+i/2, results[i], results[i+1]))
 					return
 				}
 			}
-			first[i] = ok
 		}
-		for i := 0; i < condSample; i++ {
-			ok, _, err := p1.CondMatch(ctx, corpusB[i], op, val)
-			if err != nil || ok != first[i] {
-				ht.Deterministic = false
-				rep.addErr("determinism", "cond_match", fmt.Sprintf("nondeterministic cond_match at candidate %d: %v vs %v", i, first[i], ok))
-				return
-			}
+
+	}
+}
+
+// A transient scheduler or GC pause can exhaust a deadline; retry with fresh
+// memo keys so only repeatable budget violations fail the check.
+func rankWithRetries(ctx context.Context, p *wasm.Plugin, batch []wasm.Candidate, cfg json.RawMessage) ([]int64, wasm.Outcome, error) {
+	var scores []int64
+	var out wasm.Outcome
+	var err error
+	for attempt := 0; attempt < 5; attempt++ {
+		fresh := append([]wasm.Candidate(nil), batch...)
+		for i := range fresh {
+			fresh[i].ReleaseID += fmt.Sprintf("-try-%d", attempt)
+		}
+		scores, out, err = p.RankBatch(ctx, fresh, cfg)
+		if err == nil && out.SlowCandidates == 0 {
+			return scores, out, nil
+		}
+		if ctx.Err() != nil {
+			break
 		}
 	}
+	return scores, out, err
+}
+func condBatchWithRetries(ctx context.Context, p *wasm.Plugin, cands []wasm.Candidate, op string, val json.RawMessage) ([]bool, wasm.Outcome, error) {
+	var result []bool
+	var out wasm.Outcome
+	var err error
+	for attempt := 0; attempt < 5; attempt++ {
+		result, out, err = p.CondBatch(ctx, cands, op, val)
+		if err == nil && out.SlowCandidates == 0 {
+			return result, out, nil
+		}
+		if ctx.Err() != nil {
+			break
+		}
+	}
+	return result, out, err
 }
 
 var (
@@ -1392,8 +1427,8 @@ var (
 
 func sharedCorpora() ([]wasm.Candidate, []wasm.Candidate) {
 	corpusOnce.Do(func() {
-		cachedA = generateCorpus("runA", 10000, 200)
-		cachedB = generateCorpus("runB", 200, 200)
+		cachedA = generateCorpus("runA", 10000, 10000)
+		cachedB = generateCorpus("runB", 10000, 10000)
 	})
 	return cachedA, cachedB
 }
@@ -1406,8 +1441,8 @@ func generateCorpus(prefix string, n, unique int) []wasm.Candidate {
 	rawFacts := make([]json.RawMessage, unique)
 	for i := 0; i < unique; i++ {
 		rawFacts[i] = json.RawMessage(fmt.Sprintf(
-			`{"resolution":%q,"languages":%s,"group":%q,"cached":%t}`,
-			resolutions[i%len(resolutions)],
+			`{"releaseId":"candidate-%d","resolution":%q,"languages":%s,"group":%q,"cached":%t}`,
+			i, resolutions[i%len(resolutions)],
 			langs[i%len(langs)],
 			groups[i%len(groups)],
 			i%2 == 0,
@@ -1418,7 +1453,7 @@ func generateCorpus(prefix string, n, unique int) []wasm.Candidate {
 	for i := 0; i < n; i++ {
 		u := i % unique
 		out[i] = wasm.Candidate{
-			ReleaseID: fmt.Sprintf("%s-%d", prefix, u),
+			ReleaseID: fmt.Sprintf("%s-%d", prefix, i),
 			Facts:     rawFacts[u],
 		}
 	}
