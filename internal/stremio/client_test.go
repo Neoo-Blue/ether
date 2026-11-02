@@ -9,6 +9,28 @@ import (
 	"testing"
 )
 
+func TestCatalogPaginatesShortPages(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "skip=1"):
+			fmt.Fprint(w, `{"metas":[{"id":"tt0000002"}]}`)
+		case strings.Contains(r.URL.Path, "skip=2"):
+			fmt.Fprint(w, `{"metas":[]}`)
+		default:
+			fmt.Fprint(w, `{"metas":[{"id":"tt0000001"}]}`)
+		}
+	}))
+	defer srv.Close()
+	c, err := NewClient(srv.URL+"/manifest.json", srv.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := c.Catalog(context.Background(), "movie", "test", nil, 10)
+	if err != nil || len(items) != 2 {
+		t.Fatalf("items=%v err=%v", items, err)
+	}
+}
+
 // Fixture add-ons modelled on real shapes (Cinemeta-like catalog, a tv
 // add-on, a SubSense-like subtitle add-on), keys removed.
 func fixtureAddon(t *testing.T) *httptest.Server {

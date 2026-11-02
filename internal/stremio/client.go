@@ -2,6 +2,7 @@ package stremio
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -139,6 +140,10 @@ func (c *Client) Catalog(ctx context.Context, typ, id string, extra map[string]s
 		}
 		page, err := c.CatalogPage(ctx, typ, id, ex)
 		if err != nil {
+			var httpErr *httpError
+			if skip > 0 && errors.As(err, &httpErr) && httpErr.status == http.StatusNotFound {
+				break
+			}
 			return out, err
 		}
 		if len(page) == 0 {
@@ -157,17 +162,10 @@ func (c *Client) Catalog(ctx context.Context, typ, id string, extra map[string]s
 			}
 		}
 		skip += len(page)
-		if added == 0 || len(page) < 20 {
-			// A short page is the last page for well-behaved add-ons;
-			// a page of pure duplicates means skip is ignored.
-			if added == 0 {
-				break
-			}
-			if len(page) < 20 {
-				// One more probe only when the catalog declares skip is
-				// unnecessary: short first pages are complete catalogs.
-				break
-			}
+		// Add-ons choose their own page size. Only an empty page or a
+		// page of duplicates (an add-on ignoring skip) ends pagination.
+		if added == 0 {
+			break
 		}
 	}
 	return out, nil
