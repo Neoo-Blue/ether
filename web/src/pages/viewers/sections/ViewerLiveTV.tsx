@@ -24,10 +24,18 @@ type Policy = {
   /** Only `channels` (none when empty); otherwise every channel, new ones too. */
   restricted: boolean;
   channels?: string[];
+  /** Private channels given to an unrestricted viewer. */
+  granted?: string[];
   favorites: string[];
   maxRating: string;
 };
-type ChannelSummary = { id: string; number: string; name: string; enabled: boolean };
+type ChannelSummary = {
+  id: string;
+  number: string;
+  name: string;
+  enabled: boolean;
+  private?: boolean;
+};
 
 /** One viewer's Live TV access: channels and extra parental limits (viewer profile › Access). */
 export function ViewerLiveTVAccess({ viewerId }: { viewerId: number }) {
@@ -60,7 +68,31 @@ export function ViewerLiveTVAccess({ viewerId }: { viewerId: number }) {
 
   // The same allow-list each channel's Viewers tab edits.
   const allowed = draft.channels ?? [];
-  const permits = (id: string) => !draft.restricted || allowed.includes(id);
+  const granted = draft.granted ?? [];
+  const permits = (c: ChannelSummary) =>
+    draft.restricted ? allowed.includes(c.id) : !c.private || granted.includes(c.id);
+  const anyPrivate = sorted.some((c) => c.private);
+  const toggle = (c: ChannelSummary, on: boolean) => {
+    if (draft.restricted) {
+      setDraft({
+        ...draft,
+        channels: on ? [...allowed, c.id] : allowed.filter((id) => id !== c.id),
+      });
+    } else if (c.private) {
+      setDraft({
+        ...draft,
+        granted: on ? [...granted, c.id] : granted.filter((id) => id !== c.id),
+      });
+    } else if (!on) {
+      // Turning a public channel off limits them to what they see now.
+      setDraft({
+        ...draft,
+        restricted: true,
+        channels: sorted.filter((x) => x.id !== c.id && permits(x)).map((x) => x.id),
+        granted: [],
+      });
+    }
+  };
   const allowedCount = channels.data
     ? sorted.filter((c) => allowed.includes(c.id)).length
     : allowed.length;
@@ -136,7 +168,9 @@ export function ViewerLiveTVAccess({ viewerId }: { viewerId: number }) {
         title={t("Allowed channels")}
         description={
           !draft.restricted
-            ? t("All channels, including new ones.")
+            ? anyPrivate
+              ? t("All channels, including new ones. Private channels only when turned on.")
+              : t("All channels, including new ones.")
             : allowedCount
               ? tn(
                   allowedCount,
@@ -168,25 +202,18 @@ export function ViewerLiveTVAccess({ viewerId }: { viewerId: number }) {
                   <Switch
                     id={`livetv-${viewerId}-channel-${c.id}`}
                     aria-label={t("Allow {name}", { name: c.name })}
-                    checked={permits(c.id)}
+                    checked={permits(c)}
                     disabled={draft.disabled}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        restricted: true,
-                        channels: e.currentTarget.checked
-                          ? [...allowed, c.id]
-                          : (draft.restricted ? allowed : sorted.map((x) => x.id)).filter(
-                              (id) => id !== c.id,
-                            ),
-                      })
-                    }
+                    onChange={(e) => toggle(c, e.currentTarget.checked)}
                   />
                   <label
                     htmlFor={`livetv-${viewerId}-channel-${c.id}`}
                     className="min-w-0 truncate"
                   >
                     <span className="tabular-nums text-fg-muted">{c.number}</span> {c.name}
+                    {c.private ? (
+                      <span className="ml-1.5 text-xs text-fg-muted">{t("Private")}</span>
+                    ) : null}
                   </label>
                 </div>
               ))}
@@ -196,7 +223,17 @@ export function ViewerLiveTVAccess({ viewerId }: { viewerId: number }) {
                 variant="ghost"
                 size="sm"
                 disabled={draft.disabled}
-                onClick={() => setDraft({ ...draft, restricted: false, channels: [] })}
+                onClick={() =>
+                  setDraft({
+                    ...draft,
+                    restricted: false,
+                    channels: [],
+                    // Private channels they had stay theirs.
+                    granted: sorted
+                      .filter((c) => c.private && allowed.includes(c.id))
+                      .map((c) => c.id),
+                  })
+                }
               >
                 {t("Allow all channels")}
               </Button>

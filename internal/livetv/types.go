@@ -68,8 +68,12 @@ type Block struct {
 	Watched     string          `json:"watched,omitempty"`
 }
 type Channel struct {
-	Transcode     bool           `json:"transcode"` // IPTV: normalize codecs through the transcoder
-	ID            string         `json:"id"`
+	Transcode bool   `json:"transcode"` // IPTV: normalize codecs through the transcoder
+	ID        string `json:"id"`
+	// Private channels are hidden from every viewer whose policy does not
+	// grant them: a restricted viewer needs it in Channels, an unrestricted
+	// one in Granted. Owners always see them.
+	Private       bool           `json:"private,omitempty"`
 	Number        string         `json:"number"`
 	Name          string         `json:"name"`
 	Kind          string         `json:"kind"` // virtual or iptv
@@ -165,11 +169,13 @@ func (p Programme) Offset(at time.Time) time.Duration {
 type Policy struct {
 	UserID   int64 `json:"userId"`
 	Disabled bool  `json:"disabled"`
-	// Restricted limits the viewer to Channels (none when empty). Unrestricted
-	// viewers see every channel, including ones added later, and Channels is
+	// Restricted limits the viewer to Channels (none when empty), private
+	// ones included. Unrestricted viewers see every public channel, including
+	// ones added later, plus the private channels in Granted; Channels is
 	// empty.
 	Restricted bool     `json:"restricted"`
 	Channels   []string `json:"channels,omitempty"`
+	Granted    []string `json:"granted,omitempty"`
 	Favorites  []string `json:"favorites,omitempty"`
 	MaxRating  string   `json:"maxRating,omitempty"`
 

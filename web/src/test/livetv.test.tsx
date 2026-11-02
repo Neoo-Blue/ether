@@ -210,6 +210,38 @@ describe("Live TV studio", () => {
     );
   });
 
+  it("makes a channel private and gives it to chosen viewers", async () => {
+    const calls = backend([iptv("c1")], (url) => {
+      if (url.endsWith("/users"))
+        return {
+          users: [
+            { id: 12, title: "Sam", username: "sam" },
+            { id: 13, title: "Kim", username: "kim" },
+          ],
+        };
+      if (url.endsWith("/livetv/policies"))
+        return [{ userId: 13, disabled: false, restricted: false, granted: [] }];
+      return undefined;
+    });
+    renderLiveTV("/livetv?channel=c1");
+    fireEvent.click(await screen.findByRole("tab", { name: "Viewers" }, WAIT));
+    expect(await screen.findByRole("switch", { name: "Sam" })).toBeChecked();
+    fireEvent.click(screen.getByRole("switch", { name: "Private" }));
+    // Private hides it from everyone not given it.
+    expect(screen.getByRole("switch", { name: "Sam" })).not.toBeChecked();
+    expect(screen.getByRole("switch", { name: "Kim" })).not.toBeChecked();
+    fireEvent.click(screen.getByRole("switch", { name: "Kim" }));
+    fireEvent.click(screen.getByRole("button", { name: /Save channel/ }));
+    await waitFor(() =>
+      expect(sent(calls, "PUT", /\/livetv\/channels\/c1\/viewers$/)).toHaveLength(1),
+    );
+    expect(body(sent(calls, "PUT", /\/livetv\/channels\/c1$/)[0]).private).toBe(true);
+    expect(body(sent(calls, "PUT", /\/livetv\/channels\/c1\/viewers$/)[0])).toEqual({
+      allow: [13],
+      deny: [],
+    });
+  });
+
   it("programmes a channel from a collection chosen by name", async () => {
     const calls = backend();
     renderLiveTV();
@@ -525,6 +557,43 @@ describe("Live TV source sign-in", () => {
 });
 
 describe("Live TV access on the viewer profile", () => {
+  it("gives a private channel to a viewer on all channels without restricting them", async () => {
+    let policy = { userId: 2, disabled: false, restricted: false, favorites: [], maxRating: "" };
+    const { fake } = renderAppWith("/viewers/2/limits", (method, path, body) => {
+      if (path === "/livetv/channels")
+        return [
+          { id: "c1", number: "1", name: "Movie night", kind: "virtual", enabled: true },
+          {
+            id: "c2",
+            number: "2",
+            name: "Late show",
+            kind: "virtual",
+            enabled: true,
+            private: true,
+          },
+        ];
+      if (path === "/livetv/policies/2") {
+        if (method === "PUT") policy = body as typeof policy;
+        return policy;
+      }
+      return undefined;
+    });
+    const late = await screen.findByLabelText("Allow Late show", {}, WAIT);
+    expect(late).not.toBeChecked();
+    expect(screen.getByLabelText("Allow Movie night")).toBeChecked();
+    expect(
+      screen.getByText("All channels, including new ones. Private channels only when turned on."),
+    ).toBeInTheDocument();
+    fireEvent.click(late);
+    fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(fakeCalls(fake, "PUT", "/livetv/policies/2").at(-1)?.body).toMatchObject({
+        restricted: false,
+        granted: ["c2"],
+      }),
+    );
+  });
+
   it("edits one viewer's Live TV policy in place on their Access tab", async () => {
     let policy = {
       userId: 2,

@@ -16,14 +16,15 @@ import (
 // the viewer's page (their allowed channels) and on each channel (which
 // viewers may watch it); both write the same policies.
 
-// Permits reports whether the policy lets its viewer watch channel id. Rating
-// and library limits are checked separately.
-func (p Policy) Permits(id string) bool {
+// Permits reports whether the policy lets its viewer watch channel id, which
+// is private when only granted viewers may watch it. Rating and library
+// limits are checked separately.
+func (p Policy) Permits(id string, private bool) bool {
 	if p.Disabled {
 		return false
 	}
 	if !p.Restricted {
-		return true
+		return !private || slices.Contains(p.Granted, id)
 	}
 	if p.channelSet != nil {
 		_, ok := p.channelSet[id]
@@ -32,23 +33,33 @@ func (p Policy) Permits(id string) bool {
 	return slices.Contains(p.Channels, id)
 }
 
-// normalize drops duplicate channels and the list of an unrestricted viewer,
-// who sees every channel.
+// normalize drops duplicates, the channel list of an unrestricted viewer (who
+// sees every public channel) and the grants of a restricted one (whose list
+// already names every channel they see).
 func (p *Policy) normalize() {
-	if !p.Restricted {
-		p.Channels = nil
+	if p.Restricted {
+		p.Channels = uniqueIDs(p.Channels)
+		p.Granted = nil
 		return
 	}
-	seen := make(map[string]struct{}, len(p.Channels))
-	out := p.Channels[:0]
-	for _, id := range p.Channels {
+	p.Channels = nil
+	p.Granted = uniqueIDs(p.Granted)
+}
+
+func uniqueIDs(ids []string) []string {
+	seen := make(map[string]struct{}, len(ids))
+	out := ids[:0]
+	for _, id := range ids {
 		if _, dup := seen[id]; id == "" || dup {
 			continue
 		}
 		seen[id] = struct{}{}
 		out = append(out, id)
 	}
-	p.Channels = out
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // indexChannels makes Permits constant time for long allow-lists: a guide
@@ -120,10 +131,12 @@ func (s *Service) Policies(ctx context.Context) ([]Policy, error) {
 }
 
 // ChannelViewers changes which viewers may watch one channel by editing their
-// policies. Allowing a restricted viewer adds the channel to their list.
-// Denying an unrestricted viewer restricts them to every other current
-// channel, so they stop receiving new channels automatically. A viewer with
-// Live TV disabled keeps it disabled.
+// policies. Allowing a restricted viewer adds the channel to their list;
+// allowing an unrestricted one grants a private channel (a public one they
+// already see). Denying a private channel removes it from the list or the
+// grants. Denying a public channel to an unrestricted viewer restricts them to
+// every other channel they can see now, so they stop receiving new channels
+// automatically. A viewer with Live TV disabled keeps it disabled.
 type ChannelViewers struct {
 	Allow []int64 `json:"allow,omitempty"`
 	Deny  []int64 `json:"deny,omitempty"`
@@ -146,11 +159,12 @@ func (s *Service) SetChannelViewers(ctx context.Context, channelID string, chang
 	if err := store.LockKey(ctx, store.DialectOf(s.o.DB), tx, "livetv_policies"); err != nil {
 		return err
 	}
-	ids, err := channelIDs(ctx, tx)
+	channels, err := channelAccess(ctx, tx)
 	if err != nil {
 		return err
 	}
-	if !slices.Contains(ids, channelID) {
+	private, found := channels[channelID]
+	if !found {
 		return core.ErrNotFound
 	}
 	for _, id := range change.Allow {
@@ -158,10 +172,17 @@ func (s *Service) SetChannelViewers(ctx context.Context, channelID string, chang
 		if err != nil {
 			return err
 		}
-		if !p.Restricted || slices.Contains(p.Channels, channelID) {
+		// Live TV switched off stays off; the grant still applies when it is back.
+		enabled := p
+		enabled.Disabled = false
+		switch {
+		case enabled.Permits(channelID, private):
 			continue
+		case p.Restricted:
+			p.Channels = append(p.Channels, channelID)
+		default:
+			p.Granted = append(p.Granted, channelID)
 		}
-		p.Channels = append(p.Channels, channelID)
 		if err := savePolicy(ctx, tx, p); err != nil {
 			return err
 		}
@@ -171,13 +192,30 @@ func (s *Service) SetChannelViewers(ctx context.Context, channelID string, chang
 		if err != nil {
 			return err
 		}
-		if !p.Restricted {
+		drop := func(c string) bool { return c == channelID }
+		switch {
+		case p.Restricted:
+			if !slices.Contains(p.Channels, channelID) {
+				continue
+			}
+			p.Channels = slices.DeleteFunc(p.Channels, drop)
+		case private:
+			if !slices.Contains(p.Granted, channelID) {
+				continue
+			}
+			p.Granted = slices.DeleteFunc(p.Granted, drop)
+		default:
+			// Everything they see today except this channel.
+			seen := []string{}
+			enabled := p
+			enabled.Disabled = false
+			for _, c := range sortedKeys(channels) {
+				if c != channelID && enabled.Permits(c, channels[c]) {
+					seen = append(seen, c)
+				}
+			}
 			p.Restricted = true
-			p.Channels = slices.DeleteFunc(slices.Clone(ids), func(c string) bool { return c == channelID })
-		} else if slices.Contains(p.Channels, channelID) {
-			p.Channels = slices.DeleteFunc(p.Channels, func(c string) bool { return c == channelID })
-		} else {
-			continue
+			p.Channels = seen
 		}
 		if err := savePolicy(ctx, tx, p); err != nil {
 			return err
@@ -190,19 +228,36 @@ func (s *Service) SetChannelViewers(ctx context.Context, channelID string, chang
 	return nil
 }
 
-func channelIDs(ctx context.Context, db queryer) ([]string, error) {
-	rows, err := db.QueryContext(ctx, `SELECT id FROM livetv_channels ORDER BY id`)
+// channelAccess maps every channel id to whether it is private.
+func channelAccess(ctx context.Context, db queryer) (map[string]bool, error) {
+	rows, err := db.QueryContext(ctx, `SELECT id, data FROM livetv_channels ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []string
+	out := map[string]bool{}
 	for rows.Next() {
 		var id string
-		if err := rows.Scan(&id); err != nil {
+		var b []byte
+		if err := rows.Scan(&id, &b); err != nil {
 			return nil, err
 		}
-		out = append(out, id)
+		var c struct {
+			Private bool `json:"private"`
+		}
+		if err := json.Unmarshal(b, &c); err != nil {
+			return nil, fmt.Errorf("live TV channel %s: %w", id, err)
+		}
+		out[id] = c.Private
 	}
 	return out, rows.Err()
+}
+
+func sortedKeys(m map[string]bool) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	return keys
 }

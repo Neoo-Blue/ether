@@ -662,6 +662,9 @@ page (**Limits › Live TV › Allowed channels**) or on a channel's **Viewers**
 tab; both change the same setting. A viewer allowed on all channels also gets
 channels you add later. Switching them off for one channel keeps them on the
 current other channels only, so new channels stay hidden until you allow them.
+Turn on **Private** on a channel's **Viewers** tab to keep it from everyone you
+have not given it to, including people you add later; switching a viewer on
+there, or on their page, gives it to them.
 
 Programme guides can come from separate XMLTV sources, including compressed
 `.xml.gz` feeds. Map each channel to its matching guide. URL sources refresh

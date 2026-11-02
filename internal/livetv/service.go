@@ -661,7 +661,7 @@ func (s *Service) allowedWithLookup(ctx context.Context, u *core.User, c Channel
 	if err != nil {
 		return false
 	}
-	if !u.IsOwner && !pol.Permits(c.ID) {
+	if !u.IsOwner && !pol.Permits(c.ID, c.Private) {
 		return false
 	}
 	rating := c.Rating

@@ -47,6 +47,8 @@ export type Channel = {
   number: string;
   name: string;
   kind: "virtual" | "iptv";
+  /** Only viewers given this channel may watch it. */
+  private?: boolean;
   transcode?: boolean;
   enabled: boolean;
   favorite: boolean;
@@ -191,15 +193,25 @@ export type LiveTVPolicy = {
   disabled: boolean;
   restricted: boolean;
   channels?: string[];
+  /** Private channels an unrestricted viewer was given. */
+  granted?: string[];
   favorites?: string[];
   maxRating?: string;
 };
 
-/** Whether a viewer's policy (none: every channel) lets them watch a channel. */
-export function policyPermits(p: LiveTVPolicy | undefined, channelId: string): boolean {
-  if (!p) return true;
-  if (p.disabled) return false;
-  return !p.restricted || (p.channels ?? []).includes(channelId);
+/**
+ * Whether a viewer's policy (none: every public channel) lets them watch a
+ * channel. A private channel needs to be in a restricted viewer's list, or
+ * granted to an unrestricted one.
+ */
+export function policyPermits(
+  p: LiveTVPolicy | undefined,
+  channelId: string,
+  isPrivate = false,
+): boolean {
+  if (p?.disabled) return false;
+  if (p?.restricted) return (p.channels ?? []).includes(channelId);
+  return !isPrivate || (p?.granted ?? []).includes(channelId);
 }
 
 export const tv = {

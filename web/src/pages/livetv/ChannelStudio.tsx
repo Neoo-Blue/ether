@@ -483,6 +483,10 @@ export function ChannelStudio({
             channelId={c.id}
             users={users}
             policies={policies}
+            isPrivate={Boolean(c.private)}
+            onPrivate={(next) =>
+              onChange({ ...draft, channel: { ...draft.channel, private: next || undefined } })
+            }
             pending={draft.viewers ?? {}}
             onChange={(viewers) =>
               onChange({ ...draft, viewers: Object.keys(viewers).length ? viewers : undefined })
@@ -1574,19 +1578,25 @@ function ViewerAccess({
   channelId,
   users,
   policies,
+  isPrivate,
+  onPrivate,
   pending,
   onChange,
 }: {
   channelId: string;
   users: EtherUser[];
   policies: Map<number, LiveTVPolicy>;
+  isPrivate: boolean;
+  onPrivate: (next: boolean) => void;
   pending: Record<string, boolean>;
   onChange: (pending: Record<string, boolean>) => void;
 }) {
   // Owners always see every channel; the switches edit each viewer's own
-  // allowed channels, the same list as their Live TV limits.
+  // allowed channels, the same list as their Live TV limits. A private
+  // channel shows only to viewers given it, so the baseline follows the
+  // Private switch as drafted.
   const viewers = users.filter((u) => !u.isOwner);
-  const saved = (id: number) => policyPermits(policies.get(id), channelId);
+  const saved = (id: number) => policyPermits(policies.get(id), channelId, isPrivate);
   const isOn = (id: number) => pending[id] ?? saved(id);
   const off = (id: number) => policies.get(id)?.disabled ?? false;
   const toggle = (next: Record<string, boolean>, id: number, on: boolean) => {
@@ -1598,6 +1608,19 @@ function ViewerAccess({
   const everyone = allowed === eligible.length;
   return (
     <section className="max-w-3xl space-y-3">
+      <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-surface p-3">
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium text-fg">{t("Private")}</span>
+          <span className="block text-xs text-fg-muted">
+            {t("Only viewers you give it to can watch, including people you add later.")}
+          </span>
+        </span>
+        <Switch
+          aria-label={t("Private")}
+          checked={isPrivate}
+          onChange={(e) => onPrivate(e.currentTarget.checked)}
+        />
+      </label>
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface p-3">
         <span className="grid size-9 place-items-center rounded-full bg-primary-subtle text-primary">
           <Users size={16} />

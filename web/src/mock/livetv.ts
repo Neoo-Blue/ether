@@ -34,6 +34,8 @@ type Policy = {
   disabled: boolean;
   restricted: boolean;
   channels?: string[];
+  /** Private channels given to an unrestricted viewer. */
+  granted?: string[];
   favorites?: string[];
   maxRating?: string;
 };
@@ -251,7 +253,11 @@ export function createLiveTVMock(titles: FakeTitle[]) {
   const policy = (userId: number): Policy =>
     policies.get(userId) ?? { userId, disabled: false, restricted: false };
   const savePolicy = (p: Policy) => {
-    const saved = { ...p, channels: p.restricted ? [...new Set(p.channels ?? [])] : undefined };
+    const saved = {
+      ...p,
+      channels: p.restricted ? [...new Set(p.channels ?? [])] : undefined,
+      granted: p.restricted ? undefined : [...new Set(p.granted ?? [])],
+    };
     policies.set(p.userId, saved);
     return saved;
   };
@@ -363,15 +369,30 @@ export function createLiveTVMock(titles: FakeTitle[]) {
       if (!channels.some((c) => c.id === id))
         return { body: { error: { code: "livetv", message: "not found" } }, status: 404 };
       const b = (body ?? {}) as { allow?: number[]; deny?: number[] };
+      const isPrivate = (cid: string) =>
+        Boolean((channels.find((c) => c.id === cid) as { private?: boolean } | undefined)?.private);
+      const sees = (p: Policy, cid: string) =>
+        p.restricted
+          ? (p.channels ?? []).includes(cid)
+          : !isPrivate(cid) || (p.granted ?? []).includes(cid);
       for (const user of b.allow ?? []) {
         const p = policy(user);
-        if (p.restricted && !p.channels?.includes(id))
-          savePolicy({ ...p, channels: [...(p.channels ?? []), id] });
+        if (sees(p, id)) continue;
+        if (p.restricted) savePolicy({ ...p, channels: [...(p.channels ?? []), id] });
+        else savePolicy({ ...p, granted: [...(p.granted ?? []), id] });
       }
       for (const user of b.deny ?? []) {
         const p = policy(user);
-        const from = p.restricted ? (p.channels ?? []) : channels.map((c) => c.id);
-        savePolicy({ ...p, restricted: true, channels: from.filter((c) => c !== id) });
+        if (p.restricted)
+          savePolicy({ ...p, channels: (p.channels ?? []).filter((c) => c !== id) });
+        else if (isPrivate(id))
+          savePolicy({ ...p, granted: (p.granted ?? []).filter((c) => c !== id) });
+        else
+          savePolicy({
+            ...p,
+            restricted: true,
+            channels: channels.map((c) => c.id).filter((c) => c !== id && sees(p, c)),
+          });
       }
       return { body: { ok: true } };
     }
