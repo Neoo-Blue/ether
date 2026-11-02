@@ -91,10 +91,19 @@ export function InstallDrawer({
     try {
       let installed: PluginSummary;
       if (pkgFile) {
+        const form = new FormData();
+        form.append("package", new Blob([pkgFile.bytes]), pkgFile.name);
+        form.append(
+          "options",
+          JSON.stringify({
+            grants: { viewers, folders },
+            shadow,
+            acceptAddedPermissions: !!preview.addedPermissions?.length,
+          }),
+        );
         installed = await apiFetch<PluginSummary>("/plugins/install", {
           method: "POST",
-          headers: { "Content-Type": "application/octet-stream" },
-          body: pkgFile.bytes,
+          body: form,
         });
       } else {
         installed = await apiFetch<PluginSummary>("/plugins/install", {
@@ -162,7 +171,7 @@ export function InstallDrawer({
               {t("Cancel")}
             </Button>
             {preview ? (
-              <Button type="button" disabled={busy || !!pkgFile} onClick={() => void runInstall()}>
+              <Button type="button" disabled={busy} onClick={() => void runInstall()}>
                 {busy ? t("Installing…") : t("Install")}
               </Button>
             ) : (
@@ -312,14 +321,6 @@ export function InstallDrawer({
               onChangeFolders={setFolders}
               addedPermissions={preview.addedPermissions}
             />
-
-            {pkgFile ? (
-              <p className="text-sm text-fg-muted">
-                {t(
-                  "Package installation is not available until permissions can be saved with the package.",
-                )}
-              </p>
-            ) : null}
 
             <div className="rounded-xl border border-border bg-surface px-4 py-2">
               <SettingsRow

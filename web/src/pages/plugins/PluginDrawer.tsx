@@ -39,6 +39,7 @@ import { invalidateRegistry, useRegistry } from "../../lib/extend";
 import { formatBytes, formatDateTime, formatNumber } from "../../lib/format";
 import { SchemaGroups } from "../settings/SchemaForm";
 import { FolderGrantsPicker, ViewerGrantsPicker } from "./PermissionSheet";
+import { SidecarPairing } from "./SidecarPairing";
 import {
   buildGrantItems,
   buildPlacements,
@@ -391,6 +392,21 @@ export function PluginDrawer({
     }
   };
 
+  const toggleAutoUpdate = async (next: boolean) => {
+    if (!detail) return;
+    setMutationError(null);
+    try {
+      await apiFetch(`/plugins/${encodeURIComponent(detail.id)}/auto-update`, {
+        method: "PUT",
+        body: JSON.stringify({ autoUpdate: next }),
+      });
+      await loadDetail(detail.id, true);
+      onChanged();
+    } catch (e) {
+      setMutationError(e);
+    }
+  };
+
   const rollbackVersion = async () => {
     if (!detail) return;
     setRollingBack(true);
@@ -558,6 +574,9 @@ export function PluginDrawer({
           {/* TAB 1: OVERVIEW */}
           {tab === "overview" ? (
             <div className="space-y-5">
+              {detail.manifest.ether?.runtime?.kind === "remote" ? (
+                <SidecarPairing key={detail.id} id={detail.id} />
+              ) : null}
               <Section title={t("About")}>
                 <p className="text-sm text-fg">
                   {detail.summary ||
@@ -1151,13 +1170,14 @@ export function PluginDrawer({
               <SettingsSection title={t("Update preferences")}>
                 <SettingsRow
                   title={<label htmlFor="plugin-auto-update">{t("Auto-update")}</label>}
-                  description={t("Changing auto-update is not available yet.")}
+                  description={t(
+                    "Automatically install new versions when they do not ask for new permissions.",
+                  )}
                   control={
                     <Switch
                       id="plugin-auto-update"
                       checked={detail.autoUpdate}
-                      disabled
-                      onChange={() => {}}
+                      onChange={(e) => void toggleAutoUpdate(e.currentTarget.checked)}
                       aria-label={t("Auto-update")}
                     />
                   }

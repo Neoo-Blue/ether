@@ -715,6 +715,10 @@ export function createPluginsMock(): {
 } {
   let version = 1;
   const fixtures = fixturePlugins();
+  const pairings = new Map<
+    string,
+    { id: string; created: number; lastUsed: number; expires: number }[]
+  >();
   const catalogue = catalogueFixtures();
   const bump = () => version++;
   const byId = (id: string) => fixtures.find((f) => f.detail.id === id);
@@ -830,7 +834,9 @@ export function createPluginsMock(): {
       return json(buildPreview(body));
     }
     if (method === "POST" && seg[1] === "install" && seg.length === 2) {
-      const req = (body && typeof body === "object" ? body : {}) as {
+      const options =
+        body instanceof FormData ? JSON.parse(String(body.get("options") ?? "{}")) : body;
+      const req = (options && typeof options === "object" ? options : {}) as {
         url?: string;
         kind?: string;
         lan?: boolean;
@@ -939,6 +945,23 @@ export function createPluginsMock(): {
       return json({ error: { code: "not_found", message: "That plugin is not installed." } }, 404);
     }
     const d = f.detail;
+    if (method === "POST" && seg[2] === "pair") {
+      return json({
+        code: "PAIR-1234",
+        expiresAt: new Date(Date.now() + 600000).toISOString(),
+        tunnelUrl: "wss://ether.example.test/tunnel",
+        exchangePath: "/api/plugins/pair/exchange",
+      });
+    }
+    if (method === "GET" && seg[2] === "pairings")
+      return json({ pairings: pairings.get(d.id) ?? [] });
+    if (method === "DELETE" && seg[2] === "pairings" && seg[3]) {
+      pairings.set(
+        d.id,
+        (pairings.get(d.id) ?? []).filter((p) => p.id !== seg[3]),
+      );
+      return json({ status: "revoked" });
+    }
     if (method === "GET" && seg.length === 2) return json(d);
     if (method === "GET" && seg[2] === "settings") {
       return json({ settings: f.settings, schema: f.schema });
@@ -1021,7 +1044,8 @@ export function createPluginsMock(): {
     if (method === "GET" && seg[2] === "shadow") {
       return json({ entries: f.shadowJournal, count: f.shadowJournal.length });
     }
-    if (method === "POST" && seg[2] === "auto-update") {
+    if (method === "GET" && seg[2] === "auto-update") return json({ autoUpdate: d.autoUpdate });
+    if (method === "PUT" && seg[2] === "auto-update") {
       d.autoUpdate = Boolean((body as { autoUpdate?: boolean } | null)?.autoUpdate);
       return json({ autoUpdate: d.autoUpdate });
     }

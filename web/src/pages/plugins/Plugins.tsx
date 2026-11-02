@@ -18,6 +18,7 @@ import { Artwork } from "../../components/Artwork";
 import { DomainPage, Section, useRouteTab, type PageTab } from "../../components/layout";
 import { LEVEL_LABEL, StatusDot } from "../../components/status";
 import { t, tn } from "../../i18n";
+import { useLocale } from "../../i18n/react";
 import { apiFetch, errorMessage } from "../../lib/api";
 import { invalidateRegistry } from "../../lib/extend";
 import { useStreamEvent } from "../../lib/stream";
@@ -32,6 +33,7 @@ type PluginsTabKey = "installed" | "catalogue" | "develop";
 
 export default function Plugins() {
   const navigate = useNavigate();
+  const { locale } = useLocale();
 
   const [plugins, setPlugins] = useState<PluginSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,7 +76,7 @@ export default function Plugins() {
     if (!pid || !line) return;
     setLiveLogLines((prev) => ({
       ...prev,
-      [pid]: [...(prev[pid] ?? []), line],
+      [pid]: [...(prev[pid] ?? []), line].slice(-200),
     }));
     setLogRevision((n) => n + 1);
   });
@@ -95,7 +97,7 @@ export default function Plugins() {
         label: t("Develop"),
       },
     ],
-    [plugins.length],
+    [plugins.length, locale],
   );
 
   const activeTab = useRouteTab(tabs, "installed");

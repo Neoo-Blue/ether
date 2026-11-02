@@ -22,6 +22,7 @@ import { Artwork } from "../../components/Artwork";
 import { Drawer } from "../../components/Drawer";
 import { Section } from "../../components/layout";
 import { t, tn } from "../../i18n";
+import { useLocale } from "../../i18n/react";
 import { apiFetch, errorMessage } from "../../lib/api";
 import { invalidateRegistry } from "../../lib/extend";
 import { PermissionSheet } from "./PermissionSheet";
@@ -30,6 +31,7 @@ import {
   kindIcon,
   kindLabel,
   type CatalogueEntry,
+  type InstallPreview,
   type PluginSummary,
 } from "./types";
 
@@ -53,6 +55,7 @@ export function CatalogueTab({
   onSelectInstalled: (pluginId: string) => void;
   onOpenInstall: () => void;
 }) {
+  const { locale } = useLocale();
   const [entries, setEntries] = useState<CatalogueEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [unavailable, setUnavailable] = useState(false);
@@ -62,6 +65,7 @@ export function CatalogueTab({
   const [categoryFilter, setCategoryFilter] = useState("all");
 
   const [selected, setSelected] = useState<CatalogueEntry | null>(null);
+  const [preview, setPreview] = useState<InstallPreview | null>(null);
   const [viewers, setViewers] = useState<number[]>([]);
   const [folders, setFolders] = useState<string[]>([]);
   const [shadow, setShadow] = useState(false);
@@ -108,7 +112,27 @@ export function CatalogueTab({
         (entry.category && categoryLabel(entry.category).toLowerCase().includes(q))
       );
     });
-  }, [entries, query, kindFilter, categoryFilter]);
+  }, [entries, query, kindFilter, categoryFilter, locale]);
+
+  useEffect(() => {
+    let active = true;
+    setPreview(null);
+    if (selected && !installedIds.has(selected.id)) {
+      apiFetch<InstallPreview>("/plugins/install/preview", {
+        method: "POST",
+        body: JSON.stringify({ url: selected.url }),
+      })
+        .then((result) => {
+          if (active) setPreview(result);
+        })
+        .catch((e) => {
+          if (active) setInstallErr(errorMessage(e));
+        });
+    }
+    return () => {
+      active = false;
+    };
+  }, [selected, installedIds]);
 
   const openEntry = (entry: CatalogueEntry) => {
     setSelected(entry);
@@ -119,7 +143,7 @@ export function CatalogueTab({
   };
 
   const handleInstall = async () => {
-    if (!selected) return;
+    if (!selected || !preview) return;
     setInstalling(true);
     setInstallErr(null);
     try {
@@ -127,10 +151,12 @@ export function CatalogueTab({
         method: "POST",
         body: JSON.stringify({
           url: selected.url,
-          manifest: selected.manifest,
-          viewers: selected.needsViewers ? viewers : undefined,
-          folders: selected.needsFolders ? folders : undefined,
+          grants: {
+            viewers: preview.needsViewers ? viewers : undefined,
+            folders: preview.needsFolders ? folders : undefined,
+          },
           shadow,
+          acceptAddedPermissions: !!preview.addedPermissions?.length,
         }),
       });
       invalidateRegistry();
@@ -350,7 +376,7 @@ export function CatalogueTab({
                   {t("Open installed plugin")}
                 </Button>
               ) : (
-                <Button onClick={handleInstall} disabled={installing}>
+                <Button onClick={handleInstall} disabled={installing || !preview}>
                   <Download size={14} /> {t("Install")}
                 </Button>
               )}
@@ -436,16 +462,18 @@ export function CatalogueTab({
               </div>
             ) : null}
 
-            <PermissionSheet
-              permissions={selected.permissions}
-              verified={selected.verified}
-              needsViewers={selected.needsViewers}
-              needsFolders={selected.needsFolders}
-              viewers={viewers}
-              onChangeViewers={setViewers}
-              folders={folders}
-              onChangeFolders={setFolders}
-            />
+            {preview ? (
+              <PermissionSheet
+                permissions={preview.permissions}
+                verified={preview.verified}
+                needsViewers={preview.needsViewers}
+                needsFolders={preview.needsFolders}
+                viewers={viewers}
+                onChangeViewers={setViewers}
+                folders={folders}
+                onChangeFolders={setFolders}
+              />
+            ) : null}
 
             {!isSelectedInstalled ? (
               <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-surface px-4 py-3">

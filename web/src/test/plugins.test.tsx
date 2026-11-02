@@ -173,6 +173,11 @@ describe("Server › Plugins (WS10a)", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Updates" }));
     expect(await screen.findByText("Connects to ads.pluto.tv")).toBeTruthy();
 
+    const autoUpdate = screen.getByRole("switch", { name: "Auto-update" }) as HTMLInputElement;
+    const previousAutoUpdate = autoUpdate.checked;
+    fireEvent.click(autoUpdate);
+    await waitFor(() => expect(autoUpdate.checked).toBe(!previousAutoUpdate));
+
     fireEvent.click(screen.getByRole("button", { name: /Approve permissions and update/i }));
     expect(await screen.findByText("Up to date")).toBeTruthy();
 
@@ -251,6 +256,37 @@ describe("Server › Plugins (WS10a)", () => {
 
     // Navigates to Installed tab and opens the new plugin's drawer
     expect(await screen.findByText("Where it appears")).toBeTruthy();
+  });
+
+  it("pairs and revokes a remote sidecar", async () => {
+    let revoked = false;
+    customIntercept = async (url, init) => {
+      const base = "/ether/api/plugins/community.plutotv.ether";
+      if (url.pathname === base && (!init?.method || init.method === "GET")) {
+        const response = await fakeServer.fetch(url.toString(), init);
+        const detail = await response.json();
+        detail.manifest.ether.runtime = { kind: "remote" };
+        return Response.json(detail);
+      }
+      if (url.pathname === `${base}/pairings` && (!init?.method || init.method === "GET")) {
+        return Response.json({
+          pairings: revoked
+            ? []
+            : [{ id: "sidecar-1", created: 1700000000000, lastUsed: 0, expires: 1900000000000 }],
+        });
+      }
+      if (url.pathname === `${base}/pairings/sidecar-1` && init?.method === "DELETE") {
+        revoked = true;
+        return Response.json({ status: "revoked" });
+      }
+      return null;
+    };
+    renderPlugins();
+    fireEvent.click(await screen.findByText("Pluto TV"));
+    fireEvent.click(await screen.findByRole("button", { name: "Connect a sidecar" }));
+    expect(await screen.findByText(/PAIR-1234/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
+    expect(await screen.findByText("No sidecars connected.")).toBeTruthy();
   });
 
   it("shows 'The catalogue is not available yet' when GET /api/plugins/catalogue is empty or 404", async () => {
