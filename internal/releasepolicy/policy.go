@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/braedonsaunders/ether/internal/core"
@@ -63,6 +64,8 @@ type Context struct {
 type condition struct {
 	core.ReleaseCondition
 	re *regexp.Regexp
+	// external conditions (plugin fields) evaluate Unknown until WS9h.
+	external bool
 }
 type rule struct {
 	source                       core.ReleaseRule
@@ -70,7 +73,20 @@ type rule struct {
 }
 type Policy struct{ rules []rule }
 
+// Compile validates rules against the built-in field table.
+// Plugin-namespaced fields compile structurally (operator and value shape)
+// and evaluate Unknown; see CompileWith for registry-checked compilation.
 func Compile(rules []core.ReleaseRule) (*Policy, error) {
+	return CompileWith(rules, nil)
+}
+
+// CompileWith is Compile with a caller-supplied field table, built by the
+// resolver from the descriptor registry so registered plugin fields
+// compile under their declared operators and value class. A nil lookup
+// uses the built-in table. Behaviour for built-in fields is identical
+// either way.
+func CompileWith(rules []core.ReleaseRule, lookup FieldLookup) (*Policy, error) {
+	lookup = lookupOrBuiltin(lookup)
 	if len(rules) > 32 {
 		return nil, fmt.Errorf("at most 32 release preferences are allowed")
 	}
@@ -106,7 +122,7 @@ func Compile(rules []core.ReleaseRule) (*Policy, error) {
 				return nil, fmt.Errorf("%s: at most 16 conditions per group", r.Name)
 			}
 			for _, c := range part.in {
-				cc, e := compileCondition(c)
+				cc, e := compileCondition(c, lookup)
 				if e != nil {
 					err = fmt.Errorf("%s: %w", r.Name, e)
 					break
@@ -121,23 +137,33 @@ func Compile(rules []core.ReleaseRule) (*Policy, error) {
 	}
 	return p, nil
 }
-func compileCondition(c core.ReleaseCondition) (condition, error) {
+func compileCondition(c core.ReleaseCondition, lookup FieldLookup) (condition, error) {
 	out := condition{ReleaseCondition: c}
-	numeric := c.Field == "height" || c.Field == "size_gib"
-	switch c.Field {
-	case "audio_matches_original":
+	spec, ok := lookup(c.Field)
+	if !ok {
+		if IsExternalFieldID(c.Field) {
+			// No descriptor to check against (the config save path, or a
+			// plugin that is not installed right now): accept the
+			// condition's shape and keep it neutral.
+			out.external = true
+			return compileExternalShape(out)
+		}
+		return out, fmt.Errorf("unsupported field %q", c.Field)
+	}
+	out.external = spec.External
+	if spec.ValueClass == "none" {
 		if c.Operator != "" && c.Operator != "equals" {
 			return out, fmt.Errorf("unsupported comparison %q", c.Operator)
 		}
 		if strings.TrimSpace(c.Value) != "" {
-			return out, fmt.Errorf("original-language audio takes no value")
+			if c.Field == "audio_matches_original" {
+				return out, fmt.Errorf("original-language audio takes no value")
+			}
+			return out, fmt.Errorf("field %q takes no value", c.Field)
 		}
 		return out, nil
-	case "language", "subtitles", "name", "group", "source", "video", "audio", "height", "size_gib", "indexer", "protocol", "edition", "hdr":
-	default:
-		return out, fmt.Errorf("unsupported field %q", c.Field)
 	}
-	if numeric {
+	if spec.ValueClass == "number" {
 		if c.Operator != "range" || math.IsNaN(c.Min) || math.IsNaN(c.Max) || math.IsInf(c.Min, 0) || math.IsInf(c.Max, 0) || c.Min < 0 || c.Max < 0 || (c.Max > 0 && c.Max < c.Min) {
 			return out, fmt.Errorf("invalid numeric range")
 		}
@@ -157,10 +183,46 @@ func compileCondition(c core.ReleaseCondition) (condition, error) {
 	default:
 		return out, fmt.Errorf("unsupported comparison %q", c.Operator)
 	}
-	if (c.Field == "language" || c.Field == "subtitles") && c.Operator != "equals" {
+	if spec.ValueClass == "language" && c.Operator != "equals" {
 		return out, fmt.Errorf("languages use exact matching; use filename for expressions")
 	}
+	if len(spec.Operators) > 0 && !slices.Contains(spec.Operators, c.Operator) {
+		return out, fmt.Errorf("unsupported comparison %q", c.Operator)
+	}
 	return out, nil
+}
+
+// compileExternalShape validates a plugin-field condition without its
+// descriptor: a range needs sane bounds, a comparison needs a bounded
+// value, and a valueless condition needs neither.
+func compileExternalShape(out condition) (condition, error) {
+	c := out.ReleaseCondition
+	switch c.Operator {
+	case "range":
+		if math.IsNaN(c.Min) || math.IsNaN(c.Max) || math.IsInf(c.Min, 0) || math.IsInf(c.Max, 0) || c.Min < 0 || c.Max < 0 || (c.Max > 0 && c.Max < c.Min) {
+			return out, fmt.Errorf("invalid numeric range")
+		}
+		return out, nil
+	case "equals", "contains", "regex":
+		if strings.TrimSpace(c.Value) == "" || len(c.Value) > 512 {
+			return out, fmt.Errorf("condition needs a value of at most 512 characters")
+		}
+		if c.Operator == "regex" {
+			re, err := regexp.Compile("(?i)" + c.Value)
+			if err != nil {
+				return out, fmt.Errorf("invalid expression: %w", err)
+			}
+			out.re = re
+		}
+		return out, nil
+	case "":
+		if strings.TrimSpace(c.Value) != "" {
+			return out, fmt.Errorf("unsupported comparison %q", c.Operator)
+		}
+		return out, nil
+	default:
+		return out, fmt.Errorf("unsupported comparison %q", c.Operator)
+	}
 }
 func (p *Policy) Evaluate(rel core.Release, ctx Context) Result {
 	out := Result{Preferences: []int{}, Explanations: []Explanation{}}
@@ -268,6 +330,14 @@ func Equivalent(a, b Result) bool {
 // Empty means no such conflict. Disabled rules, exceptions and fallbacks
 // are left alone: those can still be satisfied.
 func Conflict(rules []core.ReleaseRule) string {
+	return ConflictWith(rules, nil)
+}
+
+// ConflictWith is Conflict with a caller-supplied field table; it is what
+// the console-served descriptors declare as single-value that decides a
+// conflict, so plugin single-value fields conflict the same way.
+func ConflictWith(rules []core.ReleaseRule, lookup FieldLookup) string {
+	lookup = lookupOrBuiltin(lookup)
 	type need struct{ name, field, value string }
 	var needs []need
 	for _, r := range rules {
@@ -277,7 +347,7 @@ func Conflict(rules []core.ReleaseRule) string {
 		seen := map[string]string{}
 		var fields []string
 		for _, c := range r.Conditions {
-			if !singleValueField(c.Field) || c.Operator != "equals" {
+			if !singleValueField(c.Field, lookup) || c.Operator != "equals" {
 				continue
 			}
 			if prev, ok := seen[c.Field]; ok && !strings.EqualFold(prev, c.Value) {
@@ -302,13 +372,9 @@ func Conflict(rules []core.ReleaseRule) string {
 	return ""
 }
 
-func singleValueField(field string) bool {
-	switch field {
-	case "group", "source", "video", "audio", "indexer", "protocol", "edition":
-		return true
-	default:
-		return false
-	}
+func singleValueField(field string, lookup FieldLookup) bool {
+	spec, ok := lookup(field)
+	return ok && spec.SingleValue
 }
 
 // UsesOriginalAudio reports whether evaluation of these rules needs
@@ -350,6 +416,11 @@ func group(cs []condition, mode string, r core.Release, ctx Context) State {
 	return Match
 }
 func (c condition) evaluate(r core.Release, ctx Context) State {
+	if c.external {
+		// Plugin conditions run on the plugin hot path (WS9h); until then
+		// they are undecided, never a guessed match.
+		return Unknown
+	}
 	if c.Field == "audio_matches_original" {
 		return c.originalAudioState(r, ctx)
 	}

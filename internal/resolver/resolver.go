@@ -232,6 +232,8 @@ type Service struct {
 
 	con consoleState // pins, release memory, health results, history (console.go)
 
+	extend extendState // descriptor registry for ranking/rules (extend_registry.go)
+
 	invalMu sync.Mutex
 	inval   *clusterbus.Invalidator // nil on a standalone server
 }
@@ -1126,7 +1128,7 @@ func (s *Service) scoreCandidates(ctx context.Context, req core.ResolveRequest, 
 // traced like every other result. Interactive search reads the same trace.
 func (s *Service) rankCandidates(ctx context.Context, req core.ResolveRequest, sreq core.SearchRequest, profile core.QualityProfile, results []core.Release, trace *Trace, pinID string) ([]candidate, bool, error) {
 	t := req.Title
-	policy, err := releasepolicy.Compile(profile.ReleaseRules)
+	policy, err := s.compileRules(profile.ReleaseRules)
 	if err != nil {
 		return nil, true, err
 	}
