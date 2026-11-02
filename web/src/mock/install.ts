@@ -22,6 +22,12 @@ export function installMockBackend(): void {
     cacheRestart: params.has("cacheRestart"),
     restore: params.get("restore") ?? undefined,
   });
+  fake.state.config.frontends = Object.fromEntries(
+    ["plex", "jellyfin", "emby", "silo", "stremio", "webdav", "m3u", "dlna"].map((id) => [
+      id,
+      { enabled: true },
+    ]),
+  );
   const real = window.fetch.bind(window);
   window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(

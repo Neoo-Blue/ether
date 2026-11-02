@@ -20,6 +20,48 @@ afterEach(async () => {
 });
 
 describe("Settings", () => {
+  it("fills a proxy suggestion and tests the connection inline", async () => {
+    const { fake } = renderApp("/server");
+    fireEvent.click(
+      await screen.findByLabelText("Send indexers, debrid and Usenet through a proxy", {}, WAIT),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Common proxy setups" }));
+    fireEvent.click(
+      within(await screen.findByRole("listbox", { hidden: true })).getByText(
+        "VPN container (Gluetun) on a shared Docker network",
+      ),
+    );
+    expect(screen.getByLabelText("Proxy address")).toHaveValue("http://gluetun:8888");
+    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+    expect(await screen.findByText("Split tunnel working", {}, WAIT)).toBeVisible();
+    expect(calls(fake, "POST", "/outbound/check")[0]?.body).toMatchObject({
+      enabled: true,
+      url: "http://gluetun:8888",
+    });
+  });
+  it("shows enabled app addresses and saves a non-Plex port from General", async () => {
+    const { fake } = renderApp("/server", {}, (f) => {
+      f.state.config.frontends = {
+        plex: { enabled: true },
+        jellyfin: { enabled: true },
+        emby: { enabled: false },
+      };
+    });
+    const port = await screen.findByLabelText("Jellyfin port", {}, WAIT);
+    await waitFor(() => expect(port).toHaveValue(8096), WAIT);
+    expect(screen.queryByLabelText("Emby port")).toBeNull();
+    expect(screen.getByText("http://192.168.1.20:8096")).toBeVisible();
+    expect(screen.getByText("https://jellyfin.example.com")).toBeVisible();
+    fireEvent.change(port, { target: { value: "8098" } });
+    fireEvent.click(screen.getByRole("button", { name: /Save changes/ }));
+    await waitFor(
+      () =>
+        expect(calls(fake, "PUT", "/frontends/jellyfin/settings")[0]?.body).toMatchObject({
+          port: 8098,
+        }),
+      WAIT,
+    );
+  });
   it("shows and filters client families reported by other protocols", async () => {
     renderApp("/playback/devices");
     expect(await screen.findByText("Stremio TV", {}, WAIT)).toBeInTheDocument();
@@ -436,7 +478,7 @@ describe("Settings", () => {
     for (const name of ["Server", "Simkl", "Availability", "Shared Cache", "Downloads"])
       expect(screen.queryByRole("tab", { name })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "How Ether reaches the internet" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Setup" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Run setup wizard" })).toBeVisible();
   });
 
   it("keeps unknown config off General and tucks power options under More options", async () => {
@@ -447,7 +489,7 @@ describe("Settings", () => {
       } as never;
     });
     expect(await screen.findByLabelText("Server name", {}, WAIT)).toBeInTheDocument();
-    expect(screen.getByLabelText("Port")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Plex port", {}, WAIT)).toBeInTheDocument();
     expect(screen.getByText("Living Room Ether is ready for viewers.")).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Experiments" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Listen address")).not.toBeInTheDocument();

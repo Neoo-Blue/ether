@@ -31,16 +31,8 @@ export const SERVER: FieldGroup[] = localized(() => [
     id: "connect",
     title: t("How apps connect"),
     description: t("The address apps use to reach this computer."),
-    fields: [
-      {
-        key: "port",
-        label: t("Port"),
-        kind: "number",
-        min: 1,
-        max: 65535,
-        step: 1,
-        help: t("Plex apps expect 32400. A restart is needed after changing it."),
-      },
+    fields: [],
+    more: [
       {
         key: "allowRemoteConsole",
         label: t("Open this console from outside your network"),
@@ -49,8 +41,6 @@ export const SERVER: FieldGroup[] = localized(() => [
           "For reaching this console through your own domain or reverse proxy when you're away. Only the Plex account that owns this server can sign in. Off keeps it to your home network and VPN.",
         ),
       },
-    ],
-    more: [
       {
         key: "bindAddress",
         label: t("Listen address"),

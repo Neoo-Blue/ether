@@ -2237,9 +2237,15 @@ export function createFakeServer(opts: FakeOptions = {}) {
     if (mr) return json(mr.body, mr.status);
 
     const mockConnectUrls = (id: string, port?: number) => {
-      if (port) return [`http://192.168.1.20:${port}`];
+      if (port)
+        return [
+          `http://192.168.1.20:${port}`,
+          id === "plex"
+            ? `https://203-0-113-7.abc.plex.direct:${port}`
+            : `https://${id}.example.com`,
+        ];
       if (id === "stremio" || id === "webdav" || id === "dlna" || id === "m3u") {
-        return [`http://192.168.1.20:32550/${id}`];
+        return [`http://192.168.1.20:${state.config.server.port}/${id}`];
       }
       return [];
     };

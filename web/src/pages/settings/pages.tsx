@@ -17,6 +17,7 @@ import { api } from "../../lib/api";
 import Logs from "../Logs";
 import { BackupsAndImport } from "./Backups";
 import { ClusterOverview, useClustered } from "./Cluster";
+import { AppConnections } from "./AppConnections";
 import { OutboundInternet } from "./OutboundInternet";
 import { ServerProtection } from "./ServerProtection";
 import { ConnectedServices, integrationTabs, type ServiceTab } from "./ConnectedServices";
@@ -44,11 +45,18 @@ export function GeneralPage() {
       <ConfigSection
         configKey="server"
         endpoint="server"
-        groups={clustered ? S.clusterServerGroups() : S.SERVER}
+        groups={(clustered ? S.clusterServerGroups() : S.SERVER)
+          .filter((group) => group.id !== "connect")
+          .map((group) =>
+            group.id === "node"
+              ? { ...group, more: group.more?.filter((field) => field.key === "clusterWeight") }
+              : group,
+          )}
         label={t("General")}
         before={() => <ServerStatus />}
         onSaved={() => void reloadBoot()}
       />
+      <AppConnections />
       <OutboundInternet />
       <RunSetupWizard />
     </DomainPage>
@@ -74,12 +82,9 @@ function RunSetupWizard() {
     }
   };
   return (
-    <SettingsSection
-      title={t("Setup")}
-      description={t("Open the setup wizard. Saved configuration stays in place.")}
-    >
+    <SettingsSection>
       <SettingsRow
-        title={t("Setup wizard")}
+        title={t("Setup")}
         description={
           boot.setupComplete
             ? t("Walk through setup again without erasing this server's settings.")
@@ -87,11 +92,11 @@ function RunSetupWizard() {
         }
         control={
           boot.setupComplete ? (
-            <Button variant="outline" size="sm" disabled={busy} onClick={() => void reopen()}>
+            <Button variant="default" disabled={busy} onClick={() => void reopen()}>
               {t("Run setup wizard")}
             </Button>
           ) : (
-            <Link to="/setup" className={buttonVariants({ variant: "outline", size: "sm" })}>
+            <Link to="/setup" className={buttonVariants({ variant: "default" })}>
               {t("Run setup wizard")}
             </Link>
           )

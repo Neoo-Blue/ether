@@ -273,7 +273,9 @@ export const PAGES = localized<PageDef[]>(() => [
     href: "/server",
     title: t("General"),
     sections: [],
-    keywords: searchTerms(msg("settings server name port listen proxy vpn setup wizard")),
+    keywords: searchTerms(
+      msg("settings server name app ports local remote URLs listen proxy vpn setup wizard"),
+    ),
   },
   {
     href: "/apps",

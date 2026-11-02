@@ -78,6 +78,10 @@ export function settingsIndex(): SettingHit[] {
     ...rows("/server", general, [
       t("Send indexers, debrid and Usenet through a proxy"),
       t("Proxy address"),
+      t("How apps connect"),
+      t("Port"),
+      t("Local URL"),
+      t("Remote URL"),
     ]),
     ...rows(
       "/server",
