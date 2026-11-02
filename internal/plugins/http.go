@@ -16,6 +16,8 @@ import (
 func (m *Manager) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", m.handleList)
+	mux.HandleFunc("GET /catalogue", m.handleCatalogue)
+	mux.HandleFunc("POST /catalogue/refresh", m.handleCatalogue)
 	mux.HandleFunc("POST /install/preview", m.handlePreview)
 	mux.HandleFunc("POST /install", m.handleInstall)
 	mux.HandleFunc("GET /{id}", m.handleGet)
@@ -41,6 +43,15 @@ func (m *Manager) Handler() http.Handler {
 	mux.HandleFunc("GET /{id}/views/{page}", m.handleView)
 	mux.HandleFunc("POST /{id}/actions/{action}", m.handleAction)
 	return mux
+}
+
+func (m *Manager) handleCatalogue(w http.ResponseWriter, r *http.Request) {
+	cat := m.getCatalogue()
+	if cat == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"entries": []any{}, "configured": false})
+		return
+	}
+	cat.ServeHTTP(w, r)
 }
 
 // Summary is one row of the installed list.
@@ -140,6 +151,10 @@ func (m *Manager) fail(w http.ResponseWriter, err error) {
 			fields[i] = FieldError{"permissions", a}
 		}
 		writeErr(w, http.StatusConflict, "permission_increase", "This update asks for more access. Review it, then confirm.", fields)
+	case errors.Is(err, ErrDigestMismatch):
+		writeErr(w, http.StatusBadRequest, "digest_mismatch", "The downloaded package did not match its expected digest.", nil)
+	case errors.Is(err, ErrRevoked):
+		writeErr(w, http.StatusForbidden, "revoked", "This plugin has been revoked in the catalogue and cannot be enabled.", nil)
 	case errors.Is(err, ErrPermissionDenied):
 		writeErr(w, http.StatusForbidden, "permission_denied", "That access was not granted.", nil)
 	case errors.Is(err, ErrNoRuntime):
@@ -207,6 +222,9 @@ func (m *Manager) handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 type installRequest struct {
+	ID                     string                     `json:"id,omitempty"`
+	Version                string                     `json:"version,omitempty"`
+	SHA256                 string                     `json:"sha256,omitempty"`
 	URL                    string                     `json:"url"`
 	Kind                   string                     `json:"kind"`
 	LAN                    bool                       `json:"lan"`
@@ -220,7 +238,7 @@ type installRequest struct {
 }
 
 func (req installRequest) source() Source {
-	src := Source{Kind: req.Kind, URL: req.URL, LAN: req.LAN}
+	src := Source{Kind: req.Kind, ID: req.ID, Version: req.Version, SHA256: req.SHA256, URL: req.URL, LAN: req.LAN}
 	if len(req.Manifest) > 0 {
 		src.Kind = "studio"
 		src.Manifest = req.Manifest

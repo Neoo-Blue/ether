@@ -1,0 +1,7 @@
+# Ether catalogue template
+
+Set the repository variable `ETHER_REF` to an immutable Ether release tag or commit that includes `ether plugin check` and `ether-release-sign index -check`. The workflow installs both tools from that ref. Set the `ETHER_CATALOGUE_PRIVATE_KEY` and `ETHER_CATALOGUE_PUBLIC_KEY` repository secrets to the base64 Ed25519 signing key and corresponding public key. Keep the private key secret. Pull requests validate without access to signing secrets; pushes to `main` sign and upload `index.json` and `index.json.sig` as a workflow artifact. Publish both files together at the URL configured in Ether.
+
+Add one reviewed YAML file per plugin under `plugins/`; `examples/` contains an illustrative file with placeholder URLs and checksums. Each version must reference a publicly downloadable `.etherpkg` and its SHA-256 digest. CI downloads every non-revoked version, verifies the digest and identity, and runs `ether plugin check` on its unpacked files. The command runs the conformance kit, including copy lint. The index compiler also validates catalogue copy. A revoked entry requires a reason; it is retained in the signed index and its packages are not executed by CI.
+
+Review permissions for each version. A version may override the entry-level permissions using its own `permissions` field. Ether verifies that the package does not request more than the reviewed permissions before marking it verified. Never use the sample values as a real catalogue entry.
