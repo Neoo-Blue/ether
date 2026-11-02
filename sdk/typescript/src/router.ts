@@ -157,8 +157,8 @@ function parseUrlPathAndQuery(
   if (qIndex >= 0) {
     const qs = pathOnly.slice(qIndex + 1);
     pathOnly = pathOnly.slice(0, qIndex) || "/";
-    const params = new URLSearchParams(qs);
-    params.forEach((v, k) => {
+    const params = parseParams(qs);
+    Object.entries(params).forEach(([k, v]) => {
       if (query[k] === undefined) {
         query[k] = v;
       }
@@ -221,11 +221,22 @@ interface ParsedStremioRoute {
   extra: Record<string, string>;
 }
 
+function parseParams(input: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const part of input.split("&")) {
+    if (!part) continue;
+    const index = part.indexOf("=");
+    const decode = (value: string) => decodeURIComponent(value.replace(/\+/g, " "));
+    result[decode(index < 0 ? part : part.slice(0, index))] = decode(index < 0 ? "" : part.slice(index + 1));
+  }
+  return result;
+}
+
 function parseExtraSegment(rawExtra: string | undefined): Record<string, string> {
   const out: Record<string, string> = {};
   if (!rawExtra) return out;
-  const params = new URLSearchParams(rawExtra);
-  params.forEach((v, k) => {
+  const params = parseParams(rawExtra);
+  Object.entries(params).forEach(([k, v]) => {
     out[k] = v;
   });
   return out;

@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/braedonsaunders/ether/internal/plugins"
-	"github.com/braedonsaunders/ether/internal/plugins/viewspec"
 	"github.com/braedonsaunders/ether/internal/plugins/wasm"
+	"github.com/braedonsaunders/ether/internal/viewspec"
 	hello "github.com/braedonsaunders/ether/sdk/examples/hello/go"
 	etherplugin "github.com/braedonsaunders/ether/sdk/go"
 )
@@ -55,8 +55,8 @@ func (noopHost) FoldersList(context.Context, string, string) ([]plugins.FolderEn
 func (noopHost) FoldersStat(context.Context, string, string) (plugins.FolderEntry, error) {
 	return plugins.FolderEntry{}, plugins.ErrPermissionDenied
 }
-func (noopHost) NotifyOwner(context.Context, string) error                        { return nil }
-func (noopHost) Log(context.Context, string, string, map[string]any) error        { return nil }
+func (noopHost) NotifyOwner(context.Context, string) error                 { return nil }
+func (noopHost) Log(context.Context, string, string, map[string]any) error { return nil }
 
 func sdkRootDir(t *testing.T) string {
 	t.Helper()
@@ -115,14 +115,14 @@ func TestHelloManifestsAndViewSpecValidate(t *testing.T) {
 		if m.Ether == nil || m.Ether.Settings == nil {
 			t.Fatalf("%s manifest missing ether.settings", lang)
 		}
-		if diags := plugins.LintSettingsSchema(*m.Ether.Settings); len(diags) > 0 {
+		if diags := plugins.LintSettingsSchema(m.Ether.Settings); diags != nil {
 			t.Fatalf("%s LintSettingsSchema diagnostics: %+v", lang, diags)
 		}
 	}
 
 	p := hello.NewHelloPlugin()
-	h := etherplugin.NewTestHarness(p)
-	viewRes := h.Get("/ether/view/home", nil)
+	h := etherplugin.NewTestHarness(p, nil)
+	viewRes := h.Request(etherplugin.RawRequest{Method: "GET", Path: "/ether/view/home"})
 	if viewRes.Status != http.StatusOK {
 		t.Fatalf("GET /ether/view/home status = %d, body = %s", viewRes.Status, viewRes.Body)
 	}
@@ -132,8 +132,8 @@ func TestHelloManifestsAndViewSpecValidate(t *testing.T) {
 	if err := json.Unmarshal(viewRes.Body, &payload); err != nil {
 		t.Fatalf("unmarshal view response: %v", err)
 	}
-	if _, err := viewspec.ValidatePlugin(payload.Spec); err != nil {
-		t.Fatalf("viewspec.ValidatePlugin failed: %v", err)
+	if result := viewspec.ValidatePlugin(payload.Spec); !result.OK {
+		t.Fatalf("viewspec.ValidatePlugin failed: %v", result.Errors)
 	}
 }
 
@@ -271,9 +271,8 @@ import importlib.util, sys
 spec = importlib.util.spec_from_file_location("hello_plugin_mod", sys.argv[1])
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
-from ether_plugin import create_server
-srv = create_server(mod.hello_plugin, host="127.0.0.1", port=0)
-srv.start()
+from ether_plugin import serve
+srv = serve(mod.hello_plugin, host="127.0.0.1", port=0)
 print(srv.url, flush=True)
 sys.stdin.read()
 srv.close()
@@ -358,7 +357,7 @@ func TestCrossLanguageHelloParity(t *testing.T) {
 
 	// 2. Go HTTP sidecar
 	goPlugin := hello.NewHelloPlugin()
-	goSrv := httptest.NewServer(goPlugin.Handler())
+	goSrv := httptest.NewServer(goPlugin)
 	t.Cleanup(goSrv.Close)
 
 	// 3. Python HTTP sidecar

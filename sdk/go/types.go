@@ -174,20 +174,20 @@ type FieldOption struct {
 
 // Contributes declares the descriptors a plugin contributes to Ether.
 type Contributes struct {
-	Source          *SourceMeta         `json:"source,omitempty"`
-	Channels        *ChannelsMeta       `json:"channels,omitempty"`
-	Subtitles       *SubtitlesMeta      `json:"subtitles,omitempty"`
-	Markers         *MarkersMeta        `json:"markers,omitempty"`
-	Notification    *NotificationMeta   `json:"notification,omitempty"`
-	Events          *EventsMeta         `json:"events,omitempty"`
-	Integration     *IntegrationMeta    `json:"integration,omitempty"`
-	ListSources     []ListSourceMeta    `json:"listSources,omitempty"`
-	RankingSteps    []RankingStepMeta   `json:"rankingSteps,omitempty"`
-	RuleConditions  []RuleConditionMeta `json:"ruleConditions,omitempty"`
-	Tools           []ToolMeta          `json:"tools,omitempty"`
-	Pages           []PageMeta          `json:"pages,omitempty"`
-	Slots           []SlotMeta          `json:"slots,omitempty"`
-	Commands        []CommandMeta       `json:"commands,omitempty"`
+	Source         *SourceMeta         `json:"source,omitempty"`
+	Channels       *ChannelsMeta       `json:"channels,omitempty"`
+	Subtitles      *SubtitlesMeta      `json:"subtitles,omitempty"`
+	Markers        *MarkersMeta        `json:"markers,omitempty"`
+	Notification   *NotificationMeta   `json:"notification,omitempty"`
+	Events         *EventsMeta         `json:"events,omitempty"`
+	Integration    *IntegrationMeta    `json:"integration,omitempty"`
+	ListSources    []ListSourceMeta    `json:"listSources,omitempty"`
+	RankingSteps   []RankingStepMeta   `json:"rankingSteps,omitempty"`
+	RuleConditions []RuleConditionMeta `json:"ruleConditions,omitempty"`
+	Tools          []ToolMeta          `json:"tools,omitempty"`
+	Pages          []PageMeta          `json:"pages,omitempty"`
+	Slots          []SlotMeta          `json:"slots,omitempty"`
+	Commands       []CommandMeta       `json:"commands,omitempty"`
 }
 
 // SourceMeta describes a stream source contribution.
@@ -507,7 +507,7 @@ type GuideResponse struct {
 
 // ConfigureResponse is returned by a Configure route handler.
 type ConfigureResponse struct {
-	Errors map[string]string `json:"errors,omitempty"`
+	Errors map[string]string `json:"errors"`
 }
 
 // TestResponse is returned by a Test route handler.

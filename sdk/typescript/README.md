@@ -61,7 +61,7 @@ export const rank_key = hello.rank_key;
 export const cond_match = hello.cond_match;
 export default hello;
 
-void serve(hello);
+// In a separate Node/Bun entry point: await serve(hello);
 ```
 
 ## Capabilities and routes

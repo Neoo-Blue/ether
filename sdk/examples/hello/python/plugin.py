@@ -34,11 +34,9 @@ HELLO_MANIFEST: Dict[str, Any] = {
             "list_source",
             "subtitles",
             "ui",
-            "ranking_step",
-            "rule_condition",
         ],
         "summary": "Minimal greeting plugin for Ether.",
-        "runtime": {"kind": "remote", "entry": "plugin.py"},
+        "runtime": {"kind": "remote"},
         "permissions": {"catalog": "none"},
         "settings": {
             "fields": [
@@ -67,20 +65,6 @@ HELLO_MANIFEST: Dict[str, Any] = {
                     "key": "home",
                     "label": "Hello overview",
                     "route": "/ether/view/home",
-                }
-            ],
-            "rankingSteps": [
-                {
-                    "key": "cached_boost",
-                    "label": "Boost cached releases",
-                    "hint": "Adds a score bonus when a release is cached",
-                }
-            ],
-            "ruleConditions": [
-                {
-                    "key": "is_cached",
-                    "label": "Release is cached",
-                    "operators": ["eq"],
                 }
             ],
         },

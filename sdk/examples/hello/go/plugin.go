@@ -32,11 +32,9 @@ func NewHelloPlugin() *etherplugin.Plugin {
 					etherplugin.CapListSource,
 					etherplugin.CapSubtitles,
 					etherplugin.CapUI,
-					etherplugin.CapRankingStep,
-					etherplugin.CapRuleCondition,
 				},
 				Summary:     "Minimal greeting plugin for Ether.",
-				Runtime:     etherplugin.RuntimeDecl{Kind: "remote", Entry: "plugin.go"},
+				Runtime:     etherplugin.RuntimeDecl{Kind: "remote"},
 				Permissions: &etherplugin.Permissions{Catalog: "none"},
 				Settings: &etherplugin.SettingsSchema{
 					Fields: []etherplugin.SettingField{{
@@ -63,16 +61,6 @@ func NewHelloPlugin() *etherplugin.Plugin {
 						Key:   "home",
 						Label: "Hello overview",
 						Route: "/ether/view/home",
-					}},
-					RankingSteps: []etherplugin.RankingStepMeta{{
-						Key:   "cached_boost",
-						Label: "Boost cached releases",
-						Hint:  "Adds a score bonus when a release is cached",
-					}},
-					RuleConditions: []etherplugin.RuleConditionMeta{{
-						Key:       "is_cached",
-						Label:     "Release is cached",
-						Operators: []string{"eq"},
 					}},
 				},
 			},

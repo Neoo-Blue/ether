@@ -3,25 +3,41 @@
   "version": "0.1.0",
   "name": "Hello plugin",
   "description": "Minimal greeting plugin for Ether.",
-  "types": ["movie"],
-  "idPrefixes": ["tt"],
+  "types": [
+    "movie"
+  ],
+  "idPrefixes": [
+    "tt"
+  ],
   "catalogs": [
     {
       "type": "movie",
       "id": "hello",
       "name": "Hello movies",
-      "extra": [{ "name": "search", "isRequired": false }]
+      "extra": [
+        {
+          "name": "search",
+          "isRequired": false
+        }
+      ]
     }
   ],
-  "resources": ["catalog", "meta", "subtitles"],
+  "resources": [
+    "catalog",
+    "meta",
+    "subtitles"
+  ],
   "ether": {
     "protocol": 1,
     "kind": "extension",
-    "capabilities": ["list_source", "subtitles", "ui", "ranking_step", "rule_condition"],
+    "capabilities": [
+      "list_source",
+      "subtitles",
+      "ui"
+    ],
     "summary": "Minimal greeting plugin for Ether.",
     "runtime": {
-      "kind": "remote",
-      "entry": "plugin.py"
+      "kind": "remote"
     },
     "permissions": {
       "catalog": "none"
@@ -48,28 +64,18 @@
         }
       ],
       "subtitles": {
-        "languages": ["en"],
-        "formats": ["vtt"]
+        "languages": [
+          "en"
+        ],
+        "formats": [
+          "vtt"
+        ]
       },
       "pages": [
         {
           "key": "home",
           "label": "Hello overview",
           "route": "/ether/view/home"
-        }
-      ],
-      "rankingSteps": [
-        {
-          "key": "cached_boost",
-          "label": "Boost cached releases",
-          "hint": "Adds a score bonus when a release is cached"
-        }
-      ],
-      "ruleConditions": [
-        {
-          "key": "is_cached",
-          "label": "Release is cached",
-          "operators": ["eq"]
         }
       ]
     }

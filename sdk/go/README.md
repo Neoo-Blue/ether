@@ -6,10 +6,7 @@ Go authoring package (`github.com/braedonsaunders/ether/sdk/go`) for Ether Plugi
 
 1. **Native HTTP or WebSocket tunnel sidecar (`ether.runtime.kind: "remote"`)**:
    Compile a standard Go binary and call `p.Serve(ctx, etherplugin.ServeOptions{})` (or mount `p` as an `http.Handler`). Host calls go over HTTP to `/ether/plugin-host/*` authenticated with `X-Ether-Plugin-Credential`.
-2. **Hosted WebAssembly guest (`ether.runtime.kind: "hosted"`)**:
-   Register the plugin with `etherplugin.RegisterWASM(p)` and compile a reactor module exporting `alloc`, `handle`, `rank_key`, and `cond_match` against the `env.host_*` imports.
-   - Standard Go's `GOOS=wasip1 GOARCH=wasm` target emits a command module (`_start`) that exits the runtime when `main` returns, clearing exported memory in wazero before subsequent calls.
-   - For hosted WASM modules, compile with TinyGo (`tinygo build -target=wasip1 -buildmode=c-shared -o plugin.wasm .`) or run standard Go plugins as native HTTP/tunnel sidecars.
+2. **Hosted WebAssembly guest**: not yet supported. The experimental `RegisterWASM` implementation uses imports that Ether's hosted runtime rejects. Standard Go `wasip1` also emits WASI imports, which the runtime forbids. Use a sidecar until a guest is built and tested against Ether's raw WASM ABI.
 
 ## Usage
 
@@ -52,7 +49,6 @@ func main() {
 		},
 	})
 
-	etherplugin.RegisterWASM(p)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	_ = p.Serve(ctx, etherplugin.ServeOptions{})
