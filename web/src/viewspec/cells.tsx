@@ -50,10 +50,15 @@ function badgeVariant(raw: string | undefined): BadgeVariant {
  * renders as plain text.
  */
 export function safeHref(raw: string): string | null {
-  if (!raw) return null;
+  if (!raw || /[\\\u0000-\u001f\u007f]/.test(raw)) return null;
   if (raw.startsWith("/") && !raw.startsWith("//")) return raw;
-  if (raw.startsWith("https://")) return raw;
-  return null;
+  if (!raw.startsWith("https://")) return null;
+  try {
+    const url = new URL(raw);
+    return url.protocol === "https:" && url.hostname && !url.username && !url.password ? raw : null;
+  } catch {
+    return null;
+  }
 }
 
 function CellLink({ href, children }: { href: string; children: ReactNode }) {
