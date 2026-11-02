@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -361,5 +362,29 @@ func TestPackageRejectsDuplicateFiles(t *testing.T) {
 	}
 	if _, _, err := readPkg(buf.Bytes()); err == nil {
 		t.Fatal("accepted duplicate package paths")
+	}
+}
+
+func TestPackageRejectsOversizedEntry(t *testing.T) {
+	var buf bytes.Buffer
+	z := zip.NewWriter(&buf)
+	f, err := z.Create("manifest.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.Write([]byte(`{}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err = z.Close(); err != nil {
+		t.Fatal(err)
+	}
+	pkg := buf.Bytes()
+	index := bytes.LastIndex(pkg, []byte{'P', 'K', 1, 2})
+	if index < 0 {
+		t.Fatal("missing zip directory")
+	}
+	binary.LittleEndian.PutUint32(pkg[index+24:index+28], (64<<20)+1)
+	if _, _, err = readPkg(pkg); err == nil {
+		t.Fatal("accepted oversized entry")
 	}
 }
