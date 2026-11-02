@@ -23,7 +23,7 @@ import { searchSelectLabels } from "../../i18n/appkit-labels";
 import { api } from "../../lib/api";
 import { qualityGateLabel } from "../../lib/releases";
 import type { QualityProfile, ReleaseRule } from "../../lib/types";
-import { QUALITY_AUDIO, QUALITY_CODECS, QUALITY_SOURCES } from "../settings/schema";
+import { useSchemaOptions } from "../settings/SchemaForm";
 import { TieBreakerSection } from "../sources/EqualQuality";
 import {
   BoolRow,

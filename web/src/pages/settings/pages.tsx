@@ -20,8 +20,6 @@ import { BackupsAndImport } from "./Backups";
 import { ClusterOverview, useClustered } from "./Cluster";
 import { OutboundInternet } from "./OutboundInternet";
 import { ConnectedServices, integrationTabs, type ServiceTab } from "./ConnectedServices";
-import { type FieldGroup } from "./SchemaForm";
-import * as S from "./schema";
 import { UpdatesStatus } from "./sections";
 
 /** Reveals the tab holding the first field the server rejected. */
@@ -42,9 +40,10 @@ const serverTab = () => "server";
 const GENERAL_SECTIONS = localized(
   () =>
     [
-      { key: "downloads", label: t("Downloads"), groups: S.DOWNLOADS },
-      { key: "personalize", label: t("Personalization"), groups: S.PERSONALIZE },
-      { key: "extras", label: t("Trailers & extras"), groups: S.EXTRAS },
+      // Served schema ids match these config keys (internal/config/schema).
+      { key: "downloads", label: t("Downloads") },
+      { key: "personalize", label: t("Personalization") },
+      { key: "extras", label: t("Trailers & extras") },
     ] as const,
 );
 
@@ -78,7 +77,7 @@ export function GeneralPage() {
       <ConfigSection
         configKey="server"
         endpoint="server"
-        groups={clustered ? S.clusterServerGroups() : S.SERVER}
+        schemaId={clustered ? "serverCluster" : "server"}
         omit={clustered ? undefined : ["clusterWeight"]}
         label={t("General")}
         hidden={tab !== "server"}
@@ -146,7 +145,7 @@ function GeneralSection({
   hidden,
   onSaved,
 }: {
-  section: { key: string; label: string; groups: readonly FieldGroup[] };
+  section: { key: string; label: string };
   hidden: boolean;
   onSaved?: () => void;
 }) {
@@ -155,7 +154,7 @@ function GeneralSection({
   return (
     <ConfigSection
       configKey={section.key}
-      groups={[...section.groups]}
+      schemaId={section.key}
       label={section.label}
       hidden={hidden}
       before={section.key === "extras" ? () => <ExtrasStatus /> : undefined}
@@ -221,7 +220,7 @@ export function MaintenancePage() {
         <ConfigSection
           configKey="updates"
           endpoint="updates"
-          groups={S.UPDATES}
+          schemaId="updates"
           label={t("Updates")}
           before={() => <UpdatesStatus />}
         />
@@ -230,7 +229,7 @@ export function MaintenancePage() {
         <ConfigSection
           configKey="spike"
           endpoint="spike"
-          groups={S.SPIKE}
+          schemaId="spike"
           label={t("Troubleshooting")}
         />
       ) : null}

@@ -9,9 +9,13 @@ import { t, tx } from "../../i18n";
 import { api, ApiError, errorMessage } from "../../lib/api";
 import { useAsync } from "../../lib/hooks";
 import { isRuleComplete } from "../../lib/rules";
-import { asObj, SchemaField, type FieldGroup } from "../settings/SchemaForm";
+import {
+  asObj,
+  SchemaField,
+  useSettingsSchema,
+  type FieldGroup,
+} from "../settings/SchemaForm";
 import { CatalogPickers, isCatalogPicker } from "./CatalogPickers";
-import { CATALOG } from "../settings/schema";
 import {
   HomeReleaseSettings,
   HomeReleaseStatus,
@@ -90,7 +94,8 @@ export function CatalogSettings() {
       setSaving(false);
     }
   }, [config, draft, refreshDashboard]);
-  const groups = [...CATALOG, HomeReleaseSettings, UpcomingEpisodeSettings].map(briefGroup);
+  const catalog = useSettingsSchema("catalog");
+  const groups = [...(catalog.groups ?? []), HomeReleaseSettings, UpcomingEpisodeSettings].map(briefGroup);
   return (
     <div className="catalog-scroll app-scroll">
       <div className="space-y-5 p-5 lg:p-7">
@@ -108,7 +113,7 @@ export function CatalogSettings() {
         {config.error ? (
           <ErrorPanel error={config.error} onRetry={() => void config.reload()} />
         ) : null}
-        {!draft ? (
+        {!draft || (section !== "rules" && !catalog.groups) ? (
           <div className="py-10 text-center">
             <Spinner size={20} label={t("Loading settings")} />
           </div>
