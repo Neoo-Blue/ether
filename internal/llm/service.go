@@ -122,6 +122,10 @@ func New(opts ServiceOptions) *Service {
 }
 
 // Enabled reports whether the underlying client is on and a catalog is wired.
+// Client returns the underlying chat client (shared with Ask Ether so
+// config updates propagate to both).
+func (s *Service) Client() *Client { return s.client }
+
 func (s *Service) Enabled() bool {
 	return s != nil && s.client != nil && s.client.Enabled() && s.catalog != nil
 }
