@@ -153,12 +153,12 @@ func TestHotLimitsLowerButNeverRaiseBudgets(t *testing.T) {
 		{Key: "a", Budget: json.RawMessage(`{"perCandidateMicros":500,"perBatchMillis":20}`)},
 		{Key: "b", Budget: json.RawMessage(`{"perCandidateMicros":1500}`)},
 	}}}}
-	got := effectiveBudgets(hotLimits(m))
+	got := EffectiveBudgets(HotLimits(m))
 	if got.PerCandidate != 500*time.Microsecond || got.PerBatch != 20*time.Millisecond {
 		t.Fatalf("lowered budgets = %+v", got)
 	}
 	m.Ether.Contributes.RankingSteps = []RankingStepMeta{{Key: "c", Budget: json.RawMessage(`{"perCandidateMicros":9000,"perBatchMillis":900}`)}}
-	got = effectiveBudgets(hotLimits(m))
+	got = EffectiveBudgets(HotLimits(m))
 	if got.PerCandidate != wasm.DefaultRankPerCandidate || got.PerBatch != wasm.DefaultRankBatch {
 		t.Fatalf("budgets must never exceed the defaults: %+v", got)
 	}

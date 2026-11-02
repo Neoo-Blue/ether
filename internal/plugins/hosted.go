@@ -61,10 +61,11 @@ type rankingBudget struct {
 	PerBatchMillis     int64 `json:"perBatchMillis"`
 }
 
-// hotLimits lowers the runtime's hot-path defaults to the tightest budget a
+// HotLimits lowers the runtime's hot-path defaults to the tightest budget a
 // manifest declares across its ranking steps. The engine clamps anything
 // above its defaults, so a manifest can lower budgets but never raise them.
-func hotLimits(m Manifest) wasm.Limits {
+// Studio replay uses it to run a plugin under its installed budgets.
+func HotLimits(m Manifest) wasm.Limits {
 	var lim wasm.Limits
 	if m.Ether == nil {
 		return lim
@@ -108,7 +109,7 @@ func HostedRuntimeFactory(eng *wasm.Engine) RuntimeFactory {
 		}
 		decl := inst.Manifest.Ether.Runtime
 		host := hostBridge{h: inst.Host}
-		lim := hotLimits(inst.Manifest)
+		lim := HotLimits(inst.Manifest)
 		switch {
 		case decl.Module != "":
 			module, ok := inst.Files(decl.Module)
@@ -119,7 +120,7 @@ func HostedRuntimeFactory(eng *wasm.Engine) RuntimeFactory {
 			if err != nil {
 				return nil, err
 			}
-			return &hostedRuntime{p: p, budgets: effectiveBudgets(lim)}, nil
+			return &hostedRuntime{p: p, budgets: EffectiveBudgets(lim)}, nil
 		case decl.Entry != "":
 			src, ok := inst.Files(decl.Entry)
 			if !ok {
@@ -137,7 +138,7 @@ func HostedRuntimeFactory(eng *wasm.Engine) RuntimeFactory {
 			if err != nil {
 				return nil, err
 			}
-			return &hostedRuntime{p: p, budgets: effectiveBudgets(lim)}, nil
+			return &hostedRuntime{p: p, budgets: EffectiveBudgets(lim)}, nil
 		default:
 			return nil, fmt.Errorf("plugin %s: hosted runtime needs an entry or a module", inst.ID)
 		}
@@ -162,9 +163,9 @@ type hostedRuntime struct {
 	budgets HotBudgets
 }
 
-// effectiveBudgets mirrors the engine's clamping so callers see the limits
+// EffectiveBudgets mirrors the engine's clamping so callers see the limits
 // that actually apply.
-func effectiveBudgets(lim wasm.Limits) HotBudgets {
+func EffectiveBudgets(lim wasm.Limits) HotBudgets {
 	per, batch := lim.RankPerCandidate, lim.RankBatch
 	if per <= 0 || per > wasm.DefaultRankPerCandidate {
 		per = wasm.DefaultRankPerCandidate
