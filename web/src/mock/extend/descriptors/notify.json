@@ -1,0 +1,703 @@
+[
+  {
+    "kind": "channelKind",
+    "id": "webpush",
+    "owner": "builtin",
+    "label": {
+      "source": "Browser push"
+    },
+    "hint": {
+      "source": "This subscription belongs to one browser profile on one device. Use Connect this device on each device you want to receive alerts."
+    },
+    "icon": "bell-ring",
+    "meta": {
+      "fields": [
+        {
+          "key": "subscription",
+          "kind": "hidden",
+          "label": {
+            "source": "Browser subscription"
+          },
+          "hint": {},
+          "required": true,
+          "secret": true
+        }
+      ],
+      "sendTest": true,
+      "selectable": false,
+      "formats": [
+        "text"
+      ],
+      "maxLength": 450
+    }
+  },
+  {
+    "kind": "channelKind",
+    "id": "webhook",
+    "owner": "builtin",
+    "label": {
+      "source": "Webhook"
+    },
+    "hint": {
+      "source": "Ether sends a JSON POST with kind, title, message and at. Optionally add a Bearer [REDACTED] Only HTTP 2xx responses count as accepted."
+    },
+    "icon": "webhook",
+    "order": 10,
+    "meta": {
+      "fields": [
+        {
+          "key": "endpoint",
+          "kind": "url",
+          "label": {
+            "source": "Endpoint URL"
+          },
+          "hint": {},
+          "required": true,
+          "secret": true,
+          "wide": true
+        },
+        {
+          "key": "token",
+          "kind": "secret",
+          "label": {
+            "source": "Access token"
+          },
+          "hint": {
+            "source": "Optional. A Bearer [REDACTED], or the app key for Gotify."
+          },
+          "secret": true
+        }
+      ],
+      "sendTest": true,
+      "selectable": true,
+      "formats": [
+        "text",
+        "json"
+      ]
+    }
+  },
+  {
+    "kind": "channelKind",
+    "id": "discord",
+    "owner": "builtin",
+    "label": {
+      "source": "Discord"
+    },
+    "hint": {
+      "source": "Create an incoming webhook in the destination Discord channel and paste its full webhook URL. Mentions are disabled."
+    },
+    "icon": "message-circle",
+    "order": 20,
+    "meta": {
+      "fields": [
+        {
+          "key": "endpoint",
+          "kind": "url",
+          "label": {
+            "source": "Endpoint URL"
+          },
+          "hint": {},
+          "required": true,
+          "secret": true,
+          "wide": true
+        },
+        {
+          "key": "token",
+          "kind": "secret",
+          "label": {
+            "source": "Access token"
+          },
+          "hint": {
+            "source": "Optional. A Bearer [REDACTED], or the app key for Gotify."
+          },
+          "secret": true
+        }
+      ],
+      "sendTest": true,
+      "selectable": true,
+      "formats": [
+        "text"
+      ],
+      "maxLength": 1900
+    }
+  },
+  {
+    "kind": "channelKind",
+    "id": "slack",
+    "owner": "builtin",
+    "label": {
+      "source": "Slack"
+    },
+    "hint": {
+      "source": "Create an incoming webhook for the destination Slack channel and paste its full URL."
+    },
+    "icon": "hash",
+    "order": 30,
+    "meta": {
+      "fields": [
+        {
+          "key": "endpoint",
+          "kind": "url",
+          "label": {
+            "source": "Endpoint URL"
+          },
+          "hint": {},
+          "required": true,
+          "secret": true,
+          "wide": true
+        },
+        {
+          "key": "token",
+          "kind": "secret",
+          "label": {
+            "source": "Access token"
+          },
+          "hint": {
+            "source": "Optional. A Bearer [REDACTED], or the app key for Gotify."
+          },
+          "secret": true
+        }
+      ],
+      "sendTest": true,
+      "selectable": true,
+      "formats": [
+        "text"
+      ],
+      "maxLength": 3900
+    }
+  },
+  {
+    "kind": "channelKind",
+    "id": "telegram",
+    "owner": "builtin",
+    "label": {
+      "source": "Telegram"
+    },
+    "hint": {
+      "source": "Create a bot with BotFather, message it first, then enter its bot token and the destination chat ID. Group chat IDs may be negative."
+    },
+    "icon": "send",
+    "order": 40,
+    "meta": {
+      "fields": [
+        {
+          "key": "token",
+          "kind": "secret",
+          "label": {
+            "source": "Bot token"
+          },
+          "hint": {},
+          "required": true,
+          "secret": true
+        },
+        {
+          "key": "target",
+          "kind": "text",
+          "label": {
+            "source": "Chat ID"
+          },
+          "hint": {},
+          "required": true
+        }
+      ],
+      "sendTest": true,
+      "selectable": true,
+      "formats": [
+        "text"
+      ],
+      "maxLength": 4000
+    }
+  },
+  {
+    "kind": "channelKind",
+    "id": "smtp",
+    "owner": "builtin",
+    "label": {
+      "source": "Email (SMTP)"
+    },
+    "hint": {
+      "source": "Use your mail provider’s SMTP server and app password. STARTTLS usually uses port 587; implicit TLS uses 465. Authentication is optional for a trusted TLS relay. Recipients can be separated by commas."
+    },
+    "icon": "mail",
+    "order": 50,
+    "meta": {
+      "fields": [
+        {
+          "key": "endpoint",
+          "kind": "text",
+          "label": {
+            "source": "SMTP host:port"
+          },
+          "hint": {
+            "source": "The server must support TLS."
+          },
+          "required": true,
+          "secret": true,
+          "wide": true
+        },
+        {
+          "key": "smtpMode",
+          "kind": "select",
+          "label": {
+            "source": "Connection security"
+          },
+          "hint": {},
+          "default": "starttls",
+          "options": [
+            {
+              "value": "starttls",
+              "label": {
+                "source": "STARTTLS (usually 587)"
+              }
+            },
+            {
+              "value": "tls",
+              "label": {
+                "source": "Implicit TLS (usually 465)"
+              }
+            }
+          ]
+        },
+        {
+          "key": "username",
+          "kind": "text",
+          "label": {
+            "source": "Username"
+          },
+          "hint": {},
+          "secret": true
+        },
+        {
+          "key": "password",
+          "kind": "secret",
+          "label": {
+            "source": "Password"
+          },
+          "hint": {},
+          "secret": true
+        },
+        {
+          "key": "from",
+          "kind": "text",
+          "label": {
+            "source": "From address"
+          },
+          "hint": {},
+          "required": true
+        },
+        {
+          "key": "to",
+          "kind": "text",
+          "label": {
+            "source": "To addresses"
+          },
+          "hint": {},
+          "required": true
+        }
+      ],
+      "sendTest": true,
+      "selectable": true,
+      "formats": [
+        "text",
+        "html"
+      ]
+    }
+  },
+  {
+    "kind": "channelKind",
+    "id": "ntfy",
+    "owner": "builtin",
+    "label": {
+      "source": "ntfy"
+    },
+    "hint": {
+      "source": "Enter your complete topic URL. Subscribe to the same topic in the ntfy phone app. Add a Bearer [REDACTED] for private topics."
+    },
+    "icon": "bell",
+    "order": 60,
+    "meta": {
+      "fields": [
+        {
+          "key": "endpoint",
+          "kind": "url",
+          "label": {
+            "source": "Endpoint URL"
+          },
+          "hint": {},
+          "required": true,
+          "secret": true,
+          "wide": true
+        },
+        {
+          "key": "token",
+          "kind": "secret",
+          "label": {
+            "source": "Access token"
+          },
+          "hint": {
+            "source": "Optional. A Bearer [REDACTED], or the app key for Gotify."
+          },
+          "secret": true
+        }
+      ],
+      "sendTest": true,
+      "selectable": true,
+      "formats": [
+        "text"
+      ]
+    }
+  },
+  {
+    "kind": "channelKind",
+    "id": "gotify",
+    "owner": "builtin",
+    "label": {
+      "source": "Gotify"
+    },
+    "hint": {
+      "source": "Enter your server’s /message URL and an application token. Connect the Gotify app on your phone to receive alerts."
+    },
+    "icon": "bell-plus",
+    "order": 70,
+    "meta": {
+      "fields": [
+        {
+          "key": "endpoint",
+          "kind": "url",
+          "label": {
+            "source": "Endpoint URL"
+          },
+          "hint": {},
+          "required": true,
+          "secret": true,
+          "wide": true
+        },
+        {
+          "key": "token",
+          "kind": "secret",
+          "label": {
+            "source": "Access token"
+          },
+          "hint": {
+            "source": "Optional. A Bearer [REDACTED], or the app key for Gotify."
+          },
+          "secret": true
+        }
+      ],
+      "sendTest": true,
+      "selectable": true,
+      "formats": [
+        "text"
+      ]
+    }
+  },
+  {
+    "kind": "eventKind",
+    "id": "server.started",
+    "owner": "builtin",
+    "label": {
+      "source": "Server online"
+    },
+    "hint": {
+      "source": "This node is listening and ready for connections."
+    },
+    "order": 10,
+    "meta": {
+      "automatic": true
+    }
+  },
+  {
+    "kind": "eventKind",
+    "id": "server.stopping",
+    "owner": "builtin",
+    "label": {
+      "source": "Server stopping"
+    },
+    "hint": {
+      "source": "A normal shutdown or restart has begun."
+    },
+    "order": 20,
+    "meta": {
+      "automatic": true
+    }
+  },
+  {
+    "kind": "eventKind",
+    "id": "server.crash",
+    "owner": "builtin",
+    "label": {
+      "source": "Server crashed"
+    },
+    "hint": {
+      "source": "Independent watcher detects an unexpected process exit; sent immediately, outside the queue."
+    },
+    "order": 30,
+    "meta": {
+      "automatic": true,
+      "critical": true
+    }
+  },
+  {
+    "kind": "eventKind",
+    "id": "provider.recovered",
+    "owner": "builtin",
+    "label": {
+      "source": "Provider recovered"
+    },
+    "hint": {
+      "source": "An unavailable provider responds again."
+    },
+    "order": 40,
+    "meta": {
+      "automatic": true
+    }
+  },
+  {
+    "kind": "eventKind",
+    "id": "indexer.recovered",
+    "owner": "builtin",
+    "label": {
+      "source": "Indexer recovered"
+    },
+    "hint": {
+      "source": "An indexer operation succeeds after an alert."
+    },
+    "order": 50,
+    "meta": {
+      "automatic": true
+    }
+  },
+  {
+    "kind": "eventKind",
+    "id": "cache.recovered",
+    "owner": "builtin",
+    "label": {
+      "source": "Cache space available"
+    },
+    "hint": {
+      "source": "The cache drops below its budget again."
+    },
+    "order": 60,
+    "meta": {
+      "automatic": true
+    }
+  },
+  {
+    "kind": "eventKind",
+    "id": "playback.start",
+    "owner": "builtin",
+    "label": {
+      "source": "Playback started"
+    },
+    "hint": {
+      "source": "A viewer starts a stream."
+    },
+    "order": 70,
+    "meta": {
+      "automatic": true
+    }
+  },
+  {
+    "kind": "eventKind",
+    "id": "playback.stop",
+    "owner": "builtin",
+    "label": {
+      "source": "Playback ended"
+    },
+    "hint": {
+      "source": "A viewer ends a stream."
+    },
+    "order": 80,
+    "meta": {
+      "automatic": true
+    }
+  },
+  {
+    "kind": "eventKind",
+    "id": "playback.error",
+    "owner": "builtin",
+    "label": {
+      "source": "Playback failed"
+    },
+    "hint": {
+      "source": "Playback fails."
+    },
+    "order": 90,
+    "meta": {
+      "automatic": true,
+      "critical": true
+    }
+  },
+  {
+    "kind": "eventKind",
+    "id": "playback.failover",
+    "owner": "builtin",
+    "label": {
+      "source": "Playback switched source"
+    },
+    "hint": {
+      "source": "A stream switches to another source."
+    },
+    "order": 100,
+    "meta": {
+      "automatic": true
+    }
+  },
+  {
+    "kind": "eventKind",
+    "id": "provider.outage",
+    "owner": "builtin",
+    "label": {
+      "source": "Provider unavailable"
+    },
+    "hint": {
+      "source": "A provider enters backoff or rejects authentication."
+    },
+    "order": 110,
+    "meta": {
+      "automatic": true,
+      "critical": true
+    }
+  },
+  {
+    "kind": "eventKind",
+    "id": "indexer.outage",
+    "owner": "builtin",
+    "label": {
+      "source": "Indexer unavailable"
+    },
+    "hint": {
+      "source": "An indexer operation fails; one alert per outage."
+    },
+    "order": 120,
+    "meta": {
+      "automatic": true,
+      "critical": true
+    }
+  },
+  {
+    "kind": "eventKind",
+    "id": "indexer.budget",
+    "owner": "builtin",
+    "label": {
+      "source": "Indexer budget reached"
+    },
+    "hint": {
+      "source": "An indexer reports budget exhaustion."
+    },
+    "order": 130,
+    "meta": {
+      "automatic": true
+    }
+  },
+  {
+    "kind": "eventKind",
+    "id": "cache.full",
+    "owner": "builtin",
+    "label": {
+      "source": "Cache full"
+    },
+    "hint": {
+      "source": "The segment cache reaches its configured budget."
+    },
+    "order": 140,
+    "meta": {
+      "automatic": true,
+      "critical": true
+    }
+  },
+  {
+    "kind": "eventKind",
+    "id": "cert.renewed",
+    "owner": "builtin",
+    "label": {
+      "source": "Certificate renewed"
+    },
+    "hint": {
+      "source": "Owner API integration only; Ether does not automatically produce this event."
+    },
+    "order": 150,
+    "meta": {
+      "automatic": false
+    }
+  },
+  {
+    "kind": "eventKind",
+    "id": "update.available",
+    "owner": "builtin",
+    "label": {
+      "source": "Update available"
+    },
+    "hint": {
+      "source": "A new Ether release is published; one alert per version."
+    },
+    "order": 160,
+    "meta": {
+      "automatic": true
+    }
+  },
+  {
+    "kind": "eventKind",
+    "id": "backup.failed",
+    "owner": "builtin",
+    "label": {
+      "source": "Backup failed"
+    },
+    "hint": {
+      "source": "A scheduled backup fails; one alert until a backup succeeds again."
+    },
+    "order": 170,
+    "meta": {
+      "automatic": true,
+      "critical": true
+    }
+  },
+  {
+    "kind": "eventKind",
+    "id": "user.joined",
+    "owner": "builtin",
+    "label": {
+      "source": "Viewer joined"
+    },
+    "hint": {
+      "source": "Owner API integration only; Ether does not automatically produce this event."
+    },
+    "order": 180,
+    "meta": {
+      "automatic": false
+    }
+  },
+  {
+    "kind": "eventKind",
+    "id": "title.available",
+    "owner": "builtin",
+    "label": {
+      "source": "Watchlist title available"
+    },
+    "hint": {
+      "source": "A monitored watchlist title becomes available."
+    },
+    "order": 190,
+    "meta": {
+      "automatic": true
+    }
+  },
+  {
+    "kind": "eventKind",
+    "id": "newsletter.weekly",
+    "owner": "builtin",
+    "label": {
+      "source": "Weekly newsletter"
+    },
+    "hint": {
+      "source": "Scheduled viewing summary; email channels only."
+    },
+    "order": 200,
+    "meta": {
+      "automatic": true,
+      "channelKinds": [
+        "smtp"
+      ]
+    }
+  }
+]
