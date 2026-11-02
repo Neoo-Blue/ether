@@ -297,14 +297,23 @@ func readPkg(pkg []byte) (json.RawMessage, map[string][]byte, error) {
 		if f.FileInfo().IsDir() || unsafePath(name) || strings.HasPrefix(name, "__MACOSX") {
 			continue
 		}
+		if _, exists := files[name]; exists {
+			return nil, nil, fmt.Errorf("plugins: duplicate package path")
+		}
+		if f.UncompressedSize64 > 64<<20 {
+			return nil, nil, fmt.Errorf("plugins: package entry is too large")
+		}
 		rc, err := f.Open()
 		if err != nil {
 			return nil, nil, err
 		}
-		b, err := io.ReadAll(io.LimitReader(rc, 64<<20))
+		b, err := io.ReadAll(io.LimitReader(rc, (64<<20)+1))
 		rc.Close() //nolint:errcheck,gosec
 		if err != nil {
 			return nil, nil, err
+		}
+		if len(b) > 64<<20 {
+			return nil, nil, fmt.Errorf("plugins: package entry is too large")
 		}
 		total += int64(len(b))
 		if total > 128<<20 {

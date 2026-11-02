@@ -1,6 +1,8 @@
 package plugins
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -339,5 +341,25 @@ func TestPluginSourceURLDoesNotReachInspector(t *testing.T) {
 		if strings.Contains(c.Response, "private-config-472815") {
 			t.Fatal("source URL exposed in inspector")
 		}
+	}
+}
+
+func TestPackageRejectsDuplicateFiles(t *testing.T) {
+	var buf bytes.Buffer
+	z := zip.NewWriter(&buf)
+	for _, content := range []string{"{}", "{\"id\":\"different\"}"} {
+		f, err := z.Create("manifest.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = f.Write([]byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := z.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := readPkg(buf.Bytes()); err == nil {
+		t.Fatal("accepted duplicate package paths")
 	}
 }
