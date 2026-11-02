@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -381,6 +382,8 @@ func (b hostBridge) CallHost(ctx context.Context, name string, raw json.RawMessa
 			URL     string            `json:"url"`
 			Headers map[string]string `json:"headers"`
 			Body    string            `json:"body"`
+			// BodyBase64 carries a binary request body; it wins over Body.
+			BodyBase64 string `json:"bodyBase64"`
 		}
 		if len(args) > 0 {
 			if err := json.Unmarshal(args[0], &req); err != nil {
@@ -390,11 +393,24 @@ func (b hostBridge) CallHost(ctx context.Context, name string, raw json.RawMessa
 		if req.Method == "" {
 			req.Method = "GET"
 		}
-		resp, err := b.h.HTTPFetch(ctx, FetchRequest{Method: req.Method, URL: req.URL, Headers: req.Headers, Body: []byte(req.Body)})
+		body := []byte(req.Body)
+		if req.BodyBase64 != "" {
+			decoded, err := base64.StdEncoding.DecodeString(req.BodyBase64)
+			if err != nil {
+				return nil, &wasm.Fault{Code: "bad_arguments", Message: "bodyBase64 is not valid base64"}
+			}
+			body = decoded
+		}
+		resp, err := b.h.HTTPFetch(ctx, FetchRequest{Method: req.Method, URL: req.URL, Headers: req.Headers, Body: body})
 		if err != nil {
 			return nil, mapHostError(err)
 		}
-		return result(map[string]any{"status": resp.Status, "headers": resp.Headers, "body": string(resp.Body)}, nil)
+		// body is the response as text (for JSON and HTML); bodyBase64 is
+		// the exact bytes, for binary responses such as archives.
+		return result(map[string]any{
+			"status": resp.Status, "headers": resp.Headers,
+			"body": string(resp.Body), "bodyBase64": base64.StdEncoding.EncodeToString(resp.Body),
+		}, nil)
 	case "catalog.search":
 		v, err := b.h.CatalogSearch(ctx, str(0), int(num(1)), int(num(2)))
 		return result(v, err)
