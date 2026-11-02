@@ -34,7 +34,7 @@ import type {
 } from "../../lib/types";
 import { SchemaField } from "../settings/SchemaForm";
 import { DEBRID } from "../settings/schema";
-import { DEBRID_KINDS, DEBRID_TOKEN_URL, SourceCard, debridFix } from "./cards";
+import { DEBRID_KINDS, DEBRID_TOKEN_URL, PluginSourceCards, SourceCard, debridFix } from "./cards";
 import { debridMark } from "./marks";
 
 export { DEBRID_KINDS };
@@ -429,6 +429,14 @@ export function DebridSources({
           </p>
         ) : null}
       </Section>
+
+      <PluginSourceCards
+        classes={["debrid"]}
+        sectionTitle={t("Debrid plugins")}
+        sectionDescription={t(
+          "Debrid stream sources contributed by enabled plugins. Results rank alongside built-in debrid accounts.",
+        )}
+      />
 
       <DebridSettings debrid={debrid} onSaved={reloadAll} />
 
