@@ -395,6 +395,29 @@ func decodeJSONMap(raw json.RawMessage) (map[string]any, error) {
 // Dispatch routes a RawRequest through the plugin and returns a RawResponse.
 func (p *Plugin) Dispatch(ctx context.Context, req RawRequest) RawResponse {
 	pctx := p.buildContext(ctx, req)
+	if getter, ok := pctx.Ether.(interface {
+		SettingsGet(context.Context) (map[string]any, error)
+	}); ok && req.Path != "/ether/configure" {
+		remote, isRemote := pctx.Ether.(*RemoteHostClient)
+		if !isRemote || remote.credential != "" {
+			settings, err := getter.SettingsGet(ctx)
+			if err != nil {
+				return toRouteErrorResponse(err)
+			}
+			var schema *SettingsSchema
+			if p.manifest.Ether != nil {
+				schema = p.manifest.Ether.Settings
+			}
+			for _, field := range CollectSettingFields(schema) {
+				if field.Kind == "secret" {
+					if v, ok := pctx.Settings[field.Key]; ok {
+						settings[field.Key] = v
+					}
+				}
+			}
+			pctx.Settings, _ = DecodeSettings(schema, settings, p.defaultSettings)
+		}
+	}
 	method := strings.ToUpper(req.Method)
 	if method == "" {
 		method = http.MethodGet

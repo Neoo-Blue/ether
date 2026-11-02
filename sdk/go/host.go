@@ -117,6 +117,15 @@ func NewRemoteHostClient(opts RemoteHostOptions) *RemoteHostClient {
 	}
 }
 
+// SettingsGet reads the current non-secret settings from Ether.
+func (c *RemoteHostClient) SettingsGet(ctx context.Context) (map[string]any, error) {
+	var result struct {
+		Settings map[string]any `json:"settings"`
+	}
+	_, err := c.callJSON(ctx, http.MethodGet, "/ether/plugin-host/settings", nil, &result, false)
+	return result.Settings, err
+}
+
 func (c *RemoteHostClient) callJSON(
 	ctx context.Context,
 	method, path string,

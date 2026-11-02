@@ -19,6 +19,7 @@ import (
 
 	"github.com/braedonsaunders/ether/internal/plugins"
 	"github.com/braedonsaunders/ether/internal/plugins/wasm"
+	"github.com/evanw/esbuild/pkg/api"
 )
 
 // Package holds an unpacked or directory-loaded plugin ready for checking
@@ -196,8 +197,39 @@ func LoadDir(dir string) (*Package, error) {
 	if err != nil {
 		return &Package{ManifestRaw: manRaw, Files: files, Dir: dir}, err
 	}
-	return &Package{ManifestRaw: manRaw, Manifest: man, Files: files, Dir: dir}, nil
+	pkg := &Package{ManifestRaw: manRaw, Manifest: man, Files: files, Dir: dir}
+	if man.Ether != nil && man.Ether.Runtime.Kind == "hosted" && isTSPath(man.Ether.Runtime.Entry) {
+		entry := man.Ether.Runtime.Entry
+		if isUnsafePath(entry) {
+			return nil, fmt.Errorf("kit: unsafe entry %q", entry)
+		}
+		result := api.Build(api.BuildOptions{AbsWorkingDir: mustAbs(dir), EntryPoints: []string{entry}, Bundle: true, Write: false, Format: api.FormatIIFE, GlobalName: "__plugin", Platform: api.PlatformNeutral, Target: api.ES2020, LogLevel: api.LogLevelSilent})
+		if len(result.Errors) != 0 {
+			return nil, fmt.Errorf("kit: bundle: %s", result.Errors[0].Text)
+		}
+		var doc map[string]any
+		if err := json.Unmarshal(manRaw, &doc); err != nil {
+			return nil, err
+		}
+		ether := doc["ether"].(map[string]any)
+		runtime := ether["runtime"].(map[string]any)
+		runtime["entry"] = "dist/plugin.js"
+		manRaw, err = json.Marshal(doc)
+		if err != nil {
+			return nil, err
+		}
+		man, err = plugins.ParseManifest(manRaw)
+		if err != nil {
+			return nil, err
+		}
+		files["dist/plugin.js"] = result.OutputFiles[0].Contents
+		files["manifest.json"] = manRaw
+		pkg.ManifestRaw, pkg.Manifest = manRaw, man
+	}
+	return pkg, nil
 }
+
+func mustAbs(dir string) string { p, _ := filepath.Abs(dir); return p }
 
 // LoadPkgBytes loads a plugin package from .etherpkg zip bytes, verifying
 // the digest entry when present.
