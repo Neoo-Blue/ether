@@ -27,6 +27,7 @@ type Host interface {
 	CatalogSearch(ctx context.Context, pluginID, query string, limit, offset int) (json.RawMessage, error)
 	CatalogGet(ctx context.Context, pluginID, id string) (json.RawMessage, error)
 
+	ViewerGranted(ctx context.Context, pluginID string) (json.RawMessage, error)
 	ViewerHistory(ctx context.Context, pluginID string, viewerID int64, limit, offset int) (json.RawMessage, error)
 	SetWatchState(ctx context.Context, pluginID string, viewerID int64, titleID string, watched bool) error
 
@@ -79,6 +80,7 @@ func NewHostHandler(opts HostOptions) *HostHandler {
 	mux.HandleFunc("GET /ether/plugin-host/catalog/search", h.catalogSearch)
 	mux.HandleFunc("GET /ether/plugin-host/catalog/{id...}", h.catalogGet)
 	mux.HandleFunc("GET /ether/plugin-host/viewers/{viewerId}/history", h.viewerHistory)
+	mux.HandleFunc("GET /ether/plugin-host/viewers/granted", h.viewerGranted)
 	mux.HandleFunc("POST /ether/plugin-host/viewers/watch-state", h.setWatchState)
 	mux.HandleFunc("POST /ether/plugin-host/collections/upsert", h.collectionsUpsert)
 	mux.HandleFunc("POST /ether/plugin-host/notify", h.notify)
@@ -186,6 +188,11 @@ func (h *HostHandler) catalogGet(w http.ResponseWriter, r *http.Request) {
 }
 
 // --- Viewers ---
+
+func (h *HostHandler) viewerGranted(w http.ResponseWriter, r *http.Request) {
+	out, err := h.host.ViewerGranted(r.Context(), pluginIDOf(r))
+	h.writeRaw(w, out, err)
+}
 
 func (h *HostHandler) viewerHistory(w http.ResponseWriter, r *http.Request) {
 	viewerID, err := strconv.ParseInt(r.PathValue("viewerId"), 10, 64)

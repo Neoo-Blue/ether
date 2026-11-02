@@ -214,6 +214,22 @@ func (h *host) CatalogGet(ctx context.Context, id string) (json.RawMessage, erro
 	return h.m.deps.Backends.CatalogGet(ctx, id)
 }
 
+func (h *host) ViewerGranted(ctx context.Context) (json.RawMessage, error) {
+	r, g, err := h.record(ctx)
+	if err != nil {
+		return nil, err
+	}
+	p := r.Manifest.Ether.Permissions.Viewers
+	allowed := (!g.revoked("viewers.watch_history") && normLevel(p.WatchHistory) != "none") || (!g.revoked("viewers.identity") && normLevel(p.Identity) != "none")
+	if !allowed || len(g.Viewers) == 0 {
+		return json.RawMessage(`[]`), nil
+	}
+	if h.m.deps.Backends.ViewerNames == nil {
+		return nil, ErrUnavailable
+	}
+	return h.m.deps.Backends.ViewerNames(ctx, g.Viewers)
+}
+
 func (h *host) ViewerHistory(ctx context.Context, viewerID int64, limit, offset int) (json.RawMessage, error) {
 	r, g, err := h.record(ctx)
 	if err != nil {

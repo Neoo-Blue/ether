@@ -279,6 +279,15 @@ func (a HostAdapter) CatalogGet(ctx context.Context, pluginID, id string) (json.
 	return out, mapHostErr(err)
 }
 
+func (a HostAdapter) ViewerGranted(ctx context.Context, pluginID string) (json.RawMessage, error) {
+	h, err := a.host(pluginID)
+	if err != nil {
+		return nil, err
+	}
+	out, err := h.ViewerGranted(ctx)
+	return out, mapHostErr(err)
+}
+
 func (a HostAdapter) ViewerHistory(ctx context.Context, pluginID string, viewerID int64, limit, offset int) (json.RawMessage, error) {
 	h, err := a.host(pluginID)
 	if err != nil {

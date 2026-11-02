@@ -417,6 +417,9 @@ func (b hostBridge) CallHost(ctx context.Context, name string, raw json.RawMessa
 	case "catalog.get":
 		v, err := b.h.CatalogGet(ctx, str(0))
 		return result(v, err)
+	case "viewers.granted":
+		v, err := b.h.ViewerGranted(ctx)
+		return result(v, err)
 	case "viewers.history":
 		v, err := b.h.ViewerHistory(ctx, num(0), int(num(1)), int(num(2)))
 		return result(v, err)

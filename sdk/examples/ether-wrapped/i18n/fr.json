@@ -1,0 +1,17 @@
+{
+  "summary": "Explorez l'année d'un spectateur en titres.",
+  "page": "Ether Wrapped",
+  "description": "Votre année en titres, une histoire à la fois.",
+  "list": "Votre année en titres",
+  "list_hint": "Créer une collection à partir de l'année d'un spectateur.",
+  "viewer": "Spectateur",
+  "year": "Année",
+  "plays": "Lectures terminées",
+  "titles": "Titres",
+  "top_titles": "Titres préférés",
+  "empty": "Aucun titre terminé trouvé.",
+  "genres": "Genres préférés",
+  "activity": "Activité par mois",
+  "previous": "Spectateurs précédents",
+  "next": "Spectateurs suivants"
+}

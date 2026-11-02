@@ -46,6 +46,24 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 		IsLeader: func() bool { return a.cluster == nil || a.cluster.IsLeader() },
 		Bus:      clusterbus.FromCluster(a.cluster),
 		Backends: plugins.Backends{
+			ViewerNames: func(ctx context.Context, ids []int64) (json.RawMessage, error) {
+				out := make([]map[string]any, 0, len(ids))
+				for _, id := range ids {
+					u, err := a.users.ActiveUser(ctx, id)
+					if errors.Is(err, core.ErrNotFound) || errors.Is(err, core.ErrUnauthorized) || (err == nil && u == nil) {
+						continue
+					}
+					if err != nil {
+						return nil, err
+					}
+					name := u.Title
+					if name == "" {
+						name = u.Username
+					}
+					out = append(out, map[string]any{"id": u.ID, "name": name})
+				}
+				return json.Marshal(out)
+			},
 			CatalogSearch: func(ctx context.Context, query string, limit, offset int) (json.RawMessage, error) {
 				if offset < 0 || offset > 2000 {
 					return nil, errors.New("catalog search offset out of range")
@@ -114,19 +132,25 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 				if viewerID <= 0 || limit <= 0 || limit > 200 || offset < 0 || offset > 2000 {
 					return nil, errors.New("invalid history page")
 				}
-				rows, err := a.db.QueryContext(ctx, `SELECT h.rating_key, h.viewed_at, h.completed, COALESCE(w.view_offset_ns,0), COALESCE(w.duration_ns,0) FROM state_history h LEFT JOIN state_watch w ON w.user_id=h.user_id AND w.rating_key=h.rating_key WHERE h.user_id=? ORDER BY h.viewed_at DESC, h.id DESC LIMIT ? OFFSET ?`, viewerID, limit, offset)
+				history, err := a.state.History(ctx, viewerID, time.Time{}, limit+offset)
 				if err != nil {
 					return nil, err
 				}
-				defer rows.Close()
+				if offset >= len(history) {
+					return json.RawMessage(`[]`), nil
+				}
+				history = history[offset:]
+				keys := make([]core.RatingKey, len(history))
+				for i, entry := range history {
+					keys[i] = entry.Key
+				}
+				statuses, err := a.state.GetMany(ctx, viewerID, keys)
+				if err != nil {
+					return nil, err
+				}
 				out := make([]map[string]any, 0, limit)
-				for rows.Next() {
-					var key, at, offsetNS, durationNS int64
-					var completed bool
-					if err := rows.Scan(&key, &at, &completed, &offsetNS, &durationNS); err != nil {
-						return nil, err
-					}
-					k := core.RatingKey(key)
+				for _, entry := range history {
+					k := entry.Key
 					kind := "movie"
 					if k.Kind() == core.KindEpisode {
 						kind = "episode"
@@ -134,13 +158,11 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 						kind = "show"
 					}
 					progress := float64(0)
-					if durationNS > 0 {
-						progress = float64(offsetNS) / float64(durationNS)
+					status := statuses[k]
+					if status.Duration > 0 {
+						progress = float64(status.ViewOffset) / float64(status.Duration)
 					}
-					out = append(out, map[string]any{"titleId": k.String(), "type": kind, "watchedAt": time.Unix(0, at).UTC(), "progress": progress, "completed": completed})
-				}
-				if err := rows.Err(); err != nil {
-					return nil, err
+					out = append(out, map[string]any{"titleId": k.String(), "type": kind, "watchedAt": entry.ViewedAt, "progress": progress, "completed": entry.Completed})
 				}
 				return json.Marshal(out)
 			},
