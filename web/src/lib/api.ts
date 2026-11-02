@@ -183,7 +183,7 @@ function authHeaders(init: RequestInit, withSession = true): Headers {
   const method = (init.method ?? "GET").toUpperCase();
   if (method !== "GET" && method !== "HEAD") {
     headers.set("X-Ether-Request", "1");
-    if (init.body != null && !headers.has("Content-Type"))
+    if (init.body != null && !(init.body instanceof FormData) && !headers.has("Content-Type"))
       headers.set("Content-Type", "application/json");
   }
   return headers;

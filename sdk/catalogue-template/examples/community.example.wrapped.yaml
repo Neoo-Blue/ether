@@ -1,0 +1,26 @@
+id: community.example.wrapped
+name: Household Wrapped
+summary: Annual watch statistics and highlights for every viewer.
+description: Builds a shareable year-in-review page from household watch history.
+kind: extension
+category: Insights
+icon: https://example.invalid/icons/wrapped.svg
+repo: https://github.com/example/community-example-wrapped
+author: Ether Community
+license: Apache-2.0
+capabilities:
+  - ui
+  - tools
+permissions:
+  catalog: read
+  viewers:
+    identity: granted_viewers
+    watch_history: granted_viewers
+screenshots:
+  - https://example.invalid/screenshots/wrapped-summary.png
+versions:
+  - version: 1.0.0
+    url: https://github.com/example/community-example-wrapped/releases/download/v1.0.0/community.example.wrapped-1.0.0.etherpkg
+    sha256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    releasedAt: "2026-11-01T00:00:00Z"
+    minEther: 0.2.0

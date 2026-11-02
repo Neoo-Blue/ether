@@ -47,6 +47,7 @@ type Config struct {
 	OpenSubtitles OpenSubtitles `json:"openSubtitles"`
 	LLM           LLM           `json:"llm"`
 	Updates       Updates       `json:"updates"`
+	Plugins       Plugins       `json:"plugins,omitempty"`
 	Spike         Spike         `json:"spike"`
 	Downloads     Downloads     `json:"downloads"`
 	Markers       Markers       `json:"markers"`
