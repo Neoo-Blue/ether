@@ -54,6 +54,7 @@ export interface ViewerWatchEntry {
 }
 
 export interface EtherHost {
+  settings?: { get(): MaybePromise<Record<string, unknown>> };
   kv: {
     get(key: string): MaybePromise<string | null>;
     put(key: string, value: string): MaybePromise<void>;
@@ -167,6 +168,7 @@ export function createHostedClient(): EtherHost {
   };
 
   return {
+    settings: { get: () => callHost<Record<string, unknown>>("settings.get", []) },
     kv: {
       get(key: string): string | null {
         if (g.ether?.kv) return g.ether.kv.get(key) ?? null;
@@ -368,6 +370,7 @@ export function createRemoteHostClient(opts: RemoteHostOptions = {}): EtherHost 
   };
 
   return {
+    ...(credential ? { settings: { get: async () => (await callJson<{ settings: Record<string, unknown> }>("GET", "/ether/plugin-host/settings"))?.settings ?? {} } } : {}),
     kv: {
       async get(key: string): Promise<string | null> {
         const res = await callJson<{ key: string; value: string }>(
