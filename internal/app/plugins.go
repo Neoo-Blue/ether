@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/braedonsaunders/ether/internal/admin"
 	"github.com/braedonsaunders/ether/internal/clusterbus"
 	"github.com/braedonsaunders/ether/internal/config"
 	"github.com/braedonsaunders/ether/internal/core"
@@ -21,8 +23,11 @@ import (
 
 // pluginRuntime is the plugin host and its adapters (WS7, WS8, WS9, WS11).
 type pluginRuntime struct {
-	mgr    *plugins.Manager
-	studio *studio.Studio
+	mgr        *plugins.Manager
+	studio     *studio.Studio
+	tunnel     *remote.TunnelServer
+	pairing    *remote.Pairing
+	pluginHost http.Handler
 }
 
 func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRuntime, error) {
@@ -72,6 +77,64 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 	engine := wasm.NewEngine(a.log.With("component", "plugins-wasm"))
 	mgr.RegisterRuntime("hosted", plugins.HostedRuntimeFactory(engine))
 	a.closers = append(a.closers, func() { _ = engine.Close() })
+	grants, err := identity.NewGrants(a.db, a.users, 30*24*time.Hour, nil)
+	if err != nil {
+		a.log.Warn("plugin credentials unavailable", "err", err)
+	}
+	auth := remote.CredentialResolverFunc(func(ctx context.Context, credential string) (string, error) {
+		if grants == nil {
+			return "", remote.ErrUnavailable
+		}
+		_, device, _, err := grants.ResolveGrantDevice(ctx, "plugin", credential, "")
+		if err != nil || device.ID == "" {
+			return "", remote.ErrUnauthorized
+		}
+		rec, err := mgr.Get(ctx, device.ID)
+		if err != nil || !rec.Enabled || rec.Manifest.Ether == nil || rec.Manifest.Ether.Runtime.Kind != "remote" {
+			return "", remote.ErrUnauthorized
+		}
+		return device.ID, nil
+	})
+	log := a.log.With("component", "plugins-remote")
+	tunnel := remote.NewTunnelServer(remote.TunnelOptions{Auth: auth, Logger: log})
+	factory := &remote.Factory{Tunnel: tunnel, TrustedLAN: remote.GrantsLAN(mgr.GrantsOf), Logger: log}
+	mgr.RegisterRuntime("remote", factory.RuntimeFactory())
+	host := remote.NewHostHandler(remote.HostOptions{Host: remote.HostAdapter{HostFor: mgr.HostFor}, Auth: auth, Logger: log})
+	pairing := remote.NewPairing(a.db, grants, func(ctx context.Context) (int64, error) {
+		owner, err := a.users.Owner(ctx)
+		if err != nil {
+			return 0, err
+		}
+		if owner == nil || !owner.IsOwner {
+			return 0, core.ErrUnauthorized
+		}
+		return owner.ID, nil
+	}, func(ctx context.Context, id string) bool {
+		rec, err := mgr.Get(ctx, id)
+		return err == nil && rec.Enabled && rec.Manifest.Ether != nil && rec.Manifest.Ether.Runtime.Kind == "remote"
+	}, tunnel)
+	pairing.Exists = func(ctx context.Context, id string) bool { _, err := mgr.Get(ctx, id); return err == nil }
+	pairing.TunnelURL = func(r *http.Request) string {
+		scheme, host := "ws", portalSanitizeHost(r.Host)
+		if r.TLS != nil {
+			scheme = "wss"
+		}
+		if portalProxyTrusted(r, identity.ProxyPrefixes(a.cfg.TrustedProxyCIDRs())) {
+			if forwarded := portalForwardedHost(r); forwarded != "" {
+				host = forwarded
+			}
+			if proto := portalForwardedProto(r); proto == "https" {
+				scheme = "wss"
+			} else if proto == "http" {
+				scheme = "ws"
+			}
+		}
+		if host == "" {
+			return ""
+		}
+		return scheme + "://" + host + remote.TunnelPath
+	}
+	a.closers = append(a.closers, func() { _ = tunnel.Close() })
 	if err := mgr.Start(ctx); err != nil {
 		return nil, err
 	}
@@ -142,7 +205,7 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 		stopState()
 		unsubscribe()
 	})
-	return &pluginRuntime{mgr: mgr, studio: studioSvc}, nil
+	return &pluginRuntime{mgr: mgr, studio: studioSvc, tunnel: tunnel, pairing: pairing, pluginHost: host}, nil
 }
 
 // pluginHandlers mounts the owner plugin API under /api/plugins (WS7, WS11).
@@ -152,42 +215,38 @@ func (a *App) pluginHandlers(m map[string]http.Handler) {
 		if a.pluginsRT.studio != nil {
 			h = a.pluginsRT.studio.WrapPluginHandler(h)
 		}
+		if a.pluginsRT.pairing != nil {
+			wrapped := a.pluginsRT.pairing.WrapOwner(h)
+			h = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+				if len(parts) >= 2 && (parts[1] == "pair" || parts[1] == "pairings") {
+					access, ok := admin.RequestAccess(r.Context())
+					if !ok || !access.Owner {
+						http.Error(w, "owner authentication required", http.StatusUnauthorized)
+						return
+					}
+				}
+				wrapped.ServeHTTP(w, r)
+			})
+		}
 		m["plugins"] = h
 	}
 }
 
 // mountPlugins mounts the plugin tunnel and plugin host API (WS8b).
 func (a *App) mountPlugins(mux *http.ServeMux) {
-	if a.pluginsRT == nil || a.pluginsRT.mgr == nil {
+	if a.pluginsRT == nil {
 		return
 	}
-	mgr := a.pluginsRT.mgr
-	grants, err := identity.NewGrants(a.db, a.users, 30*24*time.Hour, nil)
-	if err != nil {
-		a.log.Warn("plugin credentials unavailable", "err", err)
+	if a.pluginsRT.tunnel != nil {
+		mux.Handle("GET "+remote.TunnelPath, a.pluginsRT.tunnel.Handler())
 	}
-	auth := remote.CredentialResolverFunc(func(ctx context.Context, credential string) (string, error) {
-		if grants == nil {
-			return "", remote.ErrUnavailable
-		}
-		_, device, _, err := grants.ResolveGrantDevice(ctx, "plugin", credential, "")
-		if err != nil || device.ID == "" {
-			return "", remote.ErrUnauthorized
-		}
-		rec, err := mgr.Get(ctx, device.ID)
-		if err != nil || !rec.Enabled {
-			return "", remote.ErrUnauthorized
-		}
-		return device.ID, nil
-	})
-	log := a.log.With("component", "plugins-remote")
-	tunnel := remote.NewTunnelServer(remote.TunnelOptions{Auth: auth, Logger: log})
-	factory := &remote.Factory{Tunnel: tunnel, TrustedLAN: remote.GrantsLAN(mgr.GrantsOf), Logger: log}
-	mgr.RegisterRuntime("remote", factory.RuntimeFactory())
-	host := remote.NewHostHandler(remote.HostOptions{Host: remote.HostAdapter{HostFor: mgr.HostFor}, Auth: auth, Logger: log})
-	mux.Handle("GET "+remote.TunnelPath, tunnel.Handler())
-	mux.Handle(remote.HostPath, host)
-	a.closers = append(a.closers, func() { _ = tunnel.Close() })
+	if a.pluginsRT.pluginHost != nil {
+		mux.Handle(remote.HostPath, a.pluginsRT.pluginHost)
+	}
+	if a.pluginsRT.pairing != nil {
+		mux.Handle(remote.PairExchangePath, lanOnly(http.HandlerFunc(a.pluginsRT.pairing.Exchange), a.cfg.TrustedProxyCIDRs))
+	}
 }
 
 // pluginTextResolver resolves plugin strings for the registry (WS7).

@@ -29,9 +29,8 @@ const DefaultCallTimeout = 30 * time.Second
 // URLClient talks to a remote plugin at a base URL (SPEC §5.3 URL
 // mode). Every fetch goes through safefetch: public addresses only,
 // unless TrustedOrigin names exactly this client's origin as
-// owner-confirmed (LAN URL mode). Outbound proxy routing follows the
-// egress CapPlugins capability, the class the plugin host's own
-// fetches already use.
+// owner-confirmed (LAN URL mode). Explicit proxy routing follows egress
+// CapPlugins; process environment proxies are not used.
 type URLClient struct {
 	base       *url.URL
 	httpClient *http.Client
@@ -93,19 +92,19 @@ func NewURLClient(opts URLOptions) (*URLClient, error) {
 	trusted := false
 	if opts.TrustedOrigin != "" {
 		if !safefetch.SameOrigin(opts.TrustedOrigin, base.String()) {
-			return nil, fmt.Errorf("%w: trusted origin %q does not match base %q", ErrInvalid, opts.TrustedOrigin, opts.Base)
+			return nil, fmt.Errorf("%w: trusted origin does not match base", ErrInvalid)
 		}
 		trusted = true
 	}
 	transport := opts.BaseTransport
 	if transport == nil {
 		tr := egress.Transport(egress.CapPlugins)
-		selectProxy := tr.Proxy
 		tr.Proxy = func(r *http.Request) (*url.URL, error) {
-			if !egress.Current().Enabled {
+			policy := egress.Current()
+			if !policy.Enabled {
 				return nil, nil
 			}
-			return selectProxy(r)
+			return policy.SnapshotClient(egress.CapPlugins, 0).Transport.(*http.Transport).Proxy(r)
 		}
 		transport = tr
 	}
@@ -152,10 +151,10 @@ func (c *URLClient) Base() string { return c.base.String() }
 func parseBase(raw string) (*url.URL, error) {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
-		return nil, fmt.Errorf("%w: base URL: %v", ErrInvalid, err)
+		return nil, fmt.Errorf("%w: malformed base URL", ErrInvalid)
 	}
 	if (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
-		return nil, fmt.Errorf("%w: base %q is not an http(s) URL with a host", ErrInvalid, raw)
+		return nil, fmt.Errorf("%w: base is not an http(s) URL with a host", ErrInvalid)
 	}
 	if u.User != nil {
 		return nil, fmt.Errorf("%w: base URL must not carry credentials", ErrInvalid)
@@ -244,10 +243,18 @@ func (c *URLClient) do(ctx context.Context, req Request) (*http.Response, contex
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
 		cancel()
-		return nil, nil, err
+		return nil, nil, &requestError{err: err}
 	}
 	return resp, cancel, nil
 }
+
+// HTTP errors can contain the complete URL, including add-on credentials
+// embedded in its path. Keep them out of health records and logs while
+// retaining the cause for errors.Is and errors.As.
+type requestError struct{ err error }
+
+func (e *requestError) Error() string { return "remote: plugin request failed" }
+func (e *requestError) Unwrap() error { return e.err }
 
 // Call sends one request and buffers the reply up to the size cap.
 func (c *URLClient) Call(ctx context.Context, req Request) (Response, error) {

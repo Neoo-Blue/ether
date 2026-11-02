@@ -27,6 +27,8 @@
  * on Node the credential travels in a second subprotocol entry,
  * "ether-credential.<token>", which Ether also accepts; under Bun
  * the header is used when available.
+ * For first use, supply pairCode instead of credential, then retain
+ * the resulting options.credential securely for later process restarts.
  *
  * Wire protocol "ether-tunnel-v1": JSON text frames, base64 bodies.
  * Requests carry an id; replies may be one "response" frame or a
@@ -58,7 +60,8 @@ export type TunnelHandler = (
 
 export interface TunnelOptions {
   url: string;
-  credential: string;
+  credential?: string;
+  pairCode?: string;
   plugin?: string;
   handler: TunnelHandler;
   /** When set, GET /ether/file/<path> under this root is served with ranges. */
@@ -150,7 +153,9 @@ export class Tunnel {
   private ws?: WebSocket;
   private chunkBytes = CHUNK;
 
-  constructor(private opts: TunnelOptions) {}
+  private opts: TunnelOptions;
+
+  constructor(opts: TunnelOptions) { this.opts = opts; }
 
   stop(): void {
     this.stopped = true;
@@ -176,7 +181,21 @@ export class Tunnel {
   }
 
   /** Serve one tunnel connection until it ends. */
-  serveOnce(): Promise<void> {
+  async serveOnce(): Promise<void> {
+    if (!this.opts.credential) {
+      if (!this.opts.pairCode) throw new Error("credential or pairCode is required");
+      const url = new URL(this.opts.url);
+      url.protocol = url.protocol === "wss:" ? "https:" : "http:";
+      url.pathname = "/ether/plugins/pair";
+      url.search = "";
+      const response = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({code: this.opts.pairCode})});
+      if (!response.ok) throw new Error(`pairing failed: ${response.status}`);
+      const result = await response.json() as {credential: string; pluginId: string};
+      this.opts.credential = result.credential;
+      this.opts.plugin ||= result.pluginId;
+      this.opts.pairCode = undefined;
+    }
+    const credential = this.opts.credential;
     return new Promise((resolve, reject) => {
       if (typeof WebSocket === "undefined") {
         reject(new Error("global WebSocket is unavailable (need Node >= 22 or Bun)"));
@@ -186,12 +205,12 @@ export class Tunnel {
       // object), subprotocol auth under Node: Ether accepts both.
       // The subprotocol token alphabet is base64url-safe for Ether
       // grant credentials.
-      const protocols = ["ether-tunnel-v1", `ether-credential.${this.opts.credential}`];
+      const protocols = ["ether-tunnel-v1", `ether-credential.${credential}`];
       const isBun = "Bun" in globalThis;
       const ws = isBun
         ? new WebSocket(this.opts.url, {
             protocols,
-            headers: { "X-Ether-Plugin-Credential": this.opts.credential },
+            headers: { "X-Ether-Plugin-Credential": credential },
           } as never)
         : new WebSocket(this.opts.url, protocols);
       this.ws = ws;

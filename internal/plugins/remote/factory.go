@@ -80,7 +80,7 @@ func (f *Factory) RuntimeFactory() plugins.RuntimeFactory {
 			}
 			return &contractRuntime{inner: client, plugin: inst.ID}, nil
 		default:
-			return nil, fmt.Errorf("plugin %s: no remote endpoint in source URL %q", inst.ID, inst.SourceURL)
+			return nil, fmt.Errorf("plugin %s: no remote endpoint in source URL", inst.ID)
 		}
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -228,12 +229,14 @@ func (m *Manager) ResolveText(ctx context.Context, plugin, key, locale string) (
 func (m *Manager) runtimeFor(ctx context.Context, r Record) (Runtime, error) {
 	m.mu.Lock()
 	rt, ok := m.runtimes[r.ID]
-	f, hasFactory := m.fatories[r.Manifest.Ether.Runtime.Kind]
+	kind := "remote"
+	if r.Manifest.Ether != nil { kind = r.Manifest.Ether.Runtime.Kind }
+	f, hasFactory := m.fatories[kind]
 	m.mu.Unlock()
 	if ok {
 		return rt, nil
 	}
-	if r.Manifest.Ether == nil || !hasFactory {
+	if !hasFactory {
 		return nil, ErrNoRuntime
 	}
 	inst := Installed{
@@ -257,6 +260,34 @@ func (m *Manager) runtimeFor(ctx context.Context, r Record) (Runtime, error) {
 	m.runtimes[r.ID] = rt
 	m.mu.Unlock()
 	return rt, nil
+}
+
+// ErrStreamUnsupported indicates that a runtime cannot relay file bodies.
+var ErrStreamUnsupported = errors.New("plugins: runtime does not support streaming")
+
+type streamRuntime interface {
+	CallStream(context.Context, Request) (Response, io.ReadCloser, error)
+}
+
+type streamBody struct { io.ReadCloser; cancel context.CancelFunc }
+func (b *streamBody) Close() error { err := b.ReadCloser.Close(); b.cancel(); return err }
+
+// CallStream returns a streaming response. The call deadline remains active
+// until the body is closed; callers must close it on every path.
+func (m *Manager) CallStream(ctx context.Context, pluginID string, req Request) (Response, io.ReadCloser, error) {
+	r, err := m.store.record(ctx, pluginID)
+	if err != nil { return Response{}, nil, err }
+	if !r.Enabled { return Response{}, nil, ErrDisabled }
+	rt, err := m.runtimeFor(ctx, r)
+	if err != nil { return Response{}, nil, err }
+	s, ok := rt.(streamRuntime)
+	if !ok { return Response{}, nil, ErrStreamUnsupported }
+	req.PluginID = pluginID
+	ctx, cancel := context.WithTimeout(ctx, DeadlineFor(req.Path))
+	resp, body, err := s.CallStream(ctx, req)
+	if err != nil { cancel(); return Response{}, nil, err }
+	if body == nil { cancel(); return Response{}, nil, errors.New("plugins: streaming runtime returned no body") }
+	return resp, &streamBody{ReadCloser: body, cancel: cancel}, nil
 }
 
 func (m *Manager) closeRuntime(id string) {

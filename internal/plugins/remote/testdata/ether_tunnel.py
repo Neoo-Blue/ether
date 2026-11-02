@@ -23,6 +23,8 @@ ranges of local files for `file` streams.
 The credential is minted when the owner pairs the plugin in the
 Ether console (an identity_grants row on surface "plugin"). Keep it
 secret; it is sent once, on the upgrade request, never in a frame.
+For first use, pass pair_code instead of credential. Retain the
+resulting tunnel.credential securely for later process restarts.
 
 Wire protocol "ether-tunnel-v1": JSON text frames. Bodies are
 base64. Requests carry an id; replies may be one "response" frame
@@ -40,6 +42,7 @@ import struct
 import threading
 import time
 import urllib.parse
+import urllib.request
 
 _CHUNK = 64 * 1024
 _GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -225,9 +228,10 @@ class _WS:
 class Tunnel:
     """Connects a handler to Ether and serves requests until stopped."""
 
-    def __init__(self, url, credential, handler, file_root=None, plugin=None):
+    def __init__(self, url, credential=None, handler=None, file_root=None, plugin=None, pair_code=None):
         self.url = url
         self.credential = credential
+        self.pair_code = pair_code
         self.handler = handler
         self.file_root = os.path.realpath(file_root) if file_root else None
         self.plugin = plugin or ""
@@ -259,6 +263,18 @@ class Tunnel:
             backoff = min(backoff * 2, 30)
 
     def serve_once(self):
+        if not self.credential:
+            if not self.pair_code:
+                raise ValueError("credential or pair_code is required")
+            parts = urllib.parse.urlsplit(self.url)
+            scheme = "https" if parts.scheme == "wss" else "http"
+            exchange = urllib.parse.urlunsplit((scheme, parts.netloc, "/ether/plugins/pair", "", ""))
+            req = urllib.request.Request(exchange, data=json.dumps({"code": self.pair_code}).encode(), headers={"Content-Type": "application/json"}, method="POST")
+            with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(req, timeout=10) as response:
+                result = json.load(response)
+            self.credential = result["credential"]
+            self.plugin = self.plugin or result["pluginId"]
+            self.pair_code = None
         ws = _WS(self.url, {"X-Ether-Plugin-Credential": self.credential})
         self._ws = ws
         try:

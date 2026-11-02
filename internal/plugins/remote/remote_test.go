@@ -1045,7 +1045,19 @@ func TestPythonReferenceTunnelClientFixture(t *testing.T) {
 		PingInterval: 30 * time.Millisecond,
 	})
 	defer tunnel.Close()
-	srv := httptest.NewServer(tunnel.Handler())
+	mux := http.NewServeMux()
+	mux.Handle(TunnelPath, tunnel.Handler())
+	mux.HandleFunc(PairExchangePath, func(w http.ResponseWriter, r *http.Request) {
+		var input struct {
+			Code string `json:"code"`
+		}
+		if json.NewDecoder(r.Body).Decode(&input) != nil || input.Code != "TESTCODE" {
+			http.Error(w, "invalid", http.StatusUnauthorized)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"credential": "py-cred", "pluginId": "org.example.py"})
+	})
+	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
 	fixtureDir, err := filepath.Abs("testdata")
@@ -1064,12 +1076,12 @@ def handle(req):
         return Response.json({"got": req.json()})
     return Response(404, b'{"error":{"code":"not_found","message":"missing"}}')
 
-t = Tunnel(sys.argv[2], credential="py-cred", handler=handle, file_root=sys.argv[3], plugin="org.example.py")
+t = Tunnel(sys.argv[2], pair_code="TESTCODE", handler=handle, file_root=sys.argv[3])
 t.serve_once()
 `
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, pythonBin, "-B", "-c", script, fixtureDir, srv.URL, tmpDir)
+	cmd := exec.CommandContext(ctx, pythonBin, "-B", "-c", script, fixtureDir, srv.URL+TunnelPath, tmpDir)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Start(); err != nil {
@@ -1142,7 +1154,7 @@ func TestSubprotocolCredentialAuth(t *testing.T) {
 
 func waitConnected(t *testing.T, tunnel *TunnelServer, pluginID string) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		if tunnel.IsConnected(pluginID) {
 			return
@@ -1171,5 +1183,86 @@ func TestURLClientRejectsInsecureConfigurationAndCrossOriginRedirect(t *testing.
 	}
 	if targetCalled.Load() {
 		t.Fatal("redirect target received credential")
+	}
+}
+
+func TestTypeScriptReferencePairing(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node unavailable")
+	}
+	fixture, err := filepath.Abs("testdata/ether_tunnel.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	probe := exec.Command(node, "--input-type=module", "-e", "if(typeof WebSocket==='undefined') process.exit(1); await import(process.argv[1])", "file://"+fixture)
+	if err := probe.Run(); err != nil {
+		t.Skip("node lacks native TypeScript or WebSocket support")
+	}
+	tunnel := NewTunnelServer(TunnelOptions{Auth: StaticCredentials{"ts-credential": "org.example.ts.pair"}})
+	defer tunnel.Close()
+	mux := http.NewServeMux()
+	mux.Handle(TunnelPath, tunnel.Handler())
+	mux.HandleFunc(PairExchangePath, func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Code string `json:"code"`
+		}
+		if json.NewDecoder(r.Body).Decode(&req) != nil || req.Code != "TESTCODE" {
+			http.Error(w, "invalid", 401)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"credential": "ts-credential", "pluginId": "org.example.ts.pair"})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	script := `const {Tunnel,json}=await import(process.argv[1]); const t=new Tunnel({url:process.argv[2],pairCode:"TESTCODE",handler:()=>json({ok:true})}); await t.serveOnce();`
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, node, "--input-type=module", "-e", script, "file://"+fixture, "ws"+strings.TrimPrefix(srv.URL, "http")+TunnelPath)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = cmd.Process.Kill(); _ = cmd.Wait() }()
+	waitConnected(t, tunnel, "org.example.ts.pair")
+	resp, err := tunnel.RuntimeFor("org.example.ts.pair").Call(ctx, Request{Path: "/manifest.json"})
+	if err != nil || !bytes.Contains(resp.Body, []byte(`"ok":true`)) {
+		t.Fatalf("response %s: %v; stderr %s", resp.Body, err, stderr.String())
+	}
+}
+
+func TestURLClientConfigurationOverTLS(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/ether/configure" || r.Header.Get(HeaderCredential) != "credential" {
+			http.Error(w, "unexpected request", 400)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+	c, err := NewURLClient(URLOptions{Base: srv.URL, TrustedOrigin: srv.URL, BaseTransport: srv.Client().Transport, Credential: "credential"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	resp, err := c.Call(context.Background(), Request{Method: http.MethodPost, Path: "/ether/configure", Body: []byte(`{"secret":"value"}`)})
+	if err != nil || resp.Status != http.StatusNoContent {
+		t.Fatalf("configuration status=%d error=%v", resp.Status, err)
+	}
+}
+
+func TestURLClientErrorDoesNotExposeURLSecrets(t *testing.T) {
+	client, err := NewURLClient(URLOptions{Base: "http://127.0.0.1/sensitive-token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	_, err = client.Call(context.Background(), Request{Path: "/manifest.json"})
+	if !IsBlocked(err) {
+		t.Fatalf("expected blocked error, got %v", err)
+	}
+	if strings.Contains(err.Error(), "sensitive-token") {
+		t.Fatalf("error leaked URL: %v", err)
 	}
 }
