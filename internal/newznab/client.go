@@ -751,6 +751,14 @@ func (c *Client) Search(ctx context.Context, req core.SearchRequest) ([]core.Rel
 		c.cachePut(ctx, key, results)
 		return results, nil
 	}
+	if core.IsBackgroundCheck(ctx) {
+		// A background check (new-release evidence) asks the targeted
+		// primary query only. The fallback fan-out (other ids, keyword
+		// and alias queries) costs several API hits per indexer and is
+		// kept for searches a viewer is waiting on. The miss is not
+		// cached: a foreground search must still run the fallbacks.
+		return nil, firstErr
+	}
 	rest := attempts[1:]
 	if len(rest) == 0 {
 		if firstErr != nil {
