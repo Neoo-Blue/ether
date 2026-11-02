@@ -520,7 +520,7 @@ func (h *recordingHost) CallHost(ctx context.Context, name string, raw json.RawM
 		resp := map[string]any{
 			"status":  200,
 			"headers": map[string]string{"content-type": "application/json"},
-			"body":    `{"ok":true}`,
+			"body":    `{"ok":true,"status":true,"subtitles":[]}`,
 		}
 		b, _ := json.Marshal(resp)
 		return b, nil
