@@ -121,9 +121,11 @@ type Deps struct {
 	RefreshViewers         func(context.Context) error
 	OwnerConfigured        func(context.Context) bool
 	LocalOwnerConfigured   func(context.Context) bool
-	SetViewerActive        func(context.Context, int64, bool) error
-	AuthenticatePlex       func(context.Context, string) (*core.User, error)
-	LinkPlex               func(context.Context, int64, string) error
+	// Lifecycle backs pause, resume, sign-out, remove and merge for a
+	// viewer (satisfied by *auth.Service). Nil answers those routes 503.
+	Lifecycle        ViewerLifecycle
+	AuthenticatePlex func(context.Context, string) (*core.User, error)
+	LinkPlex         func(context.Context, int64, string) error
 
 	// Extensions are owner-authenticated API subtrees keyed by relative path.
 	Extensions    map[string]http.Handler
@@ -394,8 +396,13 @@ func (h *Handler) routes() *http.ServeMux {
 	api("POST /api/users/{id}/invite", h.ownerIdentityManagement)
 	api("POST /api/users/local", h.handleCreateLocalViewer)
 	api("POST /api/users/invite", h.handleCreateInviteViewer)
-	api("PATCH /api/users/{id}/membership", h.handleViewerMembership)
+	api("POST /api/users/{id}/pause", h.handlePauseViewer)
+	api("POST /api/users/{id}/resume", h.handleResumeViewer)
+	api("POST /api/users/{id}/signout", h.handleSignOutViewer)
+	api("POST /api/users/{id}/merge", h.handleMergeViewer)
+	api("DELETE /api/users/{id}", h.handleRemoveViewer)
 	api("GET /api/users", h.handleListUsers)
+	api("GET /api/users/{id}", h.handleGetUser)
 	api("PUT /api/users/{id}", h.handleUpdateUser)
 	api("PATCH /api/users/{id}", h.handleUpdateUser)
 

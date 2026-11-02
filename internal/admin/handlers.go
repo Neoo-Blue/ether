@@ -633,13 +633,14 @@ func (h *Handler) handleDisk(w http.ResponseWriter, r *http.Request) {
 // ---- Users ----
 
 func (h *Handler) handleListUsers(w http.ResponseWriter, r *http.Request) {
-	users, err := h.viewerDirectory(r.Context())
+	records, err := h.storedViewers(r.Context())
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "users_failed", err.Error())
 		return
 	}
-	if users == nil {
-		users = []core.User{}
+	users := make([]userWithLifecycle, 0, len(records))
+	for _, u := range records {
+		users = append(users, toUserWithLifecycle(u))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"users": users})
 }

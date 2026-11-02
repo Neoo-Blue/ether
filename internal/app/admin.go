@@ -42,7 +42,7 @@ func (a *App) buildAdmin() http.Handler {
 		StremioPortalURL: a.frontends.viewerPortalSecureURL,
 		CreateDLNAGuest:  a.createDLNAGuest,
 		Invites:          invites,
-		SetViewerActive:  a.users.SetOwnerEnabled,
+		Lifecycle:        a.users,
 		LocalOwnerConfigured: func(ctx context.Context) bool {
 			owner, err := a.users.Owner(ctx)
 			if err != nil {
@@ -393,7 +393,7 @@ func (a *App) viewerDirectory(ctx context.Context) ([]admin.ViewerRecord, error)
 	}
 	out := make([]admin.ViewerRecord, 0, len(stored))
 	for _, u := range stored {
-		out = append(out, admin.ViewerRecord{User: u.User, Active: u.Active, Origin: u.Origin})
+		out = append(out, admin.ViewerRecord{User: u.User, Active: u.Active, Origin: u.Origin, Home: u.Home, OwnerEnabled: u.OwnerEnabled, PlexShared: u.PlexShared, HasPlex: u.HasPlex})
 	}
 	return out, nil
 }

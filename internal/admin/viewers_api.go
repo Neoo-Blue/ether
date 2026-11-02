@@ -101,6 +101,14 @@ type ViewerRecord struct {
 	core.User
 	Active bool
 	Origin string
+	// Home is a Plex Home (managed) user. OwnerEnabled is false when the
+	// owner paused the viewer. PlexShared is whether plex.tv still
+	// shares the server with them. HasPlex is whether they carry a Plex
+	// account id.
+	Home         bool
+	OwnerEnabled bool
+	PlexShared   bool
+	HasPlex      bool
 }
 
 func (u ViewerRecord) accessStatus() string {
@@ -118,21 +126,22 @@ func (u ViewerRecord) accessStatus() string {
 
 // viewer is the Viewer shape of the contract.
 type viewer struct {
-	ID              int64      `json:"id"`
-	PlexID          int64      `json:"plexId"`
-	Username        string     `json:"username"`
-	Title           string     `json:"title"`
-	Thumb           string     `json:"thumb,omitempty"`
-	IsOwner         bool       `json:"isOwner"`
-	AccessStatus    string     `json:"accessStatus"`
-	LastActive      *time.Time `json:"lastActive,omitempty"`
-	Plays30d        int        `json:"plays30d"`
-	HoursWatched30d float64    `json:"hoursWatched30d"`
+	ID              int64           `json:"id"`
+	PlexID          int64           `json:"plexId"`
+	Username        string          `json:"username"`
+	Title           string          `json:"title"`
+	Thumb           string          `json:"thumb,omitempty"`
+	IsOwner         bool            `json:"isOwner"`
+	AccessStatus    string          `json:"accessStatus"`
+	LastActive      *time.Time      `json:"lastActive,omitempty"`
+	Plays30d        int             `json:"plays30d"`
+	HoursWatched30d float64         `json:"hoursWatched30d"`
+	Lifecycle       viewerLifecycle `json:"lifecycle"`
 }
 
 func toViewer(u ViewerRecord, st core.ViewerStats) viewer {
 	v := viewer{ID: u.ID, PlexID: u.PlexID, Username: u.Username, Title: u.Title, Thumb: u.Thumb, IsOwner: u.IsOwner,
-		AccessStatus: u.accessStatus(), Plays30d: st.Plays30d, HoursWatched30d: st.HoursWatched30d}
+		AccessStatus: u.accessStatus(), Plays30d: st.Plays30d, HoursWatched30d: st.HoursWatched30d, Lifecycle: lifecycleOf(u)}
 	if v.Title == "" {
 		v.Title = u.Username
 	}
@@ -432,7 +441,7 @@ func (h *Handler) storedViewers(ctx context.Context) ([]ViewerRecord, error) {
 	}
 	out := make([]ViewerRecord, 0, len(users))
 	for _, u := range users {
-		out = append(out, ViewerRecord{User: u, Active: true})
+		out = append(out, ViewerRecord{User: u, Active: true, OwnerEnabled: true, HasPlex: u.PlexID != 0, PlexShared: u.PlexID != 0 && !u.IsOwner})
 	}
 	return out, nil
 }
