@@ -1,0 +1,218 @@
+[
+  {
+    "kind": "liveTVSource",
+    "id": "xtream",
+    "owner": "builtin",
+    "label": {
+      "source": "Xtream Codes login"
+    },
+    "hint": {
+      "source": "An M3U playlist of live streams, with an optional XMLTV guide."
+    },
+    "icon": "key-round",
+    "order": 10,
+    "meta": {
+      "params": [
+        {
+          "name": "name",
+          "kind": "text",
+          "label": {
+            "source": "Source name"
+          },
+          "hint": {},
+          "required": true
+        },
+        {
+          "name": "server",
+          "kind": "url",
+          "label": {
+            "source": "Server"
+          },
+          "hint": {},
+          "required": true
+        },
+        {
+          "name": "username",
+          "kind": "text",
+          "label": {
+            "source": "Username"
+          },
+          "hint": {},
+          "required": true
+        },
+        {
+          "name": "password",
+          "kind": "secret",
+          "label": {
+            "source": "Password"
+          },
+          "hint": {},
+          "required": true
+        },
+        {
+          "name": "output",
+          "kind": "select",
+          "label": {
+            "source": "Stream format"
+          },
+          "hint": {},
+          "options": [
+            {
+              "value": "ts",
+              "label": {
+                "source": "MPEG-TS"
+              }
+            },
+            {
+              "value": "m3u8",
+              "label": {
+                "source": "HLS"
+              }
+            }
+          ]
+        },
+        {
+          "name": "guideUrl",
+          "kind": "url",
+          "label": {
+            "source": "XMLTV guide override (optional)"
+          },
+          "hint": {}
+        }
+      ],
+      "editor": "xtream",
+      "yieldsChannels": true,
+      "yieldsGuide": true,
+      "test": true
+    }
+  },
+  {
+    "kind": "liveTVSource",
+    "id": "guideOnly",
+    "owner": "builtin",
+    "label": {
+      "source": "Guide only (XMLTV)"
+    },
+    "hint": {
+      "source": "An XMLTV guide on its own. Map any channel to it for listings."
+    },
+    "icon": "calendar-range",
+    "order": 30,
+    "meta": {
+      "params": [
+        {
+          "name": "name",
+          "kind": "text",
+          "label": {
+            "source": "Source name"
+          },
+          "hint": {},
+          "required": true
+        },
+        {
+          "name": "guideUrl",
+          "kind": "url",
+          "label": {
+            "source": "XMLTV guide"
+          },
+          "hint": {}
+        },
+        {
+          "name": "refreshHours",
+          "kind": "number",
+          "label": {
+            "source": "Keep it fresh"
+          },
+          "hint": {}
+        }
+      ],
+      "editor": "guide",
+      "yieldsGuide": true,
+      "test": true
+    }
+  },
+  {
+    "kind": "liveTVSource",
+    "id": "m3u",
+    "owner": "builtin",
+    "label": {
+      "source": "M3U playlist"
+    },
+    "hint": {
+      "source": "An M3U playlist of live streams, with an optional XMLTV guide."
+    },
+    "icon": "list-video",
+    "order": 20,
+    "meta": {
+      "params": [
+        {
+          "name": "name",
+          "kind": "text",
+          "label": {
+            "source": "Source name"
+          },
+          "hint": {},
+          "required": true
+        },
+        {
+          "name": "playlistUrl",
+          "kind": "url",
+          "label": {
+            "source": "M3U playlist"
+          },
+          "hint": {},
+          "placeholder": "https://…/playlist.m3u"
+        },
+        {
+          "name": "guideUrl",
+          "kind": "url",
+          "label": {
+            "source": "XMLTV guide (optional)"
+          },
+          "hint": {}
+        },
+        {
+          "name": "refreshHours",
+          "kind": "number",
+          "label": {
+            "source": "Keep it fresh"
+          },
+          "hint": {}
+        }
+      ],
+      "editor": "playlist",
+      "yieldsChannels": true,
+      "yieldsGuide": true,
+      "test": true
+    }
+  },
+  {
+    "kind": "liveTVSource",
+    "id": "virtual",
+    "owner": "builtin",
+    "label": {
+      "source": "Virtual channel"
+    },
+    "hint": {
+      "source": "A channel programmed from your catalogue."
+    },
+    "icon": "tv",
+    "order": 40,
+    "meta": {
+      "params": [
+        {
+          "name": "collection",
+          "kind": "collection",
+          "label": {
+            "source": "Collection"
+          },
+          "hint": {}
+        }
+      ],
+      "editor": "virtual",
+      "yieldsChannels": true,
+      "yieldsGuide": true,
+      "test": true
+    }
+  }
+]
