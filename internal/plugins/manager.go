@@ -29,6 +29,7 @@ type Backends struct {
 	CatalogSearch func(ctx context.Context, query string, limit, offset int) (json.RawMessage, error)
 	CatalogGet    func(ctx context.Context, id string) (json.RawMessage, error)
 	ViewerHistory func(ctx context.Context, viewerID int64, limit, offset int) (json.RawMessage, error)
+	ViewerNames   func(ctx context.Context, ids []int64) (json.RawMessage, error)
 	// SetWatchState applies a watch-state write and returns its inverse
 	// (the previous state) for the journal.
 	SetWatchState func(ctx context.Context, viewerID int64, titleID string, watched bool) (previous bool, err error)

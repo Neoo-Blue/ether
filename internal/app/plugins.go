@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -44,7 +46,28 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 		IsLeader: func() bool { return a.cluster == nil || a.cluster.IsLeader() },
 		Bus:      clusterbus.FromCluster(a.cluster),
 		Backends: plugins.Backends{
+			ViewerNames: func(ctx context.Context, ids []int64) (json.RawMessage, error) {
+				out := make([]map[string]any, 0, len(ids))
+				for _, id := range ids {
+					u, err := a.users.ActiveUser(ctx, id)
+					if errors.Is(err, core.ErrNotFound) || errors.Is(err, core.ErrUnauthorized) || (err == nil && u == nil) {
+						continue
+					}
+					if err != nil {
+						return nil, err
+					}
+					name := u.Title
+					if name == "" {
+						name = u.Username
+					}
+					out = append(out, map[string]any{"id": u.ID, "name": name})
+				}
+				return json.Marshal(out)
+			},
 			CatalogSearch: func(ctx context.Context, query string, limit, offset int) (json.RawMessage, error) {
+				if offset < 0 || offset > 2000 {
+					return nil, errors.New("catalog search offset out of range")
+				}
 				if offset > 0 {
 					limit += offset
 				}
@@ -60,16 +83,88 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 					}
 				}
 				type titleSummary struct {
-					ID    int64  `json:"id"`
-					Title string `json:"title"`
-					Type  string `json:"type"`
-					Year  int    `json:"year,omitempty"`
+					ID     int64  `json:"id"`
+					Title  string `json:"title"`
+					Type   string `json:"type"`
+					Year   int    `json:"year,omitempty"`
+					TMDBID int64  `json:"tmdbId,omitempty"`
+					IMDBID string `json:"imdbId,omitempty"`
 				}
 				out := make([]titleSummary, 0, len(titles))
 				for _, t := range titles {
-					out = append(out, titleSummary{ID: int64(t.Key), Title: t.Title, Type: string(t.Type), Year: t.Year})
+					out = append(out, titleSummary{ID: int64(t.Key), Title: t.Title, Type: string(t.Type), Year: t.Year, TMDBID: t.IDs.TMDB, IMDBID: t.IDs.IMDB})
 				}
 				return json.Marshal(map[string]any{"titles": out})
+			},
+			CatalogGet: func(ctx context.Context, id string) (json.RawMessage, error) {
+				var title *core.Title
+				var err error
+				switch {
+				case strings.HasPrefix(id, "imdb:"):
+					title, err = a.catalog.ByExternalID(ctx, "imdb", strings.TrimPrefix(id, "imdb:"))
+				case strings.HasPrefix(id, "tmdb:"):
+					var n int64
+					n, err = strconv.ParseInt(strings.TrimPrefix(id, "tmdb:"), 10, 64)
+					if err == nil && n > 0 {
+						title, err = a.catalog.Get(ctx, core.MovieKey(n))
+						if errors.Is(err, core.ErrNotFound) {
+							title, err = a.catalog.Get(ctx, core.ShowKey(n))
+						}
+					} else if err == nil {
+						err = errors.New("invalid TMDB id")
+					}
+				default:
+					var key core.RatingKey
+					key, err = core.ParseRatingKey(id)
+					if err == nil {
+						title, err = a.catalog.Get(ctx, key)
+					}
+				}
+				if err != nil {
+					return nil, err
+				}
+				if title == nil {
+					return nil, core.ErrNotFound
+				}
+				return json.Marshal(map[string]any{"id": title.Key.String(), "title": title.Title, "type": title.Type, "year": title.Year, "tmdbId": title.IDs.TMDB, "imdbId": title.IDs.IMDB, "genres": title.Genres, "posterPath": title.PosterPath, "summary": title.Summary})
+			},
+			ViewerHistory: func(ctx context.Context, viewerID int64, limit, offset int) (json.RawMessage, error) {
+				if viewerID <= 0 || limit <= 0 || limit > 200 || offset < 0 || offset > 2000 {
+					return nil, errors.New("invalid history page")
+				}
+				history, err := a.state.History(ctx, viewerID, time.Time{}, limit+offset)
+				if err != nil {
+					return nil, err
+				}
+				if offset >= len(history) {
+					return json.RawMessage(`[]`), nil
+				}
+				history = history[offset:]
+				keys := make([]core.RatingKey, len(history))
+				for i, entry := range history {
+					keys[i] = entry.Key
+				}
+				statuses, err := a.state.GetMany(ctx, viewerID, keys)
+				if err != nil {
+					return nil, err
+				}
+				out := make([]map[string]any, 0, limit)
+				for _, entry := range history {
+					k := entry.Key
+					kind := "movie"
+					if k.Kind() == core.KindEpisode {
+						kind = "episode"
+					} else if k.Kind() == core.KindShow {
+						kind = "show"
+					}
+					progress := float64(0)
+					status := statuses[k]
+					if status.Duration > 0 {
+						progress = float64(status.ViewOffset) / float64(status.Duration)
+					}
+					out = append(out, map[string]any{"titleId": k.String(), "type": kind, "watchedAt": entry.ViewedAt, "progress": progress, "completed": entry.Completed})
+				}
+				return json.Marshal(out)
 			},
 			Notice: func(text string) {
 				a.log.Warn("plugin notice", "text", text)

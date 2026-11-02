@@ -1,0 +1,67 @@
+{
+  "id": "org.ether.examples.dub-language",
+  "version": "1.0.0",
+  "name": "Dub language",
+  "description": "Prefer releases with selected audio languages.",
+  "ether": {
+    "protocol": 1,
+    "kind": "extension",
+    "capabilities": [
+      "ranking_step",
+      "rule_condition"
+    ],
+    "summary": "$t:summary",
+    "icon": "assets/icon.svg",
+    "runtime": {
+      "kind": "hosted",
+      "entry": "dist/plugin.js"
+    },
+    "permissions": {
+      "catalog": "none"
+    },
+    "settings": {
+      "$ref": "settings.schema.json"
+    },
+    "strings": {
+      "en": "i18n/en.json",
+      "fr": "i18n/fr.json"
+    },
+    "contributes": {
+      "rankingSteps": [
+        {
+          "key": "dub_language",
+          "label": "$t:step",
+          "hint": "$t:hint",
+          "editor": {
+            "kind": "ordered_list",
+            "options": [
+              "en",
+              "fr",
+              "de",
+              "es",
+              "it",
+              "ja",
+              "pt",
+              "ko",
+              "zh",
+              "hi"
+            ]
+          }
+        }
+      ],
+      "ruleConditions": [
+        {
+          "key": "dub_language",
+          "label": "$t:condition",
+          "operators": [
+            "equals",
+            "in"
+          ],
+          "editor": {
+            "valueClass": "language"
+          }
+        }
+      ]
+    }
+  }
+}
