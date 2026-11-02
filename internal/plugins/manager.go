@@ -441,7 +441,11 @@ func (m *Manager) Call(ctx context.Context, pluginID string, req Request) (Respo
 	}
 	rt, err := m.runtimeFor(ctx, r)
 	if err != nil {
-		m.recordFailure(ctx, pluginID, "runtime unavailable: "+err.Error(), false)
+		message := m.store.redactKnown(ctx, pluginID, err.Error())
+		m.recordFailure(ctx, pluginID, "runtime unavailable: "+message, false)
+		if message != err.Error() {
+			err = errors.New(message)
+		}
 		return Response{}, err
 	}
 	resp, err := rt.Call(cctx, req)
@@ -461,6 +465,9 @@ func (m *Manager) Call(ctx context.Context, pluginID string, req Request) (Respo
 		// Crash policy: drop the instance so the next call restarts it.
 		m.closeRuntime(pluginID)
 		m.recordFailure(ctx, pluginID, rec.Error, true)
+		if rec.Error != err.Error() {
+			err = errors.New(rec.Error)
+		}
 		return Response{}, err
 	}
 	if len(rec.Request) > 64*1024 {

@@ -253,3 +253,18 @@ func TestInstallRedirectDoesNotSendSourceURLAsReferer(t *testing.T) {
 		t.Fatal("source secret sent in redirect Referer")
 	}
 }
+
+func TestPluginRuntimeErrorsDoNotExposeSavedSecrets(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	rec := env.installHello(t, "1.0.0")
+	const secret = "private-value-472815"
+	if _, err := env.m.Configure(ctx, rec.ID, map[string]any{"api_token": secret}); err != nil {
+		t.Fatal(err)
+	}
+	env.fake.fail = errors.New("failure: " + secret)
+	_, err := env.m.Call(ctx, rec.ID, Request{Path: "/ether/view/home"})
+	if err == nil || strings.Contains(err.Error(), secret) {
+		t.Fatalf("runtime error exposed saved secret: %v", err)
+	}
+}
