@@ -259,6 +259,19 @@ func (s *Service) DownloadOnDemand(ctx context.Context, title *core.Title, fileI
 		return core.StreamInfo{}, core.ErrNotFound
 	}
 	id := cacheID(title, o.lang, fileID)
+	if o.cand.PluginID != "" {
+		s.mu.Lock()
+		p := s.pluginProviders[o.cand.PluginID]
+		s.mu.Unlock()
+		if p == nil {
+			return core.StreamInfo{}, core.ErrNotFound
+		}
+		var err error
+		ctx, err = p.Pick(ctx, title, o.cand)
+		if err != nil {
+			return core.StreamInfo{}, err
+		}
+	}
 	if _, err := s.fetchAndCache(ctx, id, o.cand, title.Key); err != nil {
 		return core.StreamInfo{}, err
 	}

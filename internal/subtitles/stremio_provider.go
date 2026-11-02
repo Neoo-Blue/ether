@@ -96,6 +96,12 @@ func (s *Service) searchEnabled() bool {
 	if s.dir == "" {
 		return false
 	}
+	s.mu.Lock()
+	hasPlugins := len(s.pluginProviders) > 0
+	s.mu.Unlock()
+	if hasPlugins {
+		return true
+	}
 	for _, p := range s.providerList() {
 		switch p.Kind {
 		case config.SubtitleProviderOpenSubtitles:
@@ -267,6 +273,26 @@ func (s *Service) searchProviders(ctx context.Context, title *core.Title, lang, 
 		}
 		for j := range cands {
 			cands[j].providerOrder = i
+		}
+		all = append(all, cands...)
+	}
+	s.mu.Lock()
+	pluginProviders := make([]PluginProvider, 0, len(s.pluginProviders))
+	for _, p := range s.pluginProviders {
+		pluginProviders = append(pluginProviders, p)
+	}
+	s.mu.Unlock()
+	sort.Slice(pluginProviders, func(i, j int) bool { return pluginProviders[i].ID() < pluginProviders[j].ID() })
+	for i, p := range pluginProviders {
+		cands, err := p.Search(ctx, title, lang, movieHash, videoSize)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		for j := range cands {
+			cands[j].providerOrder = len(s.providerList()) + i
 		}
 		all = append(all, cands...)
 	}

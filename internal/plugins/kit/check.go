@@ -841,16 +841,15 @@ func checkRoutes(ctx context.Context, rep *Report, man plugins.Manifest, plug *w
 		})
 	}
 
-	// Subtitles: must refuse calls without X-Ether-Pick and succeed with X-Ether-Pick.
+	// Listing is a search; only the download requires a pick.
 	if man.HasCapability(plugins.CapSubtitles) {
 		subPath := "/subtitles/movie/tt0012349/videoHash=0123456789abcdef.json"
-		// 1. Without pick token: must refuse (status >= 400 or error object).
-		callNoPick(ctx, rep, plug, subPath)
-		// 2. With pick token: must return subtitles array.
+		// The plugin must refuse a download without a pick.
+		callNoPick(ctx, rep, plug, "/ether/subtitles/download")
+		// Listing must succeed without a pick.
 		fixtures = append(fixtures, routeFixture{
-			method:  "GET",
-			path:    subPath,
-			headers: map[string]string{"X-Ether-Pick": "kit-pick-token-1"},
+			method: "GET",
+			path:   subPath,
 			validate: func(resp wasm.Response) string {
 				var doc struct {
 					Subtitles []map[string]any `json:"subtitles"`
@@ -1006,13 +1005,14 @@ func callNoPick(ctx context.Context, rep *Report, plug *wasm.Plugin, subPath str
 	defer cancel()
 	t0 := time.Now()
 	resp, _, err := plug.CallDetailed(cctx, wasm.Request{
-		Method:  "GET",
+		Method:  "POST",
 		Path:    subPath,
+		Body:    json.RawMessage(`{"id":"fixture","lang":"en","format":"srt"}`),
 		Headers: map[string]string{"X-Ether-Request-Id": "kit-nopick"},
 	})
 	dur := time.Since(t0)
 	rt := RouteTiming{
-		Method:     "GET",
+		Method:     "POST",
 		Route:      subPath + " (without X-Ether-Pick)",
 		Status:     resp.Status,
 		Duration:   dur,
@@ -1031,8 +1031,8 @@ func callNoPick(ctx context.Context, rep *Report, plug *wasm.Plugin, subPath str
 		rep.addErr("subtitles", subPath, rt.Error)
 		return
 	}
-	if resp.Status < 400 || resp.Status >= 500 {
-		rt.Error = "subtitle route must refuse calls without X-Ether-Pick (expected HTTP 4xx)"
+	if resp.Status != http.StatusForbidden {
+		rt.Error = "subtitle route must refuse calls without X-Ether-Pick (expected HTTP 403)"
 		rep.Routes = append(rep.Routes, rt)
 		rep.addErr("subtitles", subPath, rt.Error)
 		return

@@ -79,17 +79,18 @@ type Options struct {
 
 // Service is the OpenSubtitles + Stremio subtitle client and disk cache.
 type Service struct {
-	cfg         config.OpenSubtitles
-	providers   []config.SubtitleProvider
-	stremioHTTP *http.Client
-	dir         string
-	base        string
-	http        *http.Client
-	log         *slog.Logger
-	agent       string
-	negTTL      time.Duration
-	maxWait     time.Duration
-	now         func() time.Time
+	cfg             config.OpenSubtitles
+	providers       []config.SubtitleProvider
+	pluginProviders map[string]PluginProvider
+	stremioHTTP     *http.Client
+	dir             string
+	base            string
+	http            *http.Client
+	log             *slog.Logger
+	agent           string
+	negTTL          time.Duration
+	maxWait         time.Duration
+	now             func() time.Time
 
 	mu          sync.Mutex
 	token       string // login token, cached
@@ -244,10 +245,13 @@ type Candidate struct {
 	// Provider names the source shown to viewers ("OpenSubtitles" or an
 	// add-on name); ProviderID is its configured id. DownloadURL, when
 	// set, is the add-on file URL fetched only on a viewer pick.
-	Provider      string
-	ProviderID    string
-	DownloadURL   string
-	providerOrder int
+	Provider         string
+	ProviderID       string
+	DownloadURL      string
+	PluginID         string
+	PluginSubtitleID string
+	PluginFormat     string
+	providerOrder    int
 }
 
 type searchResponse struct {
@@ -588,6 +592,15 @@ func (s *Service) requestLink(ctx context.Context, c Candidate) (string, error) 
 
 // download fetches the raw subtitle file bytes for a candidate.
 func (s *Service) download(ctx context.Context, c Candidate) ([]byte, error) {
+	if c.PluginID != "" {
+		s.mu.Lock()
+		p := s.pluginProviders[c.PluginID]
+		s.mu.Unlock()
+		if p == nil {
+			return nil, core.ErrNotFound
+		}
+		return p.Download(ctx, c)
+	}
 	if c.DownloadURL != "" {
 		return s.downloadStremio(ctx, c)
 	}

@@ -84,6 +84,8 @@ type Manager struct {
 	// healthMu serializes health read-modify-writes so concurrent calls
 	// (resolves on the hot path, scheduled jobs) never lose an update.
 	healthMu sync.Mutex
+	pickMu   sync.Mutex
+	picks    map[string]subtitlePick
 	// warming holds plugin ids whose runtime is loading in the background
 	// (guarded by mu), so the hot path never waits for a load.
 	warming map[string]bool
@@ -409,7 +411,7 @@ func DeadlineFor(path string) time.Duration {
 		return 5 * time.Minute
 	case strings.HasPrefix(path, "/catalog/"), strings.HasPrefix(path, "/ether/event"), strings.HasPrefix(path, "/ether/action"), strings.HasPrefix(path, "/ether/markers"):
 		return 10 * time.Second
-	case strings.HasPrefix(path, "/subtitles/"):
+	case strings.HasPrefix(path, "/subtitles/"), path == "/ether/subtitles/download":
 		return 5 * time.Second
 	default:
 		return 30 * time.Second
@@ -420,6 +422,14 @@ func DeadlineFor(path string) time.Duration {
 // inspector ring (secrets redacted) and feeds failures into health.
 // Adapters (WS9) call plugins only through here.
 func (m *Manager) Call(ctx context.Context, pluginID string, req Request) (Response, error) {
+	if req.Path == "/ether/subtitles/download" {
+		var body struct {
+			ID string `json:"id"`
+		}
+		if json.Unmarshal(req.Body, &body) != nil || !m.consumeSubtitlePick(req.Headers["X-Ether-Pick"], pluginID, req.Headers["X-Ether-Title"], body.ID) {
+			return Response{Status: http.StatusForbidden}, ErrPermissionDenied
+		}
+	}
 	r, err := m.store.record(ctx, pluginID)
 	if err != nil {
 		return Response{}, err

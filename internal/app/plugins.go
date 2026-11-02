@@ -161,6 +161,7 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 	}
 	a.closers = append(a.closers, func() { _ = tunnel.Close() })
 	adapters.Attach(mgr, a.collections, a.personalize, a.livetv)
+	adapters.AttachSubtitles(mgr, a.subtitles)
 	if err := mgr.Start(ctx); err != nil {
 		return nil, err
 	}

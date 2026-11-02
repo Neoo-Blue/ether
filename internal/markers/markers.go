@@ -36,10 +36,11 @@ type Marker struct {
 // Lookup is the live skip-marker configuration.
 // IntroOff and CreditsOff hide those buttons. The zero value offers both.
 type Lookup struct {
-	Enabled    bool
-	APIKey     string
-	IntroOff   bool
-	CreditsOff bool
+	Enabled     bool
+	APIKey      string
+	IntroOff    bool
+	CreditsOff  bool
+	SourceOrder []string
 }
 
 type Options struct {
@@ -139,7 +140,7 @@ func dropMovieBumpers(key core.RatingKey, in []Marker) []Marker {
 }
 
 func valid(m Marker, d time.Duration) bool {
-	return (m.Type == "intro" || m.Type == "credits" || m.Type == "recap") && m.StartMS >= 0 && m.EndMS > m.StartMS && m.EndMS <= d.Milliseconds()
+	return (m.Type == "intro" || m.Type == "credits" || m.Type == "recap" || m.Type == "preview") && m.StartMS >= 0 && m.EndMS > m.StartMS && m.EndMS <= d.Milliseconds()
 }
 
 // chapterSlack is how far a chapter may end past the media duration and
@@ -235,7 +236,9 @@ func (s *Service) CachedMarkers(ctx context.Context, key core.RatingKey, info co
 	out := FromChapters(info)
 	cached, ok, err := s.cached(ctx, key, info.Duration)
 	if err == nil && ok {
-		out = merge(out, cached)
+		out = s.mergeSources(ctx, key, info.Duration, out, cached)
+	} else if err == nil {
+		out = s.mergeSources(ctx, key, info.Duration, out, nil)
 	}
 	_, _, intro, credits := s.lookup()
 	return offer(s.applyStingers(ctx, key, info, dropMovieBumpers(key, out)), intro, credits), err
@@ -275,11 +278,11 @@ func (s *Service) rawMarkers(ctx context.Context, key core.RatingKey, info core.
 		return out, err
 	}
 	if ok {
-		return merge(out, cached), nil
+		return s.mergeSources(ctx, key, info.Duration, out, cached), nil
 	}
 	enabled, apiKey, _, _ := s.lookup()
 	if !enabled || info.Duration <= 0 || (key.Kind() != core.KindEpisode && key.Kind() != core.KindMovie) {
-		return out, nil
+		return s.mergeSources(ctx, key, info.Duration, out, nil), nil
 	}
 	remote, refDuration, err := s.fetch(ctx, key, info.Duration, apiKey)
 	if err != nil {
@@ -291,7 +294,7 @@ func (s *Service) rawMarkers(ctx context.Context, key core.RatingKey, info core.
 			return merge(out, remote), err
 		}
 	}
-	return merge(out, remote), nil
+	return s.mergeSources(ctx, key, info.Duration, out, remote), nil
 }
 func merge(a, b []Marker) []Marker {
 	// Existing sources win for each kind, while retaining every range from

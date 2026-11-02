@@ -1,0 +1,71 @@
+package markers
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"time"
+
+	"github.com/braedonsaunders/ether/internal/core"
+	"github.com/braedonsaunders/ether/internal/store"
+)
+
+func init() {
+	store.Register("markers", 2, `CREATE TABLE markers_plugin_cache(rating_key INTEGER NOT NULL,runtime_ms INTEGER NOT NULL,source TEXT NOT NULL,ranges TEXT NOT NULL,expires_at INTEGER NOT NULL,PRIMARY KEY(rating_key,runtime_ms,source));`)
+}
+
+// PutPlugin stores a background result separately for each source.
+func (s *Service) PutPlugin(ctx context.Context, key core.RatingKey, d time.Duration, source string, ranges []Marker) error {
+	if s.o.DB == nil || source == "" {
+		return errors.New("marker cache requires database and source")
+	}
+	for i := range ranges {
+		if !valid(ranges[i], d) {
+			return errors.New("invalid marker range")
+		}
+		ranges[i].Source = source
+	}
+	raw, err := json.Marshal(ranges)
+	if err != nil {
+		return err
+	}
+	_, err = s.o.DB.ExecContext(ctx, `INSERT INTO markers_plugin_cache VALUES(?,?,?,?,?) ON CONFLICT(rating_key,runtime_ms,source) DO UPDATE SET ranges=excluded.ranges,expires_at=excluded.expires_at`, int64(key), d.Milliseconds(), source, string(raw), s.o.Now().Add(s.o.TTL).Unix())
+	return err
+}
+
+func (s *Service) mergeSources(ctx context.Context, key core.RatingKey, d time.Duration, chapters, introdb []Marker) []Marker {
+	var order []string
+	if s.o.Config != nil {
+		order = s.o.Config().SourceOrder
+	}
+	if len(order) == 0 {
+		return merge(chapters, introdb)
+	}
+	var out []Marker
+	seen := map[string]bool{}
+	for _, source := range order {
+		if seen[source] {
+			continue
+		}
+		seen[source] = true
+		switch source {
+		case "chapter":
+			out = merge(out, chapters)
+		case "theintrodb":
+			out = merge(out, introdb)
+		default:
+			if s.o.DB == nil {
+				continue
+			}
+			var raw string
+			err := s.o.DB.QueryRowContext(ctx, `SELECT ranges FROM markers_plugin_cache WHERE rating_key=? AND runtime_ms=? AND source=? AND expires_at>?`, int64(key), d.Milliseconds(), source, s.o.Now().Unix()).Scan(&raw)
+			if err == nil {
+				var rows []Marker
+				if json.Unmarshal([]byte(raw), &rows) == nil {
+					out = merge(out, rows)
+				}
+			}
+		}
+	}
+	return out
+}
