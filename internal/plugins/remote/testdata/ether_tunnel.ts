@@ -315,14 +315,16 @@ export class Tunnel {
     // still parses in a plain type check without @types/node.
     const fs = (await import("node:fs" as string)) as typeof import("fs");
     const pathMod = (await import("node:path" as string)) as typeof import("path");
-    const root = pathMod.resolve(this.opts.fileRoot!);
+    const root = fs.realpathSync(pathMod.resolve(this.opts.fileRoot!));
+    const requestedRoot = req.header("X-Ether-File-Root");
+    if (requestedRoot && fs.realpathSync(requestedRoot) !== root) throw new Error("file root is not served by this sidecar");
     const rel = decodeURIComponent(req.path.slice("/ether/file/".length));
-    const full = pathMod.resolve(root, "." + pathMod.sep + rel.split("/").join(pathMod.sep));
-    if (full !== root && !full.startsWith(root + pathMod.sep)) {
-      throw new Error("path escapes the file root");
-    }
+    const candidate = pathMod.resolve(root, "." + pathMod.sep + rel.split("/").join(pathMod.sep));
+    let full: string;
     let size: number;
     try {
+      full = fs.realpathSync(candidate);
+      if (full !== root && !full.startsWith(root.endsWith(pathMod.sep) ? root : root + pathMod.sep)) throw new Error("path escapes the file root");
       const stat = fs.statSync(full);
       if (!stat.isFile()) throw new Error("not a file");
       size = stat.size;

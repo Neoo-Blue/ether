@@ -13,6 +13,7 @@ import (
 
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/identity"
+	"github.com/braedonsaunders/ether/internal/plugins"
 	"github.com/braedonsaunders/ether/internal/store"
 )
 
@@ -107,5 +108,38 @@ func TestPairingExchangeAndRevocation(t *testing.T) {
 	}
 	if w.Code != 429 {
 		t.Fatalf("rate limit: %d", w.Code)
+	}
+}
+
+func TestPlainStremioThroughManagerAndURLRuntime(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/manifest.json":
+			_, _ = w.Write([]byte(`{"id":"org.example.plain","version":"1.0.0","name":"Plain"}`))
+		case "/stream/movie/tt123.json":
+			_, _ = w.Write([]byte(`{"streams":[{"name":"example"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	mgr, err := plugins.New(plugins.Deps{DB: store.OpenTest(t), FetchClient: srv.Client()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	factory := &Factory{TrustedLAN: func(string) bool { return true }}
+	mgr.RegisterRuntime("remote", factory.RuntimeFactory())
+	preview, err := mgr.PreviewInstall(context.Background(), plugins.Source{Kind: "url", URL: srv.URL + "/manifest.json", LAN: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := mgr.Install(context.Background(), preview, plugins.InstallOptions{AcceptAddedPermissions: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := mgr.Call(context.Background(), rec.ID, plugins.Request{Path: "/stream/movie/tt123.json"})
+	if err != nil || response.Status != 200 || !bytes.Contains(response.Body, []byte(`"example"`)) {
+		t.Fatalf("response %d %s: %v", response.Status, response.Body, err)
 	}
 }

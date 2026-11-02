@@ -109,6 +109,7 @@ type TunnelServer struct {
 
 	mu     sync.Mutex
 	conns  map[string]*tunnelConn
+	leases map[string]int
 	closed bool
 }
 
@@ -149,6 +150,7 @@ func NewTunnelServer(opts TunnelOptions) *TunnelServer {
 		timeout:      opts.Timeout,
 		log:          opts.Logger,
 		conns:        map[string]*tunnelConn{},
+		leases:       map[string]int{},
 	}
 	if s.maxBytes <= 0 {
 		s.maxBytes = DefaultMaxResponseBytes
@@ -296,7 +298,20 @@ func (s *TunnelServer) serve(ctx context.Context, ws *websocket.Conn, pluginID s
 // across sidecar reconnects; calls with no sidecar connected fail
 // with ErrDisconnected.
 func (s *TunnelServer) RuntimeFor(pluginID string) Runtime {
+	s.mu.Lock()
+	s.leases[pluginID]++
+	s.mu.Unlock()
 	return &tunnelRuntime{server: s, pluginID: pluginID}
+}
+
+// Disconnect drops a plugin's current socket, including in-flight requests.
+func (s *TunnelServer) Disconnect(pluginID string) {
+	s.mu.Lock()
+	conn := s.conns[pluginID]
+	s.mu.Unlock()
+	if conn != nil {
+		conn.teardown(ErrClosed)
+	}
 }
 
 // Connected lists the plugin ids with a live tunnel.
@@ -352,6 +367,7 @@ type tunnelRuntime struct {
 	// headers for symmetry with URL mode. The tunnel itself is
 	// already authenticated, so WS7 normally leaves this empty.
 	Credential string
+	closeOnce  sync.Once
 }
 
 // PluginID returns the plugin this runtime calls.
@@ -376,11 +392,19 @@ func (r *tunnelRuntime) CallStream(ctx context.Context, req Request) (*StreamRes
 // Close drops this plugin's tunnel connection, if any. The sidecar
 // may reconnect; use TunnelServer.Close to stop the endpoint.
 func (r *tunnelRuntime) Close() error {
-	conn, err := r.server.connFor(r.pluginID)
-	if err != nil {
-		return nil
-	}
-	conn.teardown(ErrClosed)
+	r.closeOnce.Do(func() {
+		r.server.mu.Lock()
+		r.server.leases[r.pluginID]--
+		var conn *tunnelConn
+		if r.server.leases[r.pluginID] <= 0 {
+			delete(r.server.leases, r.pluginID)
+			conn = r.server.conns[r.pluginID]
+		}
+		r.server.mu.Unlock()
+		if conn != nil {
+			conn.teardown(ErrClosed)
+		}
+	})
 	return nil
 }
 
@@ -401,9 +425,10 @@ var _ Streamer = (*tunnelRuntime)(nil)
 // Call reads the stream to the cap, so both reply styles share one
 // state machine.
 type pendingCall struct {
-	start  chan startInfo
-	chunks chan []byte
-	done   chan error // buffered 1: nil on clean end
+	start   chan startInfo
+	chunks  chan []byte
+	done    chan error // buffered 1: nil on clean end
+	ctxDone <-chan struct{}
 }
 
 type startInfo struct {
@@ -511,12 +536,16 @@ func (c *tunnelConn) dispatch(ctx context.Context, f frame) {
 		}
 		select {
 		case p.start <- startInfo{status: statusOr(f.Status), headers: cloneHeaders(f.Headers)}:
+		case <-p.ctxDone:
+			return
 		case <-ctx.Done():
 			return
 		}
 		if len(body) > 0 {
 			select {
 			case p.chunks <- body:
+			case <-p.ctxDone:
+				return
 			case <-ctx.Done():
 				return
 			}
@@ -525,6 +554,7 @@ func (c *tunnelConn) dispatch(ctx context.Context, f frame) {
 	case "response_start":
 		select {
 		case p.start <- startInfo{status: statusOr(f.Status), headers: cloneHeaders(f.Headers)}:
+		case <-p.ctxDone:
 		case <-ctx.Done():
 		}
 	case "response_chunk":
@@ -538,6 +568,7 @@ func (c *tunnelConn) dispatch(ctx context.Context, f frame) {
 		// of buffering a whole file in Ether's memory.
 		select {
 		case p.chunks <- data:
+		case <-p.ctxDone:
 		case <-ctx.Done():
 		}
 	case "response_end":
@@ -603,9 +634,10 @@ func (c *tunnelConn) begin(ctx context.Context, req Request, credential string) 
 	c.nextID++
 	id := fmt.Sprintf("%d", c.nextID)
 	p := &pendingCall{
-		start:  make(chan startInfo, 1),
-		chunks: make(chan []byte, streamChunkQueueSize),
-		done:   make(chan error, 1),
+		start:   make(chan startInfo, 1),
+		chunks:  make(chan []byte, streamChunkQueueSize),
+		done:    make(chan error, 1),
+		ctxDone: ctx.Done(),
 	}
 	c.pending[id] = p
 	c.mu.Unlock()

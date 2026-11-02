@@ -319,9 +319,12 @@ class Tunnel:
                 pass
 
     def _serve_file(self, req, req_id, chunk):
+        root = req.header("X-Ether-File-Root")
+        if root and os.path.realpath(root) != self.file_root:
+            raise ValueError("file root is not served by this sidecar")
         rel = urllib.parse.unquote(req.path[len("/ether/file/"):])
         full = os.path.realpath(os.path.join(self.file_root, rel))
-        if full != self.file_root and not full.startswith(self.file_root + os.sep):
+        if full != self.file_root and not full.startswith(self.file_root.rstrip(os.sep) + os.sep):
             raise ValueError("path escapes the file root")
         if not os.path.isfile(full):
             self._send({"type": "error", "id": req_id,

@@ -160,7 +160,7 @@ func (p *Pairing) WrapOwner(next http.Handler) http.Handler {
 				return
 			}
 			if p.tunnel != nil {
-				_ = p.tunnel.RuntimeFor(id).Close()
+				p.tunnel.Disconnect(id)
 			}
 			w.WriteHeader(http.StatusNoContent)
 		default:
@@ -202,7 +202,12 @@ func (p *Pairing) Exchange(w http.ResponseWriter, r *http.Request) {
 		delete(p.pending, hash)
 	}
 	p.mu.Unlock()
-	if !ok || !entry.expires.After(now) || !p.enabled(r.Context(), entry.plugin) || p.grants == nil {
+	if !ok || !entry.expires.After(now) || !p.enabled(r.Context(), entry.plugin) || p.grants == nil || p.owner == nil {
+		pairError(w, 401)
+		return
+	}
+	ownerID, err := p.owner(r.Context())
+	if err != nil || ownerID != entry.viewer {
 		pairError(w, 401)
 		return
 	}

@@ -634,6 +634,11 @@ func TestSamePluginOverURLAndTunnelPlusRangeRelay(t *testing.T) {
 	go func() { _ = sidecar.ServeOnce(ctx) }()
 	waitConnected(t, tunnel, "org.example.simple")
 	tunnelRT := tunnel.RuntimeFor("org.example.simple")
+	defer tunnelRT.Close()
+	duplicate := tunnel.RuntimeFor("org.example.simple")
+	if err := duplicate.Close(); err != nil || !tunnel.IsConnected("org.example.simple") {
+		t.Fatalf("closing duplicate runtime disconnected active tunnel: %v", err)
+	}
 
 	// Verify identical JSON responses across URL mode and tunnel mode.
 	for _, p := range []string{"/manifest.json", "/stream/movie/tt0012345.json", "/ether/health", "/missing"} {
@@ -1264,5 +1269,48 @@ func TestURLClientErrorDoesNotExposeURLSecrets(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "sensitive-token") {
 		t.Fatalf("error leaked URL: %v", err)
+	}
+}
+
+func TestFileHandlerRejectsSymlinkOutsideRoot(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "secret"), []byte("secret"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "secret"), filepath.Join(root, "escape")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	stream, err := FileHandler(root)(context.Background(), Request{Path: "/ether/file/escape"})
+	if stream != nil {
+		stream.Body.Close()
+	}
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("symlink escape: %v", err)
+	}
+	stream, err = FileHandler(root)(context.Background(), Request{Path: "/ether/file/escape", Headers: map[string][]string{"X-Ether-File-Root": {outside}}})
+	if stream != nil {
+		stream.Body.Close()
+	}
+	if !errors.Is(err, ErrPermissionDenied) {
+		t.Fatalf("mismatched root: %v", err)
+	}
+}
+
+func TestCancelledStreamUnblocksTunnelDispatch(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	p := &pendingCall{chunks: make(chan []byte, 1), start: make(chan startInfo, 1), done: make(chan error, 1), ctxDone: ctx.Done()}
+	p.chunks <- []byte("occupied")
+	conn := &tunnelConn{pending: map[string]*pendingCall{"1": p}}
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		conn.dispatch(context.Background(), frame{ID: "1", Type: "response_chunk", Data: encodeBody([]byte("more"))})
+	}()
+	cancel()
+	select {
+	case <-finished:
+	case <-time.After(5 * time.Second):
+		t.Fatal("cancelled stream left the tunnel reader blocked")
 	}
 }

@@ -385,10 +385,22 @@ func FileHandler(root string) StreamHandlerFunc {
 		if rel == req.Path || rel == "" {
 			return nil, ErrStreamNotHandled
 		}
+		if requestedRoot := firstHeader(req.Headers, "X-Ether-File-Root"); requestedRoot != "" && filepath.Clean(requestedRoot) != root {
+			return nil, ErrPermissionDenied
+		}
 		// URL paths are slash-separated on every platform.
 		clean := path.Clean("/" + rel)
 		full := filepath.Join(root, filepath.FromSlash(strings.TrimPrefix(clean, "/")))
-		if full != root && !strings.HasPrefix(full, root+string(filepath.Separator)) {
+		realRoot, err := filepath.EvalSymlinks(root)
+		if err != nil {
+			return nil, ErrNotFound
+		}
+		full, err = filepath.EvalSymlinks(full)
+		if err != nil {
+			return nil, ErrNotFound
+		}
+		prefix := strings.TrimSuffix(realRoot, string(filepath.Separator)) + string(filepath.Separator)
+		if full != realRoot && !strings.HasPrefix(full, prefix) {
 			return nil, fmt.Errorf("%w: path escapes the file root", ErrInvalid)
 		}
 		f, err := os.Open(full)
