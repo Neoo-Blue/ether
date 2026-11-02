@@ -12,6 +12,7 @@ import (
 
 	"github.com/braedonsaunders/ether/internal/config"
 	"github.com/braedonsaunders/ether/internal/core"
+	"github.com/braedonsaunders/ether/internal/extend"
 	"github.com/braedonsaunders/ether/internal/plugins"
 	"github.com/braedonsaunders/ether/internal/plugins/wasm"
 	"github.com/braedonsaunders/ether/internal/releaseparse"
@@ -19,16 +20,18 @@ import (
 )
 
 type rankingManagerFake struct {
-	rt     plugins.HotRuntime
-	record plugins.Record
-	slow   int
+	rt       plugins.HotRuntime
+	record   plugins.Record
+	slow     int
+	registry *extend.Registry
+	notReady bool
 }
 
 func (m *rankingManagerFake) Get(context.Context, string) (plugins.Record, error) {
 	return m.record, nil
 }
-func (m *rankingManagerFake) Hot(context.Context, string) (plugins.HotRuntime, bool) {
-	return m.rt, true
+func (m *rankingManagerFake) HotReady(string) (plugins.HotRuntime, bool) {
+	return m.rt, !m.notReady
 }
 func (m *rankingManagerFake) GetSettings(context.Context, string) (map[string]any, json.RawMessage, error) {
 	return map[string]any{}, nil, nil
@@ -51,18 +54,22 @@ func fixtureRanking(t testing.TB) *rankingManagerFake {
 	t.Helper()
 	eng := wasm.NewEngine(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	t.Cleanup(func() { _ = eng.Close() })
-	man := plugins.Manifest{Version: "1", Ether: &plugins.EtherBlock{Runtime: plugins.RuntimeDecl{Kind: "hosted", Entry: "p.js"}, Contributes: plugins.Contributes{RankingSteps: []plugins.RankingStepMeta{{Key: "dub"}}, RuleConditions: []plugins.RuleConditionMeta{{Key: "dub"}}}}}
+	man := plugins.Manifest{Version: "1", Ether: &plugins.EtherBlock{Runtime: plugins.RuntimeDecl{Kind: "hosted", Entry: "p.js"}, Contributes: plugins.Contributes{RankingSteps: []plugins.RankingStepMeta{{Key: "dub", Label: "Dub"}}, RuleConditions: []plugins.RuleConditionMeta{{Key: "dub", Label: "Dub"}}}}}
 	src := `globalThis.rank_key = c => c.name.includes("DUB") ? 10 : 0; globalThis.cond_match = (c,op,v) => c.name.includes("DUB");`
 	rt, err := plugins.HostedRuntimeFactory(eng)(plugins.Installed{ID: "test.dub", Manifest: man, Files: func(string) ([]byte, bool) { return []byte(src), true }})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = rt.Close() })
-	return &rankingManagerFake{rt: rt.(plugins.HotRuntime), record: plugins.Record{ID: "test.dub", Enabled: true, Manifest: man}}
+	reg := extend.New()
+	if err := reg.Register(plugins.DescriptorsFor(plugins.Manifest{ID: "test.dub", Version: man.Version, Ether: man.Ether})...); err != nil {
+		t.Fatal(err)
+	}
+	return &rankingManagerFake{rt: rt.(plugins.HotRuntime), registry: reg, record: plugins.Record{ID: "test.dub", Enabled: true, Manifest: man}}
 }
 func TestRankingHostedJSAndSlowFallback(t *testing.T) {
 	m := fixtureRanking(t)
-	session := (Ranking{Manager: m}).NewResolve(context.Background(), core.ClientCaps{})
+	session := (Ranking{Manager: m, Registry: m.registry}).NewResolve(context.Background(), core.ClientCaps{})
 	rels := []core.Release{{ID: "a", Name: "film.1080p"}, {ID: "b", Name: "film.DUB.1080p"}}
 	keys := session.Rank("plugin:test.dub/dub", rels, nil)
 	if session.(*rankingSession).slow["test.dub"] > 0 {
@@ -94,7 +101,7 @@ func TestRankingSlowFallback(t *testing.T) {
 	cond := core.ReleaseCondition{Field: "plugin:test.dub/dub", Operator: "equals", Value: "dub"}
 	var session resolver.RankingSession
 	m.rt = slowHot{m.rt}
-	session = (Ranking{Manager: m}).NewResolve(context.Background(), core.ClientCaps{})
+	session = (Ranking{Manager: m, Registry: m.registry}).NewResolve(context.Background(), core.ClientCaps{})
 	if v := session.Rank("plugin:test.dub/dub", rels, nil); v != nil {
 		t.Fatalf("timeout must neutralize step: %v", v)
 	}
@@ -134,7 +141,7 @@ func BenchmarkResolve500PluginStep(b *testing.B) {
 	}
 	s := resolver.New(rankingBenchIndexer{pool}, nil, nil, cfg, resolver.Options{})
 	defer s.Close()
-	s.SetRankingHooks(Ranking{Manager: m})
+	s.SetRankingHooks(Ranking{Manager: m, Registry: m.registry})
 	req := core.ResolveRequest{Title: &core.Title{Key: core.MovieKey(123), Type: core.TypeMovie, Title: "The Signal", Year: 1999, Runtime: 120 * time.Minute}, Client: core.ClientCaps{Product: "Plex Web", MaxHeight: 1080, VideoCodecs: []string{"h264"}}}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -160,7 +167,7 @@ func TestHostedJSChangesActualResolve(t *testing.T) {
 	}
 	s := resolver.New(rankingBenchIndexer{pool}, nil, nil, cfg, resolver.Options{})
 	defer s.Close()
-	s.SetRankingHooks(Ranking{Manager: m})
+	s.SetRankingHooks(Ranking{Manager: m, Registry: m.registry})
 	req := core.ResolveRequest{Title: &core.Title{Key: core.MovieKey(123), Type: core.TypeMovie, Title: "The Signal", Year: 1999, Runtime: 120 * time.Minute}, Client: core.ClientCaps{Product: "Plex Web", MaxHeight: 1080, VideoCodecs: []string{"h264"}}}
 	got, err := s.Resolve(context.Background(), req)
 	if err != nil {
@@ -171,5 +178,27 @@ func TestHostedJSChangesActualResolve(t *testing.T) {
 	}
 	if got.Release.ID != "1" {
 		t.Fatalf("winner %q, slow=%d", got.Release.ID, m.slow)
+	}
+}
+
+func TestUnreadyAndMissingPluginAreNeutral(t *testing.T) {
+	m := fixtureRanking(t)
+	m.notReady = true
+	session := (Ranking{Manager: m, Registry: m.registry}).NewResolve(context.Background(), core.ClientCaps{})
+	r := core.Release{ID: "1", Name: "DUB"}
+	if keys := session.Rank("plugin:test.dub/dub", []core.Release{r}, nil); keys != nil {
+		t.Fatalf("unready keys: %v", keys)
+	}
+	cond := core.ReleaseCondition{Field: "plugin:test.dub/dub", Operator: "equals", Value: "x"}
+	if matched, available := session.Match(r, cond, false); matched || !available {
+		t.Fatalf("unready = %v, %v", matched, available)
+	}
+	cond.Field = "plugin:missing/dub"
+	if _, available := session.Match(r, cond, false); available {
+		t.Fatal("missing plugin should remain unknown")
+	}
+	session.Close()
+	if m.slow != 0 {
+		t.Fatalf("warming recorded as slow: %d", m.slow)
 	}
 }

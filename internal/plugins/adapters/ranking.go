@@ -8,32 +8,33 @@ import (
 	"time"
 
 	"github.com/braedonsaunders/ether/internal/core"
+	"github.com/braedonsaunders/ether/internal/extend"
 	"github.com/braedonsaunders/ether/internal/plugins"
 	"github.com/braedonsaunders/ether/internal/resolver"
 )
 
 // Ranking bridges the resolver to installed hosted hot-path plugins.
 type RankingManager interface {
-	Get(context.Context, string) (plugins.Record, error)
-	Hot(context.Context, string) (plugins.HotRuntime, bool)
-	GetSettings(context.Context, string) (map[string]any, json.RawMessage, error)
+	HotReady(string) (plugins.HotRuntime, bool)
 	RecordSlow(context.Context, string, int)
 }
-type Ranking struct{ Manager RankingManager }
+type Ranking struct {
+	Manager  RankingManager
+	Registry *extend.Registry
+}
 
 func (a Ranking) NewResolve(ctx context.Context, caps core.ClientCaps) resolver.RankingSession {
-	return &rankingSession{ctx: ctx, manager: a.Manager, caps: caps, runtimes: map[string]*rankingRuntime{}, matches: map[string]bool{}, slow: map[string]int{}}
+	return &rankingSession{ctx: ctx, manager: a.Manager, registry: a.Registry, caps: caps, runtimes: map[string]*rankingRuntime{}, matches: map[string]bool{}, slow: map[string]int{}}
 }
 
 type rankingRuntime struct {
 	hot           plugins.HotRuntime
-	record        plugins.Record
-	config        json.RawMessage
 	conditionTime time.Duration
 }
 type rankingSession struct {
 	ctx      context.Context
 	manager  RankingManager
+	registry *extend.Registry
 	caps     core.ClientCaps
 	runtimes map[string]*rankingRuntime
 	matches  map[string]bool
@@ -62,43 +63,28 @@ func (s *rankingSession) runtime(id string) *rankingRuntime {
 	if s.manager == nil {
 		return nil
 	}
-	rec, err := s.manager.Get(s.ctx, id)
-	if err != nil || !rec.Enabled || rec.Shadow || rec.Manifest.Ether == nil {
-		return nil
-	}
-	hot, ok := s.manager.Hot(s.ctx, id)
+	hot, ok := s.manager.HotReady(id)
 	if !ok {
 		return nil
 	}
-	settings, _, err := s.manager.GetSettings(s.ctx, id)
-	if err != nil {
-		return nil
-	}
-	config, err := json.Marshal(settings)
-	if err != nil {
-		return nil
-	}
-	rt := &rankingRuntime{hot: hot, record: rec, config: config}
+	rt := &rankingRuntime{hot: hot}
 	s.runtimes[id] = rt
 	return rt
 }
+func (s *rankingSession) declared(kind extend.Kind, step, owner string) bool {
+	if s.registry == nil {
+		return false
+	}
+	d, ok := s.registry.Get(kind, step)
+	return ok && d.Owner == owner
+}
 func (s *rankingSession) Rank(step string, releases []core.Release, verified []bool) []int64 {
-	id, key, ok := splitHotID(step)
-	if !ok {
+	id, _, ok := splitHotID(step)
+	if !ok || !s.declared(extend.KindRankingStep, step, id) {
 		return nil
 	}
 	rt := s.runtime(id)
 	if rt == nil || !rt.hot.HasRankKey() {
-		return nil
-	}
-	found := false
-	for _, decl := range rt.record.Manifest.Ether.Contributes.RankingSteps {
-		if decl.Key == key {
-			found = true
-			break
-		}
-	}
-	if !found {
 		return nil
 	}
 	facts := make([]plugins.CandidateFacts, len(releases))
@@ -106,7 +92,7 @@ func (s *rankingSession) Rank(step string, releases []core.Release, verified []b
 		v := i < len(verified) && verified[i]
 		facts[i] = candidateFacts(r, s.caps, v)
 	}
-	keys, out, err := rt.hot.RankBatch(s.ctx, facts, rt.config)
+	keys, out, err := rt.hot.RankBatch(s.ctx, facts, json.RawMessage(`{}`))
 	slow := out.Slow
 	if (err != nil || (out.Status != "" && out.Status != "ok")) && slow == 0 {
 		slow = len(releases)
@@ -121,22 +107,12 @@ func (s *rankingSession) Rank(step string, releases []core.Release, verified []b
 }
 func (s *rankingSession) Match(rel core.Release, cond core.ReleaseCondition, verified bool) (bool, bool) {
 	id, key, ok := splitHotID(cond.Field)
-	if !ok {
+	if !ok || !s.declared(extend.KindRuleField, cond.Field, id) {
 		return false, false
 	}
 	rt := s.runtime(id)
 	if rt == nil || !rt.hot.HasCondMatch() {
-		return false, false
-	}
-	found := false
-	for _, decl := range rt.record.Manifest.Ether.Contributes.RuleConditions {
-		if decl.Key == key {
-			found = true
-			break
-		}
-	}
-	if !found {
-		return false, false
+		return false, true
 	}
 	value, _ := json.Marshal(cond.Value)
 	if cond.Operator == "range" {

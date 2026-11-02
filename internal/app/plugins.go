@@ -76,7 +76,7 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 	}
 	a.bindStreamSources(mgr)
 	if a.resolver != nil {
-		a.resolver.SetRankingHooks(adapters.Ranking{Manager: mgr})
+		a.resolver.SetRankingHooks(adapters.Ranking{Manager: mgr, Registry: a.extendRT.registry})
 	}
 	unsubscribe := mgr.SubscribeInvalidations()
 
