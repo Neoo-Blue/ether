@@ -69,6 +69,16 @@ export const SERVER: FieldGroup[] = localized(() => [
         placeholder: "10.0.0.0/8",
         help: t("Networks whose forwarding headers Ether trusts. Empty trusts none."),
       },
+    ],
+  },
+]);
+
+/** server.logLevel, edited on Maintenance › Logs. */
+export const LOG_LEVEL: FieldGroup[] = localized(() => [
+  {
+    id: "logLevel",
+    title: t("What gets recorded"),
+    fields: [
       {
         key: "logLevel",
         label: t("Log level"),
@@ -82,6 +92,10 @@ export const SERVER: FieldGroup[] = localized(() => [
       },
     ],
   },
+]);
+
+/** server stream limits, edited on Playback › Streams & transcoding. */
+export const STREAM_LIMITS: FieldGroup[] = localized(() => [
   {
     id: "streams",
     title: t("Who can watch at once"),
@@ -111,17 +125,11 @@ export const SERVER: FieldGroup[] = localized(() => [
 ]);
 
 /** server.* keys edited on the cluster "This computer" group. */
-const ON_THIS_COMPUTER = new Set([
-  "port",
-  "bindAddress",
-  "logLevel",
-  "machineIdentifier",
-  "trustedProxyCIDRs",
-]);
+const ON_THIS_COMPUTER = new Set(["port", "bindAddress", "machineIdentifier", "trustedProxyCIDRs"]);
 
 /**
- * General's server groups on a cluster node. Shared names and stream limits
- * stay put. The listener, logging and this computer's weight gather together.
+ * General's server groups on a cluster node. Shared names stay put. The
+ * listener and this computer's weight gather together.
  */
 export function clusterServerGroups(): FieldGroup[] {
   const localFields: FieldGroup["fields"] = [];
@@ -181,28 +189,6 @@ export const PLEX: FieldGroup[] = localized(() => [
         kind: "bool",
         help: t("Asks your router to forward the port."),
       },
-      {
-        key: "publicPort",
-        label: t("Public port"),
-        kind: "number",
-        min: 0,
-        max: 65535,
-        step: 1,
-        help: t("The port forwarded on your router. 0 uses the server port."),
-      },
-      {
-        key: "publicHost",
-        label: t("Public host name"),
-        kind: "text",
-        help: t("Optional. Leave empty to detect your public address."),
-      },
-      {
-        key: "customUrls",
-        label: t("Custom server URLs"),
-        kind: "list",
-        placeholder: "https://ether.example.com:443",
-        help: t("Extra addresses Plex apps should try, comma-separated."),
-      },
     ],
   },
   {
@@ -221,6 +207,73 @@ export const PLEX: FieldGroup[] = localized(() => [
         ],
       },
     ],
+  },
+  {
+    id: "compatibility",
+    title: t("Compatibility"),
+    description: t("Leave this alone unless a Plex app refuses to connect."),
+    fields: [],
+    more: [
+      {
+        key: "trackLatestVersion",
+        label: t("Report the latest public PMS version"),
+        kind: "bool",
+        help: t(
+          "Off reports the version Ether is verified against. Plex enables features by server version.",
+        ),
+      },
+      {
+        key: "latestCompatibilityVersion",
+        label: t("Latest public PMS version"),
+        kind: "readonly",
+      },
+      {
+        key: "compatibilityVersion",
+        label: t("Compatibility version override"),
+        kind: "text",
+        help: t(
+          "Leave empty to use the verified version, or the latest public version when tracking is on.",
+        ),
+      },
+    ],
+  },
+]);
+
+/** plex.* addresses and certificate every app uses (Apps › Overview › Away from home). */
+export const AWAY: FieldGroup[] = localized(() => [
+  {
+    id: "address",
+    title: t("Away from home"),
+    description: t("How apps outside your home reach this server."),
+    fields: [],
+    more: [
+      {
+        key: "publicHost",
+        label: t("Public host name"),
+        kind: "text",
+        help: t("Optional. Leave empty to detect your public address."),
+      },
+      {
+        key: "publicPort",
+        label: t("Public port"),
+        kind: "number",
+        min: 0,
+        max: 65535,
+        step: 1,
+        help: t("The port forwarded on your router. 0 uses the server port."),
+      },
+      {
+        key: "customUrls",
+        label: t("Custom server URLs"),
+        kind: "list",
+        placeholder: "https://ether.example.com:443",
+        help: t("Extra addresses apps should try, comma-separated."),
+      },
+    ],
+  },
+  {
+    id: "certificate",
+    fields: [],
     more: [
       {
         key: "certFile",
@@ -235,35 +288,6 @@ export const PLEX: FieldGroup[] = localized(() => [
         kind: "text",
         wide: true,
         help: t("The private key that matches the certificate file."),
-      },
-    ],
-  },
-  {
-    id: "compatibility",
-    title: t("Compatibility"),
-    fields: [
-      {
-        key: "trackLatestVersion",
-        label: t("Report the latest public PMS version"),
-        kind: "bool",
-        help: t(
-          "Off reports the version Ether is verified against. Plex enables features by server version.",
-        ),
-      },
-      {
-        key: "latestCompatibilityVersion",
-        label: t("Latest public PMS version"),
-        kind: "readonly",
-      },
-    ],
-    more: [
-      {
-        key: "compatibilityVersion",
-        label: t("Compatibility version override"),
-        kind: "text",
-        help: t(
-          "Leave empty to use the verified version, or the latest public version when tracking is on.",
-        ),
       },
     ],
   },
@@ -292,11 +316,10 @@ export const CATALOG: FieldGroup[] = localized(() => [
     ],
   },
   {
+    id: "browsable",
     title: t("What's browsable"),
     description: t("Hide obscure titles from libraries. They stay searchable."),
     fields: [
-      { key: "minPopularity", label: t("Minimum popularity"), kind: "number", min: 0, step: 1 },
-      { key: "minVotes", label: t("Minimum votes"), kind: "number", min: 0, step: 10 },
       { key: "includeAdult", label: t("Include adult titles"), kind: "bool" },
       {
         key: "hideFranchiseCollections",
@@ -305,13 +328,18 @@ export const CATALOG: FieldGroup[] = localized(() => [
         help: t("Hide automatic franchise groups, such as Zootopia."),
       },
     ],
+    more: [
+      { key: "minPopularity", label: t("Minimum popularity"), kind: "number", min: 0, step: 1 },
+      { key: "minVotes", label: t("Minimum votes"), kind: "number", min: 0, step: 10 },
+    ],
   },
 ]);
 
-/** How many same-quality copies apps list after Auto. Edited on Releases → Searching. */
+/** How many same-quality copies apps list after Auto. Edited on Quality › Profiles. */
 export const PLAY_VERSIONS: FieldGroup[] = localized(() => [
   {
-    title: t("Versions in the app"),
+    id: "versions",
+    title: t("Version menu"),
     description: t("Extra copies of the same picture, after Auto."),
     fields: [
       {
@@ -335,14 +363,13 @@ export const PLAY_VERSIONS: FieldGroup[] = localized(() => [
   },
 ]);
 
-/** Engine search memory. Edited on Releases → Searching. */
+/** Engine search memory. Edited on Quality › Searching. */
 export const RELEASE_SEARCH: FieldGroup[] = localized(() => [
   {
     title: t("How Ether searches"),
-    description: t(
-      "How many releases Ether keeps ready, and how long it remembers a search. The defaults are enough for a household.",
-    ),
-    fields: [
+    description: t("The defaults are enough for a household."),
+    fields: [],
+    more: [
       {
         key: "maxCandidates",
         label: t("Releases to keep ready"),
@@ -503,17 +530,6 @@ export const TRANSCODE: FieldGroup[] = localized(() => {
             "How many videos can be converted at once. Leave the default unless several people watch together and the computer struggles.",
           ),
         },
-        {
-          key: "remoteMaxBitrateKbps",
-          label: t("Remote bitrate cap"),
-          kind: "number",
-          min: 0,
-          step: 500,
-          unit: "kbps",
-          help: t(
-            "Limits picture quality for people watching away from home, so the stream fits their connection. 0 means no limit.",
-          ),
-        },
       ],
     },
     {
@@ -580,7 +596,6 @@ export const TRAKT: FieldGroup[] = localized(() => [
     title: "Trakt",
     description: t("Sync watch history and lists with Trakt."),
     fields: [
-      { key: "enabled", label: t("Enabled"), kind: "bool" },
       { key: "clientId", label: t("Client ID"), kind: "text", wide: true },
       {
         key: "clientSecret",
@@ -597,7 +612,6 @@ export const OPENSUBTITLES: FieldGroup[] = localized(() => [
     title: "OpenSubtitles",
     description: t("Fetch subtitles when a release doesn't include them."),
     fields: [
-      { key: "enabled", label: t("Enabled"), kind: "bool" },
       { key: "apiKey", label: t("API key"), kind: "secret" },
       { key: "username", label: t("Username"), kind: "text" },
       { key: "password", label: t("Password"), kind: "secret" },
@@ -697,16 +711,8 @@ export const QUALITY_AUDIO = ["truehd", "dtshd", "eac3", "ac3", "dts", "aac", "f
 
 export const MARKERS: FieldGroup[] = localized(() => [
   {
-    title: t("Chapters and skip markers"),
-    fields: [
-      {
-        key: "theIntroDb",
-        label: t("Look up intro and credits markers"),
-        kind: "bool",
-        help: t("Use the public TheIntroDB lookup, cached per episode and runtime."),
-      },
-      { key: "apiKey", label: t("Optional TheIntroDB key"), kind: "secret" },
-    ],
+    title: "TheIntroDB",
+    fields: [{ key: "apiKey", label: t("Optional TheIntroDB key"), kind: "secret" }],
   },
 ]);
 
@@ -771,7 +777,7 @@ export const DEBRID: FieldGroup[] = localized(() => [
   },
 ]);
 
-/** Plex offline downloads (General › Downloads). */
+/** Plex offline downloads (Apps › Plex › Downloads). */
 export const DOWNLOADS: FieldGroup[] = localized(() => [
   {
     title: t("Downloads"),
@@ -832,11 +838,11 @@ export const DOWNLOADS: FieldGroup[] = localized(() => [
   },
 ]);
 
-/** Per-viewer touches in Plex apps (General › Personalization). */
-export const PERSONALIZE: FieldGroup[] = localized(() => [
+/** After-the-credits picks (personalize.*), edited on Playback › Extras. */
+export const UP_NEXT: FieldGroup[] = localized(() => [
   {
-    title: t("Personalization"),
-    description: t("Extras for each viewer. Turn any off for the plain layout."),
+    id: "upNext",
+    title: t("Up next"),
     fields: [
       {
         key: "postPlay",
@@ -850,6 +856,16 @@ export const PERSONALIZE: FieldGroup[] = localized(() => [
         kind: "bool",
         help: t("Warm the first suggestion in the last minutes so it starts instantly."),
       },
+    ],
+  },
+]);
+
+/** Per-viewer touches on Home and details (personalize.*), edited on Home › Tuning. */
+export const PERSONAL_TOUCHES: FieldGroup[] = localized(() => [
+  {
+    id: "personalTouches",
+    title: t("Personal touches"),
+    fields: [
       {
         key: "microReasons",
         label: t("Match and finish time on details"),
@@ -878,10 +894,11 @@ export const PERSONALIZE: FieldGroup[] = localized(() => [
   },
 ]);
 
-/** Trailers and extras (General › Trailers & extras). */
+/** Trailers before a title (Playback › Extras). */
 export const EXTRAS: FieldGroup[] = localized(() => [
   {
-    title: t("Trailers & extras"),
+    id: "trailers",
+    title: t("Trailers"),
     description: t("Play a trailer before a movie or episode."),
     fields: [
       {

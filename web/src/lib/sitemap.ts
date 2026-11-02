@@ -180,7 +180,7 @@ export const PAGES = localized<PageDef[]>(() => [
     ],
   },
   {
-    href: "/releases",
+    href: "/quality",
     title: t("Releases"),
     sections: [
       {

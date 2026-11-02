@@ -5,7 +5,7 @@ import { webcrypto } from "node:crypto";
 import { BrowserPush } from "../pages/notifications/BrowserPush";
 import { ChannelDrawer } from "../pages/notifications/ChannelDrawer";
 import { Channels } from "../pages/notifications/Channels";
-import { Protection } from "../pages/notifications/Protection";
+import { ServerProtection } from "../pages/settings/ServerProtection";
 import { blankChannel, type NotificationsData } from "../pages/notifications/types";
 
 const empty: NotificationsData = {
@@ -193,10 +193,14 @@ describe("Notification setup", () => {
   });
   it("saves external outage monitoring without exposing its existing URL", async () => {
     const fetcher = vi.fn(
-      async (_url: string, init?: RequestInit) =>
+      async (url: string, init?: RequestInit) =>
         new Response(
           JSON.stringify(
-            init?.method ? { ok: true } : { enabled: false, endpoint: "[configured]" },
+            init?.method
+              ? { ok: true }
+              : String(url).endsWith("/notifications/")
+                ? { crashWatcher: true }
+                : { enabled: false, endpoint: "[configured]" },
           ),
           { status: 200 },
         ),
@@ -204,7 +208,7 @@ describe("Notification setup", () => {
     vi.stubGlobal("fetch", fetcher);
     render(
       <MemoryRouter>
-        <Protection active />
+        <ServerProtection />
       </MemoryRouter>,
     );
     fireEvent.click(await screen.findByRole("switch", { name: "Send uptime heartbeat" }));
@@ -217,6 +221,6 @@ describe("Notification setup", () => {
         ),
       ).toBe(true),
     );
-    expect(screen.getByText("Watcher running on this node")).toBeInTheDocument();
+    expect(await screen.findByText("Watcher running on this node")).toBeInTheDocument();
   });
 });

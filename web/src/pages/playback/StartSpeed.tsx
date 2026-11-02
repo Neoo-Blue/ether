@@ -13,7 +13,7 @@ const RACE = localized(() => [
   ...[2, 3, 4].map((n) => ({ value: String(n), label: t("First healthy of {n}", { n }) })),
 ]);
 
-/** How soon playback starts, tucked under More options on the Playback page. */
+/** How soon playback starts (Quality › Searching). */
 export function StartSpeed() {
   const { config, resolver, save } = useResolver();
   const saved = useMemo(
@@ -47,46 +47,39 @@ export function StartSpeed() {
   }
 
   return (
-    <>
-      <MoreOptions label={t("More options: Start speed")} text={t("Start speed")}>
-        <SettingsSection
-          title={t("Start speed")}
+    <SettingsSection title={t("Start speed")}>
+      <SettingsRow
+        title={t("Start before the health check finishes")}
+        description={t(
+          "Plays the top release straight away. Missing articles still trigger failover.",
+        )}
+        control={
+          <Switch
+            checked={draft.optimisticStart}
+            onChange={(e) => setDraft({ ...draft, optimisticStart: e.currentTarget.checked })}
+            aria-label={t("Start the top release before its health check completes")}
+          />
+        }
+      />
+      <MoreOptions label={t("More options: Start speed")}>
+        <SettingsRow
+          title={t("Concurrent checks")}
           description={t(
-            "Ranked selection is the default. The other modes trade extra indexer requests for less waiting.",
+            "Checking several releases at once can use extra NZB downloads. Detail-page warming has its own small budget.",
           )}
-        >
-          <SettingsRow
-            title={t("Start before the health check finishes")}
-            description={t(
-              "Plays the top release straight away. Missing articles still trigger failover, and a failed background check marks the release bad for later requests.",
-            )}
-            control={
-              <Switch
-                checked={draft.optimisticStart}
-                onChange={(e) => setDraft({ ...draft, optimisticStart: e.currentTarget.checked })}
-                aria-label={t("Start the top release before its health check completes")}
+          control={
+            <div className="w-48">
+              <SearchSelect
+                {...searchSelectLabels()}
+                value={String(draft.healthRace)}
+                onChange={(v) => setDraft({ ...draft, healthRace: Number(v) })}
+                options={RACE}
+                ariaLabel={t("Concurrent checks")}
+                searchable={false}
               />
-            }
-          />
-          <SettingsRow
-            title={t("Concurrent checks")}
-            description={t(
-              "Checking several releases at once can use extra NZB downloads. Detail-page warming has its own small budget.",
-            )}
-            control={
-              <div className="w-48">
-                <SearchSelect
-                  {...searchSelectLabels()}
-                  value={String(draft.healthRace)}
-                  onChange={(v) => setDraft({ ...draft, healthRace: Number(v) })}
-                  options={RACE}
-                  ariaLabel={t("Concurrent checks")}
-                  searchable={false}
-                />
-              </div>
-            }
-          />
-        </SettingsSection>
+            </div>
+          }
+        />
       </MoreOptions>
       <SaveBar
         dirty={dirty}
@@ -98,6 +91,6 @@ export function StartSpeed() {
           setError(null);
         }}
       />
-    </>
+    </SettingsSection>
   );
 }

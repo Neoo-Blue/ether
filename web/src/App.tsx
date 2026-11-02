@@ -98,7 +98,7 @@ const Calendar = lazy(() => import("./pages/calendar/Calendar"));
 const Catalog = lazy(() => import("./pages/catalog/Catalog"));
 const Metadata = lazy(() => import("./pages/metadata/Metadata"));
 const Sources = lazy(() => import("./pages/sources/Sources"));
-const Releases = lazy(() => import("./pages/releases/Releases"));
+const Quality = lazy(() => import("./pages/releases/Releases"));
 const Cache = lazy(() => import("./pages/cache/Cache"));
 const Playback = lazy(() => import("./pages/playback/Playback"));
 
@@ -157,7 +157,7 @@ function navigation(): SidebarNavGroup[] {
       label: t("Streaming"),
       items: [
         { href: "/sources", label: t("Sources"), icon: <Network size={icon} /> },
-        { href: "/releases", label: t("Releases"), icon: <ListFilter size={icon} /> },
+        { href: "/quality", label: t("Quality"), icon: <ListFilter size={icon} /> },
         { href: "/cache", label: t("Cache"), icon: <HardDrive size={icon} /> },
         { href: "/playback", label: t("Playback"), icon: <MonitorPlay size={icon} /> },
       ],
@@ -450,7 +450,7 @@ function Shell() {
               <Route path="/catalog/:tab?" element={<Catalog />} />
               <Route path="/metadata/:tab?" element={<Metadata />} />
               <Route path="/sources/:tab?" element={<Sources />} />
-              <Route path="/releases/:tab?" element={<Releases />} />
+              <Route path="/quality/:tab?" element={<Quality />} />
               <Route path="/cache/:tab?" element={<Cache />} />
               <Route path="/playback/:tab?/:section?" element={<Playback />} />
               <Route path="/notifications/:tab?" element={<Notifications />} />

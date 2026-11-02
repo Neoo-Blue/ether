@@ -6,7 +6,6 @@ import {
   SettingsSection,
   Switch,
   Textarea,
-  toast,
   confirmDialog,
 } from "@braedonsaunders/appkit-ui";
 import { ChevronDown, Download, Plus, SlidersHorizontal } from "lucide-react";
@@ -24,7 +23,10 @@ import { api } from "../../lib/api";
 import { qualityGateLabel } from "../../lib/releases";
 import type { QualityProfile, ReleaseRule } from "../../lib/types";
 import { QUALITY_AUDIO, QUALITY_CODECS, QUALITY_SOURCES } from "../settings/schema";
-import { sourceOrderFields, sourceOrderValue, TieBreakerSection } from "../sources/EqualQuality";
+import { SourceOrderSection } from "../sources/EqualQuality";
+import { AwaySection } from "./AwaySection";
+import { ConfigSection } from "../../components/ConfigSection";
+import { PLAY_VERSIONS } from "../settings/schema";
 import {
   BoolRow,
   OrderButtons,
@@ -240,7 +242,7 @@ function ImportedSection({
             />
           </label>
           <p className="px-4 pb-2 text-sm">
-            <Link to="/releases/history" className="text-primary underline">
+            <Link to="/quality/history" className="text-primary underline">
               {t("Inspect release scores and rejection reasons")}
             </Link>
           </p>
@@ -498,18 +500,31 @@ function WhatMattersMostSection({
   );
 }
 
-/** Profiles tab: only the profile cards plus "Add profile" and "Import from TRaSH Guides". */
+/**
+ * Profiles tab: the profile cards, then the choices that apply to every
+ * profile: away from home, which source goes first, and the version menu.
+ */
 export function QualityTab() {
   const { config, quality, commit, refresh } = useQuality();
   if (config.error) return <ErrorPanel error={config.error} onRetry={() => void config.reload()} />;
   if (!quality) return <LoadingRows rows={4} />;
   return (
-    <ProfileList
-      quality={quality}
-      resolver={config.data?.resolver ?? null}
-      commit={commit}
-      refresh={refresh}
-    />
+    <>
+      <ProfileList
+        quality={quality}
+        resolver={config.data?.resolver ?? null}
+        commit={commit}
+        refresh={refresh}
+      />
+      <AwaySection quality={quality} onSaved={refresh} />
+      <SourceOrderSection />
+      <ConfigSection
+        configKey="resolver"
+        endpoint="resolver"
+        groups={PLAY_VERSIONS}
+        label={t("Version menu")}
+      />
+    </>
   );
 }
 
@@ -534,9 +549,6 @@ function ProfileList({
     home: false,
     away: false,
   });
-  const [sourcePref, setSourcePref] = useState<string>("auto");
-  const [savingTieBreaker, setSavingTieBreaker] = useState(false);
-  const [tieBreakerError, setTieBreakerError] = useState<unknown>(null);
   const [scoring, setScoring] = useState<{ formats: string; scores: string } | null>(null);
   const [errors, setErrors] = useState<Errors>({});
   const [error, setError] = useState<unknown>(null);
@@ -545,7 +557,6 @@ function ProfileList({
   const open = (index: number, draft: QualityProfile) => {
     setErrors({});
     setError(null);
-    setTieBreakerError(null);
     const cloned = structuredClone(draft);
     cloned.ranking = normalizeRanking(cloned);
     setEditing({ index, draft: cloned });
@@ -554,30 +565,8 @@ function ProfileList({
       home: isExisting ? quality.default === draft.name : profiles.length === 0,
       away: isExisting && quality.remote === draft.name,
     });
-    setSourcePref(sourceOrderValue(resolver ?? undefined));
     setScoring(scoringText(resolver, draft));
   };
-
-  async function chooseSourcePreference(nextPref: string) {
-    setSourcePref(nextPref);
-    if (!resolver) return;
-    setSavingTieBreaker(true);
-    setTieBreakerError(null);
-    try {
-      await api.putSection("resolver", {
-        ...resolver,
-        customFormats: resolver.customFormats ?? [],
-        customFormatScores: resolver.customFormatScores ?? {},
-        ...sourceOrderFields(nextPref),
-      });
-      toast.success(t("Source order saved"));
-      await refresh();
-    } catch (e) {
-      setTieBreakerError(e);
-    } finally {
-      setSavingTieBreaker(false);
-    }
-  }
 
   async function save() {
     if (!editing) return;
@@ -642,12 +631,7 @@ function ProfileList({
       if (parsed) {
         const previous = JSON.stringify(resolver?.customFormats ?? []);
         if (previous !== JSON.stringify(parsed.customFormats)) {
-          await api.putSection("resolver", {
-            ...(resolver ?? {}),
-            ...sourceOrderFields(sourcePref),
-            customFormats: parsed.customFormats,
-            customFormatScores: resolver?.customFormatScores ?? {},
-          });
+          await api.putSection("resolver", { customFormats: parsed.customFormats });
           await refresh();
         }
       }
@@ -953,13 +937,6 @@ function ProfileList({
             </SettingsSection>
 
             <WhatMattersMostSection draft={draft} patch={patch} rankingError={errors.ranking} />
-
-            <TieBreakerSection
-              value={sourcePref}
-              saving={savingTieBreaker}
-              error={tieBreakerError}
-              onChange={(v) => void chooseSourcePreference(v)}
-            />
 
             <ImportedSection
               draft={draft}

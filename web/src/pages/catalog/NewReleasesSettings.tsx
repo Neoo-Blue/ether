@@ -1,8 +1,8 @@
-import { Input, SettingsSection, toast } from "@braedonsaunders/appkit-ui";
-import { Link } from "react-router-dom";
+import { Input, SettingsSection, Switch, toast } from "@braedonsaunders/appkit-ui";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { MoreOptions } from "../../components/ConfigSection";
-import { MutationError } from "../../components/feedback";
+import { SaveBar, useDraft } from "../../components/SaveBar";
 import { SettingsRow } from "../../components/SettingsRow";
 import { t, tn, tx } from "../../i18n";
 import { api, apiFetch } from "../../lib/api";
@@ -52,35 +52,28 @@ const MODES: {
   },
 ];
 
-export function NewReleasesSettings() {
-  const config = useAsync(() => api.getConfig(), []);
+/**
+ * The three new-release modes plus the release-date gate. Edits the
+ * `availability` draft and `catalog.gateMoviesByHomeRelease`; the page's
+ * save bar saves both.
+ */
+export function NewReleasesSettings({
+  availability,
+  onAvailability,
+  gate,
+  onGate,
+}: {
+  availability: AvailabilityConfig;
+  onAvailability: (next: AvailabilityConfig) => void;
+  gate: boolean;
+  onGate: (next: boolean) => void;
+}) {
   const summary = useAsync((signal) => apiFetch<Summary>("/availability/summary", { signal }), []);
   useInterval(() => void summary.reload(), 30000);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  const cfg = config.data?.availability;
-  if (!cfg) return null;
-  const mode = releaseMode(cfg);
-  const ceiling = customRequestCeiling(cfg);
-
-  const save = async (next: AvailabilityConfig) => {
-    setSaving(true);
-    setError(null);
-    try {
-      await api.putSection("availability", next);
-      await config.reload();
-      await summary.reload();
-      toast.success(t("Settings saved"));
-    } catch (e) {
-      setError(e);
-    } finally {
-      setSaving(false);
-    }
-  };
+  const mode = releaseMode(availability);
 
   return (
     <SettingsSection title={t("New releases")}>
-      {error ? <MutationError error={error} /> : null}
       <div className="new-release-modes" role="radiogroup" aria-label={t("New releases")}>
         {MODES.map((item) => {
           const selected = mode === item.value;
@@ -90,10 +83,12 @@ export function NewReleasesSettings() {
                 type="button"
                 role="radio"
                 aria-checked={selected}
-                disabled={saving}
                 className={`new-release-card${selected ? " is-selected" : ""}`}
                 onClick={() => {
-                  if (!selected) void save(applyReleaseMode(cfg, item.value));
+                  if (selected) return;
+                  onAvailability(applyReleaseMode(availability, item.value));
+                  // "Right away" promises theatre-only movies too.
+                  if (item.value === "immediate" && gate) onGate(false);
                 }}
               >
                 <span className="new-release-card-head">
@@ -127,34 +122,116 @@ export function NewReleasesSettings() {
           );
         })}
       </div>
-      <MoreOptions label={t("More options: Advanced")} text={t("Advanced")}>
+      {mode !== "immediate" ? (
         <SettingsRow
-          title={t("Daily request ceiling")}
-          description={t("Leave empty to let Ether choose a daily limit from your indexers.")}
+          title={
+            <label htmlFor="catalog-home-release">
+              {t("Wait for digital or physical release")}
+            </label>
+          }
+          description={t(
+            "Also keep every movie hidden until its digital or physical release date.",
+          )}
           control={
-            <Input
-              aria-label={t("Daily request ceiling")}
-              type="number"
-              inputMode="numeric"
-              min={0}
-              max={100000}
-              className="w-28 tabular-nums"
-              defaultValue={ceiling ?? ""}
-              key={`${cfg.effort}-${cfg.feedRequests}`}
-              onBlur={(e) => {
-                const raw = e.currentTarget.value.trim();
-                const value = raw === "" ? 0 : Number(raw);
-                if (!Number.isFinite(value) || value <= 0) {
-                  if (ceiling !== null) void save({ ...cfg, effort: "normal", feedRequests: 400 });
-                  return;
-                }
-                if (value !== ceiling)
-                  void save({ ...cfg, effort: "custom", feedRequests: Math.round(value) });
-              }}
+            <Switch
+              id="catalog-home-release"
+              checked={gate}
+              onChange={(e) => onGate(e.currentTarget.checked)}
             />
           }
         />
+      ) : null}
+    </SettingsSection>
+  );
+}
+
+/**
+ * Daily indexer budget for new-release checks (`availability.effort` /
+ * `feedRequests`), edited on Sources › Indexers.
+ */
+export function NewReleaseBudget({
+  availability,
+  onChange,
+}: {
+  availability: AvailabilityConfig;
+  onChange: (next: AvailabilityConfig) => void;
+}) {
+  const ceiling = customRequestCeiling(availability);
+  return (
+    <SettingsRow
+      title={t("Daily budget for new-release checks")}
+      description={t("Leave empty to let Ether choose a daily limit from your indexers.")}
+      control={
+        <Input
+          aria-label={t("Daily budget for new-release checks")}
+          type="number"
+          inputMode="numeric"
+          min={0}
+          max={100000}
+          className="w-28 tabular-nums"
+          value={ceiling ?? ""}
+          onChange={(e) => {
+            const raw = e.currentTarget.value.trim();
+            const value = raw === "" ? 0 : Number(raw);
+            if (!Number.isFinite(value) || value <= 0) {
+              if (ceiling !== null)
+                onChange({ ...availability, effort: "normal", feedRequests: 400 });
+              return;
+            }
+            onChange({ ...availability, effort: "custom", feedRequests: Math.round(value) });
+          }}
+        />
+      }
+    />
+  );
+}
+
+/** The `availability` section (new-release modes, budget) as a draft with its own save. */
+export function useAvailabilityDraft() {
+  const config = useAsync(() => api.getConfig(), []);
+  const stored = (config.data?.availability ?? null) as AvailabilityConfig | null;
+  const { draft, setDraft, dirty, reset } = useDraft<AvailabilityConfig>(stored);
+  const [error, setError] = useState<unknown>(null);
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    if (!draft) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await api.putSection("availability", draft);
+      toast.success(t("Settings saved"));
+      await config.reload();
+    } catch (e) {
+      setError(e);
+    } finally {
+      setSaving(false);
+    }
+  };
+  const saveBar = (
+    <SaveBar
+      dirty={dirty}
+      saving={saving}
+      error={error}
+      onSave={() => void save()}
+      onDiscard={() => {
+        reset();
+        setError(null);
+      }}
+    />
+  );
+  return { draft, setDraft, saveBar };
+}
+
+/** Sources › Indexers: the new-release check budget, under More options. */
+export function NewReleaseBudgetSection() {
+  const availability = useAvailabilityDraft();
+  if (!availability.draft) return null;
+  return (
+    <SettingsSection title={t("Daily budgets")}>
+      <MoreOptions label={t("More options: {title}", { title: t("Daily budgets") })}>
+        <NewReleaseBudget availability={availability.draft} onChange={availability.setDraft} />
       </MoreOptions>
+      {availability.saveBar}
     </SettingsSection>
   );
 }

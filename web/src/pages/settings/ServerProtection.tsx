@@ -9,8 +9,12 @@ import { apiFetch, errorMessage } from "../../lib/api";
 import { useAsync } from "../../lib/hooks";
 
 type Heartbeat = { enabled: boolean; endpoint: string };
-export function Protection({ active }: { active?: boolean }) {
+
+/** Crash watcher and uptime heartbeat (Maintenance › Health). */
+export function ServerProtection() {
   const id = useId();
+  const notices = useAsync(() => apiFetch<{ crashWatcher?: boolean }>("/notifications/"), []);
+  const active = notices.data?.crashWatcher;
   const settings = useAsync(() => apiFetch<Heartbeat>("/notifications/heartbeat"), []);
   const [draft, setDraft] = useState<Heartbeat | null>(null);
   const [busy, setBusy] = useState(false);

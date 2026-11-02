@@ -1,4 +1,5 @@
-import { Badge, Button, toast } from "@braedonsaunders/appkit-ui";
+import { Badge, Button, buttonVariants, toast } from "@braedonsaunders/appkit-ui";
+import { Link } from "react-router-dom";
 import { useState, type ReactNode } from "react";
 import { Drawer } from "../../components/Drawer";
 import { MutationError } from "../../components/feedback";
@@ -114,44 +115,36 @@ export function PosterAccounts({
               key={item.id}
               identity={{ id: item.id, name: item.name }}
               description={item.description}
-              enabled={on}
-              busy={saving}
-              disabled={locked || saving}
               status={
                 !on ? (
-                  <Badge variant="secondary">{t("Off")}</Badge>
+                  <Badge variant="secondary">{t("Not in use")}</Badge>
                 ) : keyed || !item.key ? (
-                  <Badge variant="success">{keyed ? t("Key saved") : t("On")}</Badge>
+                  <Badge variant="success">{keyed ? t("Key saved") : t("In use")}</Badge>
                 ) : (
                   <Badge variant="warning">{t("Needs an API key")}</Badge>
                 )
               }
-              onToggle={(next) => {
-                if (!next) {
-                  void save({ ...posters, enabled: false });
-                  return;
-                }
-                setError(null);
-                setDraft({
-                  ...posters,
-                  enabled: true,
-                  source: item.id,
-                  apiKey: posters.source === item.id ? posters.apiKey : "",
-                  urlTemplate: posters.source === item.id ? posters.urlTemplate : "",
-                });
-              }}
-              configureLabel={on ? t("Manage") : t("Set up")}
               action={
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setError(null);
-                    setDraft({ ...posters, source: item.id, enabled: true });
-                  }}
-                >
-                  {on ? t("Manage") : t("Set up")}
-                </Button>
+                on && !item.key && !item.template ? undefined : on ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={locked || saving}
+                    onClick={() => {
+                      setError(null);
+                      setDraft({ ...posters });
+                    }}
+                  >
+                    {t("Manage")}
+                  </Button>
+                ) : (
+                  <Link
+                    to="/metadata/artwork"
+                    className={buttonVariants({ variant: "outline", size: "sm" })}
+                  >
+                    {t("Choose in Artwork")}
+                  </Link>
+                )
               }
             />
           );
@@ -164,9 +157,7 @@ export function PosterAccounts({
           setDraft(null);
         }}
         title={service?.name ?? t("Poster service")}
-        description={t(
-          "This key is used when this poster service is the one Artwork has selected.",
-        )}
+        description={t("The key for the poster service Artwork uses.")}
         footer={
           <div className="flex w-full flex-wrap items-center gap-2">
             <span className="flex-1" />

@@ -8,7 +8,7 @@ import type { EtherConfig, QualityProfile } from "../../lib/types";
 
 export type ResolverPolicy = EtherConfig["resolver"];
 
-/** The resolver section, saved whole so a partial edit does not drop other fields. */
+/** The resolver section. A save sends only the patch; the server keeps every other field. */
 export function useResolver() {
   const { refreshDashboard } = useApp();
   const config = useAsync(() => api.getConfig(), []);
@@ -16,12 +16,7 @@ export function useResolver() {
   const save = useCallback(
     async (patch: Partial<ResolverPolicy>, message: string) => {
       if (!resolver) return;
-      await api.putSection("resolver", {
-        ...resolver,
-        customFormats: resolver.customFormats ?? [],
-        customFormatScores: resolver.customFormatScores ?? {},
-        ...patch,
-      });
+      await api.putSection("resolver", patch);
       toast.success(message);
       await config.reload();
       void refreshDashboard();

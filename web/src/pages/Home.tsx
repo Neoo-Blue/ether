@@ -118,7 +118,7 @@ function GettingStarted({ sessions }: { sessions: NowPlaying[] }) {
   const qualityChip = {
     id: "quality",
     label: t("Playback quality: {profile} at home · change", { profile }),
-    to: "/releases/profiles",
+    to: "/quality/profiles",
   };
   return (
     <section

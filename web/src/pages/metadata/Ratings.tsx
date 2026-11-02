@@ -87,6 +87,7 @@ export function RatingSources({
   persist,
   disabled,
   accountOnIntegrations,
+  keysOnly,
 }: {
   /** Parent-owned saved document. Omit on the metadata page, which loads its own. */
   saved?: RatingSettings | null;
@@ -98,6 +99,8 @@ export function RatingSources({
   disabled?: boolean;
   /** Metadata keeps the score choices. The API key is edited on Integrations. */
   accountOnIntegrations?: boolean;
+  /** Integrations: only the provider account (provider and API key). */
+  keysOnly?: boolean;
 } = {}) {
   const controlled = saved !== undefined;
   const doc = useAsync(() => apiFetch<RatingSettings>("/discovery/ratings/settings"), []);
@@ -151,6 +154,81 @@ export function RatingSources({
     else await write();
   };
 
+  const saveBar = (
+    <SaveBar
+      dirty={dirty}
+      saving={saving}
+      disabled={disabled}
+      error={error}
+      onSave={save}
+      onDiscard={() => {
+        reset();
+        setError(null);
+      }}
+    />
+  );
+  const providerRow = (
+    <SettingsRow
+      stacked
+      title={<label htmlFor="ratings-provider">{t("Provider")}</label>}
+      description={t(
+        "OMDb has IMDb, Rotten Tomatoes critics and Metacritic. MDBList adds audience and Letterboxd scores.",
+      )}
+      control={
+        <select
+          id="ratings-provider"
+          className={`${nativeSelect} sm:w-48`}
+          value={draft.provider}
+          onChange={(e) => set({ provider: e.currentTarget.value })}
+        >
+          <option value="omdb">OMDb</option>
+          <option value="mdblist">MDBList</option>
+        </select>
+      }
+    />
+  );
+  const keyRow = (
+    <SettingsRow
+      stacked
+      title={<label htmlFor="ratings-key">{t("API key")}</label>}
+      description={
+        draft.apiKey === STORED_KEY
+          ? t("Saved. Leave as is to keep it, or type a new key to replace it.")
+          : t("Your own key from the provider's website.")
+      }
+      control={
+        <PasswordInput
+          id="ratings-key"
+          autoComplete="new-password"
+          spellCheck={false}
+          className="sm:w-64"
+          value={draft.apiKey}
+          onFocus={(e) => {
+            if (draft.apiKey === STORED_KEY) e.currentTarget.select();
+          }}
+          onChange={(e) => set({ apiKey: e.currentTarget.value })}
+        />
+      }
+    />
+  );
+  if (keysOnly)
+    return (
+      <>
+        <SettingsSection
+          title={t("OMDb and MDBList")}
+          footer={
+            <Link to="/metadata/ratings" className="text-sm text-primary underline">
+              {t("Choose which scores apps show")}
+            </Link>
+          }
+        >
+          {providerRow}
+          {keyRow}
+        </SettingsSection>
+        {saveBar}
+      </>
+    );
+
   return (
     <>
       <MetadataWorkspace
@@ -175,24 +253,7 @@ export function RatingSources({
                   />
                 }
               />
-              <SettingsRow
-                stacked
-                title={<label htmlFor="ratings-provider">{t("Provider")}</label>}
-                description={t(
-                  "OMDb has IMDb, Rotten Tomatoes critics and Metacritic. MDBList adds audience and Letterboxd scores.",
-                )}
-                control={
-                  <select
-                    id="ratings-provider"
-                    className={`${nativeSelect} sm:w-48`}
-                    value={draft.provider}
-                    onChange={(e) => set({ provider: e.currentTarget.value })}
-                  >
-                    <option value="omdb">OMDb</option>
-                    <option value="mdblist">MDBList</option>
-                  </select>
-                }
-              />
+              {accountOnIntegrations ? null : providerRow}
               {accountOnIntegrations ? (
                 <SettingsRow
                   stacked
@@ -200,7 +261,9 @@ export function RatingSources({
                   description={
                     secretConfigured(draft.apiKey) ? (
                       <Link to="/services/ratings" className="text-primary underline">
-                        {t("OMDb and MDBList connected")}
+                        {draft.provider === "mdblist"
+                          ? t("MDBList connected")
+                          : t("OMDb connected")}
                       </Link>
                     ) : (
                       tx("Connect OMDb or MDBList in {link}.", {
@@ -214,28 +277,7 @@ export function RatingSources({
                   }
                 />
               ) : (
-                <SettingsRow
-                  stacked
-                  title={<label htmlFor="ratings-key">{t("API key")}</label>}
-                  description={
-                    draft.apiKey === STORED_KEY
-                      ? t("Saved. Leave as is to keep it, or type a new key to replace it.")
-                      : t("Your own key from the provider's website.")
-                  }
-                  control={
-                    <PasswordInput
-                      id="ratings-key"
-                      autoComplete="new-password"
-                      spellCheck={false}
-                      className="sm:w-64"
-                      value={draft.apiKey}
-                      onFocus={(e) => {
-                        if (draft.apiKey === STORED_KEY) e.currentTarget.select();
-                      }}
-                      onChange={(e) => set({ apiKey: e.currentTarget.value })}
-                    />
-                  }
-                />
+                keyRow
               )}
               {(
                 [
@@ -359,17 +401,7 @@ export function RatingSources({
         }
       />
 
-      <SaveBar
-        dirty={dirty}
-        saving={saving}
-        disabled={disabled}
-        error={error}
-        onSave={save}
-        onDiscard={() => {
-          reset();
-          setError(null);
-        }}
-      />
+      {saveBar}
     </>
   );
 }

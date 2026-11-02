@@ -1,3 +1,4 @@
+import { MoreOptions } from "../../components/ConfigSection";
 import {
   Alert,
   AlertDescription,
@@ -641,7 +642,7 @@ export function SiteDefinitions({
         {saved.definitionsUrl?.trim() ? null : (
           <EmptyState
             icon={<Upload />}
-            title={t("Add a definitions source to search tracker sites")}
+            title={t("Add a definitions source under More options to search tracker sites")}
           />
         )}
         <SettingsRow
@@ -716,28 +717,30 @@ export function SiteDefinitions({
             </ul>
           </SettingsRow>
         ) : null}
-        <TextRow
-          label={t("Definitions source")}
-          type="url"
-          value={draft.definitionsUrl ?? ""}
-          placeholder="https://…/definitions/"
-          error={errors.definitionsUrl}
-          help={t(
-            "Optional. A folder of Cardigann-format definitions you trust: a GitHub folder or raw folder URL, a GitHub contents API URL, or a plain list of definition URLs. Ether lists it when you add a site and updates installed definitions from it.",
-          )}
-          onChange={(v) => setDraft({ ...draft, definitionsUrl: v })}
-        />
-        <TextRow
-          label="FlareSolverr"
-          type="url"
-          value={draft.flareSolverrUrl ?? ""}
-          placeholder="http://localhost:8191"
-          error={errors.flareSolverrUrl}
-          help={t(
-            "Optional. Passes Cloudflare browser challenges for sites that use them. Without it, those sites report that they need FlareSolverr.",
-          )}
-          onChange={(v) => setDraft({ ...draft, flareSolverrUrl: v })}
-        />
+        <MoreOptions label={t("More options: {title}", { title: t("Site definitions") })}>
+          <TextRow
+            label={t("Definitions source")}
+            type="url"
+            value={draft.definitionsUrl ?? ""}
+            placeholder="https://…/definitions/"
+            error={errors.definitionsUrl}
+            help={t(
+              "Optional. A folder of Cardigann-format definitions you trust: a GitHub folder or raw folder URL, a GitHub contents API URL, or a plain list of definition URLs. Ether lists it when you add a site and updates installed definitions from it.",
+            )}
+            onChange={(v) => setDraft({ ...draft, definitionsUrl: v })}
+          />
+          <TextRow
+            label="FlareSolverr"
+            type="url"
+            value={draft.flareSolverrUrl ?? ""}
+            placeholder="http://localhost:8191"
+            error={errors.flareSolverrUrl}
+            help={t(
+              "Optional. Passes Cloudflare browser challenges for sites that use them. Without it, those sites report that they need FlareSolverr.",
+            )}
+            onChange={(v) => setDraft({ ...draft, flareSolverrUrl: v })}
+          />
+        </MoreOptions>
       </SettingsSection>
       <SaveBar
         dirty={dirty}

@@ -5,7 +5,7 @@ import {
   buttonVariants,
   toast,
 } from "@braedonsaunders/appkit-ui";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../../app-context";
 import { ConfigSection } from "../../components/ConfigSection";
@@ -14,39 +14,14 @@ import { RestartButton } from "../../components/RestartDrawer";
 import { SettingsRow } from "../../components/SettingsRow";
 import { localized, t } from "../../i18n";
 import { api } from "../../lib/api";
-import { useAsync } from "../../lib/hooks";
 import Logs from "../Logs";
 import { BackupsAndImport } from "./Backups";
 import { ClusterOverview, useClustered } from "./Cluster";
 import { OutboundInternet } from "./OutboundInternet";
+import { ServerProtection } from "./ServerProtection";
 import { ConnectedServices, integrationTabs, type ServiceTab } from "./ConnectedServices";
-import { type FieldGroup } from "./SchemaForm";
 import * as S from "./schema";
 import { UpdatesStatus } from "./sections";
-
-/** Reveals the tab holding the first field the server rejected. */
-function useRevealErrors(base: string, tabOf: (key: string) => string | undefined) {
-  const navigate = useNavigate();
-  return useCallback(
-    (keys: string[]) => {
-      const tab = keys.map(tabOf).find(Boolean);
-      if (tab) navigate(`${base}/${tab}`);
-    },
-    [base, navigate, tabOf],
-  );
-}
-
-const serverTab = () => "server";
-
-/** General sections other than the server itself, each on its own tab. */
-const GENERAL_SECTIONS = localized(
-  () =>
-    [
-      { key: "downloads", label: t("Downloads"), groups: S.DOWNLOADS },
-      { key: "personalize", label: t("Personalization"), groups: S.PERSONALIZE },
-      { key: "extras", label: t("Trailers & extras"), groups: S.EXTRAS },
-    ] as const,
-);
 
 function ServerStatus() {
   const { boot } = useApp();
@@ -60,37 +35,22 @@ function ServerStatus() {
   );
 }
 
-/**
- * Names, how apps connect, then downloads, personalization and trailers.
- * Every form stays mounted across tabs, so edits on several tabs save together.
- */
+/** Names, how apps reach this computer, how it reaches the internet, and setup. */
 export function GeneralPage() {
   const { reloadBoot } = useApp();
   const clustered = useClustered();
-  const tabs = [
-    { key: "server", label: t("Server") },
-    ...GENERAL_SECTIONS.map((x) => ({ key: x.key, label: x.label })),
-  ];
-  const tab = useRouteTab(tabs);
-  const toServer = useRevealErrors("/server", serverTab);
   return (
-    <DomainPage title={t("General")} base="/server" tabs={tabs} active={tab}>
+    <DomainPage title={t("General")} base="/server">
       <ConfigSection
         configKey="server"
         endpoint="server"
         groups={clustered ? S.clusterServerGroups() : S.SERVER}
-        omit={clustered ? undefined : ["clusterWeight"]}
         label={t("General")}
-        hidden={tab !== "server"}
         before={() => <ServerStatus />}
-        onFieldErrors={toServer}
         onSaved={() => void reloadBoot()}
       />
-      <OutboundInternet hidden={tab !== "server"} />
-      {tab === "server" ? <RunSetupWizard /> : null}
-      {GENERAL_SECTIONS.map((x) => (
-        <GeneralSection key={x.key} section={x} hidden={tab !== x.key} />
-      ))}
+      <OutboundInternet />
+      <RunSetupWizard />
     </DomainPage>
   );
 }
@@ -141,44 +101,6 @@ function RunSetupWizard() {
   );
 }
 
-function GeneralSection({
-  section,
-  hidden,
-  onSaved,
-}: {
-  section: { key: string; label: string; groups: readonly FieldGroup[] };
-  hidden: boolean;
-  onSaved?: () => void;
-}) {
-  const tabOf = useCallback(() => section.key, [section.key]);
-  const reveal = useRevealErrors("/server", tabOf);
-  return (
-    <ConfigSection
-      configKey={section.key}
-      groups={[...section.groups]}
-      label={section.label}
-      hidden={hidden}
-      before={section.key === "extras" ? () => <ExtrasStatus /> : undefined}
-      onFieldErrors={reveal}
-      onSaved={onSaved}
-    />
-  );
-}
-
-function ExtrasStatus() {
-  const config = useAsync(() => api.getConfig(), []);
-  const extras = config.data?.extras;
-  const command = String(extras?.resolverCommand ?? "").trim();
-  if (!extras?.enabled || command) return null;
-  return (
-    <p role="status" className="text-sm text-fg-muted">
-      {t(
-        "Trailers use yt-dlp. Install yt-dlp, or set your own resolver command under More options.",
-      )}
-    </p>
-  );
-}
-
 export function ServicesPage() {
   const [enabled, setEnabled] = useState<Partial<Record<ServiceTab, boolean>>>({});
   const tabs = integrationTabs(enabled);
@@ -203,7 +125,7 @@ const MAINTENANCE_TABS = localized(
     [
       { key: "backups", label: t("Backups & import") },
       { key: "updates", label: t("Updates") },
-      { key: "troubleshooting", label: t("Troubleshooting") },
+      { key: "health", label: t("Health") },
       { key: "logs", label: t("Logs") },
     ] as const,
 );
@@ -228,15 +150,23 @@ export function MaintenancePage() {
           before={() => <UpdatesStatus />}
         />
       ) : null}
-      {tab === "troubleshooting" ? (
-        <ConfigSection
-          configKey="spike"
-          endpoint="spike"
-          groups={S.SPIKE}
-          label={t("Troubleshooting")}
-        />
+      {tab === "health" ? (
+        <>
+          <ServerProtection />
+          <ConfigSection configKey="spike" endpoint="spike" groups={S.SPIKE} label={t("Health")} />
+        </>
       ) : null}
-      {tab === "logs" ? <Logs /> : null}
+      {tab === "logs" ? (
+        <>
+          <ConfigSection
+            configKey="server"
+            endpoint="server"
+            groups={S.LOG_LEVEL}
+            label={t("Logs")}
+          />
+          <Logs />
+        </>
+      ) : null}
     </DomainPage>
   );
 }

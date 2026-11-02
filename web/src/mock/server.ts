@@ -3448,7 +3448,17 @@ export function createFakeServer(opts: FakeOptions = {}) {
     }
     if (seg[0] === "config" && seg[1] && method === "PUT") {
       const key = seg[1] === "opensubtitles" ? "openSubtitles" : seg[1];
-      let value = body;
+      // Like the server: the body is merged onto the stored section.
+      const prev = (state.config as unknown as Record<string, unknown>)[key];
+      let value =
+        prev &&
+        typeof prev === "object" &&
+        !Array.isArray(prev) &&
+        body &&
+        typeof body === "object" &&
+        !Array.isArray(body)
+          ? { ...(prev as Record<string, unknown>), ...(body as Record<string, unknown>) }
+          : body;
       if (
         key === "plex" &&
         body !== null &&
@@ -3456,7 +3466,7 @@ export function createFakeServer(opts: FakeOptions = {}) {
         !Array.isArray(body) &&
         (body as { claimed?: boolean }).claimed === false
       ) {
-        value = { ...(body as Record<string, unknown>), token: "" };
+        value = { ...(value as Record<string, unknown>), token: "" };
       }
       (state.config as unknown as Record<string, unknown>)[key] = value;
       return json({ section: key, value });

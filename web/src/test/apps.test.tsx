@@ -279,7 +279,7 @@ describe("Apps", () => {
     const toggle = await screen.findByRole("switch", { name: "Silo enabled" });
     expect(toggle).toBeChecked();
     fireEvent.click(toggle);
-    expect(await screen.findByRole("alert")).toHaveTextContent("enable failed");
+    expect(await screen.findByText("enable failed")).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "Silo enabled" })).toBeChecked();
     expect(screen.getByRole("tab", { name: "Silo" })).toBeInTheDocument();
   });

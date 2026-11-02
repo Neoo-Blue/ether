@@ -71,7 +71,7 @@ function ruleSummary(r: QualityRule, viewers: Viewer[] | null) {
     .join(" · ");
 }
 
-/** Device rules: the first rule matching an app picks its quality profile. */
+/** Rules: the first rule matching a viewer, app or device picks its quality profile. */
 export function ClientRulesTab() {
   const { config, quality, commit } = useQuality();
   const { viewers } = useViewers();
@@ -156,9 +156,9 @@ export function ClientRulesTab() {
   return (
     <>
       <Section
-        title={t("Device rules")}
+        title={t("Rules")}
         description={t(
-          "Checked from the top. The first rule that matches an app on a device picks its quality profile; apps no rule matches use the defaults.",
+          "Checked from the top. The first rule that matches picks the quality profile; anything no rule matches uses the defaults.",
         )}
         actions={
           <Button
@@ -334,7 +334,7 @@ export function ClientRulesTab() {
               }
             />
             <SettingsRow
-              title={t("Maximum resolution")}
+              title={t("Quality limit")}
               description={
                 errors.maxHeight ? (
                   <span className="text-danger">{errors.maxHeight}</span>
@@ -349,7 +349,7 @@ export function ClientRulesTab() {
                     value={String(draft.maxHeight ?? 0)}
                     onChange={(v) => set({ maxHeight: Number(v) || undefined })}
                     options={HEIGHTS}
-                    ariaLabel={t("Maximum resolution")}
+                    ariaLabel={t("Quality limit")}
                     searchable={false}
                   />
                 </div>
