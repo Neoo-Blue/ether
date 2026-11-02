@@ -124,7 +124,7 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 	tunnel := remote.NewTunnelServer(remote.TunnelOptions{Auth: auth, Logger: log})
 	factory := &remote.Factory{Tunnel: tunnel, TrustedLAN: remote.GrantsLAN(mgr.GrantsOf), Logger: log}
 	mgr.RegisterRuntime("remote", factory.RuntimeFactory())
-	host := remote.NewHostHandler(remote.HostOptions{Host: remote.HostAdapter{HostFor: mgr.HostFor}, Auth: auth, Logger: log})
+	host := remote.NewHostHandler(remote.HostOptions{Host: remote.HostAdapter{HostFor: mgr.HostFor, SettingsWithSecrets: mgr.PluginSettings}, Auth: auth, Logger: log})
 	pairing := remote.NewPairing(a.db, grants, func(ctx context.Context) (int64, error) {
 		owner, err := a.users.Owner(ctx)
 		if err != nil {

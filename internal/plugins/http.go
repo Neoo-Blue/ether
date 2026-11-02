@@ -693,6 +693,7 @@ func (m *Manager) handleAction(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(resp.Body)
 		return
 	}
+	m.startActionJob(id, resp.Body)
 	result, err := m.saveActionProposal(r.Context(), id, resp.Body)
 	if err != nil {
 		m.fail(w, err)

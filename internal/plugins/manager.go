@@ -18,6 +18,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/config"
 	"github.com/braedonsaunders/ether/internal/egress"
 	"github.com/braedonsaunders/ether/internal/extend"
+	"github.com/braedonsaunders/ether/internal/logredact"
 	"github.com/braedonsaunders/ether/internal/notify"
 	"github.com/braedonsaunders/ether/internal/safefetch"
 )
@@ -87,6 +88,8 @@ type Manager struct {
 	// warming holds plugin ids whose runtime is loading in the background
 	// (guarded by mu), so the hot path never waits for a load.
 	warming map[string]bool
+	// jobs holds "plugin|path" for action-started jobs still running.
+	jobs sync.Map
 	// shadow mirrors each plugin's shadow flag (guarded by mu) so the play
 	// path can skip shadow plugins without a database read.
 	shadow map[string]bool
@@ -333,7 +336,36 @@ func (m *Manager) runtimeFor(ctx context.Context, r Record) (Runtime, error) {
 	}
 	m.runtimes[r.ID] = rt
 	m.mu.Unlock()
+	m.deliverSettings(ctx, r.ID, rt)
 	return rt, nil
+}
+
+// deliverSettings sends a newly opened runtime the plugin's stored
+// settings (secrets included; the plugin owns them) through
+// /ether/configure, so a plugin that keeps its configuration in memory has
+// it after a start, restart or update. Failures are logged, not fatal: the
+// plugin can still read settings.get per request.
+func (m *Manager) deliverSettings(ctx context.Context, pluginID string, rt Runtime) {
+	settings, err := m.mergedSettings(ctx, pluginID)
+	if err != nil || len(settings) == 0 {
+		return
+	}
+	body, err := json.Marshal(settings)
+	if err != nil {
+		return
+	}
+	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), DeadlineFor("/ether/configure"))
+	defer cancel()
+	if _, err := rt.Call(cctx, Request{PluginID: pluginID, Method: "POST", Path: "/ether/configure", Body: body}); err != nil {
+		m.log.Warn("plugins: deliver settings to new runtime", "plugin", pluginID, "err", err)
+	}
+}
+
+// PluginSettings returns a plugin's stored settings with its own secrets,
+// for delivery to that plugin only (remote sidecars read it from the
+// authenticated plugin-host API after a restart or reconnect).
+func (m *Manager) PluginSettings(ctx context.Context, pluginID string) (map[string]any, error) {
+	return m.mergedSettings(ctx, pluginID)
 }
 
 // ErrStreamUnsupported indicates that a runtime cannot relay file bodies.
@@ -409,7 +441,7 @@ func DeadlineFor(path string) time.Duration {
 		return 5 * time.Minute
 	case strings.HasPrefix(path, "/catalog/"), strings.HasPrefix(path, "/ether/event"), strings.HasPrefix(path, "/ether/action"), strings.HasPrefix(path, "/ether/markers"):
 		return 10 * time.Second
-	case strings.HasPrefix(path, "/subtitles/"):
+	case strings.HasPrefix(path, "/subtitles/"), strings.HasPrefix(path, "/ether/subtitles/"):
 		return 5 * time.Second
 	default:
 		return 30 * time.Second
@@ -490,7 +522,7 @@ func redactJSON(raw json.RawMessage) string {
 	if err := json.Unmarshal(raw, &v); err != nil {
 		return ""
 	}
-	redactValue(v)
+	v = redactValue(v)
 	out, err := json.Marshal(v)
 	if err != nil {
 		return ""
@@ -498,22 +530,27 @@ func redactJSON(raw json.RawMessage) string {
 	return string(out)
 }
 
-func redactValue(v any) {
+func redactValue(v any) any {
 	switch t := v.(type) {
 	case map[string]any:
 		for k, val := range t {
 			lk := strings.ToLower(k)
-			if strings.Contains(lk, "secret") || strings.Contains(lk, "token") || strings.Contains(lk, "password") || strings.Contains(lk, "api_key") || strings.Contains(lk, "apikey") || lk == "key" {
+			if strings.Contains(lk, "secret") || strings.Contains(lk, "token") || strings.Contains(lk, "password") || strings.Contains(lk, "api_key") || strings.Contains(lk, "apikey") || lk == "key" || logredact.Sensitive(k) {
 				t[k] = "Saved"
 				continue
 			}
-			redactValue(val)
+			t[k] = redactValue(val)
 		}
 	case []any:
-		for _, item := range t {
-			redactValue(item)
+		for i, item := range t {
+			t[i] = redactValue(item)
 		}
+	case string:
+		// Signed URLs and free text can carry credentials in query
+		// parameters or as bare JWTs.
+		return logredact.String(t)
 	}
+	return v
 }
 
 // recordFailure applies the SPEC §5.2 failure policy: exponential backoff
@@ -724,4 +761,37 @@ func (m *Manager) Remove(ctx context.Context, id string, undoFirst bool) error {
 	}
 	m.broadcast(ctx)
 	return nil
+}
+
+// startActionJob lets a page action start long work: when the action's
+// result names a job ({"job": "/ether/job/<name>"}), the host runs that job
+// in the background with the job deadline (5 minutes), once at a time per
+// plugin and job, so a scan of a large library is not cut off by the
+// 10-second action deadline.
+func (m *Manager) startActionJob(pluginID string, body json.RawMessage) {
+	var out struct {
+		Job string `json:"job"`
+	}
+	if json.Unmarshal(body, &out) != nil || out.Job == "" {
+		return
+	}
+	path := out.Job
+	if !strings.HasPrefix(path, "/ether/job/") {
+		path = "/ether/job/" + strings.TrimPrefix(path, "/")
+	}
+	if strings.Contains(path, "..") || strings.ContainsAny(path, "?#") {
+		return
+	}
+	key := pluginID + "|" + path
+	if _, running := m.jobs.LoadOrStore(key, true); running {
+		return
+	}
+	go func() {
+		defer m.jobs.Delete(key)
+		ctx, cancel := context.WithTimeout(context.Background(), DeadlineFor(path))
+		defer cancel()
+		if _, err := m.Call(ctx, pluginID, Request{Method: "POST", Path: path}); err != nil {
+			m.log.Warn("plugins: action job", "plugin", pluginID, "job", path, "err", err)
+		}
+	}()
 }

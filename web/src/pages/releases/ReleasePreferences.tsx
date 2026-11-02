@@ -431,11 +431,13 @@ function ValueField({
   value,
   suggestions,
   mono,
+  placeholder,
   onChange,
 }: {
   value: string;
   suggestions: { value: string; label: string }[];
   mono?: boolean;
+  placeholder?: string;
   onChange: (value: string) => void;
 }) {
   const listId = useId();
@@ -445,6 +447,7 @@ function ValueField({
         aria-label={t("Value")}
         className={mono ? "font-mono text-xs" : ""}
         value={value}
+        placeholder={placeholder}
         list={suggestions.length ? listId : undefined}
         onChange={(e) => onChange(e.target.value)}
       />
@@ -467,6 +470,8 @@ function operatorLabel(operator: string): string {
       return t("Contains");
     case "regex":
       return t("Regex");
+    case "in":
+      return t("Is one of");
     default:
       return t("Equals");
   }
@@ -554,6 +559,7 @@ function ConditionEditor({
             <ValueField
               value={c.value ?? ""}
               mono={c.operator === "regex"}
+              placeholder={c.operator === "in" ? t("Values separated by commas") : undefined}
               suggestions={c.operator === "equals" ? suggestionsFor(desc) : []}
               onChange={(value) => onChange({ ...c, value })}
             />

@@ -55,6 +55,7 @@ func (noopHost) FoldersList(context.Context, string, string) ([]plugins.FolderEn
 func (noopHost) FoldersStat(context.Context, string, string) (plugins.FolderEntry, error) {
 	return plugins.FolderEntry{}, plugins.ErrPermissionDenied
 }
+func (noopHost) Settings(context.Context) (map[string]any, error)          { return map[string]any{}, nil }
 func (noopHost) NotifyOwner(context.Context, string) error                 { return nil }
 func (noopHost) Log(context.Context, string, string, map[string]any) error { return nil }
 
