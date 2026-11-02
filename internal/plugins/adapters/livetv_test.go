@@ -25,7 +25,7 @@ type livetvTestHarness struct {
 	tv  *livetv.Service
 	mgr *plugins.Manager
 	reg *extend.Registry
-	rt  *fakePluginRuntime
+	rt  *listChannelFakeRuntime
 	now time.Time
 }
 
@@ -44,7 +44,7 @@ func newLiveTVTestHarness(t *testing.T) *livetvTestHarness {
 	t.Cleanup(func() { _ = tv.Close() })
 
 	reg := extend.New()
-	rt := &fakePluginRuntime{routes: map[string]func(plugins.Request) (plugins.Response, error){}}
+	rt := &listChannelFakeRuntime{routes: map[string]func(plugins.Request) (plugins.Response, error){}}
 
 	mgr, err := plugins.New(plugins.Deps{
 		DB:       db,

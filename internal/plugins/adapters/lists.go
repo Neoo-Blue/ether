@@ -408,11 +408,10 @@ func (k *listSourceKind) fetchCatalogPages(g *collections.Gather, catType, catID
 			} else {
 				newOnPage++
 			}
-			if ref, ok := parseCatalogMeta(item, defaultMedia); ok {
-				refs = append(refs, ref)
-				if len(refs) >= maxItems {
-					break
-				}
+			ref, _ := parseCatalogMeta(item, defaultMedia)
+			refs = append(refs, ref)
+			if len(refs) >= maxItems {
+				break
 			}
 		}
 		if hasMore != nil && !*hasMore {

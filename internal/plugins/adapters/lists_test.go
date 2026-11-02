@@ -23,13 +23,13 @@ import (
 	"github.com/braedonsaunders/ether/internal/store"
 )
 
-type fakePluginRuntime struct {
+type listChannelFakeRuntime struct {
 	mu     sync.Mutex
 	calls  []plugins.Request
 	routes map[string]func(plugins.Request) (plugins.Response, error)
 }
 
-func (f *fakePluginRuntime) Call(_ context.Context, req plugins.Request) (plugins.Response, error) {
+func (f *listChannelFakeRuntime) Call(_ context.Context, req plugins.Request) (plugins.Response, error) {
 	f.mu.Lock()
 	f.calls = append(f.calls, req)
 	fn := f.routes[req.Path]
@@ -55,9 +55,9 @@ func (f *fakePluginRuntime) Call(_ context.Context, req plugins.Request) (plugin
 	}
 }
 
-func (f *fakePluginRuntime) Close() error { return nil }
+func (f *listChannelFakeRuntime) Close() error { return nil }
 
-func (f *fakePluginRuntime) paths() []string {
+func (f *listChannelFakeRuntime) paths() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	out := make([]string, len(f.calls))
@@ -67,7 +67,7 @@ func (f *fakePluginRuntime) paths() []string {
 	return out
 }
 
-func (f *fakePluginRuntime) resetCalls() {
+func (f *listChannelFakeRuntime) resetCalls() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = nil
@@ -80,7 +80,7 @@ type listTestHarness struct {
 	pers *personalize.Engine
 	mgr  *plugins.Manager
 	reg  *extend.Registry
-	rt   *fakePluginRuntime
+	rt   *listChannelFakeRuntime
 }
 
 func newListTestHarness(t *testing.T) *listTestHarness {
@@ -165,7 +165,7 @@ func newListTestHarness(t *testing.T) *listTestHarness {
 		t.Fatal(err)
 	}
 	reg := extend.New()
-	rt := &fakePluginRuntime{routes: map[string]func(plugins.Request) (plugins.Response, error){}}
+	rt := &listChannelFakeRuntime{routes: map[string]func(plugins.Request) (plugins.Response, error){}}
 
 	mgr, err := plugins.New(plugins.Deps{
 		DB:       db,
