@@ -90,9 +90,10 @@ func (r *fakeRelease) failure() (from, to int64, err error) {
 }
 
 type fakeSource struct {
-	rel    *fakeRelease
-	closed atomic.Bool
-	reads  atomic.Int64
+	rel          *fakeRelease
+	closed       atomic.Bool
+	reads        atomic.Int64
+	playDuration atomic.Int64 // SetPlaybackDuration hint
 
 	spanMu sync.Mutex
 	spans  [][2]int64 // [offset, end) of every read
@@ -108,6 +109,8 @@ func (s *fakeSource) Size() int64       { return s.rel.Size }
 func (s *fakeSource) Name() string      { return s.rel.Name }
 func (s *fakeSource) ReleaseID() string { return s.rel.ID }
 func (s *fakeSource) Close() error      { s.closed.Store(true); return nil }
+
+func (s *fakeSource) SetPlaybackDuration(d time.Duration) { s.playDuration.Store(int64(d)) }
 
 func (s *fakeSource) ReadAt(p []byte, off int64) (int, error) {
 	s.reads.Add(1)

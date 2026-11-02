@@ -529,6 +529,7 @@ func (a *App) applyConfig(c config.Config) {
 	a.catalog.UpdateConfig(c.Catalog)
 	a.configureCache(c.Cache)
 	c.Cache = a.runningCacheConfig()
+	a.engine.UpdatePlaybackReadAhead(c.Cache.PlaybackReadAhead())
 	if a.cachefill != nil {
 		a.cachefill.Wake()
 	}

@@ -252,6 +252,10 @@ type Cache struct {
 	DisableSpeculation bool   `json:"disableSpeculation,omitempty"`
 	DetailWarmup       string `json:"detailWarmup,omitempty"` // empty/on or off
 	DetailBytes        int64  `json:"detailBytes,omitempty"`  // zero warms 40s of source media, capped at 256 MiB
+	// PlaybackReadAheadMinutes is how many minutes of the title being played
+	// Usenet streaming keeps downloaded to the cache ahead of the viewer:
+	// 0 is off, nil is DefaultPlaybackReadAheadMinutes.
+	PlaybackReadAheadMinutes *int `json:"playbackReadAheadMinutes,omitempty"`
 
 	Dir         string `json:"dir"`
 	BudgetBytes int64  `json:"budgetBytes"`
@@ -864,6 +868,23 @@ func (s *Store) save() error {
 		syncDir = syncDirAfterRename
 	}
 	return writeFileAtomicWithDirSync(s.path, b, 0o600, syncDir)
+}
+
+// DefaultPlaybackReadAheadMinutes rides out a provider stall several times
+// longer than a stream read's 90 s timeout while costing about 3 GiB of
+// cache for an 80 Mbit/s 4K remux.
+const DefaultPlaybackReadAheadMinutes = 5
+
+// MaxPlaybackReadAheadMinutes bounds PlaybackReadAheadMinutes.
+const MaxPlaybackReadAheadMinutes = 30
+
+// PlaybackReadAhead is the media time kept downloaded ahead of a viewer.
+func (c Cache) PlaybackReadAhead() time.Duration {
+	m := DefaultPlaybackReadAheadMinutes
+	if c.PlaybackReadAheadMinutes != nil {
+		m = min(max(*c.PlaybackReadAheadMinutes, 0), MaxPlaybackReadAheadMinutes)
+	}
+	return time.Duration(m) * time.Minute
 }
 
 // EffectiveCache combines the shared pool policy with this node's mount path.

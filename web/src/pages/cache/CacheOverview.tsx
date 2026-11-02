@@ -213,6 +213,10 @@ export function CacheOverview({
               [t("Detail-page openings"), warming && p.detailWarmup !== "off"],
               [t("Next episode"), warming && p.prefetchNextEpisode],
               [t("Resume warming"), warming && p.keepInProgressWarm],
+              [
+                t("Read ahead while playing"),
+                p.mode !== "off" && (p.playbackReadAheadMinutes ?? 5) > 0,
+              ],
             ].map(([label, on]) => (
               <div key={String(label)} className="flex justify-between gap-3">
                 <dt className="text-fg-muted">{label}</dt>

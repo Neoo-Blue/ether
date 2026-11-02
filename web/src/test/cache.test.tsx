@@ -89,6 +89,20 @@ describe("Cache management", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save policy" }));
     await waitFor(() => expect(fake.state.config.cache.mode).toBe("off"));
   });
+  it("saves the playback read-ahead depth and disables it without media caching", async () => {
+    const { fake } = renderApp("/cache");
+    fireEvent.click(await screen.findByRole("button", { name: "Edit policy" }, WAIT));
+    const ahead = await screen.findByLabelText("Read ahead while playing", {}, WAIT);
+    expect(ahead).toHaveValue("5");
+    fireEvent.change(ahead, { target: { value: "10" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save policy" }));
+    await waitFor(() => expect(fake.state.config.cache.playbackReadAheadMinutes).toBe(10));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit policy" }, WAIT));
+    fireEvent.change(await screen.findByLabelText("Retention strategy", {}, WAIT), {
+      target: { value: "off" },
+    });
+    expect(screen.getByLabelText("Read ahead while playing")).toBeDisabled();
+  });
   it("filters retained titles and updates an owner pin", async () => {
     const { fake } = renderApp("/cache/explorer");
     expect(await screen.findByText("Arrival", {}, WAIT)).toBeInTheDocument();

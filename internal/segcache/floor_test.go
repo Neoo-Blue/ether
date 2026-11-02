@@ -296,3 +296,25 @@ func TestSharedFreeSpaceFloorCountsBytesStillBeingUnlinked(t *testing.T) {
 		t.Fatalf("reclaim records left: %d %v", pending, err)
 	}
 }
+
+func TestUsageLimitIsBudgetOrFloorCap(t *testing.T) {
+	c := openT(t, t.TempDir(), 0)
+	if got := c.UsageLimit(); got != -1 {
+		t.Fatalf("unlimited cache limit = %d, want -1", got)
+	}
+	c.SetBudget(500)
+	if got := c.UsageLimit(); got != 500 {
+		t.Fatalf("budget limit = %d, want 500", got)
+	}
+	vol := &fakeVolume{total: 1000} // floor: 50 bytes
+	vol.cache = func() int64 { used, _ := c.Usage(); return used }
+	vol.other.Store(800) // 200 free: cap 150
+	c.SetDiskUsage(vol.usage)
+	if got := c.UsageLimit(); got != 150 {
+		t.Fatalf("floor-capped limit = %d, want 150", got)
+	}
+	c.SetPolicy(Policy{Mode: "off"})
+	if got := c.UsageLimit(); got != 0 {
+		t.Fatalf("mode off limit = %d, want 0", got)
+	}
+}

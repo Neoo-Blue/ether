@@ -72,11 +72,15 @@ type Options struct {
 	// MaxProbes bounds articles fetched to identify obfuscated files
 	// (default 64).
 	MaxProbes int
+	// PlaybackReadAhead is how much media time a playing source keeps
+	// downloaded into the disk segment cache ahead of its reader (0 = off;
+	// see playahead.go). It needs the cache and a SetPlaybackDuration hint.
+	PlaybackReadAhead time.Duration
 }
 
 // OptionsFromConfig derives options from the owner settings.
 func OptionsFromConfig(cfg config.Config) Options {
-	return Options{HealthSamples: cfg.Resolver.HealthSamples, Repair: cfg.Usenet.Repair}
+	return Options{HealthSamples: cfg.Resolver.HealthSamples, Repair: cfg.Usenet.Repair, PlaybackReadAhead: cfg.EffectiveCache().PlaybackReadAhead()}
 }
 
 func (o Options) withDefaults() Options {
@@ -188,6 +192,9 @@ type Engine struct {
 
 	fetches, fetchedBytes, hotHits, cacheHits, missing, coalesced, active atomic.Int64
 
+	playAhead    atomic.Int64 // time.Duration of playback read-ahead; 0 = off
+	playAheaders atomic.Int64 // sources running a playback read-ahead loop
+
 	par2Loaded, par2Failed, par2Skipped, par2Named, par2Saved, par2Verified, par2Mismatches atomic.Int64
 }
 
@@ -230,7 +237,7 @@ func New(fetcher core.ArticleFetcher, cache core.SegmentCache, opts Options, log
 	}
 	opts = opts.withDefaults()
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Engine{
+	e := &Engine{
 		repairGate:    make(chan struct{}, 1),
 		repairPersist: make(chan struct{}, 1),
 		fetcher:       fetcher,
@@ -245,6 +252,8 @@ func New(fetcher core.ArticleFetcher, cache core.SegmentCache, opts Options, log
 		relLRU:        list.New(),
 		flights:       map[flightKey]*flight{},
 	}
+	e.playAhead.Store(int64(max(opts.PlaybackReadAhead, 0)))
+	return e
 }
 
 // Close cancels every in-flight fetch, makes open sources fail and waits

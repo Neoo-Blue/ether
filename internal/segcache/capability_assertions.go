@@ -8,4 +8,5 @@ var (
 	_ core.SegmentPresence   = (*Cache)(nil)
 	_ core.ReleaseSizeSource = (*Cache)(nil)
 	_ core.CachePlayRecorder = (*Cache)(nil)
+	_ core.SegmentCacheLimit = (*Cache)(nil)
 )

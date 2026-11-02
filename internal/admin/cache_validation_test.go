@@ -23,6 +23,8 @@ func TestCachePolicyValidation(t *testing.T) {
 		{"shelf exceeds total", func(c *config.Cache) { c.PreloadBudgetBytes = c.BudgetBytes + 1 }, "cache.preloadBudgetBytes"},
 		{"shelf without disk", func(c *config.Cache) { c.Mode = "off"; c.PreloadEnabled = true; c.PreloadBudgetBytes = 1 << 30 }, "cache.preloadEnabled"},
 		{"unbounded count", func(c *config.Cache) { c.PreloadMaxTitles = 5001 }, "cache.preloadMaxTitles"},
+		{"oversized playback read-ahead", func(c *config.Cache) { v := 31; c.PlaybackReadAheadMinutes = &v }, "cache.playbackReadAheadMinutes"},
+		{"negative playback read-ahead", func(c *config.Cache) { v := -1; c.PlaybackReadAheadMinutes = &v }, "cache.playbackReadAheadMinutes"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := config.Defaults(t.TempDir())

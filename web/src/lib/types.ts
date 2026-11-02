@@ -300,6 +300,7 @@ export interface EtherConfig {
     disableSpeculation?: boolean;
     detailWarmup?: string;
     detailBytes?: number;
+    playbackReadAheadMinutes?: number;
     inProgressPinPercent?: number;
     inProgressPinMaxAge?: string;
     dir: string;

@@ -375,6 +375,11 @@ func (m *Manager) probeGeneration(ctx context.Context, s *session, res *core.Res
 	}
 	// The loopback server may already hold g; publish under its lock.
 	g.publishInfo(mi, observation, TimeMap{Size: src.Size(), Duration: mi.Duration, Points: points})
+	// The running time turns the source's playback read-ahead from minutes
+	// into bytes; it starts only once a reader actually plays.
+	if ps, ok := src.(core.PlaybackDurationSetter); ok && mi.Duration > 0 {
+		ps.SetPlaybackDuration(mi.Duration)
+	}
 	if needIndex {
 		// Play never waits for the container index: publish now and fill
 		// TimeMap.Points / MediaInfo.Keyframes in the background.

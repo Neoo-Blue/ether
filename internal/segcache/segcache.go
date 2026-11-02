@@ -431,6 +431,21 @@ func (c *Cache) Usage() (used, budget int64) {
 	return c.used, c.budget
 }
 
+// UsageLimit is the most the cache may hold right now: the budget, or the
+// free-space floor's last measured cap when that is lower. -1 means
+// unbounded; 0 means the policy retains no media bytes (mode off).
+func (c *Cache) UsageLimit() int64 {
+	c.floorMu.Lock()
+	floorCap, floorOK := c.floor.cap, c.floor.ok
+	c.floorMu.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.policy.Mode == "off" {
+		return 0
+	}
+	return usageLimit(c.budget, floorCap, floorOK)
+}
+
 // ReleaseBytes reports how many bytes of a release are currently cached.
 func (c *Cache) ReleaseBytes(releaseID string) int64 {
 	if c.shared != nil {
