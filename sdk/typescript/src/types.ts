@@ -245,7 +245,8 @@ export interface SlotMeta {
   slot: SlotKind;
   key: string;
   label: string;
-  route: string;
+  route?: string;
+  action?: string;
 }
 
 export interface CommandMeta {

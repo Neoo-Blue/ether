@@ -525,7 +525,14 @@ func validateContributes(m Manifest, add func(string, string)) {
 			add(base+".slot", "unknown slot "+strconv.Quote(sl.Slot))
 		}
 		label(base+".label", sl.Label, 40)
-		if !strings.HasPrefix(sl.Route, "/") {
+		if !keyRe.MatchString(sl.Key) {
+			add(base+".key", "must be a simple key")
+		}
+		if strings.HasPrefix(sl.Slot, "actionMenu.") {
+			if !keyRe.MatchString(sl.Action) {
+				add(base+".action", "must be a simple action name")
+			}
+		} else if !strings.HasPrefix(sl.Route, "/") {
 			add(base+".route", "must be a plugin route starting with /")
 		}
 	}

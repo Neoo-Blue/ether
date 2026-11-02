@@ -197,3 +197,23 @@ func TestLintCopy(t *testing.T) {
 		t.Fatal("want banned word failure")
 	}
 }
+
+func TestActionSlotContract(t *testing.T) {
+	m := baseManifest()
+	m.Ether.Contributes.Slots = []SlotMeta{{Slot: "actionMenu.title", Key: "mark", Label: "Mark", Action: "mark"}}
+	if err := m.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	ds := DescriptorsFor(m)
+	if len(ds) != 1 || !strings.Contains(string(ds[0].Meta), `"action":"mark"`) || !strings.Contains(string(ds[0].Meta), `"key":"mark"`) {
+		t.Fatalf("descriptor: %+v", ds)
+	}
+	m.Ether.Contributes.Slots[0].Action = ""
+	if err := m.Validate(); !hasField(err, "ether.contributes.slots[0].action") {
+		t.Fatalf("expected action error, got %v", err)
+	}
+	m.Ether.Contributes.Slots[0] = SlotMeta{Slot: "title.panel", Key: "panel", Label: "Panel"}
+	if err := m.Validate(); !hasField(err, "ether.contributes.slots[0].route") {
+		t.Fatalf("expected route error, got %v", err)
+	}
+}

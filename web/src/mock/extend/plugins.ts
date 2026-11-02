@@ -541,6 +541,12 @@ function fixturePlugins(): Fixture[] {
       settings: {},
       schema: {},
       descriptors: [
+        // Fixture plugin contributions exercise every native console slot.
+        ...["title.panel", "viewer.tab", "dashboard.panel", "actionMenu.title", "actionMenu.viewer", "actionMenu.collection", "actionMenu.release"].map((slot) => ({
+          kind: "slot" as const, id: `plugin:${wrapped.id}/fixture-${slot}`, owner: wrapped.id,
+          group: wrapped.name, label: text(wrapped.id, `Fixture ${slot}`),
+          meta: { slot, key: `fixture-${slot}`, route: "/ether/view/fixture", action: slot.startsWith("actionMenu.") ? "fixture" : undefined },
+        })),
         {
           kind: "page",
           id: "plugin:community.example.wrapped/wrapped",
@@ -1113,7 +1119,7 @@ export function createPluginsMock(): {
       bump();
       return json({ status: "removed" });
     }
-    if (method === "GET" && seg[2] === "view") {
+    if (method === "GET" && seg[2] === "views") {
       return json({ spec: { specVersion: 1, blocks: [] }, data: {} });
     }
     if (method === "POST" && seg[2] === "actions") {

@@ -1,3 +1,4 @@
+import { PanelSlots } from "../viewspec/slots/Slots";
 import { DashboardPanel } from "@braedonsaunders/appkit-dashboard/primitives";
 import {
   Alert,
@@ -267,6 +268,7 @@ export default function Home() {
               <RowsPanel state={rows} className="cockpit:min-h-0 cockpit:flex-1" />
             </div>
           </div>
+          <PanelSlots slot="dashboard.panel" />
         </div>
       </div>
     </div>

@@ -276,10 +276,11 @@ type PageMeta struct {
 
 // SlotMeta is one contributed console slot.
 type SlotMeta struct {
-	Slot  string `json:"slot"` // title.panel|viewer.tab|dashboard.panel|actionMenu.*
-	Key   string `json:"key"`
-	Label string `json:"label"`
-	Route string `json:"route"`
+	Slot   string `json:"slot"` // title.panel|viewer.tab|dashboard.panel|actionMenu.*
+	Key    string `json:"key"`
+	Label  string `json:"label"`
+	Route  string `json:"route,omitempty"`
+	Action string `json:"action,omitempty"`
 }
 
 // CommandMeta is one contributed ⌘K command.
