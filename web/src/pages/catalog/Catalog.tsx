@@ -44,7 +44,7 @@ export default function Catalog() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const settings = tab === "settings";
-  const visibility = tab === "visibility";
+  const visibility = tab === "rules";
   const onSettings = settings || visibility;
   const { health, refreshDashboard } = useApp();
   const status = health.find((h) => h.id === "catalog");
@@ -85,11 +85,13 @@ export default function Catalog() {
   );
 }
 
-function CatalogBrowser({
+export function CatalogBrowser({
   params,
   setParams,
   refreshHealth,
+  ruleFilter,
 }: {
+  ruleFilter?: { ruleVisibility: string; rules: string; ruleFallback: string };
   params: URLSearchParams;
   setParams: (p: URLSearchParams, options?: { replace?: boolean }) => void;
   refreshHealth: () => Promise<void>;
@@ -132,6 +134,7 @@ function CatalogBrowser({
     (signal) =>
       api.browseCatalog(
         {
+          ...ruleFilter,
           q: debouncedQuery,
           type,
           genre,
@@ -143,7 +146,7 @@ function CatalogBrowser({
         },
         signal,
       ),
-    [debouncedQuery, type, genre, decade, waiting, sort, page],
+    [debouncedQuery, type, genre, decade, waiting, sort, page, ruleFilter],
   );
   const facets = useAsync(async () => {
     const [genres, decades] = await Promise.all([
@@ -285,15 +288,17 @@ function CatalogBrowser({
             />
           </div>
           <ErrorPanel error={facets.error} onRetry={() => void facets.reload()} />
-          <div className="catalog-policy">
-            <Film size={18} />
-            <h4>{t("Ready for discovery")}</h4>
-            <p>
-              {t(
-                "Only released titles appear here. Popularity and vote thresholds are in Catalog settings.",
-              )}
-            </p>
-          </div>
+          {!ruleFilter ? (
+            <div className="catalog-policy">
+              <Film size={18} />
+              <h4>{t("Ready for discovery")}</h4>
+              <p>
+                {t(
+                  "Only released titles appear here. Popularity and vote thresholds are in Catalog settings.",
+                )}
+              </p>
+            </div>
+          ) : null}
         </aside>
         <section className="catalog-results" aria-label={t("Catalog titles")} aria-busy={busy}>
           <div className="catalog-results-head">

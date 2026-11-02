@@ -286,6 +286,7 @@ type Cache struct {
 type Catalog struct {
 	// ShowUpcomingEpisodes adds metadata-only scheduled episodes to airing seasons.
 	ShowUpcomingEpisodes bool `json:"showUpcomingEpisodes"`
+	ShowUpcomingMovies   bool `json:"showUpcomingMovies"`
 	// GateMoviesByHomeRelease waits for a worldwide digital or physical release.
 	GateMoviesByHomeRelease bool `json:"gateMoviesByHomeRelease"`
 	// HideFranchiseCollections hides automatic TMDB groups from Plex's

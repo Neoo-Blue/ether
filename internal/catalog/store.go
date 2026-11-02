@@ -995,7 +995,7 @@ func (c *Catalog) queryTitles(ctx context.Context, q string, args ...any) ([]cor
 		// Let hydration establish an undated Specials container's premiere
 		// from its aired children; all other unknown dates remain excluded.
 		undatedSpecials := st.t.Type == core.TypeSeason && st.t.Key.Season() == 0 && st.t.Released.IsZero()
-		if !st.t.Adult && (st.t.IsReleased(c.now()) || undatedSpecials) {
+		if !st.t.Adult && (st.t.IsReleased(c.now()) || c.upcomingMovie(&st.t) || undatedSpecials) {
 			out = append(out, st.t)
 		}
 	}
@@ -1024,7 +1024,7 @@ func (c *Catalog) queryTitles(ctx context.Context, q string, args ...any) ([]cor
 	}
 	visible := out[:0]
 	for _, t := range out {
-		if t.IsReleased(c.now()) && (!c.config().GateMoviesByHomeRelease || homeReleaseVisible(&t, c.now())) {
+		if c.upcomingMovie(&t) || (t.IsReleased(c.now()) && (!c.config().GateMoviesByHomeRelease || homeReleaseVisible(&t, c.now()))) {
 			visible = append(visible, t)
 		}
 	}

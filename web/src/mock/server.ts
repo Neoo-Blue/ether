@@ -792,6 +792,18 @@ export function createFakeServer(opts: FakeOptions = {}) {
     }
   }
 
+  type VisibilityGroup = { action?: string; mediaType: string; match: string; rules: Rule[] };
+  function hiddenByRules(title: FakeTitle, groups: VisibilityGroup[], fallback: string) {
+    const first = groups.find(
+      (g) =>
+        (g.mediaType === "mixed" || g.mediaType === title.type) &&
+        (g.match === "any"
+          ? g.rules.some((r) => matches(title, r))
+          : g.rules.every((r) => matches(title, r))),
+    );
+    return first ? first.action !== "show" : fallback === "hide";
+  }
+
   function matches(t: FakeTitle, r: Rule): boolean {
     if (r.field === "contentRating") return ratingMatches(t, r);
     const vals = fieldValues(t, r.field);
@@ -1778,6 +1790,8 @@ export function createFakeServer(opts: FakeOptions = {}) {
           movies: 24929,
           shows: 24298,
           browsableMovies: 24928,
+          homeReleaseChecked: 24680,
+          homeReleasePending: 248,
           browsableShows: 24298,
           lastSync: new Date(Date.now() - 5 * 3600_000).toISOString(),
           sync: { running: false, titlesSeen: 63500 },
@@ -2941,7 +2955,13 @@ export function createFakeServer(opts: FakeOptions = {}) {
                 ? g.rules.some((r) => fieldValues(t, r.field).length > 0 && matches(t, r))
                 : g.rules.every((r) => fieldValues(t, r.field).length > 0 && matches(t, r))),
           );
-        const items = catalog.filter((t) => groups.some((g) => hits(g).includes(t)));
+        const items = catalog.filter((t) =>
+          hiddenByRules(
+            t,
+            groups,
+            String((body as { visibilityDefault?: string }).visibilityDefault ?? "show"),
+          ),
+        );
         const shown = catalog.filter((t) => !items.includes(t));
         return json({
           total: catalog.length,
@@ -2968,8 +2988,13 @@ export function createFakeServer(opts: FakeOptions = {}) {
         const decade = q.get("decade");
         const waiting = q.get("waiting") === "1";
         const sort = q.get("sort");
+        const ruleVisibility = q.get("ruleVisibility");
+        const ruleGroups = JSON.parse(q.get("rules") || "[]") as VisibilityGroup[];
         const items = catalog.filter(
           (t) =>
+            (!ruleVisibility ||
+              hiddenByRules(t, ruleGroups, q.get("ruleFallback") ?? "show") ===
+                (ruleVisibility === "hidden")) &&
             t.title.toLowerCase().includes(needle) &&
             (!type || t.type === type) &&
             (!waiting || t.type === "movie") &&

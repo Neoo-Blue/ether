@@ -1,5 +1,14 @@
+import { CatalogBrowser } from "./Catalog";
 import { Button, Input, Select } from "@braedonsaunders/appkit-ui";
-import { ChevronDown, ChevronUp, GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  GripVertical,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { Drawer } from "../../components/Drawer";
 import { Artwork } from "../../components/Artwork";
@@ -110,6 +119,16 @@ export function RulesPanel({
   onFallback: (value: string) => void;
   region: string;
 }) {
+  const [browse, setBrowse] = useState<"hidden" | "shown" | null>(null);
+  const [browseParams, setBrowseParams] = useState(new URLSearchParams());
+  const ruleFilter = useMemo(
+    () => ({
+      ruleVisibility: browse ?? "shown",
+      rules: JSON.stringify(rules),
+      ruleFallback: fallback,
+    }),
+    [browse, rules, fallback],
+  );
   const [open, setOpen] = useState<number | null>(null);
   const [drag, setDrag] = useState<number | null>(null);
   const [fresh, setFresh] = useState<number | null>(null);
@@ -148,7 +167,16 @@ export function RulesPanel({
     preview.data?.visible ?? Math.max(0, (preview.data?.total ?? 0) - (preview.data?.hidden ?? 0));
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
-      <div className="space-y-2">
+      <div className="space-y-4">
+        <div className="rounded-xl border border-border bg-surface p-5 text-lg font-semibold">
+          {preview.loading
+            ? t("Loading titles…")
+            : tn(
+                preview.data?.total ?? 0,
+                "{count} title in your catalog",
+                "{count} titles in your catalog",
+              )}
+        </div>
         <p className="text-sm text-fg-muted">
           {t("First match wins. Ratings match by age level.")}
         </p>
@@ -275,9 +303,16 @@ export function RulesPanel({
           <Plus size={14} />
           {t("Add rule")}
         </Button>
+        <div className="rounded-xl border border-border bg-surface p-5 font-semibold" role="status">
+          {t("{shown} shown · {hidden} hidden", {
+            shown: formatNumber(visible),
+            hidden: formatNumber(preview.data?.hidden ?? 0),
+          })}
+        </div>
       </div>
       <aside className="space-y-3 lg:sticky lg:top-0 lg:self-start" aria-label={t("Preview")}>
-        <div className="rounded-lg border border-border bg-surface p-4">
+        <div className="rounded-xl border border-border bg-surface p-5">
+          <CheckCircle2 className="mb-4 text-success" size={32} aria-hidden />
           {!complete ? (
             <p className="text-sm text-fg-muted">{t("Finish each condition to preview.")}</p>
           ) : preview.error ? (
@@ -301,9 +336,38 @@ export function RulesPanel({
             </>
           )}
         </div>
-        <PosterRow title={t("Hidden")} items={hiddenItems} />
-        <PosterRow title={t("Shown")} items={shownItems} />
+        <PosterRow
+          title={t("Hidden")}
+          items={hiddenItems}
+          onBrowse={() => {
+            setBrowseParams(new URLSearchParams());
+            setBrowse("hidden");
+          }}
+        />
+        <PosterRow
+          title={t("Shown")}
+          items={shownItems}
+          onBrowse={() => {
+            setBrowseParams(new URLSearchParams());
+            setBrowse("shown");
+          }}
+        />
       </aside>
+      <Drawer
+        open={browse !== null}
+        onClose={() => setBrowse(null)}
+        title={browse === "hidden" ? t("Hidden by rules") : t("Shown by rules")}
+        size="2xl"
+      >
+        {browse ? (
+          <CatalogBrowser
+            params={browseParams}
+            setParams={setBrowseParams}
+            refreshHealth={async () => {}}
+            ruleFilter={ruleFilter}
+          />
+        ) : null}
+      </Drawer>
       <Drawer
         open={editing != null}
         onClose={() => setOpen(null)}
@@ -412,16 +476,17 @@ export function RulesPanel({
 function PosterRow({
   title,
   items,
+  onBrowse,
 }: {
   title: string;
+  onBrowse: () => void;
   items: { key: string; title: string; poster?: string; posterPath?: string }[];
 }) {
-  if (!items.length) return null;
   return (
     <div>
       <h3 className="mb-2 text-xs font-medium text-fg-muted">{title}</h3>
-      <div className="grid grid-cols-4 gap-2">
-        {items.slice(0, 4).map((item) => (
+      <div className="grid max-h-64 overflow-y-auto grid-cols-4 gap-2">
+        {items.slice(0, 24).map((item) => (
           <Artwork
             key={item.key}
             src={
@@ -433,6 +498,9 @@ function PosterRow({
           />
         ))}
       </div>
+      <Button variant="outline" className="mt-3 w-full" onClick={onBrowse}>
+        {t("Browse")}
+      </Button>
     </div>
   );
 }

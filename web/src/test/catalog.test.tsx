@@ -63,18 +63,15 @@ describe("Catalog workspace", () => {
     expect(screen.getByRole("radio", { name: "Some" })).toBeChecked();
     fireEvent.click(screen.getByRole("button", { name: "More options: What's browsable" }));
     expect(screen.getByLabelText("Minimum popularity")).toBeInTheDocument();
-    expect(
-      screen
-        .getAllByRole("link", { name: "Integrations" })
-        .map((link) => link.getAttribute("href")),
-    ).toContain("/services/tmdb");
+    expect(screen.queryByText("TMDB connected")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Your TMDB API key")).not.toBeInTheDocument();
-    const gate = screen.getByLabelText("Wait for digital or physical release");
-    expect(gate).not.toBeChecked();
-    fireEvent.click(gate);
-    const upcoming = screen.getByLabelText("Show scheduled episodes");
+    fireEvent.click(screen.getByRole("radio", { name: /On digital release/ }));
+    const upcoming = screen.getByLabelText("Show upcoming episodes");
     expect(upcoming).not.toBeChecked();
     fireEvent.click(upcoming);
+    const movies = screen.getByLabelText("Show upcoming movies");
+    expect(movies).not.toBeChecked();
+    fireEvent.click(movies);
     fireEvent.click(language);
     fireEvent.click(await screen.findByRole("option", { name: "French (France)" }));
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
@@ -83,8 +80,9 @@ describe("Catalog workspace", () => {
       language: "fr-FR",
       gateMoviesByHomeRelease: true,
       showUpcomingEpisodes: true,
+      showUpcomingMovies: true,
     });
-    expect(screen.getByRole("radio", { name: /When they can play/ })).toBeVisible();
+    expect(screen.getByRole("radio", { name: /On digital release/ })).toBeVisible();
   });
 
   it("filters the catalog to titles waiting for a release", async () => {

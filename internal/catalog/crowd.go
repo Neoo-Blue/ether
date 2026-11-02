@@ -266,7 +266,7 @@ func (c *Catalog) titlesByKeys(ctx context.Context, keys []core.RatingKey) ([]co
 		}
 		if k.Kind() == core.KindMovie {
 			if ent, ok := c.titleCache[k]; ok && ent.gen == gen && ent.minute == minBucket {
-				if !ent.st.t.Adult && ent.st.t.IsReleased(c.now()) && (!c.config().GateMoviesByHomeRelease || homeReleaseVisible(&ent.st.t, c.now())) {
+				if !ent.st.t.Adult && (c.upcomingMovie(&ent.st.t) || (ent.st.t.IsReleased(c.now()) && (!c.config().GateMoviesByHomeRelease || homeReleaseVisible(&ent.st.t, c.now())))) {
 					byKey[k] = cloneTitle(ent.st.t)
 				}
 				continue

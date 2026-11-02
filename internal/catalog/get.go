@@ -97,8 +97,13 @@ func (c *Catalog) Get(ctx context.Context, key core.RatingKey) (*core.Title, err
 	return t, err
 }
 
+// upcomingMovie permits metadata browsing only; playback still enforces release availability.
+func (c *Catalog) upcomingMovie(t *core.Title) bool {
+	return t != nil && c.config().ShowUpcomingMovies && t.Type == core.TypeMovie && !t.Released.IsZero() && t.Released.After(c.now())
+}
+
 func (c *Catalog) visibleTitle(t *core.Title) bool {
-	return t != nil && !t.Adult && t.IsReleased(c.now()) && (!c.config().GateMoviesByHomeRelease || c.homeVisible(t)) && (t.Type != core.TypeSeason || listableSeason(t, c.now()))
+	return t != nil && !t.Adult && (c.upcomingMovie(t) || (t.IsReleased(c.now()) && (!c.config().GateMoviesByHomeRelease || c.homeVisible(t)))) && (t.Type != core.TypeSeason || listableSeason(t, c.now()))
 }
 
 // CachedGet applies the same catalogue visibility gates as Get without a

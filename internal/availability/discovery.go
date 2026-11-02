@@ -39,7 +39,7 @@ func (s *Service) filterReleaseDiscovery(ctx context.Context, items []core.Title
 	keys := []core.RatingKey{}
 	for i := range items {
 		t := &items[i]
-		if evidenceWindow(*t, input.now, input.availability) && titles[t.Key] == nil {
+		if !input.upcomingMovie(*t) && evidenceWindow(*t, input.now, input.availability) && titles[t.Key] == nil {
 			keys = append(keys, t.Key)
 			titles[t.Key] = t
 		}

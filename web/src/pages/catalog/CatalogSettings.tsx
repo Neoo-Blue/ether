@@ -1,13 +1,13 @@
+import { CheckCircle2, AlertTriangle } from "lucide-react";
 import { SettingsSection, Spinner, SubtabNav, toast } from "@braedonsaunders/appkit-ui";
 import { Segmented } from "../../components/fields";
 import { MoreOptions } from "../../components/ConfigSection";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useCallback, useState } from "react";
 import { useApp } from "../../app-context";
 import { SaveBar, useDraft } from "../../components/SaveBar";
 import { ErrorPanel } from "../../components/feedback";
-import { secretConfigured } from "../../components/IntegrationAccount";
-import { t, tx } from "../../i18n";
+import { t } from "../../i18n";
 import { api, ApiError, errorMessage } from "../../lib/api";
 import { useAsync } from "../../lib/hooks";
 import { isRuleComplete } from "../../lib/rules";
@@ -24,29 +24,6 @@ import { SettingsRow } from "../../components/SettingsRow";
 import "./catalog.css";
 
 type Obj = Record<string, unknown>;
-
-function TmdbAccount({ apiKey }: { apiKey: unknown }) {
-  if (secretConfigured(apiKey)) {
-    return (
-      <p className="text-sm">
-        <Link to="/services/tmdb" className="text-primary underline">
-          {t("TMDB connected")}
-        </Link>
-      </p>
-    );
-  }
-  return (
-    <p className="text-sm text-fg-muted">
-      {tx("Connect TMDB in {link}.", {
-        link: (
-          <Link to="/services/tmdb" className="text-primary underline">
-            {t("Integrations")}
-          </Link>
-        ),
-      })}
-    </p>
-  );
-}
 
 function briefGroup(g: FieldGroup): FieldGroup {
   return {
@@ -101,8 +78,9 @@ function ObscureTitles({ draft, onChange }: { draft: Obj; onChange: (next: Obj) 
 export function CatalogSettings() {
   const { tab } = useParams();
   const navigate = useNavigate();
-  const section = tab === "visibility" ? "rules" : "library";
+  const section = tab === "rules" ? "rules" : "library";
   const { health, refreshDashboard } = useApp();
+  const catalogHealth = health.find((h) => h.id === "catalog");
   const config = useAsync(() => api.getConfig(), []);
   const stored = config.data ? asObj(config.data.catalog) : null;
   const { draft, setDraft, dirty, reset } = useDraft<Obj>(stored);
@@ -132,17 +110,17 @@ export function CatalogSettings() {
   return (
     <div className="catalog-scroll app-scroll">
       <div className="space-y-5 p-5 lg:p-7">
-        <SubtabNav
-          ariaLabel={t("Catalog settings")}
-          active={section}
-          onSelect={(key) =>
-            navigate(key === "rules" ? "/catalog/visibility" : "/catalog/settings")
-          }
-          tabs={[
-            { key: "library", label: t("General") },
-            { key: "rules", label: t("Visibility") },
-          ]}
-        />
+        <div className="pb-5">
+          <SubtabNav
+            ariaLabel={t("Catalog settings")}
+            active={section}
+            onSelect={(key) => navigate(key === "rules" ? "/catalog/rules" : "/catalog/settings")}
+            tabs={[
+              { key: "library", label: t("General") },
+              { key: "rules", label: t("Rules") },
+            ]}
+          />
+        </div>
         {config.error ? (
           <ErrorPanel error={config.error} onRetry={() => void config.reload()} />
         ) : null}
@@ -161,7 +139,6 @@ export function CatalogSettings() {
         ) : (
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
             <div className="space-y-5">
-              <TmdbAccount apiKey={draft.tmdbKey} />
               {availability.draft ? (
                 <NewReleasesSettings
                   availability={availability.draft}
@@ -214,21 +191,27 @@ export function CatalogSettings() {
               <WatchlistAlerts />
             </div>
             <aside className="space-y-5">
+              {catalogHealth ? (
+                <section
+                  className="rounded-xl border border-border bg-surface p-5"
+                  aria-label={t("Your catalog")}
+                >
+                  <div className="mb-4 flex items-center gap-3">
+                    {catalogHealth.level === "ok" ? (
+                      <CheckCircle2 size={36} className="text-success" />
+                    ) : (
+                      <AlertTriangle size={36} className="text-warning" />
+                    )}
+                    <h3 className="text-lg font-semibold">{t("Your catalog")}</h3>
+                  </div>
+                  <p className="text-lg font-semibold">{catalogHealth.summary}</p>
+                  <div className="mt-4">
+                    <LevelBadge level={catalogHealth.level} />
+                  </div>
+                </section>
+              ) : null}
               <HomeReleaseStatus />
               <TrendingStatus />
-              {health.find((h) => h.id === "catalog") ? (
-                <SettingsSection title={t("Catalog health")}>
-                  <SettingsRow
-                    title={t("TMDB catalog")}
-                    control={
-                      <LevelBadge
-                        level={health.find((h) => h.id === "catalog")!.level}
-                        label={health.find((h) => h.id === "catalog")!.summary}
-                      />
-                    }
-                  />
-                </SettingsSection>
-              ) : null}
             </aside>
           </div>
         )}

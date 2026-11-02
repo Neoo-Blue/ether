@@ -1,4 +1,5 @@
-import { Input, SettingsSection, Switch, toast } from "@braedonsaunders/appkit-ui";
+import { Play, CalendarDays, Zap } from "lucide-react";
+import { Input, SettingsSection, toast } from "@braedonsaunders/appkit-ui";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { MoreOptions } from "../../components/ConfigSection";
@@ -74,9 +75,18 @@ export function NewReleasesSettings({
 
   return (
     <SettingsSection title={t("New releases")}>
+      {gate && mode === "playable" ? (
+        <p className="text-xs text-fg-muted">
+          {t(
+            "Your saved release-date requirement still applies. Choose a release option to replace it.",
+          )}
+        </p>
+      ) : null}
       <div className="new-release-modes" role="radiogroup" aria-label={t("New releases")}>
         {MODES.map((item) => {
           const selected = mode === item.value;
+          const Icon =
+            item.value === "playable" ? Play : item.value === "digital" ? CalendarDays : Zap;
           return (
             <div key={item.value} className="new-release-mode">
               <button
@@ -85,12 +95,11 @@ export function NewReleasesSettings({
                 aria-checked={selected}
                 className={`new-release-card${selected ? " is-selected" : ""}`}
                 onClick={() => {
-                  if (selected) return;
                   onAvailability(applyReleaseMode(availability, item.value));
-                  // "Right away" promises theatre-only movies too.
-                  if (item.value === "immediate" && gate) onGate(false);
+                  onGate(item.value === "digital");
                 }}
               >
+                <Icon className="new-release-card-icon" aria-hidden="true" />
                 <span className="new-release-card-head">
                   <span className="new-release-card-title">{item.title()}</span>
                   {item.recommended ? (
@@ -99,47 +108,28 @@ export function NewReleasesSettings({
                 </span>
                 <span className="new-release-card-body">{item.body()}</span>
               </button>
-              {selected && item.value === "playable" && summary.data ? (
-                <p className="new-release-status">
-                  {tx("{ready} ready · {waiting} · checked {when}", {
-                    ready: formatNumber(summary.data.ready),
-                    waiting: (
-                      <Link to="/catalog?waiting=1&type=movie" className="text-primary underline">
-                        {tn(
-                          summary.data.waiting,
-                          "{count} waiting for a release",
-                          "{count} waiting for a release",
-                        )}
-                      </Link>
-                    ),
-                    when: summary.data.lastChecked
-                      ? relativeTime(new Date(summary.data.lastChecked * 1000))
-                      : t("not yet"),
-                  })}
-                </p>
-              ) : null}
             </div>
           );
         })}
       </div>
-      {mode !== "immediate" ? (
-        <SettingsRow
-          title={
-            <label htmlFor="catalog-home-release">
-              {t("Wait for digital or physical release")}
-            </label>
-          }
-          description={t(
-            "Also keep every movie hidden until its digital or physical release date.",
-          )}
-          control={
-            <Switch
-              id="catalog-home-release"
-              checked={gate}
-              onChange={(e) => onGate(e.currentTarget.checked)}
-            />
-          }
-        />
+      {mode === "playable" && summary.data ? (
+        <p className="new-release-status">
+          {tx("{ready} ready · {waiting} · checked {when}", {
+            ready: formatNumber(summary.data.ready),
+            waiting: (
+              <Link to="/catalog?waiting=1&type=movie" className="text-primary underline">
+                {tn(
+                  summary.data.waiting,
+                  "{count} waiting for a release",
+                  "{count} waiting for a release",
+                )}
+              </Link>
+            ),
+            when: summary.data.lastChecked
+              ? relativeTime(new Date(summary.data.lastChecked * 1000))
+              : t("not yet"),
+          })}
+        </p>
       ) : null}
     </SettingsSection>
   );

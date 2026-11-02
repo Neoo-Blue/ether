@@ -72,6 +72,20 @@ func TestLibraryFilterPreviewBrowseAndPolicyAgree(t *testing.T) {
 		if err != nil || p.Total != len(titles)-hidden {
 			t.Fatalf("SQL/evaluator differ: total=%d hidden=%d err=%v", p.Total, hidden, err)
 		}
+		for _, visibility := range []string{"hidden", "shown"} {
+			want := hidden
+			if visibility == "shown" {
+				want = len(titles) - hidden
+			}
+			page, err := c.Browse(ctx, core.BrowseQuery{Filter: core.Filter{RuleVisibility: visibility, PreviewRules: specs, Query: "Sample"}, Limit: 2})
+			if err != nil || page.Total != want || len(page.Items) > 2 {
+				t.Fatalf("rules browse %s: %+v err=%v want=%d", visibility, page, err, want)
+			}
+			empty, err := c.Browse(ctx, core.BrowseQuery{Filter: core.Filter{RuleVisibility: visibility, PreviewRules: specs, Query: "not a matching title"}})
+			if err != nil || empty.Total != 0 {
+				t.Fatalf("rules search: %+v %v", empty, err)
+			}
+		}
 		raw, err := c.PreviewVisibility(ctx, specs)
 		if err != nil {
 			t.Fatal(err)

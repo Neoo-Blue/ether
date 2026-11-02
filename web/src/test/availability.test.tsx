@@ -153,12 +153,9 @@ describe("New release modes", () => {
     });
   });
 
-  it("hides the release-date gate when new movies show right away", async () => {
+  it("merges the release-date gate into the three release cards", async () => {
     renderApp("/catalog/settings");
-    const gate = await screen.findByRole("switch", {
-      name: "Wait for digital or physical release",
-    });
-    expect(gate).toBeVisible();
+    expect(await screen.findByRole("radio", { name: /On digital release/ })).toBeVisible();
     fireEvent.click(screen.getByRole("radio", { name: /Right away/ }));
     expect(
       screen.queryByRole("switch", { name: "Wait for digital or physical release" }),

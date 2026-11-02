@@ -465,7 +465,7 @@ func MeetsThreshold(cfg config.Catalog, t core.Title, now time.Time) bool {
 	if t.Type != core.TypeMovie && t.Type != core.TypeShow {
 		return false
 	}
-	if !t.IsReleased(now) {
+	if !t.IsReleased(now) && !(cfg.ShowUpcomingMovies && t.Type == core.TypeMovie && !t.Released.IsZero()) {
 		// A title with no date is treated as unreleased.
 		return false
 	}

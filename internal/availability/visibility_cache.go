@@ -42,7 +42,7 @@ func (s *Service) filterDiscoverySnapshot(ctx context.Context, items []core.Titl
 	s.visibilityMu.Lock()
 	revision := s.visibilityRevision
 	for _, t := range items {
-		if !evidenceWindow(t, now, input.availability) {
+		if input.upcomingMovie(t) || !evidenceWindow(t, now, input.availability) {
 			allowed[t.Key] = true
 			continue
 		}

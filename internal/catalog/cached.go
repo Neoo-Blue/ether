@@ -269,7 +269,7 @@ func (c *Catalog) CachedDiscoveryEpisodes(ctx context.Context, shows []core.Rati
 // CachedGetMany applies CachedGet's visibility gates to bounded local reads.
 // Missing or hidden titles are omitted. It never refreshes or admits fallbacks.
 func (c *Catalog) cachedListVisible(t *core.Title) bool {
-	return !t.Adult && t.IsReleased(c.now()) && (!c.config().GateMoviesByHomeRelease || homeReleaseVisible(t, c.now())) && (t.Type != core.TypeSeason || listableSeason(t, c.now()))
+	return !t.Adult && (c.upcomingMovie(t) || (t.IsReleased(c.now()) && (!c.config().GateMoviesByHomeRelease || homeReleaseVisible(t, c.now())))) && (t.Type != core.TypeSeason || listableSeason(t, c.now()))
 }
 
 func (c *Catalog) cachedStored(key core.RatingKey, gen uint64, minute int64) (core.Title, bool) {

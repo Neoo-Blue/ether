@@ -29,7 +29,7 @@ describe("switching language", () => {
     fireEvent.click(await screen.findByRole("button", { name: "More options: What's browsable" }));
     const popularity = screen.getByLabelText("Minimum popularity");
     fireEvent.change(popularity, { target: { value: "42" } });
-    const gate = screen.getByLabelText("Wait for digital or physical release");
+    const gate = screen.getByRole("radio", { name: /On digital release/ });
     fireEvent.click(gate);
     expect(screen.getByRole("button", { name: "Save changes" })).toBeInTheDocument();
 
@@ -38,7 +38,9 @@ describe("switching language", () => {
     // The same form, still dirty, now labelled in German.
     const saveDe = await screen.findByRole("button", { name: german("Save changes") });
     expect(screen.getByLabelText(german("Minimum popularity"))).toHaveValue(42);
-    expect(screen.getByLabelText(german("Wait for digital or physical release"))).toBeChecked();
+    expect(
+      screen.getByRole("radio", { name: new RegExp(german("On digital release")) }),
+    ).toBeChecked();
     expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
     expect(getLocale()).toBe("de");
     expect(localStorage.getItem("ether.locale")).toBe("de");

@@ -40,7 +40,7 @@ func (c *Catalog) SearchVisible(t *core.Title) bool {
 }
 
 func (c *Catalog) visibleWith(f *libraryfilter.Filter, t *core.Title) bool {
-	return !f.Hidden(t) && (!c.config().GateMoviesByHomeRelease || c.homeVisible(t))
+	return !f.Hidden(t) && (c.upcomingMovie(t) || !c.config().GateMoviesByHomeRelease || c.homeVisible(t))
 }
 
 // FilterVisibility enriches remote summaries with already-known local facets;
@@ -112,7 +112,7 @@ func (c *Catalog) FilterVisibility(ctx context.Context, ts []core.Title) []core.
 	}
 	keep := out[:0]
 	for i := range out {
-		if !f.Hidden(&out[i]) && (!c.config().GateMoviesByHomeRelease || homeReleaseVisible(&out[i], c.now())) {
+		if !f.Hidden(&out[i]) && (c.upcomingMovie(&out[i]) || !c.config().GateMoviesByHomeRelease || homeReleaseVisible(&out[i], c.now())) {
 			keep = append(keep, out[i])
 		}
 	}
@@ -160,7 +160,7 @@ func (c *Catalog) PreviewVisibilityPolicy(ctx context.Context, specs []core.Libr
 	if p.Visible < 0 {
 		p.Visible = 0
 	}
-	p.Items, err = c.queryTitles(ctx, `SELECT `+prefixedCols("t")+` FROM catalog_titles t WHERE `+base+` ORDER BY t.popularity DESC,t.key LIMIT 8`, args...)
+	p.Items, err = c.queryTitles(ctx, `SELECT `+prefixedCols("t")+` FROM catalog_titles t WHERE `+base+` ORDER BY t.popularity DESC,t.key LIMIT 24`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +168,7 @@ func (c *Catalog) PreviewVisibilityPolicy(ctx context.Context, specs []core.Libr
 		p.Items = []core.Title{}
 	}
 	shownWhere, shownArgs := f.SQLHidden()
-	p.Shown, err = c.queryTitles(ctx, `SELECT `+prefixedCols("t")+` FROM catalog_titles t WHERE `+mirrorBrowsableWhere+` AND NOT (`+shownWhere+`) ORDER BY t.popularity DESC,t.key LIMIT 8`, shownArgs...)
+	p.Shown, err = c.queryTitles(ctx, `SELECT `+prefixedCols("t")+` FROM catalog_titles t WHERE `+mirrorBrowsableWhere+` AND NOT (`+shownWhere+`) ORDER BY t.popularity DESC,t.key LIMIT 24`, shownArgs...)
 	if err != nil {
 		return nil, err
 	}
