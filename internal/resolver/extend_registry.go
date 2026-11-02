@@ -12,12 +12,12 @@ import (
 // compilation consult the descriptors the console renders from, so a
 // registered plugin step or field is accepted with its declared shape and
 // an unregistered one is rejected on registry-aware paths. Plugin steps
-// and fields stay neutral (no ranking effect, Unknown matches) until the
-// plugin hot path lands in WS9h.
+// and fields are evaluated by the optional hosted hot-path adapter.
 
 type extendState struct {
 	mu       sync.Mutex
 	registry *extend.Registry
+	hot      RankingHooks
 	version  uint64
 	fields   map[string]releasepolicy.FieldSpec
 }

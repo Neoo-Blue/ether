@@ -49,7 +49,14 @@ export interface DescriptorOption {
 export type RankingEditorKind = "ordered_list" | "choice" | "range" | "toggle" | "none";
 
 export interface RankingStepMeta {
-  editor: RankingEditorKind;
+  editor:
+    | RankingEditorKind
+    | {
+        kind?: RankingEditorKind;
+        editor?: RankingEditorKind;
+        options?: (DescriptorOption | string)[];
+        choices?: (DescriptorOption | string)[];
+      };
   options?: DescriptorOption[];
   choices?: DescriptorOption[];
   required?: boolean;

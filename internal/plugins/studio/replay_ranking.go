@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -157,6 +156,7 @@ func (r *Runner) replayRanking(ctx context.Context, target *resolvedTarget, para
 		mode = "rule_condition"
 	}
 
+	budgets := plugins.EffectiveBudgets(plugins.HotLimits(target.manifest))
 	report := &RankingReplayReport{
 		Mode:         mode,
 		StepKey:      stepKey,
@@ -167,17 +167,9 @@ func (r *Runner) replayRanking(ctx context.Context, target *resolvedTarget, para
 		TracesLoaded: len(rows),
 		Changed:      []ChangedPick{},
 		Budget: RankingBudgetStats{
-			PerCandidateLimitMS: 2.0,
-			BatchLimitMS:        50.0,
+			PerCandidateLimitMS: float64(budgets.PerCandidate) / float64(time.Millisecond),
+			BatchLimitMS:        float64(budgets.PerBatch) / float64(time.Millisecond),
 		},
-	}
-
-	cfgJSON := params.Config
-	if len(cfgJSON) == 0 && len(target.settings) > 0 {
-		cfgJSON, _ = json.Marshal(target.settings)
-	}
-	if len(cfgJSON) == 0 {
-		cfgJSON = json.RawMessage("{}")
 	}
 
 	operator := params.Operator
@@ -234,8 +226,9 @@ func (r *Runner) replayRanking(ctx context.Context, target *resolvedTarget, para
 		if isCondition {
 			var batchDur time.Duration
 			var batchUnits int64
+			batchCtx, cancel := context.WithTimeout(ctx, budgets.PerBatch)
 			for i, wc := range wasmCands {
-				matched, out, _ := target.wasmPlug.CondMatch(ctx, wc, operator, params.Value)
+				matched, out, _ := target.wasmPlug.CondMatch(batchCtx, wc, operator, params.Value)
 				condMatched[i] = matched
 				if matched {
 					scores[i] = 1
@@ -244,6 +237,7 @@ func (r *Runner) replayRanking(ctx context.Context, target *resolvedTarget, para
 				batchUnits += out.Units
 				accumulateOutcome(&report.Budget, out)
 			}
+			cancel()
 			totalPluginDur += batchDur
 			batchCount++
 			if batchDur > maxBatchDur {
@@ -253,8 +247,15 @@ func (r *Runner) replayRanking(ctx context.Context, target *resolvedTarget, para
 				report.Budget.MaxBatchUnits = batchUnits
 			}
 		} else {
-			gotScores, out, _ := target.wasmPlug.RankBatch(ctx, wasmCands, cfgJSON)
-			if len(gotScores) == len(eligible) {
+			cfgJSON := params.Config
+			if len(cfgJSON) == 0 {
+				cfgJSON = prof.RankingConfig[pluginStepID]
+			}
+			if len(cfgJSON) == 0 {
+				cfgJSON = json.RawMessage(`{}`)
+			}
+			gotScores, out, err := target.wasmPlug.RankBatch(ctx, wasmCands, cfgJSON)
+			if err == nil && out.Status == wasm.StatusOK && out.SlowCandidates == 0 && len(gotScores) == len(eligible) {
 				scores = gotScores
 			}
 			totalPluginDur += out.Duration
@@ -278,7 +279,7 @@ func (r *Runner) replayRanking(ctx context.Context, target *resolvedTarget, para
 		ladderAfter := insertStepAt(ladderBefore, pluginStepID, rowPos)
 
 		beforeCands := slices.Clone(eligible)
-		sortReplayCandidates(beforeCands, prof, ladderBefore, "")
+		beforeCands = rankReplayCandidates(beforeCands, prof, ladderBefore, "")
 
 		afterCands := slices.Clone(eligible)
 		if isCondition && (condAction == "require" || condAction == "avoid") {
@@ -293,9 +294,9 @@ func (r *Runner) replayRanking(ctx context.Context, target *resolvedTarget, para
 				filtered = append(filtered, c)
 			}
 			afterCands = filtered
-			sortReplayCandidates(afterCands, prof, ladderBefore, "")
+			afterCands = rankReplayCandidates(afterCands, prof, ladderBefore, "")
 		} else {
-			sortReplayCandidates(afterCands, prof, ladderAfter, pluginStepID)
+			afterCands = rankReplayCandidates(afterCands, prof, ladderAfter, pluginStepID)
 		}
 
 		var beforeWinner, afterWinner replayCandidate
@@ -473,20 +474,10 @@ type replayCandidate struct {
 	langWanted bool
 	verified   bool
 	bandwidth  int
-	heightRank int
-	sourceRank int
-	hdrRank    int
-	codecRank  int
-	audioRank  int
-	sizeRank   int64
-	wasWinner  bool
+	starved    bool
 }
 
 func buildReplayCandidates(row historyRow, prof core.QualityProfile, policy *releasepolicy.Policy) []replayCandidate {
-	winnerID := row.trace.Winner
-	if winnerID == "" {
-		winnerID = row.releaseID
-	}
 	var out []replayCandidate
 	for idx, ct := range row.trace.Candidates {
 		if ct.Rejected {
@@ -528,27 +519,11 @@ func buildReplayCandidates(row historyRow, prof core.QualityProfile, policy *rel
 		}
 		langOK := !strings.Contains(ct.CompatibilityReason, "ranked after releases in an accepted audio language")
 		if langOK && len(prof.PreferredLanguages) > 0 && len(info.Languages) > 0 {
-			langOK = matchesAnyLang(info.Languages, prof.PreferredLanguages)
+			langOK = replayMatchesAnyLang(info.Languages, prof.PreferredLanguages)
 		}
-		langWanted := langOK && len(prof.PreferredLanguages) > 0 && matchesAnyLang(info.Languages, prof.PreferredLanguages)
+		langWanted := langOK && len(prof.PreferredLanguages) > 0 && replayMatchesAnyLang(info.Languages, prof.PreferredLanguages)
 
 		starved := strings.Contains(ct.CompatibilityReason, "ranked one resolution lower")
-		effHeight := info.Height
-		if starved {
-			switch {
-			case effHeight >= 2160:
-				effHeight = 1080
-			case effHeight >= 1080:
-				effHeight = 720
-			case effHeight >= 720:
-				effHeight = 480
-			}
-		}
-		hdr := computeHDRRank(info, prof, starved)
-		var sizeRank int64
-		if prof.PreferLargest {
-			sizeRank = rel.Size
-		}
 
 		facts := buildCandidateFacts(rel, ct, row.trace.Limits, verified)
 		out = append(out, replayCandidate{
@@ -559,13 +534,7 @@ func buildReplayCandidates(row historyRow, prof core.QualityProfile, policy *rel
 			langWanted: langWanted,
 			verified:   verified,
 			bandwidth:  bandwidth,
-			heightRank: effHeight,
-			sourceRank: sliceRank(prof.PreferredSources, info.Source),
-			hdrRank:    hdr,
-			codecRank:  sliceRank(prof.PreferredCodecs, info.VideoCodec),
-			audioRank:  computeAudioRank(info, prof),
-			sizeRank:   sizeRank,
-			wasWinner:  winnerID != "" && relID == winnerID,
+			starved:    starved,
 		})
 	}
 	return out
@@ -657,45 +626,13 @@ func resolutionString(height int) string {
 	}
 }
 
-func computeHDRRank(info core.ReleaseInfo, profile core.QualityProfile, starved bool) int {
-	if starved {
-		return 0
-	}
-	switch {
-	case info.DolbyVision && profile.AllowDolbyVision:
-		return 2
-	case profile.AllowHDR && (info.HDR10 || info.DolbyVision || (info.Height >= 2160 && info.Source == core.SourceRemux)):
-		return 1
-	default:
-		return 0
-	}
-}
-
-func computeAudioRank(info core.ReleaseInfo, profile core.QualityProfile) int {
-	r := sliceRank(profile.PreferredAudio, info.AudioCodec) * 2
-	if info.Atmos {
-		r++
-	}
-	return r
-}
-
-func sliceRank[T comparable](list []T, v T) int {
-	for i, x := range list {
-		if x == v {
-			return len(list) - i
-		}
-	}
-	return 0
-}
-
-func matchesAnyLang(have, want []string) bool {
+func replayMatchesAnyLang(have, want []string) bool {
 	for _, h := range have {
 		if strings.EqualFold(h, "multi") {
 			return true
 		}
-		ch := langtag.Normalize(h)
 		for _, w := range want {
-			if ch != "" && ch == langtag.Normalize(w) {
+			if langtag.Normalize(h) != "" && langtag.Normalize(h) == langtag.Normalize(w) {
 				return true
 			}
 		}
@@ -703,79 +640,24 @@ func matchesAnyLang(have, want []string) bool {
 	return false
 }
 
-func hasDefaultTail(ladder []string) bool {
-	n := len(ladder)
-	return n >= 3 &&
-		ladder[n-3] == core.RankVideoCodec &&
-		ladder[n-2] == core.RankAudioFormat &&
-		ladder[n-1] == core.RankSize
-}
-
-func sortReplayCandidates(cands []replayCandidate, profile core.QualityProfile, ladder []string, pluginStep string) {
-	defaultTail := hasDefaultTail(ladder)
-	sort.SliceStable(cands, func(i, j int) bool {
-		a, b := cands[i], cands[j]
-		if a.policy.Fallback != b.policy.Fallback {
-			return a.policy.Fallback < b.policy.Fallback
+func rankReplayCandidates(cands []replayCandidate, profile core.QualityProfile, ladder []string, pluginStep string) []replayCandidate {
+	profile.Ranking = ladder
+	if strings.HasPrefix(pluginStep, core.RankRulePrefix) {
+		id := strings.TrimPrefix(pluginStep, core.RankRulePrefix)
+		profile.ReleaseRules = append(slices.Clone(profile.ReleaseRules), core.ReleaseRule{ID: id, Action: "prefer"})
+	}
+	ranked := make([]resolver.RankingCandidate, len(cands))
+	for i, c := range cands {
+		policy := c.policy
+		if strings.HasPrefix(pluginStep, core.RankRulePrefix) && c.condMatch {
+			policy.Explanations = append(slices.Clone(policy.Explanations), releasepolicy.Explanation{ID: strings.TrimPrefix(pluginStep, core.RankRulePrefix), Action: "prefer", Outcome: "prefer"})
 		}
-		for _, step := range ladder {
-			switch {
-			case pluginStep != "" && step == pluginStep:
-				if a.pluginKey != b.pluginKey {
-					return a.pluginKey > b.pluginKey
-				}
-			case strings.HasPrefix(step, core.RankRulePrefix):
-				id := strings.TrimPrefix(step, core.RankRulePrefix)
-				if ap, bp := a.policy.PreferRule(id), b.policy.PreferRule(id); ap != bp {
-					return ap > bp
-				}
-			case step == core.RankLanguage:
-				if a.langOK != b.langOK {
-					return a.langOK
-				}
-			case step == core.RankConnection:
-				if a.bandwidth != b.bandwidth {
-					return a.bandwidth > b.bandwidth
-				}
-			case step == core.RankResolution:
-				if a.heightRank != b.heightRank {
-					return a.heightRank > b.heightRank
-				}
-				if a.langWanted != b.langWanted {
-					return a.langWanted
-				}
-			case step == core.RankReleaseType:
-				if a.sourceRank != b.sourceRank {
-					return a.sourceRank > b.sourceRank
-				}
-			case step == core.RankHDR:
-				if a.hdrRank != b.hdrRank {
-					return a.hdrRank > b.hdrRank
-				}
-			case step == core.RankVerified:
-				if a.verified != b.verified {
-					return a.verified
-				}
-			case step == core.RankVideoCodec:
-				if !defaultTail && a.codecRank != b.codecRank {
-					return a.codecRank > b.codecRank
-				}
-			case step == core.RankAudioFormat:
-				if !defaultTail && a.audioRank != b.audioRank {
-					return a.audioRank > b.audioRank
-				}
-			case step == core.RankSize:
-				if !defaultTail && a.sizeRank != b.sizeRank {
-					return a.sizeRank > b.sizeRank
-				}
-			}
-		}
-		if a.rel.Score != b.rel.Score {
-			return a.rel.Score > b.rel.Score
-		}
-		if a.wasWinner != b.wasWinner {
-			return a.wasWinner
-		}
-		return false
-	})
+		ranked[i] = resolver.RankingCandidate{Index: i, Release: c.rel, Policy: policy, Verified: c.verified, LanguageOK: c.langOK, LanguageWanted: c.langWanted, Starved: c.starved, Bandwidth: c.bandwidth, PluginKeys: map[string]int64{pluginStep: c.pluginKey}}
+	}
+	resolver.SortRankingCandidates(ranked, profile)
+	out := make([]replayCandidate, len(cands))
+	for i, c := range ranked {
+		out[i] = cands[c.Index]
+	}
+	return out
 }
