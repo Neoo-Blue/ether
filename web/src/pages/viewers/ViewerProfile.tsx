@@ -39,7 +39,7 @@ import { TasteView } from "./TasteView";
 import { ViewerAccess } from "./ViewerAccess";
 import { ViewerActions } from "./ViewerActions";
 import { ViewerPlayback } from "./ViewerPlayback";
-import { PlexAccessNote, ViewerStatus, viewerLifecycle, viewerStatus } from "./ViewerStatus";
+import { ViewerStatus, viewerLifecycle, viewerStatus } from "./ViewerStatus";
 
 const TABS = ["overview", "limits", "playback", "home-taste", "sign-in"] as const;
 type Tab = (typeof TABS)[number];
@@ -136,8 +136,12 @@ export default function ViewerProfile() {
             <Avatar src={v.thumb} name={name} size={56} />
             <div className="min-w-0 flex-1">
               <h1 className="flex flex-wrap items-center gap-2 text-xl font-semibold text-fg">
-                {name} <ViewerStatus viewer={v} />
-                {life.paused ? <Badge variant="warning">{t("Paused")}</Badge> : null}
+                {name}
+                {life.paused ? (
+                  <Badge variant="warning">{t("Paused")}</Badge>
+                ) : (
+                  <ViewerStatus viewer={v} />
+                )}
                 {life.managedBy === "plex" ? <Badge>{t("Managed on plex.tv")}</Badge> : null}
               </h1>
               <p className="text-sm text-fg-muted">
@@ -158,15 +162,11 @@ export default function ViewerProfile() {
               onPreviewHome={() => setTab("home-taste")}
             />
           </div>
-          <div className="mt-3">
-            {life.managedBy === "plex" ? (
-              <p className="text-sm text-fg-muted">
-                {t("Managed on plex.tv. Access changes happen there, not in Ether.")}
-              </p>
-            ) : (
-              <PlexAccessNote viewer={v} />
-            )}
-          </div>
+          {life.managedBy === "plex" ? (
+            <p className="mt-3 text-sm text-fg-muted">
+              {t("Managed on plex.tv. Access changes happen there, not in Ether.")}
+            </p>
+          ) : null}
         </div>
       }
       subtabs={
