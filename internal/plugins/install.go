@@ -470,7 +470,7 @@ func (m *Manager) CheckUpdate(ctx context.Context, id string) (*Preview, bool, e
 	}
 	added := PermissionDiff(r.Manifest, p.Manifest)
 	if r.AutoUpdate && r.Verified && len(added) == 0 {
-		if _, err := m.Install(ctx, p, InstallOptions{}); err != nil {
+		if _, err := m.Install(ctx, p, InstallOptions{AutoUpdate: r.AutoUpdate, Shadow: r.Shadow}); err != nil {
 			return p, true, err
 		}
 		return p, true, nil
@@ -510,7 +510,7 @@ func (m *Manager) ApplyUpdate(ctx context.Context, id string, acceptAdded bool) 
 	if err := p.resolve(); err != nil {
 		return Record{}, err
 	}
-	saved, err := m.Install(ctx, p, InstallOptions{AcceptAddedPermissions: acceptAdded})
+	saved, err := m.Install(ctx, p, InstallOptions{AcceptAddedPermissions: acceptAdded, AutoUpdate: r.AutoUpdate, Shadow: r.Shadow})
 	if err != nil {
 		return Record{}, err
 	}

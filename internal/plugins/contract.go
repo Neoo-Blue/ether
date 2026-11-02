@@ -114,6 +114,15 @@ type Author struct {
 	URL  string `json:"url,omitempty"`
 }
 
+// RuntimeKind is the runtime that serves the plugin. A plain Stremio
+// add-on (no ether block) is always reached over HTTP: "remote".
+func (m Manifest) RuntimeKind() string {
+	if m.Ether == nil || m.Ether.Runtime.Kind == "" {
+		return "remote"
+	}
+	return m.Ether.Runtime.Kind
+}
+
 // RuntimeDecl declares how a plugin runs: hosted (Entry JS or Module WASM)
 // or remote (the manifest URL or a tunnel is the endpoint).
 type RuntimeDecl struct {

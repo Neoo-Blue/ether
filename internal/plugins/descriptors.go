@@ -129,6 +129,9 @@ func ToolName(plugin, name string) string {
 // syncDescriptors replaces a plugin's registry descriptors and tools to
 // match its record: none while disabled.
 func (m *Manager) syncDescriptors(ctx context.Context, r Record) {
+	m.mu.Lock()
+	m.shadow[r.ID] = r.Shadow
+	m.mu.Unlock()
 	if m.deps.Registry != nil {
 		var ds []extend.Descriptor
 		if r.Enabled {
@@ -155,6 +158,7 @@ func (m *Manager) syncDescriptors(ctx context.Context, r Record) {
 	for _, fn := range hooks {
 		fn(ctx, r)
 	}
+	m.prewarmHot(r)
 }
 
 // pluginTool adapts one contributed tool to the catalogue. Read-only tools
