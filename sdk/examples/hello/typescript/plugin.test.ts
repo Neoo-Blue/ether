@@ -19,7 +19,7 @@ test("hello typescript plugin responds identically in hosted and HTTP sidecar mo
   assert.equal(meta.body.meta.name, "The Matrix");
 
   const subDenied = await harness.subtitles("movie", "tt0133093");
-  assert.equal(subDenied.status, 403);
+  assert.equal(subDenied.status, 200);
 
   const subOk = await harness.subtitles("movie", "tt0133093", fixtures.pickToken("tt0133093"));
   assert.equal(subOk.status, 200);

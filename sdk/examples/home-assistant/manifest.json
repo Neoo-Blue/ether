@@ -1,0 +1,76 @@
+{
+  "id": "org.ether.examples.home-assistant",
+  "version": "1.0.0",
+  "name": "Home Assistant",
+  "description": "Connect playback events to Home Assistant.",
+  "ether": {
+    "protocol": 1,
+    "kind": "extension",
+    "capabilities": [
+      "events",
+      "tools"
+    ],
+    "summary": "$t:summary",
+    "author": {
+      "name": "Ether"
+    },
+    "license": "MIT",
+    "icon": "assets/icon.svg",
+    "runtime": {
+      "kind": "remote"
+    },
+    "permissions": {
+      "secrets": [
+        "token"
+      ]
+    },
+    "settings": {
+      "$ref": "settings.schema.json"
+    },
+    "strings": {
+      "en": "i18n/en.json",
+      "fr": "i18n/fr.json"
+    },
+    "contributes": {
+      "events": {
+        "subscribe": [
+          "playback.started",
+          "playback.paused",
+          "playback.stopped"
+        ]
+      },
+      "tools": [
+        {
+          "name": "ha_states",
+          "title": "$t:states",
+          "description": "Read Home Assistant entity states.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          },
+          "readOnly": true,
+          "openWorld": true
+        },
+        {
+          "name": "ha_run_scene",
+          "title": "$t:scene",
+          "description": "Activate a Home Assistant scene after approval.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "entity_id": {
+                "type": "string",
+                "pattern": "^scene\\.[a-z0-9_]+$"
+              }
+            },
+            "required": [
+              "entity_id"
+            ],
+            "additionalProperties": false
+          },
+          "openWorld": true
+        }
+      ]
+    }
+  }
+}
