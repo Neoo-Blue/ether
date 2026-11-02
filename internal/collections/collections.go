@@ -811,7 +811,7 @@ func (s *Service) AllowsPlaceholders(ctx context.Context, user *core.User, colle
 		return false
 	}
 	row, err := s.rowByKey(ctx, collection)
-	return err == nil && visible(row, user) && row.spec.Targets.CollectionsTab && scheduleAllows(row.spec.Targets.Schedule, device, s.now()) && (row.spec.ReleaseMode == "upcoming" || row.spec.ReleaseMode == "mixed")
+	return err == nil && visible(row, user) && row.spec.Targets.CollectionsTab && row.spec.Targets.Schedule.Allows(device, s.now()) && (row.spec.ReleaseMode == "upcoming" || row.spec.ReleaseMode == "mixed")
 }
 
 func (s *Service) Placeholder(ctx context.Context, user *core.User, collection, key core.RatingKey, device string) (*core.Title, error) {
@@ -819,7 +819,7 @@ func (s *Service) Placeholder(ctx context.Context, user *core.User, collection, 
 		return nil, core.ErrNotFound
 	}
 	row, err := s.rowByKey(ctx, collection)
-	if err != nil || !visible(row, user) || !row.spec.Targets.CollectionsTab || !scheduleAllows(row.spec.Targets.Schedule, device, s.now()) || (row.spec.ReleaseMode != "upcoming" && row.spec.ReleaseMode != "mixed") {
+	if err != nil || !visible(row, user) || !row.spec.Targets.CollectionsTab || !row.spec.Targets.Schedule.Allows(device, s.now()) || (row.spec.ReleaseMode != "upcoming" && row.spec.ReleaseMode != "mixed") {
 		return nil, core.ErrNotFound
 	}
 	keys, err := s.serve(ctx, row, user, true)

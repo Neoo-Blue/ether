@@ -131,11 +131,16 @@ export type Refresh = "live" | "hourly" | "daily" | "weekly";
 export type ArtworkMode = "auto" | "collage" | "backdrop" | "tmdb" | "custom";
 export type DeviceClass = "tv" | "mobile" | "web" | "desktop";
 
+/** A collection's row schedule: the one schedule for its rows, edited in Collections and the Home designer. */
 export interface TargetSchedule {
   days?: number[];
   fromHour?: number;
   toHour?: number;
   devices?: DeviceClass[];
+  dayparts?: Daypart[];
+  months?: number[];
+  startDate?: string;
+  endDate?: string;
 }
 
 export interface CollectionSpec {
@@ -378,6 +383,12 @@ export interface HomeLayout {
   global: LayoutPage[];
   viewers: ViewerLayout[];
   updatedAt?: string;
+  /**
+   * Collection row schedules by collection id. The server fills it on read;
+   * a save sends only changed entries (null clears) and stores them on the
+   * collections, never in the layout. Previews apply it.
+   */
+  collectionSchedules?: Record<string, TargetSchedule | null>;
 }
 
 export type RowGroup = "picks" | "explore" | "shows" | "household" | "collections" | "plex";

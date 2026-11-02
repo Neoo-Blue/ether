@@ -1,19 +1,45 @@
 package admin
 
 import (
+	"context"
+	"errors"
+	"maps"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/braedonsaunders/ether/internal/core"
 )
 
-// writeLayout answers with the saved Home layout document, the engine's
-// per-section row defaults and the rows the document can target.
+// collectionScheduler is the Collection Studio capability the Home
+// designer uses for collection rows: a collection owns its row schedule,
+// and the layout document carries it as collectionSchedules.
+type collectionScheduler interface {
+	CollectionSchedules(ctx context.Context) (map[string]*core.CollectionSchedule, error)
+	ValidateSchedule(sc *core.CollectionSchedule) error
+	SetSchedule(ctx context.Context, id string, sc *core.CollectionSchedule) error
+}
+
+func (h *Handler) scheduler() collectionScheduler {
+	s, _ := h.deps.Collections.(collectionScheduler)
+	return s
+}
+
+// writeLayout answers with the saved Home layout document (with every
+// collection's schedule), the engine's per-section row defaults and the
+// rows the document can target.
 func (h *Handler) writeLayout(w http.ResponseWriter, r *http.Request, d core.HomeLayout) {
 	avail, err := h.deps.Personalization.AvailableRows(r.Context())
 	if err != nil {
 		writeEngineError(w, err)
 		return
+	}
+	d.CollectionSchedules = nil
+	if s := h.scheduler(); s != nil {
+		if d.CollectionSchedules, err = s.CollectionSchedules(r.Context()); err != nil {
+			h.writeServiceError(w, err)
+			return
+		}
 	}
 	if avail == nil {
 		avail = []core.RowDescriptor{}
@@ -44,10 +70,47 @@ func (h *Handler) handlePutLayout(w http.ResponseWriter, r *http.Request) {
 		writeValidationError(w, []FieldError{{Field: "layout", Message: "is required"}})
 		return
 	}
+	// Edited collection schedules (null clears one) are saved to their
+	// collections once the layout itself is valid and saved.
+	schedules := body.Layout.CollectionSchedules
+	body.Layout.CollectionSchedules = nil
+	sched := h.scheduler()
+	if len(schedules) > 0 {
+		if sched == nil {
+			writeValidationError(w, []FieldError{{Field: "layout.collectionSchedules", Message: "collections are unavailable"}})
+			return
+		}
+		var fields []FieldError
+		for _, id := range slices.Sorted(maps.Keys(schedules)) {
+			var invalid interface{ InvalidFields() map[string]string }
+			if err := sched.ValidateSchedule(schedules[id]); errors.As(err, &invalid) {
+				for _, f := range slices.Sorted(maps.Keys(invalid.InvalidFields())) {
+					fields = append(fields, FieldError{Field: "layout.collectionSchedules." + id + "." + f, Message: invalid.InvalidFields()[f]})
+				}
+			} else if err != nil {
+				h.writeServiceError(w, err)
+				return
+			}
+		}
+		if len(fields) > 0 {
+			writeValidationError(w, fields)
+			return
+		}
+	}
 	d, err := h.deps.Personalization.SetHomeLayout(r.Context(), *body.Layout)
 	if err != nil {
 		writeEngineError(w, err)
 		return
+	}
+	for _, id := range slices.Sorted(maps.Keys(schedules)) {
+		// A collection deleted since the designer loaded has no schedule to keep.
+		if err := sched.SetSchedule(r.Context(), id, schedules[id]); err != nil && !errors.Is(err, core.ErrNotFound) {
+			h.writeServiceError(w, err)
+			return
+		}
+	}
+	if len(schedules) > 0 {
+		h.invalidateOwnerRows()
 	}
 	h.writeLayout(w, r, d)
 }

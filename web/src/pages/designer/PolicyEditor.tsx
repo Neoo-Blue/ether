@@ -1,4 +1,5 @@
 import { Input, SearchSelect } from "@braedonsaunders/appkit-ui";
+import type { ReactNode } from "react";
 import { ChipGroup, Segmented } from "../../components/fields";
 import type { Daypart, LayoutWhen, RowPolicy } from "../../lib/contract";
 import { t, tx } from "../../i18n";
@@ -43,24 +44,36 @@ function OptNumber({
   );
 }
 
+/** Where a row's schedule lives when it is not the policy's own (a collection's schedule). */
+export interface ScheduleSource {
+  when: LayoutWhen | undefined;
+  onChange: (w: LayoutWhen | undefined) => void;
+  /** One short line under the heading, e.g. whose schedule this is. */
+  note: ReactNode;
+}
+
 /** Every constraint of one row policy. */
 export function PolicyEditor({
   policy,
   title,
   onChange,
+  schedule,
 }: {
   policy: RowPolicy;
   title: string;
   onChange: (p: RowPolicy) => void;
+  schedule?: ScheduleSource;
 }) {
-  const when = policy.when ?? {};
+  const when = (schedule ? schedule.when : policy.when) ?? {};
   const setWhen = (patch: Partial<LayoutWhen>) => {
     const next: LayoutWhen = { ...when, ...patch };
     for (const k of Object.keys(next) as (keyof LayoutWhen)[]) {
       const v = next[k];
       if (v === undefined || v === "" || (Array.isArray(v) && v.length === 0)) delete next[k];
     }
-    onChange({ ...policy, when: hasWhen(next) ? next : undefined });
+    const w = hasWhen(next) ? next : undefined;
+    if (schedule) schedule.onChange(w);
+    else onChange({ ...policy, when: w });
   };
   const hours = Array.from({ length: 25 }, (_, h) => ({
     value: String(h),
@@ -145,6 +158,7 @@ export function PolicyEditor({
               note: <span className="text-fg-subtle">{t("(off outside the schedule)")}</span>,
             })}
           </legend>
+          {schedule ? <p className="text-fg-muted">{schedule.note}</p> : null}
           <ChipGroup
             ariaLabel={t("Days for {title}", { title })}
             size="sm"

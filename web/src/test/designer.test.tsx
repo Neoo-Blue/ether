@@ -202,6 +202,48 @@ describe("Home", () => {
     });
   });
 
+  it("edits a collection row's schedule on the collection, not in the layout", async () => {
+    const { fake } = renderApp("/home");
+    await screen.findByRole("region", { name: "Slot 1: Continue Watching" }, WAIT);
+    fireEvent.click(screen.getByRole("tab", { name: "Rows" }));
+    fireEvent.click(screen.getByRole("button", { name: "Constraints for Weeknight wind-down" }));
+    const editor = await screen.findByRole("dialog", { name: "Weeknight wind-down" });
+    expect(editor).toHaveTextContent("The collection's schedule, also set in Collections.");
+    const link = within(editor).getByRole("link", { name: "Collections" });
+    expect(link.getAttribute("href")).toMatch(/^\/collections\/c\d+\?section=audience$/);
+    const id = link.getAttribute("href")!.match(/collections\/(c\d+)/)![1]!;
+    const days = within(editor).getByRole("group", { name: "Days for Weeknight wind-down" });
+    const chips = within(days).getAllByRole("button");
+    expect(chips.filter((c) => c.getAttribute("aria-pressed") === "true")).toHaveLength(4);
+    fireEvent.click(chips[6]!); // Saturday
+    await closeEditor();
+    await waitFor(
+      () =>
+        expect(lastPreview(fake).layout?.collectionSchedules?.[id]?.days).toEqual([1, 2, 3, 4, 6]),
+      WAIT,
+    );
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Save layout/ }));
+    await waitFor(() => expect(calls(fake, "PUT", "/layout")).toHaveLength(1), WAIT);
+    const saved = savedLayout(fake);
+    // Only the edited collection is sent, and the layout keeps no schedule for it.
+    expect(saved.collectionSchedules).toEqual({ [id]: { days: [1, 2, 3, 4, 6], fromHour: 18 } });
+    expect(
+      saved.global.flatMap((p) => p.rows).filter((r) => r.row === `collection:${id}` && r.when),
+    ).toEqual([]);
+    await waitFor(() => expect(screen.queryByText("Unsaved changes")).toBeNull());
+    // The saved document reads the schedule back from the collection.
+    fireEvent.click(screen.getByRole("button", { name: "Constraints for Weeknight wind-down" }));
+    const again = await screen.findByRole("dialog", { name: "Weeknight wind-down" });
+    const pressed = within(
+      within(again).getByRole("group", { name: "Days for Weeknight wind-down" }),
+    )
+      .getAllByRole("button")
+      .filter((c) => c.getAttribute("aria-pressed") === "true");
+    expect(pressed).toHaveLength(5);
+  });
+
   it("anchors a row from the preview and limits the page length", async () => {
     const { fake } = renderApp("/home");
     const row = await screen.findByRole("region", { name: /Slot \d+: New Releases/ }, WAIT);

@@ -210,6 +210,15 @@ func normalizeHomeLayout(d core.HomeLayout) (core.HomeLayout, error) {
 		}
 	}
 	pages(d.Global, "layout.global")
+	// A collection row's schedule belongs to its collection
+	// (collectionSchedules); only a viewer override may replace it.
+	for i, p := range d.Global {
+		for j, r := range p.Rows {
+			if r.When != nil && collectionRowID(r.Row) != "" {
+				ve.add(fmt.Sprintf("layout.global[%d].rows[%d].when", i, j), "a collection row uses its collection's schedule")
+			}
+		}
+	}
 	seen := map[int64]bool{}
 	for i, v := range d.Viewers {
 		if v.UserID <= 0 || seen[v.UserID] {
@@ -231,6 +240,8 @@ func (e *Engine) SetHomeLayout(ctx context.Context, d core.HomeLayout) (core.Hom
 		return d, err
 	}
 	d.UpdatedAt = e.now()
+	// Collection schedules are saved with their collections, never here.
+	d.CollectionSchedules = nil
 	if err = e.store.setHomeLayout(ctx, d); err != nil {
 		return d, err
 	}
