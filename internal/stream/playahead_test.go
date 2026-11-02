@@ -186,8 +186,10 @@ func TestPlaybackReadAheadStopsOnClose(t *testing.T) {
 	if after := f.prio(core.PriorityPrefetch); after != before {
 		t.Fatalf("read-ahead fetched %d articles after Close", after-before)
 	}
-	if n := e.playAheaders.Load(); n != 0 {
-		t.Fatalf("%d read-ahead loops still running", n)
+	running := 0
+	e.playSources.Range(func(any, any) bool { running++; return true })
+	if running != 0 {
+		t.Fatalf("%d read-ahead loops still running", running)
 	}
 }
 
@@ -232,5 +234,38 @@ func TestPlaybackReadAheadRespectsCacheLimit(t *testing.T) {
 	e.UpdatePlaybackReadAhead(0)
 	if got := src.playAheadBytes(); got != 0 {
 		t.Fatalf("read-ahead depth = %d when turned off", got)
+	}
+}
+
+// A paused viewer's source keeps its loop until the session closes, but it
+// must not shrink the read-ahead of viewers still playing (Codex review on
+// #274): only sources read within playIdle share the cache allowance.
+func TestPausedSourceDoesNotShrinkOthersReadAhead(t *testing.T) {
+	f := newFakeFetcher()
+	docA := post(t, f, playPart, postFile{name: "a.mkv", data: mkvBytes(35, playSize)})
+	docB := post(t, f, playPart, postFile{name: "b.mkv", data: mkvBytes(36, playSize)})
+	cache := openCache(t, 8<<20) // 2 MiB of read-ahead for one viewer
+	e := playEngine(t, f, cache)
+	a := openSource(t, e, "a", docA).(*source)
+	b := openSource(t, e, "b", docB).(*source)
+	for _, src := range []*source{a, b} {
+		src.SetPlaybackDuration(playDuration)
+		playRead(t, src, 1<<20)
+	}
+	waitFor(t, "both read-ahead loops", func() bool {
+		n := 0
+		e.playSources.Range(func(any, any) bool { n++; return true })
+		return n == 2
+	})
+	if got := a.playAheadBytes(); got != 1<<20 {
+		t.Fatalf("two playing viewers: depth %d, want half the 2 MiB share", got)
+	}
+	b.lastRead.Store(time.Now().Add(-2 * playIdle).UnixNano()) // paused
+	if got := a.playAheadBytes(); got != 2<<20 {
+		t.Fatalf("other viewer paused: depth %d, want the whole 2 MiB share", got)
+	}
+	playRead(t, b, 1<<20) // resumed
+	if got := a.playAheadBytes(); got != 1<<20 {
+		t.Fatalf("other viewer resumed: depth %d, want half again", got)
 	}
 }
