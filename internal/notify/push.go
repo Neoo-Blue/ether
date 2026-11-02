@@ -76,7 +76,11 @@ func (s *Service) pushKeys(ctx context.Context) (private, public string, err err
 	return private, public, nil
 }
 func (s *Service) sendPush(ctx context.Context, c Channel, e Event) error {
-	if err := validatePush(c.Subscription); err != nil {
+	sub, err := c.Subscription()
+	if err != nil {
+		return err
+	}
+	if err := validatePush(sub); err != nil {
 		return err
 	}
 	private, public, err := s.pushKeys(ctx)
@@ -84,7 +88,7 @@ func (s *Service) sendPush(ctx context.Context, c Channel, e Event) error {
 		return errors.New("browser push identity unavailable")
 	}
 	payload, _ := json.Marshal(map[string]string{"title": clip(e.Title, 150), "message": clip(e.Message, 450), "url": "/ether/notifications/deliveries"})
-	resp, err := webpush.SendNotificationWithContext(ctx, payload, &webpush.Subscription{Endpoint: c.Subscription.Endpoint, Keys: webpush.Keys{Auth: c.Subscription.Keys.Auth, P256dh: c.Subscription.Keys.P256dh}}, &webpush.Options{HTTPClient: s.opts.Client, Subscriber: "https://ether.local", VAPIDPrivateKey: private, VAPIDPublicKey: public, TTL: 3600, Urgency: webpush.UrgencyHigh})
+	resp, err := webpush.SendNotificationWithContext(ctx, payload, &webpush.Subscription{Endpoint: sub.Endpoint, Keys: webpush.Keys{Auth: sub.Keys.Auth, P256dh: sub.Keys.P256dh}}, &webpush.Options{HTTPClient: s.opts.Client, Subscriber: "https://ether.local", VAPIDPrivateKey: private, VAPIDPublicKey: public, TTL: 3600, Urgency: webpush.UrgencyHigh})
 	if err != nil {
 		return errors.New("browser push transport failed")
 	}

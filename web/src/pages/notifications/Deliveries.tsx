@@ -3,6 +3,7 @@ import { pagedTableLabels } from "../../i18n/appkit-labels";
 import { Badge, EmptyState, PagedTable } from "@braedonsaunders/appkit-ui";
 import { Inbox } from "lucide-react";
 import { Section } from "../../components/layout";
+import { useRegistry } from "../../lib/extend";
 import { channelName, eventLabel, type Delivery, type NotificationsData } from "./types";
 
 function statusVariant(status: string) {
@@ -24,9 +25,10 @@ const statusLabel = (status: string) => STATUS_LABELS[status] ?? status;
 
 /** Recent notification deliveries and their outcome. */
 export function Deliveries({ data }: { data: NotificationsData }) {
+  const { descriptors } = useRegistry("channelKind", "eventKind");
   const name = (d: Delivery) => {
     const c = data.channels.find((c) => c.id === d.channel);
-    return c ? channelName(c) : d.channel;
+    return c ? channelName(c, descriptors) : d.channel;
   };
   return (
     <Section
@@ -61,8 +63,8 @@ export function Deliveries({ data }: { data: NotificationsData }) {
             {
               key: "kind",
               header: t("Event"),
-              search: (d) => eventLabel(d.kind ?? ""),
-              cell: (d) => eventLabel(d.kind ?? ""),
+              search: (d) => eventLabel(d.kind ?? "", descriptors),
+              cell: (d) => eventLabel(d.kind ?? "", descriptors),
             },
             {
               key: "error",
