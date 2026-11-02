@@ -77,6 +77,7 @@ type Service struct {
 	art         *artwork.Renderer
 	images      *artwork.Images
 	catCfg      func() config.Catalog
+	kinds       *KindRegistry
 	traktCfg    func() config.Trakt
 
 	liveTTL     time.Duration
@@ -178,7 +179,7 @@ func New(db *sql.DB, cat core.Catalog, log *slog.Logger, opts ...Option) (*Servi
 	if log == nil {
 		log = slog.Default()
 	}
-	s := &Service{db: db, cat: cat, log: log, now: time.Now,
+	s := &Service{db: db, cat: cat, log: log, now: time.Now, kinds: NewKindRegistry(),
 		liveTTL: 2 * time.Minute, tick: time.Minute, buildBudget: 20 * time.Second,
 		members: map[int64]*memberSet{}, failed: map[buildKey]time.Time{}, personal: map[string]personalEntry{}, airGate: make(chan struct{}, 1),
 		opts: options{indexTTL: 2 * time.Minute}}

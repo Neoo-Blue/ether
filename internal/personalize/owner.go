@@ -359,7 +359,7 @@ func (e *Engine) AvailableRows(ctx context.Context) ([]core.RowDescriptor, error
 			}
 		}
 	}
-	return descriptors(extra), nil
+	return e.rowKindRegistry().RowDescriptors(extra), nil
 }
 
 // collectionSections is where a collection of a media type can appear.
