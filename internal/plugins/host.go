@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -158,7 +159,29 @@ func (h *host) HTTPFetch(ctx context.Context, req FetchRequest) (FetchResponse, 
 	for k, v := range req.Headers {
 		hr.Header.Set(k, v)
 	}
-	resp, err := h.m.client.Do(hr)
+	// Recheck the current grant before every redirect, as well as the SSRF
+	// guard's own redirect policy. A redirect is another network request.
+	client := *h.m.client
+	previousRedirect := client.CheckRedirect
+	client.CheckRedirect = func(next *http.Request, via []*http.Request) error {
+		current, grants, err := h.record(next.Context())
+		if err != nil {
+			return err
+		}
+		if err := h.deny(current, grants, "network", "", func(string) bool {
+			return hostAllowed(current.Manifest.Ether.Permissions.Network, next.URL.Hostname())
+		}); err != nil {
+			return err
+		}
+		if previousRedirect != nil {
+			return previousRedirect(next, via)
+		}
+		if len(via) >= 10 {
+			return errors.New("plugins: stopped after 10 redirects")
+		}
+		return nil
+	}
+	resp, err := client.Do(hr)
 	if err != nil {
 		return FetchResponse{}, err
 	}
@@ -381,12 +404,26 @@ func (h *host) folderCheck(ctx context.Context, root, path string) (string, erro
 }
 
 func (h *host) FoldersList(ctx context.Context, root, path string) ([]FolderEntry, error) {
-	dir, err := h.folderCheck(ctx, root, path)
+	_, err := h.folderCheck(ctx, root, path)
 	if err != nil {
 		return nil, err
 	}
-	entries, err := os.ReadDir(dir)
+	fs, err := os.OpenRoot(root)
 	if err != nil {
+		return nil, err
+	}
+	defer fs.Close()
+	name := path
+	if name == "" {
+		name = "."
+	}
+	dir, err := fs.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer dir.Close()
+	entries, err := dir.ReadDir(1000)
+	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, err
 	}
 	out := make([]FolderEntry, 0, len(entries))
@@ -404,11 +441,20 @@ func (h *host) FoldersList(ctx context.Context, root, path string) ([]FolderEntr
 }
 
 func (h *host) FoldersStat(ctx context.Context, root, path string) (FolderEntry, error) {
-	full, err := h.folderCheck(ctx, root, path)
+	_, err := h.folderCheck(ctx, root, path)
 	if err != nil {
 		return FolderEntry{}, err
 	}
-	info, err := os.Stat(full)
+	fs, err := os.OpenRoot(root)
+	if err != nil {
+		return FolderEntry{}, err
+	}
+	defer fs.Close()
+	name := path
+	if name == "" {
+		name = "."
+	}
+	info, err := fs.Stat(name)
 	if err != nil {
 		return FolderEntry{}, err
 	}
