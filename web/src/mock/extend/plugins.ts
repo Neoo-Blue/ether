@@ -7,6 +7,7 @@
  */
 import type { Descriptor } from "../../lib/extend";
 import type { ExtendHandler } from "./index";
+import { createStudioMock } from "./studio";
 
 export interface PluginSummary {
   id: string;
@@ -414,9 +415,12 @@ export function createPluginsMock(): {
   const fixtures = fixturePlugins();
   const bump = () => version++;
   const byId = (id: string) => fixtures.find((f) => f.detail.id === id);
+  const studio = createStudioMock(() => bump());
 
   const handle: ExtendHandler = (method, seg, q, body) => {
     if (seg[0] !== "plugins") return null;
+    const studioResp = studio.handle(method, seg, q, body);
+    if (studioResp) return studioResp;
     if (method === "GET" && seg.length === 1) {
       return json({ plugins: fixtures.map((f) => summary(f.detail)) });
     }

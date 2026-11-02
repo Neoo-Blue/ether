@@ -29,7 +29,7 @@ func TestEpisodeAlertRealQueueSurvivesCompletionFailure(t *testing.T) {
 	}
 	defer db.Close()
 	notifier := notify.New(db, notify.Options{Now: clock, NodeID: "first"})
-	if err := notifier.Save(ctx, notify.Channel{ID: "alerts", Kind: "webhook", Enabled: true, Endpoint: "https://notifications.invalid/hook", Events: []string{"title.available"}, PerMinute: 60}); err != nil {
+	if err := notifier.Save(ctx, notify.Channel{ID: "alerts", Kind: "webhook", Enabled: true, Secrets: map[string]string{"endpoint": "https://notifications.invalid/hook"}, Events: []string{"title.available"}, PerMinute: 60}); err != nil {
 		t.Fatal(err)
 	}
 	service := func(n *notify.Service) *Service {

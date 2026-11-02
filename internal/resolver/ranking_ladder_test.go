@@ -485,3 +485,73 @@ func TestValidateRankingAndSelectionKey(t *testing.T) {
 		t.Fatal("custom ranking must change SelectionKey")
 	}
 }
+
+// Plugin steps (WS1a): accepted structurally by core, kept by
+// EffectiveRanking, and neutral in ordering until WS9h executes them.
+func TestPluginRankingStepsAreAcceptedAndNeutral(t *testing.T) {
+	ctx := context.Background()
+	title := matrixTitle()
+	title.Language = "en"
+	rules := []core.ReleaseRule{
+		{ID: "r1", Name: "Prefer A", Action: "prefer", Conditions: []core.ReleaseCondition{{Field: "group", Operator: "equals", Value: "A"}}},
+	}
+	pluginStep := "plugin:example.dub/lang"
+	withPlugin := append(core.DefaultRanking(rules), "")
+	copy(withPlugin[3:], withPlugin[2:])
+	withPlugin[2] = pluginStep
+
+	if err := core.ValidateRanking(withPlugin, rules); err != nil {
+		t.Fatalf("plugin step should validate structurally: %v", err)
+	}
+	registered := func(step string) bool {
+		return core.IsBuiltinRankingStep(step) || step == pluginStep
+	}
+	if err := core.ValidateRankingWith(withPlugin, rules, registered); err != nil {
+		t.Fatalf("registered plugin step should validate: %v", err)
+	}
+	unregistered := func(step string) bool { return core.IsBuiltinRankingStep(step) }
+	if err := core.ValidateRankingWith(withPlugin, rules, unregistered); err == nil {
+		t.Fatal("unregistered plugin step must fail registry-aware validation")
+	}
+
+	prof := core.QualityProfile{Name: "4K", MaxHeight: 2160, ReleaseRules: rules, Ranking: withPlugin}
+	eff := prof.EffectiveRanking()
+	if !slices.Contains(eff, pluginStep) {
+		t.Fatalf("EffectiveRanking dropped the plugin step: %v", eff)
+	}
+
+	releases := []core.Release{
+		rel("2160p-webdl", "The.Signal.1999.2160p.WEB-DL.DDP5.1.HDR.HEVC-NTb", 16000),
+		rel("1080p-remux", "The.Signal.1999.1080p.BluRay.REMUX.AVC.TrueHD.5.1-EPSiLON", 26000),
+	}
+	for i := range releases {
+		releases[i].Info = releaseparse.Parse(releases[i].Name)
+	}
+	base := core.QualityProfile{
+		Name: "4K", MinHeight: 720, MaxHeight: 2160, AllowHDR: true, AllowDolbyVision: true,
+		PreferredSources: []core.Source{core.SourceRemux, core.SourceWEBDL},
+		PreferredCodecs:  []string{"hevc", "h264"}, PreferredAudio: []string{"truehd", "eac3"},
+		MinSizeMBPerMin: 5, MaxSizeMBPerMin: 800, ReleaseRules: rules,
+	}
+	order := func(p core.QualityProfile) []string {
+		cfg := testCfg()
+		cfg.Quality.Default = p.Name
+		cfg.Quality.Profiles = []core.QualityProfile{p}
+		svc := New(&fakeIndexer{releases: releases}, fakeHealth{}, nil, cfg, Options{})
+		cands, _, err := svc.rankCandidates(ctx, core.ResolveRequest{Title: title, Client: appleTVCaps()}, searchRequestFor(title), SelectProfile(cfg.Quality, appleTVCaps(), nil), releases, nil, "")
+		if err != nil {
+			t.Fatalf("rankCandidates: %v", err)
+		}
+		ids := make([]string, len(cands))
+		for i, c := range cands {
+			ids[i] = c.rel.ID
+		}
+		return ids
+	}
+	plain := order(base)
+	withStep := base
+	withStep.Ranking = withPlugin
+	if got := order(withStep); !slices.Equal(got, plain) {
+		t.Fatalf("plugin step must be neutral: with %v, without %v", got, plain)
+	}
+}

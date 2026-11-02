@@ -7,37 +7,212 @@ import {
   Switch,
   Textarea,
 } from "@braedonsaunders/appkit-ui";
-import { ArrowDown, ArrowUp, ChevronDown, Plus, Trash2, Upload, Download } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronDown,
+  Plus,
+  Puzzle,
+  Trash2,
+  Upload,
+  Download,
+} from "lucide-react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { DragHandle, type DragHandleProps } from "../../components/Sortable";
-import { t, getLocale, localized } from "../../i18n";
+import { t, getLocale } from "../../i18n";
 import { useLocale } from "../../i18n/react";
 import { searchSelectLabels } from "../../i18n/appkit-labels";
 import { apiFetch, errorMessage, isAbort } from "../../lib/api";
+import {
+  BUILTIN,
+  isPluginDescriptor,
+  textOf,
+  useRegistry,
+  type Descriptor,
+  type ExtendText,
+} from "../../lib/extend";
 import type { QualityProfile, ReleaseCondition, ReleaseRule } from "../../lib/types";
 import type { ConsoleRelease } from "../../lib/releases";
 import { TitlePicker } from "./Search";
 
-export const DEFAULT_BUILTIN_RANKING = [
-  "language",
-  "connection",
-  "resolution",
-  "releaseType",
-  "hdr",
-  "verified",
-  "videoCodec",
-  "audioFormat",
-  "size",
-] as const;
+/**
+ * Ranking step and rule field descriptor metadata, mirroring
+ * internal/extend/meta_ranking.go. The server registry is the one source
+ * for which steps and fields exist, their order, editors and choices;
+ * this file keeps no copy of those lists.
+ */
+export interface DescriptorOption {
+  value: string;
+  label?: ExtendText;
+}
 
-const BUILTIN_SET = new Set<string>(DEFAULT_BUILTIN_RANKING);
+export type RankingEditorKind = "ordered_list" | "choice" | "range" | "toggle" | "none";
+
+export interface RankingStepMeta {
+  editor: RankingEditorKind;
+  options?: DescriptorOption[];
+  choices?: DescriptorOption[];
+  required?: boolean;
+  canMove: boolean;
+  defaultPosition: number;
+  configKey?: string;
+  hint?: string;
+}
+
+export type RuleValueClass = "text" | "choice" | "language" | "number" | "none";
+
+export interface RuleFieldMeta {
+  valueClass: RuleValueClass;
+  operators?: string[];
+  defaultOperator?: string;
+  choices?: DescriptorOption[];
+  unit?: string;
+  singleValue?: boolean;
+  editor?:
+    | string
+    | {
+        kind?: string;
+        valueClass?: string;
+        choices?: DescriptorOption[];
+        options?: DescriptorOption[];
+        unit?: string;
+        singleValue?: boolean;
+      };
+}
+
+export type RankingStepDescriptor = Descriptor<RankingStepMeta>;
+export type RuleFieldDescriptor = Descriptor<RuleFieldMeta>;
+
+function normalizeValueClass(raw: string | undefined): RuleValueClass | undefined {
+  if (!raw) return undefined;
+  if (raw === "range") return "number";
+  if (
+    raw === "text" ||
+    raw === "choice" ||
+    raw === "language" ||
+    raw === "number" ||
+    raw === "none"
+  ) {
+    return raw;
+  }
+  return undefined;
+}
 
 /**
- * Mirrors internal/core.NormalizeProfileRanking: Prefer rules sit at the top
- * by default in their rule order, followed by the built-in steps.
+ * Normalizes a ruleField descriptor's meta whether it was registered directly
+ * as RuleFieldMeta or built from a plugin manifest's ruleConditions entry.
+ */
+export function resolveRuleFieldMeta(meta: RuleFieldMeta | undefined):
+  | {
+      valueClass?: RuleValueClass;
+      operators?: string[];
+      defaultOperator?: string;
+      choices?: DescriptorOption[];
+      unit?: string;
+      singleValue?: boolean;
+    }
+  | undefined {
+  if (!meta) return undefined;
+  let valueClass = normalizeValueClass(meta.valueClass);
+  let choices = meta.choices;
+  let unit = meta.unit;
+  let singleValue = meta.singleValue;
+  if (typeof meta.editor === "string") {
+    valueClass = valueClass ?? normalizeValueClass(meta.editor);
+  } else if (typeof meta.editor === "object" && meta.editor !== null) {
+    valueClass = valueClass ?? normalizeValueClass(meta.editor.valueClass ?? meta.editor.kind);
+    if (!choices?.length) {
+      choices = meta.editor.choices ?? meta.editor.options;
+    }
+    unit = unit ?? meta.editor.unit;
+    singleValue = singleValue ?? meta.editor.singleValue;
+  }
+  const operators = meta.operators?.length ? meta.operators : undefined;
+  if (!valueClass && operators?.length === 1 && operators[0] === "range") {
+    valueClass = "number";
+  }
+  const defaultOperator = meta.defaultOperator || operators?.[0];
+  return {
+    valueClass,
+    operators,
+    defaultOperator,
+    choices,
+    unit,
+    singleValue,
+  };
+}
+
+/** Ranking steps and rule fields from the descriptor registry, in registry order. */
+export function useRankingRegistry(): {
+  steps: RankingStepDescriptor[];
+  fields: RuleFieldDescriptor[];
+  loading: boolean;
+  error: Error | null;
+  reload: () => void;
+} {
+  const { descriptors, loading, error, reload } = useRegistry("rankingStep", "ruleField");
+  return useMemo(
+    () => ({
+      steps: descriptors.filter((d) => d.kind === "rankingStep") as RankingStepDescriptor[],
+      fields: descriptors.filter((d) => d.kind === "ruleField") as RuleFieldDescriptor[],
+      loading,
+      error,
+      reload,
+    }),
+    [descriptors, loading, error, reload],
+  );
+}
+
+/** Display name for a plugin-contributed descriptor's owner. */
+export function descriptorOwnerName(d: Descriptor): string {
+  return d.group || d.owner;
+}
+
+/** Small badge marking a descriptor a plugin contributed. */
+export function PluginBadge({ owner }: { owner: string }) {
+  return (
+    <Badge variant="secondary" className="inline-flex items-center gap-1">
+      <Puzzle size={11} aria-hidden />
+      {t("From {name}", { name: owner })}
+    </Badge>
+  );
+}
+
+export function descriptorLabel(d: Descriptor): string {
+  const label = textOf(d.label) || d.id;
+  return isPluginDescriptor(d)
+    ? `${label} · ${t("From {name}", { name: descriptorOwnerName(d) })}`
+    : label;
+}
+
+export function optionLabel(option: DescriptorOption): string {
+  return textOf(option.label) || option.value;
+}
+
+/** Inserts a step ahead of the first ladder step with a larger default position. */
+export function insertStepAtDefaultPosition(
+  ladder: string[],
+  steps: RankingStepDescriptor[],
+  stepId: string,
+): string[] {
+  const positions = new Map(
+    steps.map((s) => [s.id, s.meta?.defaultPosition ?? Number.MAX_SAFE_INTEGER]),
+  );
+  const mine = positions.get(stepId) ?? Number.MAX_SAFE_INTEGER;
+  const without = ladder.filter((s) => s !== stepId);
+  const at = without.findIndex((s) => !s.startsWith("rule:") && (positions.get(s) ?? -1) > mine);
+  return at < 0 ? [...without, stepId] : [...without.slice(0, at), stepId, ...without.slice(at)];
+}
+
+/**
+ * The complete ladder for a profile: Prefer rules first by default in their
+ * rule order, then the registered built-in steps in registry order. Steps a
+ * plugin contributed appear only when the profile already names them; the
+ * registry never inserts them on its own. Mirrors core EffectiveRanking.
  */
 export function normalizeRanking(
   profile: Pick<QualityProfile, "ranking" | "releaseRules">,
+  steps: RankingStepDescriptor[],
 ): string[] {
   const rules = profile.releaseRules ?? [];
   const preferSteps: string[] = [];
@@ -51,10 +226,12 @@ export function normalizeRanking(
       }
     }
   }
+  const defaultSteps = steps.filter((s) => s.owner === BUILTIN).map((s) => s.id);
   const raw = profile.ranking ?? [];
   if (raw.length === 0) {
-    return [...preferSteps, ...DEFAULT_BUILTIN_RANKING];
+    return [...preferSteps, ...defaultSteps];
   }
+  const known = new Set(steps.map((s) => s.id));
   const seen = new Set<string>();
   const kept: string[] = [];
   for (const step of raw) {
@@ -66,16 +243,18 @@ export function normalizeRanking(
       }
       continue;
     }
-    if (BUILTIN_SET.has(step)) {
+    // Before the registry answers, keep the saved ladder as it is rather
+    // than dropping every step it cannot vouch for yet.
+    if (steps.length === 0 || known.has(step)) {
       seen.add(step);
       kept.push(step);
     }
   }
   const missingPrefer = preferSteps.filter((step) => !seen.has(step));
-  const out = [...missingPrefer, ...kept];
-  for (const step of DEFAULT_BUILTIN_RANKING) {
+  let out = [...missingPrefer, ...kept];
+  for (const step of defaultSteps) {
     if (!seen.has(step)) {
-      out.push(step);
+      out = insertStepAtDefaultPosition(out, steps, step);
     }
   }
   return out;
@@ -120,48 +299,24 @@ export function insertPreferRuleInRanking(ranking: string[], ruleId: string): st
   return [...without.slice(0, insertAt), key, ...without.slice(insertAt)];
 }
 
-const FIELDS = localized((): [string, string][] => [
-  ["language", t("Declared audio language")],
-  ["subtitles", t("Declared subtitle language")],
-  ["audio_matches_original", t("Original-language audio")],
-  ["name", t("Release name")],
-  ["group", t("Release group")],
-  ["source", t("Release type")],
-  ["video", t("Video codec")],
-  ["audio", t("Audio codec")],
-  ["height", t("Resolution")],
-  ["size_gib", t("Size (GiB)")],
-  ["hdr", t("HDR")],
-  ["edition", t("Edition")],
-  ["indexer", t("Indexer")],
-  ["protocol", t("Protocol")],
-]);
+export function fieldDescriptor(
+  fields: RuleFieldDescriptor[],
+  field: string,
+): RuleFieldDescriptor | undefined {
+  return fields.find((f) => f.id === field);
+}
 
-const SINGLE_VALUE = new Set([
-  "group",
-  "source",
-  "video",
-  "audio",
-  "indexer",
-  "protocol",
-  "edition",
-]);
+function fieldLabel(field: string, fields: RuleFieldDescriptor[]) {
+  const d = fieldDescriptor(fields, field);
+  return d ? textOf(d.label) || field : field;
+}
 
-const LANGUAGE_CODES =
-  "en es es-419 es-ES pt pt-BR pt-PT fr de it nl sv da no nb nn fi is ja ko zh pl cs hu ro tr ru uk ar he hi th vi id".split(
-    " ",
-  );
-
-const CHOICES: Record<string, string[]> = {
-  source: ["webdl", "webrip", "bluray", "remux", "hdtv", "dvd", "cam"],
-  video: ["h264", "hevc", "av1", "mpeg2", "xvid"],
-  audio: ["aac", "ac3", "eac3", "truehd", "dts", "dtshd", "opus"],
-  hdr: ["hdr10", "dv"],
-  protocol: ["usenet", "torrent", "http"],
-};
-
-function fieldLabel(field: string) {
-  return FIELDS.find(([value]) => value === field)?.[1] ?? field;
+function fieldOptions(fields: RuleFieldDescriptor[], current?: string) {
+  const options = fields.map((d) => ({ value: d.id, label: descriptorLabel(d) }));
+  if (current && !options.some((o) => o.value === current)) {
+    options.unshift({ value: current, label: current });
+  }
+  return options;
 }
 
 function mentionsOriginal(rule: ReleaseRule) {
@@ -170,27 +325,39 @@ function mentionsOriginal(rule: ReleaseRule) {
   );
 }
 
-function languageSuggestions() {
+function languageSuggestions(codes: string[]) {
   const names = new Intl.DisplayNames([getLocale()], { type: "language" });
-  return LANGUAGE_CODES.map((value) => ({ value, label: names.of(value) ?? value })).sort((a, b) =>
-    a.label.localeCompare(b.label, getLocale()),
-  );
+  return codes
+    .map((value) => ({ value, label: names.of(value) ?? value }))
+    .sort((a, b) => a.label.localeCompare(b.label, getLocale()));
 }
 
-function suggestionsFor(field: string) {
-  if (field === "language" || field === "subtitles") return languageSuggestions();
-  return (CHOICES[field] ?? []).map((value) => ({ value, label: value }));
+function suggestionsFor(d: RuleFieldDescriptor | undefined) {
+  const meta = resolveRuleFieldMeta(d?.meta);
+  if (!meta) return [];
+  if (meta.valueClass === "language") {
+    return languageSuggestions((meta.choices ?? []).map((c) => c.value));
+  }
+  return (meta.choices ?? []).map((c) => ({ value: c.value, label: optionLabel(c) }));
 }
 
-const condition = (field = "name"): ReleaseCondition => ({
-  field,
-  operator:
-    field === "name" ? "contains" : ["height", "size_gib"].includes(field) ? "range" : "equals",
-  value: "",
-});
+export function newCondition(fields: RuleFieldDescriptor[], field = "name"): ReleaseCondition {
+  const meta = resolveRuleFieldMeta(fieldDescriptor(fields, field)?.meta);
+  return {
+    field,
+    operator: (meta?.defaultOperator ??
+      meta?.operators?.[0] ??
+      "equals") as ReleaseCondition["operator"],
+    value: "",
+  };
+}
 
-function retarget(current: ReleaseCondition, field: string): ReleaseCondition {
-  const next = condition(field);
+function retarget(
+  current: ReleaseCondition,
+  field: string,
+  fields: RuleFieldDescriptor[],
+): ReleaseCondition {
+  const next = newCondition(fields, field);
   if (next.operator !== "range" && current.value) next.value = current.value;
   return next;
 }
@@ -204,7 +371,10 @@ function createRule(
 }
 
 /** Same conflict the server rejects on save. Exceptions and fallbacks stay allowed. */
-export function releaseRuleConflict(rules: ReleaseRule[]): string {
+export function releaseRuleConflict(rules: ReleaseRule[], fields: RuleFieldDescriptor[]): string {
+  const singleValue = new Set(
+    fields.filter((f) => resolveRuleFieldMeta(f.meta)?.singleValue).map((f) => f.id),
+  );
   const needs: { name: string; field: string; value: string }[] = [];
   for (const r of rules) {
     if (
@@ -217,12 +387,12 @@ export function releaseRuleConflict(rules: ReleaseRule[]): string {
       continue;
     const seen = new Map<string, string>();
     for (const c of r.conditions) {
-      if (!SINGLE_VALUE.has(c.field) || c.operator !== "equals") continue;
+      if (!singleValue.has(c.field) || c.operator !== "equals") continue;
       const prev = seen.get(c.field);
       if (prev != null && prev.toLowerCase() !== (c.value ?? "").toLowerCase()) {
         return t(
           "Required rule {name} cannot match: {field} would have to equal both {left} and {right}.",
-          { name: r.name, field: fieldLabel(c.field), left: prev, right: c.value ?? "" },
+          { name: r.name, field: fieldLabel(c.field, fields), left: prev, right: c.value ?? "" },
         );
       }
       seen.set(c.field, c.value ?? "");
@@ -236,7 +406,13 @@ export function releaseRuleConflict(rules: ReleaseRule[]): string {
       if (a.field === b.field && a.value.toLowerCase() !== b.value.toLowerCase()) {
         return t(
           "Required rules {a} and {b} cannot match the same release: {field} would have to equal both {left} and {right}.",
-          { a: a.name, b: b.name, field: fieldLabel(a.field), left: a.value, right: b.value },
+          {
+            a: a.name,
+            b: b.name,
+            field: fieldLabel(a.field, fields),
+            left: a.value,
+            right: b.value,
+          },
         );
       }
     }
@@ -278,16 +454,36 @@ function ValueField({
   );
 }
 
+function operatorLabel(operator: string): string {
+  switch (operator) {
+    case "contains":
+      return t("Contains");
+    case "regex":
+      return t("Regex");
+    default:
+      return t("Equals");
+  }
+}
+
 function ConditionEditor({
   value: c,
+  fields,
   onChange,
 }: {
   value: ReleaseCondition;
+  fields: RuleFieldDescriptor[];
   onChange: (c: ReleaseCondition) => void;
 }) {
-  const numeric = ["height", "size_gib"].includes(c.field);
-  const language = ["language", "subtitles"].includes(c.field);
-  const original = c.field === "audio_matches_original";
+  const desc = fieldDescriptor(fields, c.field);
+  const meta = resolveRuleFieldMeta(desc?.meta);
+  // A field with no descriptor (its plugin is gone, or the registry has
+  // not answered yet) keeps the generic comparison editor its saved
+  // operator implies, so the condition stays visible and removable.
+  const numeric = meta?.valueClass ? meta.valueClass === "number" : c.operator === "range";
+  const valueless = meta?.valueClass === "none";
+  const operators = (meta?.operators ?? ["equals", "contains", "regex"]).filter(
+    (op) => op !== "range",
+  );
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
       <div className="min-w-0 sm:min-w-40 sm:flex-1">
@@ -295,16 +491,13 @@ function ConditionEditor({
           {...searchSelectLabels()}
           ariaLabel={t("What it describes")}
           value={c.field}
-          options={FIELDS.map(([value, label]) => ({ value, label }))}
-          onChange={(v) => onChange(retarget(c, v))}
+          options={fieldOptions(fields, c.field)}
+          onChange={(v) => onChange(retarget(c, v, fields))}
         />
       </div>
-      {original ? (
-        <p className="text-xs text-fg-muted sm:flex-1">
-          {t(
-            "Declared audio must match this title's original language. Subtitles do not count, and a filename alone cannot make the comparison.",
-          )}
-        </p>
+      {desc && isPluginDescriptor(desc) ? <PluginBadge owner={descriptorOwnerName(desc)} /> : null}
+      {valueless ? (
+        <p className="text-xs text-fg-muted sm:flex-1">{textOf(desc?.hint)}</p>
       ) : numeric ? (
         <div className="flex items-center gap-2">
           <Input
@@ -330,10 +523,11 @@ function ConditionEditor({
               onChange({ ...c, max: e.target.value === "" ? 0 : Number(e.target.value) })
             }
           />
+          {meta?.unit ? <span className="text-xs text-fg-muted">{meta.unit}</span> : null}
         </div>
       ) : (
         <>
-          {!language && (
+          {operators.length > 1 && (
             <Select
               className="w-full sm:w-32"
               aria-label={t("Comparison")}
@@ -342,16 +536,18 @@ function ConditionEditor({
                 onChange({ ...c, operator: e.target.value as ReleaseCondition["operator"] })
               }
             >
-              <option value="equals">{t("Equals")}</option>
-              <option value="contains">{t("Contains")}</option>
-              <option value="regex">{t("Regex")}</option>
+              {operators.map((op) => (
+                <option key={op} value={op}>
+                  {operatorLabel(op)}
+                </option>
+              ))}
             </Select>
           )}
           <div className="min-w-0 sm:min-w-40 sm:flex-1">
             <ValueField
               value={c.value ?? ""}
               mono={c.operator === "regex"}
-              suggestions={c.operator === "equals" ? suggestionsFor(c.field) : []}
+              suggestions={c.operator === "equals" ? suggestionsFor(desc) : []}
               onChange={(value) => onChange({ ...c, value })}
             />
           </div>
@@ -363,9 +559,11 @@ function ConditionEditor({
 
 function ConditionGroup({
   values,
+  fields,
   onChange,
 }: {
   values: ReleaseCondition[];
+  fields: RuleFieldDescriptor[];
   onChange: (v: ReleaseCondition[]) => void;
 }) {
   return (
@@ -375,6 +573,7 @@ function ConditionGroup({
           <div className="min-w-0 flex-1">
             <ConditionEditor
               value={c}
+              fields={fields}
               onChange={(v) => onChange(values.map((x, j) => (i === j ? v : x)))}
             />
           </div>
@@ -392,7 +591,7 @@ function ConditionGroup({
         size="sm"
         variant="ghost"
         disabled={values.length >= 16}
-        onClick={() => onChange([...values, condition()])}
+        onClick={() => onChange([...values, newCondition(fields)])}
       >
         <Plus size={14} />
         {t("Add condition")}
@@ -403,6 +602,7 @@ function ConditionGroup({
 
 export function RuleEditorCard({
   rule: r,
+  fields,
   handle,
   stepNumber,
   canMoveUp,
@@ -412,6 +612,7 @@ export function RuleEditorCard({
   onRemove,
 }: {
   rule: ReleaseRule;
+  fields: RuleFieldDescriptor[];
   handle?: DragHandleProps;
   stepNumber?: number;
   canMoveUp?: boolean;
@@ -470,6 +671,7 @@ export function RuleEditorCard({
       {r.conditions[0] && (
         <ConditionEditor
           value={r.conditions[0]}
+          fields={fields}
           onChange={(v) => onChange({ conditions: [v, ...r.conditions.slice(1)] })}
         />
       )}
@@ -521,6 +723,7 @@ export function RuleEditorCard({
             <p className="text-sm font-medium">{t("Other conditions")}</p>
             <ConditionGroup
               values={r.conditions.slice(1)}
+              fields={fields}
               onChange={(rest) =>
                 onChange({ conditions: [r.conditions[0]!, ...rest].filter(Boolean) })
               }
@@ -528,7 +731,11 @@ export function RuleEditorCard({
           </div>
           <div className="space-y-2">
             <p className="text-sm font-medium">{t("Except when any matches")}</p>
-            <ConditionGroup values={r.unless ?? []} onChange={(unless) => onChange({ unless })} />
+            <ConditionGroup
+              values={r.unless ?? []}
+              fields={fields}
+              onChange={(unless) => onChange({ unless })}
+            />
           </div>
           {r.action === "require" && (
             <div className="space-y-2">
@@ -540,6 +747,7 @@ export function RuleEditorCard({
               </p>
               <ConditionGroup
                 values={r.fallback ?? []}
+                fields={fields}
                 onChange={(fallback) => onChange({ fallback })}
               />
             </div>
@@ -570,6 +778,7 @@ export function FilterRulesEditor({
   error?: string;
 }) {
   useLocale();
+  const { steps, fields } = useRankingRegistry();
   const rules = profile.releaseRules ?? [];
   const filterRules = rules.filter((r) => r.action === "require" || r.action === "avoid");
   const [term, setTerm] = useState("");
@@ -582,11 +791,11 @@ export function FilterRulesEditor({
   profileRef.current = profile;
   useEffect(() => () => importAbort.current?.abort(), []);
 
-  const conflict = releaseRuleConflict(rules);
+  const conflict = releaseRuleConflict(rules, fields);
 
   function updateRule(id: string, patch: Partial<ReleaseRule>) {
     const nextRules = rules.map((r) => (r.id === id ? { ...r, ...patch } : r));
-    const currentRanking = normalizeRanking(profile);
+    const currentRanking = normalizeRanking(profile, steps);
     let nextRanking = currentRanking;
     if (patch.action === "prefer") {
       nextRanking = insertPreferRuleInRanking(currentRanking, id);
@@ -601,7 +810,7 @@ export function FilterRulesEditor({
 
   function removeRule(id: string) {
     const nextRules = rules.filter((r) => r.id !== id);
-    const nextRanking = normalizeRanking(profile).filter((s) => s !== `rule:${id}`);
+    const nextRanking = normalizeRanking(profile, steps).filter((s) => s !== `rule:${id}`);
     onChange({
       releaseRules: nextRules,
       ranking: nextRanking,
@@ -611,8 +820,8 @@ export function FilterRulesEditor({
   function addTerm() {
     const value = term.trim();
     if (!value || rules.length >= 32) return;
-    const c = condition(field);
-    if (field === "audio_matches_original") {
+    const c = newCondition(fields, field);
+    if (resolveRuleFieldMeta(fieldDescriptor(fields, field)?.meta)?.valueClass === "none") {
       c.value = "";
     } else if (c.operator === "range") {
       const [min, max] = value.split(/[-–]/).map((part) => part.trim());
@@ -623,7 +832,7 @@ export function FilterRulesEditor({
     }
     const added = createRule(value, c, action);
     const nextRules = [...rules, added];
-    const currentRanking = normalizeRanking(profile);
+    const currentRanking = normalizeRanking(profile, steps);
     const nextRanking =
       action === "prefer" ? insertPreferRuleInRanking(currentRanking, added.id) : currentRanking;
     onChange({
@@ -652,7 +861,7 @@ export function FilterRulesEditor({
         throw Error(t("Use a rules export with at most 32 rules."));
       const next = data.map((r) => ({ ...r, id: crypto.randomUUID() }));
       const mergedRules = [...currentRules, ...next];
-      let nextRanking = normalizeRanking(profileRef.current);
+      let nextRanking = normalizeRanking(profileRef.current, steps);
       for (const r of next) {
         if (r.action === "prefer") {
           nextRanking = insertPreferRuleInRanking(nextRanking, r.id);
@@ -727,7 +936,7 @@ export function FilterRulesEditor({
               {...searchSelectLabels()}
               ariaLabel={t("What it describes")}
               value={field}
-              options={FIELDS.map(([value, label]) => ({ value, label }))}
+              options={fieldOptions(fields, field)}
               onChange={setField}
             />
           </div>
@@ -746,12 +955,8 @@ export function FilterRulesEditor({
             {t("Add rule")}
           </Button>
         </div>
-        {field === "audio_matches_original" && (
-          <p className="text-xs text-fg-muted">
-            {t(
-              "Declared audio must match this title's original language. Subtitles do not count, and a filename alone cannot make the comparison.",
-            )}
-          </p>
+        {resolveRuleFieldMeta(fieldDescriptor(fields, field)?.meta)?.valueClass === "none" && (
+          <p className="text-xs text-fg-muted">{textOf(fieldDescriptor(fields, field)?.hint)}</p>
         )}
       </div>
       {(error || importError || conflict) && (
@@ -765,6 +970,7 @@ export function FilterRulesEditor({
             <RuleEditorCard
               key={r.id}
               rule={r}
+              fields={fields}
               onChange={(patch) => updateRule(r.id, patch)}
               onRemove={() => removeRule(r.id)}
             />

@@ -57,7 +57,7 @@ func traktRow(t *testing.T, db *sql.DB, user int64) string {
 }
 
 func hookChannel(id string) notify.Channel {
-	return notify.Channel{ID: id, Name: id, Kind: "webhook", Enabled: true, Events: []string{"test"}, Endpoint: "https://hooks.test/hook-secret-path"}
+	return notify.Channel{ID: id, Name: id, Kind: "webhook", Enabled: true, Events: []string{"test"}, Secrets: map[string]string{"endpoint": "https://hooks.test/hook-secret-path"}}
 }
 
 func channelRow(t *testing.T, db *sql.DB, id string) string {
