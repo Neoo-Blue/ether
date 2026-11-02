@@ -146,7 +146,6 @@ func TestPlaylistRefreshPreservesBackupOrderAndChannelIdentity(t *testing.T) {
 	c.StreamSources[0].Priority = 1
 	c.StreamSources = append(c.StreamSources, StreamSource{ID: "owner-backup", URL: "https://backup.invalid/live", Name: "Preferred backup", Enabled: true})
 	c.Number, c.Favorite, c.GuideID = "99", true, "owner-guide"
-	c.AllowedUsers = []int64{9}
 	if _, err := s.SaveChannel(ctx, c); err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +156,7 @@ func TestPlaylistRefreshPreservesBackupOrderAndChannelIdentity(t *testing.T) {
 	// A new service instance reads the same persisted channel contract.
 	reopened := testService(t, Options{DB: s.o.DB})
 	saved, err := reopened.Channel(ctx, c.ID)
-	if err != nil || saved.Number != "99" || !saved.Favorite || saved.GuideID != "owner-guide" || len(saved.AllowedUsers) != 1 {
+	if err != nil || saved.Number != "99" || !saved.Favorite || saved.GuideID != "owner-guide" {
 		t.Fatalf("refresh changed channel identity/policy: %+v err=%v", saved, err)
 	}
 	if len(saved.StreamSources) != 2 || saved.StreamSources[0].ID != "owner-backup" || saved.StreamSources[1].ID != importID || saved.StreamSources[1].URL != "https://primary.invalid/new" || saved.StreamURL != "https://backup.invalid/live" {

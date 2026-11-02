@@ -82,7 +82,7 @@ func testCheapSurfacesMounted(t *testing.T, dir string, configure func(*config.C
 	if len(media) > 0 {
 		durationMS = 120000
 	}
-	channel, err := a.livetv.SaveChannel(ctx, livetv.Channel{ID: "cert-channel", Number: "1", Name: "Cert & News", Kind: "virtual", Enabled: true, AllowedUsers: []int64{id}, Items: []livetv.Item{{Key: title.Key, Title: title.Title, DurationMS: durationMS}}})
+	channel, err := a.livetv.SaveChannel(ctx, livetv.Channel{ID: "cert-channel", Number: "1", Name: "Cert & News", Kind: "virtual", Enabled: true, Items: []livetv.Item{{Key: title.Key, Title: title.Title, DurationMS: durationMS}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,8 +255,7 @@ func testCheapSurfacesMounted(t *testing.T, dir string, configure func(*config.C
 		t.Log("real file source: Stremio/WebDAV/DLNA byte ranges match; ffprobe decoded M3U/HLS")
 	}
 	// Channel access changes must be effective on the already mounted instance.
-	channel.AllowedUsers = []int64{id + 1}
-	if _, err = a.livetv.SaveChannel(ctx, channel); err != nil {
+	if err = a.livetv.SetChannelViewers(ctx, channel.ID, livetv.ChannelViewers{Deny: []int64{id}}); err != nil {
 		t.Fatal(err)
 	}
 	hidden := request("GET", m3u+"/playlist.m3u", "", "", nil, 200)

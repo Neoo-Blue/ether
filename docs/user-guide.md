@@ -648,6 +648,12 @@ being retried. The channel keeps its number, favourites, sharing and programme
 guide when its input changes. A running stream stays on its selected input;
 retuning after an interruption can select a healthy backup.
 
+Who can watch each channel is one list per viewer. Edit it on the viewer's
+page (**Limits › Live TV › Allowed channels**) or on a channel's **Viewers**
+tab; both change the same setting. A viewer allowed on all channels also gets
+channels you add later. Switching them off for one channel keeps them on the
+current other channels only, so new channels stay hidden until you allow them.
+
 Programme guides can come from separate XMLTV sources, including compressed
 `.xml.gz` feeds. Map each channel to its matching guide. URL sources refresh
 automatically and retain existing listings if a refresh fails; uploaded files

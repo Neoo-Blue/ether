@@ -48,8 +48,11 @@ func TestFrontendLiveTVUsesViewerPolicy(t *testing.T) {
 	if err := a.catalog.UpsertTitle(ctx, core.Title{Key: core.MovieKey(1), Type: core.TypeMovie, IDs: core.IDs{TMDB: 1}, Title: "Programme", Released: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)}, true); err != nil {
 		t.Fatal(err)
 	}
-	c, err := a.livetv.SaveChannel(ctx, livetv.Channel{ID: "private-channel", Number: "1", Name: "Channel", Kind: "virtual", Enabled: true, AllowedUsers: []int64{owner.ID}, Items: []livetv.Item{{Key: core.MovieKey(1), Title: "Programme", DurationMS: 3600000}}})
+	c, err := a.livetv.SaveChannel(ctx, livetv.Channel{ID: "private-channel", Number: "1", Name: "Channel", Kind: "virtual", Enabled: true, Items: []livetv.Item{{Key: core.MovieKey(1), Title: "Programme", DurationMS: 3600000}}})
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.livetv.SetChannelViewers(ctx, c.ID, livetv.ChannelViewers{Deny: []int64{viewerID}}); err != nil {
 		t.Fatal(err)
 	}
 	facade := surfaceLiveTV{app: a}
@@ -114,7 +117,7 @@ func TestChannelArtworkGrantFollowsLiveTVPolicy(t *testing.T) {
 	if _, err := a.db.ExecContext(ctx, `UPDATE catalog_titles SET detail=1,detail_at=? WHERE key=?`, time.Now().Unix(), int64(title.Key)); err != nil {
 		t.Fatal(err)
 	}
-	channel, err := a.livetv.SaveChannel(ctx, livetv.Channel{ID: "scoped-channel", Number: "9", Name: "News", Kind: "virtual", Enabled: true, AllowedUsers: []int64{viewerID}, Items: []livetv.Item{{Key: core.MovieKey(1), Title: "Programme", DurationMS: 3600000}}})
+	channel, err := a.livetv.SaveChannel(ctx, livetv.Channel{ID: "scoped-channel", Number: "9", Name: "News", Kind: "virtual", Enabled: true, Items: []livetv.Item{{Key: core.MovieKey(1), Title: "Programme", DurationMS: 3600000}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,8 +156,7 @@ func TestChannelArtworkGrantFollowsLiveTVPolicy(t *testing.T) {
 	if w.Code != 200 || w.Header().Get("Content-Type") != "image/png" {
 		t.Fatalf("channel PNG: %d %q", w.Code, w.Header().Get("Content-Type"))
 	}
-	channel.AllowedUsers = []int64{viewerID + 1}
-	if _, err := a.livetv.SaveChannel(ctx, channel); err != nil {
+	if err := a.livetv.SetChannelViewers(ctx, channel.ID, livetv.ChannelViewers{Deny: []int64{viewerID}}); err != nil {
 		t.Fatal(err)
 	}
 	w = httptest.NewRecorder()
@@ -169,7 +171,9 @@ func TestChannelArtworkGrantFollowsLiveTVPolicy(t *testing.T) {
 	if _, err := service.Issue(ctx, request); err == nil {
 		t.Fatal("accepted both item and channel")
 	}
-	channel.AllowedUsers = []int64{viewerID}
+	if err := a.livetv.SetChannelViewers(ctx, channel.ID, livetv.ChannelViewers{Allow: []int64{viewerID}}); err != nil {
+		t.Fatal(err)
+	}
 	channel.Logo = "https://example.invalid/logo.png?token=private"
 	if _, err := a.livetv.SaveChannel(ctx, channel); err != nil {
 		t.Fatal(err)

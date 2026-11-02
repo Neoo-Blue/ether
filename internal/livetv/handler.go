@@ -37,6 +37,13 @@ func (s *Service) Handler() http.Handler {
 	}
 	r.Post("/channels", save)
 	r.Put("/channels/{id}", save)
+	r.Put("/channels/{id}/viewers", func(w http.ResponseWriter, r *http.Request) {
+		var change ChannelViewers
+		if !ownerBody(w, r, &change) {
+			return
+		}
+		ownerResult(w, map[string]bool{"ok": true}, s.SetChannelViewers(r.Context(), chi.URLParam(r, "id"), change))
+	})
 	r.Delete("/channels/{id}", func(w http.ResponseWriter, r *http.Request) {
 		ownerResult(w, map[string]bool{"ok": true}, s.DeleteChannel(r.Context(), chi.URLParam(r, "id")))
 	})
@@ -103,6 +110,7 @@ func (s *Service) Handler() http.Handler {
 	s.guideRoutes(r)
 	s.previewRoutes(r, owner)
 	r.Get("/guide.xml", func(w http.ResponseWriter, r *http.Request) { s.ServeXMLTV(w, r, owner) })
+	r.Get("/policies", func(w http.ResponseWriter, r *http.Request) { v, e := s.Policies(r.Context()); ownerResult(w, v, e) })
 	r.Get("/policies/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id, e := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 		if e != nil || id <= 0 {
@@ -123,6 +131,7 @@ func (s *Service) Handler() http.Handler {
 			return
 		}
 		p.UserID = id
+		p.normalize()
 		ownerResult(w, p, s.SavePolicy(r.Context(), p))
 	})
 	r.Post("/preview", func(w http.ResponseWriter, r *http.Request) {
