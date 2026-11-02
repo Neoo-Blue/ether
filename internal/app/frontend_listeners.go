@@ -139,6 +139,17 @@ func (m *frontendListeners) start(ctx context.Context, id frontend.Protocol) err
 				next.ServeHTTP(w, r)
 			})
 		}
+		if id != "silo" {
+			// A Silo client pointed at this port must not read its
+			// probe 404 as "update the server" (see siloProbeMiss).
+			next := handler
+			handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if siloProbeMiss(w, r) {
+					return
+				}
+				next.ServeHTTP(w, r)
+			})
+		}
 		run.servers = append(run.servers, &http.Server{Handler: handler, ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second})
 	}
 	if err == nil {
