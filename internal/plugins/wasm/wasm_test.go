@@ -578,3 +578,13 @@ func TestJSInitializationRespectsDeadline(t *testing.T) {
 		t.Fatal("unbounded initialization accepted")
 	}
 }
+
+func TestRawStartFunctionRespectsDeadline(t *testing.T) {
+	// A valid module with an endless start function; no external compiler needed.
+	module := []byte{0, 97, 115, 109, 1, 0, 0, 0, 1, 4, 1, 0x60, 0, 0, 3, 2, 1, 0, 8, 1, 0, 10, 9, 1, 7, 0, 3, 0x40, 0x0c, 0, 0x0b, 0x0b}
+	e := testEngine(t)
+	_, err := e.LoadWASM("test.start", "1", module, nil, Limits{Deadline: 100 * time.Millisecond})
+	if err == nil {
+		t.Fatal("endless start accepted")
+	}
+}
