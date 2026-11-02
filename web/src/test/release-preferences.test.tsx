@@ -2,7 +2,15 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { calls, renderApp } from "./harness";
-import { releaseRuleConflict } from "../pages/releases/ReleasePreferences";
+import {
+  releaseRuleConflict,
+  type RuleFieldDescriptor,
+} from "../pages/releases/ReleasePreferences";
+import { descriptors as rankingDescriptors } from "../mock/extend/descriptors/ranking";
+
+const ruleFields = rankingDescriptors.filter(
+  (d) => d.kind === "ruleField",
+) as unknown as RuleFieldDescriptor[];
 
 const WAIT = { timeout: 4000 };
 
@@ -136,20 +144,23 @@ describe("profile rules and ranking ladder", () => {
 
   it("flags conflicting requirements before save", () => {
     expect(
-      releaseRuleConflict([
-        {
-          id: "a",
-          name: "HEVC",
-          action: "require",
-          conditions: [{ field: "video", operator: "equals", value: "hevc" }],
-        },
-        {
-          id: "b",
-          name: "H.264",
-          action: "require",
-          conditions: [{ field: "video", operator: "equals", value: "h264" }],
-        },
-      ]),
+      releaseRuleConflict(
+        [
+          {
+            id: "a",
+            name: "HEVC",
+            action: "require",
+            conditions: [{ field: "video", operator: "equals", value: "hevc" }],
+          },
+          {
+            id: "b",
+            name: "H.264",
+            action: "require",
+            conditions: [{ field: "video", operator: "equals", value: "h264" }],
+          },
+        ],
+        ruleFields,
+      ),
     ).toMatch(/cannot match the same release/);
   });
 
