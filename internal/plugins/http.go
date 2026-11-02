@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/braedonsaunders/ether/internal/viewspec"
 )
 
 // Handler serves the owner API. It is mounted at /api/plugins by the app,
@@ -38,6 +40,7 @@ func (m *Manager) Handler() http.Handler {
 	mux.HandleFunc("DELETE /{id}", m.handleRemove)
 	mux.HandleFunc("GET /{id}/views/{page}", m.handleView)
 	mux.HandleFunc("POST /{id}/actions/{action}", m.handleAction)
+	mux.HandleFunc("POST /{id}/proposals/{pid}", m.handleProposalDecision)
 	return mux
 }
 
@@ -555,6 +558,14 @@ func (m *Manager) handleView(w http.ResponseWriter, r *http.Request) {
 				route = p.Route
 			}
 		}
+		if route == "" {
+			for _, slot := range rec.Manifest.Ether.Contributes.Slots {
+				if slot.Key == page {
+					route = slot.Route
+					break
+				}
+			}
+		}
 	}
 	if route == "" {
 		writeErr(w, http.StatusNotFound, "not_found", "That page does not exist.", nil)
@@ -569,15 +580,30 @@ func (m *Manager) handleView(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, err)
 		return
 	}
+	if resp.Status >= 200 && resp.Status < 300 {
+		var doc struct {
+			Spec json.RawMessage `json:"spec"`
+			Data json.RawMessage `json:"data"`
+		}
+		if len(resp.Body) > 1<<20 || json.Unmarshal(resp.Body, &doc) != nil || !viewspec.ValidatePlugin(doc.Spec).OK {
+			writeErr(w, http.StatusBadGateway, "invalid_view", "Plugin returned an invalid view.", nil)
+			return
+		}
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(resp.Status)
 	_, _ = w.Write(resp.Body)
 }
 
 func (m *Manager) handleAction(w http.ResponseWriter, r *http.Request) {
 	id, action := r.PathValue("id"), r.PathValue("action")
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	body, err := io.ReadAll(io.LimitReader(r.Body, (1<<20)+1))
 	if err != nil {
 		m.fail(w, err)
+		return
+	}
+	if len(body) > 1<<20 {
+		writeErr(w, http.StatusRequestEntityTooLarge, "too_large", "Action request is too large.", nil)
 		return
 	}
 	resp, err := m.Call(r.Context(), id, Request{Method: "POST", Path: "/ether/action/" + action, Body: body})
@@ -585,6 +611,17 @@ func (m *Manager) handleAction(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, err)
 		return
 	}
+	if resp.Status < 200 || resp.Status >= 300 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(resp.Status)
+		_, _ = w.Write(resp.Body)
+		return
+	}
+	result, err := m.saveActionProposal(r.Context(), id, resp.Body)
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_, _ = w.Write(resp.Body)
+	_, _ = w.Write(result)
 }

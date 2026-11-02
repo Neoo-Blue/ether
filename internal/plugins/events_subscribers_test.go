@@ -33,3 +33,21 @@ func TestPublishLogsOnlySubscribedEvents(t *testing.T) {
 		t.Fatal("disabled subscriber caused a write")
 	}
 }
+
+func TestEventSubscriptionsRestoredOnStart(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	env.installHello(t, "1.0.0")
+	restarted, err := New(Deps{DB: env.m.store.db})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := restarted.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	restarted.Publish(ctx, Event{Name: EventPlaybackStarted})
+	var count int
+	if err := restarted.store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM plugins_outbox`).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("restored subscription: %d %v", count, err)
+	}
+}

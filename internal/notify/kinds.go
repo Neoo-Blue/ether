@@ -101,6 +101,15 @@ func (r *KindRegistry) Register(k ChannelKind) error {
 	return nil
 }
 
+// RemovePlugin removes a plugin's channel kind without affecting built-ins.
+func (r *KindRegistry) RemovePlugin(id, owner string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if k, ok := r.kinds[id]; ok && k.Owner == owner && owner != "" && owner != extend.Builtin {
+		delete(r.kinds, id)
+	}
+}
+
 // Get returns one kind.
 func (r *KindRegistry) Get(id string) (ChannelKind, bool) {
 	r.mu.RLock()

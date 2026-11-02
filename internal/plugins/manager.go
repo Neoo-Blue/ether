@@ -17,6 +17,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/config"
 	"github.com/braedonsaunders/ether/internal/egress"
 	"github.com/braedonsaunders/ether/internal/extend"
+	"github.com/braedonsaunders/ether/internal/notify"
 	"github.com/braedonsaunders/ether/internal/safefetch"
 )
 
@@ -41,11 +42,12 @@ type Backends struct {
 
 // Deps are the plugin host's explicit dependencies.
 type Deps struct {
-	DB       *sql.DB
-	Sealer   config.FieldSealer
-	Registry *extend.Registry
-	Tools    *tools.Catalogue
-	Logger   *slog.Logger
+	DB            *sql.DB
+	Sealer        config.FieldSealer
+	Registry      *extend.Registry
+	Tools         *tools.Catalogue
+	Notifications *notify.Service
+	Logger        *slog.Logger
 	// IsLeader reports cluster leadership; nil means always leader.
 	IsLeader func() bool
 	// Bus broadcasts invalidate:plugins; nil disables it.
@@ -59,19 +61,26 @@ type Deps struct {
 
 // Manager is the plugin host. It is safe for concurrent use.
 type Manager struct {
-	store    *storage
-	deps     Deps
-	log      *slog.Logger
-	now      func() time.Time
-	client   *http.Client
-	mu       sync.Mutex
-	fatories map[string]RuntimeFactory
-	runtimes map[string]Runtime
+	store       *storage
+	deps        Deps
+	log         *slog.Logger
+	now         func() time.Time
+	client      *http.Client
+	mu          sync.Mutex
+	fatories    map[string]RuntimeFactory
+	runtimes    map[string]Runtime
+	eventSubs   map[string]map[string]Record
+	notifyLocks sync.Map // plugin id -> *sync.Mutex
 	// schedule bookkeeping: "plugin|call" -> next run
 	nextRun map[string]time.Time
 	// rate-limit bookkeeping for host log and notify
 	notifyTimes map[string][]time.Time
 	logTimes    map[string][]time.Time
+}
+
+func (m *Manager) notificationLock(id string) *sync.Mutex {
+	lock, _ := m.notifyLocks.LoadOrStore(id, &sync.Mutex{})
+	return lock.(*sync.Mutex)
 }
 
 // New builds the host and re-registers descriptors for enabled plugins.
@@ -95,7 +104,8 @@ func New(deps Deps) (*Manager, error) {
 		store: &storage{db: deps.DB, sealer: deps.Sealer, now: now}, deps: deps,
 		log: log, now: now, client: client,
 		fatories: map[string]RuntimeFactory{}, runtimes: map[string]Runtime{},
-		nextRun: map[string]time.Time{}, notifyTimes: map[string][]time.Time{}, logTimes: map[string][]time.Time{},
+		eventSubs: map[string]map[string]Record{},
+		nextRun:   map[string]time.Time{}, notifyTimes: map[string][]time.Time{}, logTimes: map[string][]time.Time{},
 	}
 	return m, nil
 }
@@ -153,7 +163,22 @@ func (m *Manager) SubscribeInvalidations() func() {
 			m.syncDescriptors(ctx, r)
 			m.closeRuntime(r.ID)
 		}
-		_ = seen
+		m.mu.Lock()
+		for _, subscribers := range m.eventSubs {
+			for id := range subscribers {
+				if !seen[id] {
+					delete(subscribers, id)
+				}
+			}
+		}
+		m.mu.Unlock()
+		if m.deps.Notifications != nil {
+			for _, kind := range m.deps.Notifications.Kinds().List() {
+				if kind.Owner != "" && kind.Owner != extend.Builtin && !seen[kind.Owner] {
+					m.deps.Notifications.Kinds().RemovePlugin(kind.ID, kind.Owner)
+				}
+			}
+		}
 	})
 }
 
@@ -325,13 +350,26 @@ func (m *Manager) Call(ctx context.Context, pluginID string, req Request) (Respo
 	ms := m.now().Sub(start).Milliseconds()
 	rec := CallRecord{Plugin: pluginID, Route: req.Path, Method: req.Method, Status: resp.Status, MS: ms,
 		Request: redactJSON(req.Body), Response: redactJSON(resp.Body)}
+	if req.Path == "/ether/notify" || req.Path == "/ether/configure" {
+		rec.Request = ""
+		rec.Response = ""
+	}
 	if err != nil {
+		if req.Path == "/ether/notify" || req.Path == "/ether/configure" {
+			err = errors.New("notification delivery failed")
+		}
 		rec.Error = err.Error()
 		m.store.addCall(ctx, rec)
 		// Crash policy: drop the instance so the next call restarts it.
 		m.closeRuntime(pluginID)
 		m.recordFailure(ctx, pluginID, err.Error(), true)
 		return Response{}, err
+	}
+	if len(rec.Request) > 64*1024 {
+		rec.Request = ""
+	}
+	if len(rec.Response) > 64*1024 {
+		rec.Response = ""
 	}
 	if resp.Status == 0 {
 		resp.Status = http.StatusOK
@@ -505,11 +543,15 @@ func (m *Manager) Remove(ctx context.Context, id string, undoFirst bool) error {
 		}
 	}
 	m.closeRuntime(id)
+	m.indexEventSubscriptions(Record{ID: id})
 	if m.deps.Registry != nil {
 		m.deps.Registry.RemoveOwner(id)
 	}
 	if m.deps.Tools != nil {
 		_ = m.deps.Tools.ReplaceOwner(id, nil)
+	}
+	if m.deps.Notifications != nil {
+		m.deps.Notifications.Kinds().RemovePlugin(extend.PluginID(id, "notify"), id)
 	}
 	if err := m.store.purge(ctx, id); err != nil {
 		return err
