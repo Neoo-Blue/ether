@@ -315,3 +315,29 @@ func TestRemoteReadOnlyToolRequiresApproval(t *testing.T) {
 		t.Fatalf("remote read tool should propose: %+v %v", result, err)
 	}
 }
+
+func TestPluginSourceURLDoesNotReachInspector(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	rec := env.installHello(t, "1.0.0")
+	const sourceURL = "https://example.com/private-config-472815/manifest.json"
+	rec.SourceURL = sourceURL
+	if err := env.m.store.upsert(ctx, rec); err != nil {
+		t.Fatal(err)
+	}
+	env.fake.routes["/ether/view/home"] = func(Request) (Response, error) {
+		return Response{Status: 200, Body: json.RawMessage(`{"message":"https://example.com/private-config-472815/manifest.json"}`)}, nil
+	}
+	if _, err := env.m.Call(ctx, rec.ID, Request{Path: "/ether/view/home"}); err != nil {
+		t.Fatal(err)
+	}
+	calls, err := env.m.store.calls(ctx, rec.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range calls {
+		if strings.Contains(c.Response, "private-config-472815") {
+			t.Fatal("source URL exposed in inspector")
+		}
+	}
+}

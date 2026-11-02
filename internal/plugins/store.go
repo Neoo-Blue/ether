@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -623,6 +624,29 @@ func (s *storage) redactKnown(ctx context.Context, plugin, value string) string 
 	row, err := s.settings(ctx, plugin)
 	if err != nil {
 		return "[redacted]"
+	}
+	// URL-mode add-ons commonly embed credentials in the source URL.
+	// Protect the URL and its configuration components in diagnostics too.
+	record, err := s.record(ctx, plugin)
+	if err != nil {
+		return "[redacted]"
+	}
+	if record.SourceURL != "" {
+		value = strings.ReplaceAll(value, record.SourceURL, "[redacted]")
+		if u, err := url.Parse(record.SourceURL); err == nil {
+			for _, segment := range strings.Split(u.Path, "/") {
+				if len(segment) >= 4 && segment != "manifest.json" {
+					value = strings.ReplaceAll(value, segment, "[redacted]")
+				}
+			}
+			for _, values := range u.Query() {
+				for _, secret := range values {
+					if len(secret) >= 4 {
+						value = strings.ReplaceAll(value, secret, "[redacted]")
+					}
+				}
+			}
+		}
 	}
 	for name, sealed := range row.Secrets {
 		secret, err := s.openSecret(plugin, name, sealed)
