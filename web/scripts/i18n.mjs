@@ -121,7 +121,7 @@ switch (command) {
     process.exit(rejected.length ? 1 : 0);
   }
   case "audit": {
-    const files = args.length ? args.map((f) => path.resolve(f)) : sourceFiles();
+    const files = args.length ? args.map((f) => path.resolve(f)) : undefined;
     const hits = audit(files);
     for (const h of hits) console.log(`${h.ref}  ${JSON.stringify(h.text)}`);
     console.error(`${hits.length} possible untranslated strings`);
