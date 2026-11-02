@@ -304,6 +304,15 @@ func (a HostAdapter) CollectionsUpsert(ctx context.Context, pluginID string, col
 	return mapHostErr(h.CollectionsUpsert(ctx, collection))
 }
 
+func (a HostAdapter) Settings(ctx context.Context, pluginID string) (map[string]any, error) {
+	h, err := a.host(pluginID)
+	if err != nil {
+		return nil, err
+	}
+	v, err := h.Settings(ctx)
+	return v, mapHostErr(err)
+}
+
 func (a HostAdapter) NotifyOwner(ctx context.Context, pluginID, text string) error {
 	h, err := a.host(pluginID)
 	if err != nil {

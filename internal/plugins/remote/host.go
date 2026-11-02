@@ -32,6 +32,8 @@ type Host interface {
 
 	CollectionsUpsert(ctx context.Context, pluginID string, collection json.RawMessage) error
 
+	Settings(ctx context.Context, pluginID string) (map[string]any, error)
+
 	NotifyOwner(ctx context.Context, pluginID, text string) error
 	Log(ctx context.Context, pluginID, level, msg string, attrs map[string]any) error
 }
@@ -81,6 +83,7 @@ func NewHostHandler(opts HostOptions) *HostHandler {
 	mux.HandleFunc("GET /ether/plugin-host/viewers/{viewerId}/history", h.viewerHistory)
 	mux.HandleFunc("POST /ether/plugin-host/viewers/watch-state", h.setWatchState)
 	mux.HandleFunc("POST /ether/plugin-host/collections/upsert", h.collectionsUpsert)
+	mux.HandleFunc("GET /ether/plugin-host/settings", h.settings)
 	mux.HandleFunc("POST /ether/plugin-host/notify", h.notify)
 	mux.HandleFunc("POST /ether/plugin-host/log", h.logLine)
 	h.mux = mux
@@ -233,6 +236,14 @@ func (h *HostHandler) collectionsUpsert(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (h *HostHandler) settings(w http.ResponseWriter, r *http.Request) {
+	v, err := h.host.Settings(r.Context(), pluginIDOf(r))
+	if !h.finishErr(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"settings": v})
 }
 
 func (h *HostHandler) notify(w http.ResponseWriter, r *http.Request) {

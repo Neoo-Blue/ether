@@ -843,6 +843,10 @@ func (f *fakeHost) CollectionsUpsert(_ context.Context, pluginID string, collect
 	return nil
 }
 
+func (f *fakeHost) Settings(_ context.Context, pluginID string) (map[string]any, error) {
+	return map[string]any{"plugin": pluginID}, nil
+}
+
 func (f *fakeHost) NotifyOwner(_ context.Context, pluginID, text string) error {
 	f.mu.Lock()
 	f.notices = append(f.notices, pluginID+":"+text)
