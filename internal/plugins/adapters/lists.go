@@ -95,7 +95,7 @@ func (b *Bridge) Sync(_ context.Context, r plugins.Record) {
 			pluginID:   r.ID,
 			pluginName: r.Name,
 			meta:       ls,
-			fields:     parseListParamFields(ls.Params),
+			fields:     plugins.ParseListParamFields(ls.Params),
 		}
 		if b.cols != nil {
 			_ = b.cols.RegisterSourceKind(kind)
@@ -143,83 +143,12 @@ func resolvePlainText(mgr *plugins.Manager, pluginID, raw, fallback string) stri
 	return raw
 }
 
-type listParamField struct {
-	Key         string `json:"key"`
-	Name        string `json:"name"`
-	Kind        string `json:"kind"`
-	Label       string `json:"label"`
-	Help        string `json:"help"`
-	Hint        string `json:"hint"`
-	Required    bool   `json:"required"`
-	Placeholder string `json:"placeholder"`
-	Default     any    `json:"default"`
-	Options     []struct {
-		Value string `json:"value"`
-		Label string `json:"label"`
-	} `json:"options"`
-}
-
-func parseListParamFields(raw json.RawMessage) []listParamField {
-	if len(raw) == 0 {
-		return nil
-	}
-	var arr []listParamField
-	if err := json.Unmarshal(raw, &arr); err == nil {
-		return arr
-	}
-	var obj struct {
-		Fields []listParamField `json:"fields"`
-	}
-	if err := json.Unmarshal(raw, &obj); err == nil {
-		return obj.Fields
-	}
-	return nil
-}
-
-func paramFieldsFromList(pluginID string, fields []listParamField) ([]extend.ParamField, string) {
-	params := make([]extend.ParamField, 0, len(fields))
-	defaults := map[string]any{}
-	for _, f := range fields {
-		key := firstNonEmpty(f.Key, f.Name)
-		if key == "" {
-			continue
-		}
-		kind := f.Kind
-		if kind == "" {
-			kind = "text"
-		}
-		pf := extend.ParamField{
-			Name:        key,
-			Kind:        kind,
-			Label:       pluginText(pluginID, firstNonEmpty(f.Label, key)),
-			Hint:        pluginText(pluginID, firstNonEmpty(f.Hint, f.Help)),
-			Required:    f.Required,
-			Placeholder: f.Placeholder,
-		}
-		for _, opt := range f.Options {
-			pf.Options = append(pf.Options, extend.ParamOption{
-				Value: opt.Value,
-				Label: pluginText(pluginID, firstNonEmpty(opt.Label, opt.Value)),
-			})
-		}
-		params = append(params, pf)
-		if f.Default != nil {
-			defaults[key] = f.Default
-		}
-	}
-	raw, err := json.Marshal(defaults)
-	if err != nil || len(defaults) == 0 {
-		return params, `{}`
-	}
-	return params, string(raw)
-}
-
 type listSourceKind struct {
 	mgr        *plugins.Manager
 	pluginID   string
 	pluginName string
 	meta       plugins.ListSourceMeta
-	fields     []listParamField
+	fields     []plugins.ListParamField
 }
 
 func (k *listSourceKind) ID() string {
@@ -243,7 +172,7 @@ func (k *listSourceKind) mediaTypes() []string {
 }
 
 func (k *listSourceKind) Describe() collections.KindDescribe {
-	params, defaults := paramFieldsFromList(k.pluginID, k.fields)
+	params, defaults := plugins.ParamFieldsFromList(k.pluginID, k.fields)
 	return collections.KindDescribe{
 		Label:      pluginText(k.pluginID, firstNonEmpty(k.meta.Label, k.meta.Key)),
 		Hint:       pluginText(k.pluginID, k.meta.Hint),
@@ -279,6 +208,9 @@ func (k *listSourceKind) Gather(g *collections.Gather) {
 	maxItems := k.meta.MaxItems
 	if maxItems <= 0 || maxItems > MaxPluginListItems {
 		maxItems = MaxPluginListItems
+	}
+	if collections.IsPreview(g.Ctx) && maxItems > 20 {
+		maxItems = 20
 	}
 	targets := k.catalogTargets(g)
 	var refs []collections.ExternalRef
@@ -372,8 +304,7 @@ func (k *listSourceKind) fetchCatalogPages(g *collections.Gather, catType, catID
 	var refs []collections.ExternalRef
 	seenRaw := map[string]bool{}
 	skip := 0
-	const maxPages = 50
-	for pageNum := 0; pageNum < maxPages && len(refs) < maxItems; pageNum++ {
+	for pageNum := 0; pageNum < maxItems && len(refs) < maxItems; pageNum++ {
 		path := buildCatalogPath(catType, catID, g.Src.Params, skip)
 		resp, err := k.mgr.Call(g.Ctx, k.pluginID, plugins.Request{
 			Method: "GET",
@@ -413,6 +344,9 @@ func (k *listSourceKind) fetchCatalogPages(g *collections.Gather, catType, catID
 			if len(refs) >= maxItems {
 				break
 			}
+		}
+		if collections.IsPreview(g.Ctx) {
+			break
 		}
 		if hasMore != nil && !*hasMore {
 			break

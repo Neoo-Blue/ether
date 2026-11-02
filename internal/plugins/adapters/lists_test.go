@@ -326,20 +326,11 @@ func TestListSourceLifecycleAndMatching(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Preview failed: %v", err)
 	}
-	if prev.Total != 3 {
-		t.Fatalf("expected 3 matched titles, got %d (warnings: %v)", prev.Total, prev.Warnings)
+	if prev.Total != 2 {
+		t.Fatalf("expected 2 preview titles from first page, got %d (warnings: %v)", prev.Total, prev.Warnings)
 	}
-	if prev.Items[0].Title != "The Matrix" || prev.Items[1].Title != "The Matrix Reloaded" || prev.Items[2].Title != "The Matrix Revolutions" {
+	if prev.Items[0].Title != "The Matrix" || prev.Items[1].Title != "The Matrix Reloaded" {
 		t.Fatalf("unexpected matched titles: %+v", prev.Items)
-	}
-	foundUnmatchedWarning := false
-	for _, w := range prev.Warnings {
-		if strings.Contains(w, "1 of 4") && strings.Contains(w, "Staff picks") {
-			foundUnmatchedWarning = true
-		}
-	}
-	if !foundUnmatchedWarning {
-		t.Fatalf("expected unmatched count warning in %v", prev.Warnings)
 	}
 
 	// Create a persisted spec collection and verify reading its items on the

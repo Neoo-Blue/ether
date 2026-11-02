@@ -58,9 +58,14 @@ func DescriptorsFor(man Manifest) []extend.Descriptor {
 	}
 	for _, ls := range c.ListSources {
 		pid := extend.PluginID(id, ls.Key)
+		fields, defaults := ParamFieldsFromList(id, ParseListParamFields(ls.Params))
+		var values map[string]any
+		_ = json.Unmarshal([]byte(defaults), &values)
 		meta := map[string]any{
 			"catalog":          ls.Catalog,
-			"params":           ls.Params,
+			"params":           fields,
+			"editor":           "plugin",
+			"defaults":         map[string]any{"params": values},
 			"maxItems":         ls.MaxItems,
 			"refresh":          ls.Refresh,
 			"hint":             ls.Hint,

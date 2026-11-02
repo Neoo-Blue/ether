@@ -379,6 +379,14 @@ func (s *Service) membersFor(ctx context.Context, row *specRow, wait bool) (*mem
 		}
 		return nil, errNotBuilt
 	}
+	// Plugin-backed live collections are refreshed in the background, even
+	// when a viewer requests a synchronous live evaluation.
+	for _, src := range row.spec.Sources {
+		if strings.HasPrefix(src.Kind, "plugin:") {
+			wait = false
+			break
+		}
+	}
 	if !wait {
 		go func() {
 			bctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)

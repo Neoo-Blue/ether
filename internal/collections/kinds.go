@@ -60,6 +60,11 @@ func (g *Gather) Warn(format string, args ...any) {
 	g.Res.warnings = append(g.Res.warnings, fmt.Sprintf(format, args...))
 }
 
+type previewContextKey struct{}
+
+// IsPreview reports whether a gather belongs to an owner-initiated preview.
+func IsPreview(ctx context.Context) bool { return ctx.Value(previewContextKey{}) == true }
+
 // ExternalRef identifies one item from an external or plugin list source.
 type ExternalRef struct {
 	TMDB  int64

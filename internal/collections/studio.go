@@ -168,6 +168,9 @@ func (s *Service) Preview(ctx context.Context, sp core.CollectionSpec, n int) (*
 	if err := s.validate(&named); err != nil {
 		return nil, err
 	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	ctx = context.WithValue(ctx, previewContextKey{}, true)
 	res, err := s.evaluate(ctx, named, evalOptions{seed: named.Name})
 	if err != nil {
 		return nil, err
