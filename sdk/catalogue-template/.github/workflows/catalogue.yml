@@ -1,0 +1,48 @@
+name: Catalogue CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      ETHER_REF: ${{ vars.ETHER_REF }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.3"
+      - name: Install the pinned Ether tools
+        run: |
+          test -n "$ETHER_REF" || { echo 'Set the ETHER_REF repository variable to a pinned Ether release or commit' >&2; exit 1; }
+          go install "github.com/braedonsaunders/ether/cmd/ether@${ETHER_REF}"
+          go install "github.com/braedonsaunders/ether/cmd/ether-release-sign@${ETHER_REF}"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Validate catalogue and copy
+        run: ether-release-sign index -check -dir plugins -out index.json
+      - name: Check every published package
+        run: python3 scripts/check_artifacts.py index.json
+      - name: Sign and verify the index
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          ETHER_CATALOGUE_PRIVATE_KEY: ${{ secrets.ETHER_CATALOGUE_PRIVATE_KEY }}
+          ETHER_CATALOGUE_PUBLIC_KEY: ${{ secrets.ETHER_CATALOGUE_PUBLIC_KEY }}
+        run: |
+          test -n "$ETHER_CATALOGUE_PRIVATE_KEY" && test -n "$ETHER_CATALOGUE_PUBLIC_KEY"
+          ether-release-sign index -in index.json
+          ether-release-sign index -verify -in index.json
+      - name: Upload signed index
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-catalogue
+          path: |
+            index.json
+            index.json.sig
+          if-no-files-found: error

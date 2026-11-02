@@ -599,5 +599,67 @@ func CompareSemVer(a, b string) int {
 			return 1
 		}
 	}
+	// A release sorts after any prerelease of the same core version.
+	pre := func(v string) string {
+		v, _, _ = strings.Cut(v, "+")
+		_, p, _ := strings.Cut(v, "-")
+		return p
+	}
+	pa, pb := pre(a), pre(b)
+	if pa == pb {
+		return 0
+	}
+	if pa == "" {
+		return 1
+	}
+	if pb == "" {
+		return -1
+	}
+	as, bs := strings.Split(pa, "."), strings.Split(pb, ".")
+	for i := 0; i < len(as) && i < len(bs); i++ {
+		x, y := as[i], bs[i]
+		if x == y {
+			continue
+		}
+		isNumeric := func(s string) bool {
+			if s == "" {
+				return false
+			}
+			for _, c := range s {
+				if c < '0' || c > '9' {
+					return false
+				}
+			}
+			return true
+		}
+		xn, yn := isNumeric(x), isNumeric(y)
+		if xn != yn {
+			if xn {
+				return -1
+			}
+			return 1
+		}
+		if xn {
+			x, y = strings.TrimLeft(x, "0"), strings.TrimLeft(y, "0")
+			if len(x) < len(y) {
+				return -1
+			}
+			if len(x) > len(y) {
+				return 1
+			}
+		}
+		if x < y {
+			return -1
+		}
+		if x > y {
+			return 1
+		}
+	}
+	if len(as) < len(bs) {
+		return -1
+	}
+	if len(as) > len(bs) {
+		return 1
+	}
 	return 0
 }
