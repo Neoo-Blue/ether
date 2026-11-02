@@ -31,7 +31,7 @@ func TestUpdateAvailableOncePerVersionAcrossNodesAndRestarts(t *testing.T) {
 		return New(db, Options{NodeID: id})
 	}
 	a, b := open("a"), open("b")
-	if err := a.Save(ctx, Channel{ID: "hook", Kind: "webhook", Enabled: true, Endpoint: "https://hooks.example/x", Events: []string{"update.available"}, PerMinute: 60}); err != nil {
+	if err := a.Save(ctx, Channel{ID: "hook", Kind: "webhook", Enabled: true, Secrets: map[string]string{"endpoint": "https://hooks.example/x"}, Events: []string{"update.available"}, PerMinute: 60}); err != nil {
 		t.Fatal(err)
 	}
 	for _, s := range []*Service{a, b, a, open("a-restarted")} {
@@ -53,7 +53,7 @@ func TestUpdateAvailableOncePerVersionAcrossNodesAndRestarts(t *testing.T) {
 func TestEmitOnceKeyAndQueueCommitTogether(t *testing.T) {
 	ctx := context.Background()
 	s := newTestService(t)
-	if err := s.Save(ctx, Channel{ID: "hook", Kind: "webhook", Enabled: true, Endpoint: "https://hooks.example/x", Events: []string{"*"}, PerMinute: 60}); err != nil {
+	if err := s.Save(ctx, Channel{ID: "hook", Kind: "webhook", Enabled: true, Secrets: map[string]string{"endpoint": "https://hooks.example/x"}, Events: []string{"*"}, PerMinute: 60}); err != nil {
 		t.Fatal(err)
 	}
 	if ok, err := s.EmitOnce(ctx, "k", Event{Kind: "no.such.kind"}); ok || err == nil {
@@ -87,7 +87,7 @@ func TestEmitOnceKeyAndQueueCommitTogether(t *testing.T) {
 func TestBackupFailedAndUpdateAvailableAreAutomaticEvents(t *testing.T) {
 	ctx := context.Background()
 	s := newTestService(t)
-	if err := s.Save(ctx, Channel{ID: "hook", Kind: "webhook", Enabled: true, Endpoint: "https://hooks.example/x", Events: []string{"backup.failed"}, PerMinute: 60}); err != nil {
+	if err := s.Save(ctx, Channel{ID: "hook", Kind: "webhook", Enabled: true, Secrets: map[string]string{"endpoint": "https://hooks.example/x"}, Events: []string{"backup.failed"}, PerMinute: 60}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.BackupFailed(ctx, errors.New("no space left on device")); err != nil {
@@ -98,8 +98,8 @@ func TestBackupFailedAndUpdateAvailableAreAutomaticEvents(t *testing.T) {
 		t.Fatalf("queued %q %v", raw, err)
 	}
 	auto := map[string]bool{}
-	for _, e := range eventCatalog() {
-		auto[e.Kind] = e.Automatic
+	for _, e := range builtinEventKinds() {
+		auto[e.ID] = e.Automatic
 	}
 	if !auto["backup.failed"] || !auto["update.available"] {
 		t.Fatalf("catalog %v", auto)
@@ -109,7 +109,7 @@ func TestBackupFailedAndUpdateAvailableAreAutomaticEvents(t *testing.T) {
 func TestTitleAvailableOnceQueuesOncePerKey(t *testing.T) {
 	ctx := context.Background()
 	s := newTestService(t)
-	if err := s.Save(ctx, Channel{ID: "hook", Kind: "webhook", Enabled: true, Endpoint: "https://hooks.example/x", Events: []string{"title.available"}, PerMinute: 60}); err != nil {
+	if err := s.Save(ctx, Channel{ID: "hook", Kind: "webhook", Enabled: true, Secrets: map[string]string{"endpoint": "https://hooks.example/x"}, Events: []string{"title.available"}, PerMinute: 60}); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 3; i++ {
