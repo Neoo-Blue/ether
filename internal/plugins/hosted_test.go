@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -34,7 +35,10 @@ func (h *memHost) KVList(context.Context, string) ([]string, error) {
 	return nil, nil
 }
 func (h *memHost) SecretGet(context.Context, string) (string, error) { return "", ErrPermissionDenied }
-func (h *memHost) HTTPFetch(context.Context, FetchRequest) (FetchResponse, error) {
+func (h *memHost) HTTPFetch(_ context.Context, req FetchRequest) (FetchResponse, error) {
+	if req.URL == "https://dl.example.test/file.zip" {
+		return FetchResponse{Status: 200, Body: []byte{0x50, 0x4b, 0x03, 0x04, 0xff, 0xfe, 0x00, 0x80}}, nil
+	}
 	return FetchResponse{}, ErrPermissionDenied
 }
 func (h *memHost) CatalogSearch(context.Context, string, int, int) (json.RawMessage, error) {
@@ -161,5 +165,24 @@ func TestHotLimitsLowerButNeverRaiseBudgets(t *testing.T) {
 	got = EffectiveBudgets(HotLimits(m))
 	if got.PerCandidate != wasm.DefaultRankPerCandidate || got.PerBatch != wasm.DefaultRankBatch {
 		t.Fatalf("budgets must never exceed the defaults: %+v", got)
+	}
+}
+
+func TestHostFetchKeepsBinaryBodies(t *testing.T) {
+	out, err := hostBridge{h: &memHost{kv: map[string][]byte{}}}.CallHost(context.Background(), "http.fetch", json.RawMessage(`[{"url":"https://dl.example.test/file.zip"}]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var resp struct {
+		Status     int    `json:"status"`
+		BodyBase64 string `json:"bodyBase64"`
+	}
+	if err := json.Unmarshal(out, &resp); err != nil {
+		t.Fatal(err)
+	}
+	got, err := base64.StdEncoding.DecodeString(resp.BodyBase64)
+	want := []byte{0x50, 0x4b, 0x03, 0x04, 0xff, 0xfe, 0x00, 0x80}
+	if err != nil || resp.Status != 200 || string(got) != string(want) {
+		t.Fatalf("binary body = %x (%v), want %x", got, err, want)
 	}
 }
