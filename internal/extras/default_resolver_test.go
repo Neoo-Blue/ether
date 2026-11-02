@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -17,6 +18,9 @@ func fakePATH(t *testing.T, names ...string) {
 	t.Helper()
 	dir := t.TempDir()
 	for _, name := range names {
+		if runtime.GOOS == "windows" {
+			name += ".exe" // exec.LookPath only finds PATHEXT extensions there
+		}
 		path := filepath.Join(dir, name)
 		if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
 			t.Fatal(err)
