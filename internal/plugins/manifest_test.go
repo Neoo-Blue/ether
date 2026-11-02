@@ -208,6 +208,11 @@ func TestActionSlotContract(t *testing.T) {
 	if len(ds) != 1 || !strings.Contains(string(ds[0].Meta), `"action":"mark"`) || !strings.Contains(string(ds[0].Meta), `"key":"mark"`) {
 		t.Fatalf("descriptor: %+v", ds)
 	}
+	m.Ether.Contributes.Slots[0].Route = "/ether/view/incorrect"
+	if err := m.Validate(); !hasField(err, "ether.contributes.slots[0].route") {
+		t.Fatalf("expected unexpected route error, got %v", err)
+	}
+	m.Ether.Contributes.Slots[0].Route = ""
 	m.Ether.Contributes.Slots[0].Action = ""
 	if err := m.Validate(); !hasField(err, "ether.contributes.slots[0].action") {
 		t.Fatalf("expected action error, got %v", err)

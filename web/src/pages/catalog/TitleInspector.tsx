@@ -92,8 +92,20 @@ export function TitleInspector({ titleKey, onClose }: { titleKey: string; onClos
               <p>{title.summary || t("No overview is available for this title yet.")}</p>
             </section>
             <ReleaseEvidence titleKey={title.key} type={title.type} />
-            <PanelSlots slot="title.panel" recordType="title" recordId={title.key} />
-            <PluginActionMenu slot="actionMenu.title" recordId={title.key} onRefresh={() => void state.reload()} />
+            <PanelSlots
+              slot="title.panel"
+              recordType="title"
+              recordId={title.key}
+              tmdbId={title.tmdbId}
+              imdbId={title.imdbId}
+              titleKey={title.key}
+              type={title.type}
+            />
+            <PluginActionMenu
+              slot="actionMenu.title"
+              recordId={title.key}
+              onRefresh={() => void state.reload()}
+            />
             <dl className="catalog-detail-facts">
               <div>
                 <dt>{t("Catalog ID")}</dt>

@@ -571,7 +571,9 @@ export default function CollectionsGallery({
                       </>
                     )}
                     <PluginActionMenu
-                      slot="actionMenu.collection" recordId={String(selected!.id)} onRefresh={() => void collections.reload()}
+                      slot="actionMenu.collection"
+                      recordId={String(selected!.id)}
+                      onRefresh={() => void collections.reload()}
                       label={t("Collection actions")}
                       items={[
                         {

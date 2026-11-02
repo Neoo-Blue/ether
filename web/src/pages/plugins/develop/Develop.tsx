@@ -189,12 +189,12 @@ export function Develop() {
 
   // Open New plugin drawer when a slot is clicked in Slot X-ray
   useEffect(() => {
-    if (selectedSlot) {
+    if (selectedSlot && templates.length) {
       const spec = SLOT_CATALOG.find((s) => s.slot === selectedSlot);
       openNewDialogForTemplate(spec?.template ?? "page", selectedSlot);
       selectSlot(null);
     }
-  }, [selectedSlot, selectSlot]);
+  }, [selectedSlot, selectSlot, templates]);
 
   // Hot reload preview & diagnostics when studio.reload fires over /api/stream
   useStreamEvent<{ projectId?: string; pluginId?: string; ok?: boolean }>("studio.reload", (ev) => {

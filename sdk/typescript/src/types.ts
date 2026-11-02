@@ -241,13 +241,15 @@ export type SlotKind =
   | "actionMenu.release"
   | "command";
 
-export interface SlotMeta {
-  slot: SlotKind;
-  key: string;
-  label: string;
-  route?: string;
-  action?: string;
-}
+type ActionSlot =
+  | "actionMenu.title"
+  | "actionMenu.viewer"
+  | "actionMenu.collection"
+  | "actionMenu.release";
+export type SlotMeta = { key: string; label: string } & (
+  | { slot: ActionSlot; action: string; route?: never }
+  | { slot: Exclude<SlotKind, ActionSlot>; route: string; action?: never }
+);
 
 export interface CommandMeta {
   key: string;
@@ -555,7 +557,14 @@ export type ViewSpecBlock =
   | {
       kind: "text";
       content: ViewSpecValue;
-      tone?: "default" | "negative" | "positive" | "warning" | "muted" | "strong" | ViewSpecFieldRef;
+      tone?:
+        | "default"
+        | "negative"
+        | "positive"
+        | "warning"
+        | "muted"
+        | "strong"
+        | ViewSpecFieldRef;
       when?: ViewSpecFieldRef;
     }
   | {

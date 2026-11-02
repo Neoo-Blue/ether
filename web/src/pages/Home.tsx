@@ -196,7 +196,7 @@ export default function Home() {
 
   return (
     <div className="@container flex min-h-0 flex-1 flex-col">
-      <div className="app-scroll min-h-0 flex-1 overflow-y-auto cockpit:overflow-hidden">
+      <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
         <div className="reveal mx-auto flex w-full max-w-(--breakpoint-2xl) flex-col gap-4 p-4 sm:p-6 cockpit:h-full cockpit:max-w-none cockpit:min-h-0 cockpit:pb-5">
           <header className="flex shrink-0 flex-wrap items-end justify-between gap-3">
             <div className="min-w-0">

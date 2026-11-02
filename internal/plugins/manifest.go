@@ -532,8 +532,16 @@ func validateContributes(m Manifest, add func(string, string)) {
 			if !keyRe.MatchString(sl.Action) {
 				add(base+".action", "must be a simple action name")
 			}
-		} else if !strings.HasPrefix(sl.Route, "/") {
-			add(base+".route", "must be a plugin route starting with /")
+			if sl.Route != "" {
+				add(base+".route", "action slots use an action instead of a route")
+			}
+		} else {
+			if !strings.HasPrefix(sl.Route, "/") {
+				add(base+".route", "must be a plugin route starting with /")
+			}
+			if sl.Action != "" {
+				add(base+".action", "view slots use a route instead of an action")
+			}
 		}
 	}
 	for i, cm := range c.Commands {

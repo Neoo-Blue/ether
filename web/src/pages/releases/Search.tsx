@@ -523,7 +523,9 @@ export function ReleaseSearch({ onPinsChanged }: { onPinsChanged?: () => void })
                     align: "right",
                     cell: (r) => (
                       <PluginActionMenu
-                        slot="actionMenu.release" recordId={r.release.id} onRefresh={() => void result.reload()}
+                        slot="actionMenu.release"
+                        recordId={r.release.id}
+                        onRefresh={() => void result.reload()}
                         label={t("Actions for {release}", { release: r.release.name })}
                         items={[
                           r.pinned

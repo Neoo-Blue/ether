@@ -25,6 +25,8 @@ export interface TitleCard {
 }
 
 export interface TitleDetail extends TitleCard {
+  tmdbId?: number;
+  imdbId?: string;
   cast?: { id: number; name: string; role?: string; image?: string }[];
   directors?: { id: number; name: string; image?: string }[];
   keywords?: { id: number; name: string }[] | string[];
