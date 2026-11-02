@@ -2,6 +2,7 @@ package plex
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -401,6 +402,73 @@ func TestSubtitleSearchAndPick(t *testing.T) {
 	}
 	if rec := f.get(t, "/library/metadata/1000000000999999/subtitles?language=eng"); rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown title: %d", rec.Code)
+	}
+}
+
+// Issue #268: Plex Web's subtitle search modal spins until an "ended"
+// subtitle.download ActivityNotification whose uuid matches the PUT
+// response's X-Plex-Activity header arrives on its event connection. The
+// event follows the response so the client has stored the id first.
+func TestSubtitlePickEndsPlexActivity(t *testing.T) {
+	saved := subtitleActivityDelay
+	subtitleActivityDelay = 100 * time.Millisecond
+	t.Cleanup(func() { subtitleActivityDelay = saved })
+	f, subs := newSubtitleFixture(t)
+	subs.offers = []SubtitleOffer{{ID: 101, Language: "en", Title: "Fight.Club.1999.1080p.BluRay", Provider: "OpenSubtitles", Score: 80}}
+	sub, ok := f.srv.notifier.subscribe([]string{"activity"}, &ownerUser)
+	if !ok {
+		t.Fatal("subscribe")
+	}
+	defer f.srv.notifier.unsubscribe(sub)
+	key := fightClub.Key.String()
+
+	rec := f.request(t, http.MethodPut, "/library/metadata/"+key+"/subtitles?key="+url.QueryEscape("/library/metadata/"+key+"/subtitles/101"), nil)
+	activity := rec.Header().Get("X-Plex-Activity")
+	if rec.Code != http.StatusOK || activity == "" {
+		t.Fatalf("pick: %d activity=%q", rec.Code, activity)
+	}
+	if len(sub.ch) != 0 {
+		t.Fatal("activity ended before the client could read X-Plex-Activity")
+	}
+	select {
+	case msg := <-sub.ch:
+		var nc struct {
+			NotificationContainer struct {
+				Type                 string `json:"type"`
+				ActivityNotification []struct {
+					Event    string `json:"event"`
+					UUID     string `json:"uuid"`
+					Activity struct {
+						UUID     string          `json:"uuid"`
+						Type     string          `json:"type"`
+						Response json.RawMessage `json:"Response"`
+					} `json:"Activity"`
+				} `json:"ActivityNotification"`
+			} `json:"NotificationContainer"`
+		}
+		if err := json.Unmarshal(msg.data, &nc); err != nil {
+			t.Fatalf("decode %s: %v", msg.data, err)
+		}
+		c := nc.NotificationContainer
+		if msg.typ != "activity" || c.Type != "activity" || len(c.ActivityNotification) != 1 {
+			t.Fatalf("notification %s", msg.data)
+		}
+		a := c.ActivityNotification[0]
+		if a.Event != "ended" || a.UUID != activity || a.Activity.UUID != activity || a.Activity.Type != "subtitle.download" || strings.Contains(string(a.Activity.Response), "error") {
+			t.Fatalf("activity %s, want ended subtitle.download %q without error", msg.data, activity)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no subtitle.download activity ended; Plex Web keeps spinning")
+	}
+
+	// A failed pick answers an error status and ends nothing.
+	if rec := f.request(t, http.MethodPut, "/library/metadata/"+key+"/subtitles?key="+url.QueryEscape("/library/metadata/"+key+"/subtitles/999"), nil); rec.Code != http.StatusNotFound || rec.Header().Get("X-Plex-Activity") != "" {
+		t.Fatalf("unknown offer: %d activity=%q", rec.Code, rec.Header().Get("X-Plex-Activity"))
+	}
+	select {
+	case msg := <-sub.ch:
+		t.Fatalf("failed pick published %s", msg.data)
+	case <-time.After(3 * subtitleActivityDelay):
 	}
 }
 

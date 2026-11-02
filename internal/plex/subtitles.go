@@ -13,6 +13,7 @@ package plex
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"errors"
 	"io"
 	"net/http"
@@ -379,7 +380,52 @@ func (s *Server) handleSubtitlePick(w http.ResponseWriter, r *http.Request) {
 			s.log.Warn("save stream preference", "error", err)
 		}
 	}
+	activity := rand.Text()
+	w.Header().Set("X-Plex-Activity", activity)
 	w.WriteHeader(http.StatusOK)
+	s.finishSubtitleActivity(activity, pr.User.ID)
+}
+
+// subtitleActivityDelay holds the "ended" event until the client has read
+// the PUT response: Plex Web only matches an event against the activity id
+// it stored from that response's X-Plex-Activity header.
+var subtitleActivityDelay = time.Second
+
+// finishSubtitleActivity publishes the subtitle.download activity's end, as
+// PMS does when a picked subtitle is stored. Plex Web's search modal keeps
+// its spinner until an "ended" ActivityNotification with the uuid from
+// X-Plex-Activity arrives on the event connection (it polls only when no
+// event connection is open), then re-reads the item and lists the track
+// (#268). The download already finished, so there is no progress to report.
+func (s *Server) finishSubtitleActivity(uuid string, userID int64) {
+	if s.Closed() {
+		return
+	}
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		timer := time.NewTimer(subtitleActivityDelay)
+		defer timer.Stop()
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-timer.C:
+		}
+		s.publishNotification(model.NotificationContainer{
+			Type: "activity",
+			Size: 1,
+			ActivityNotification: []model.ActivityNotification{{
+				Event: "ended",
+				UUID:  uuid,
+				Activity: &model.Activity{
+					UUID:     uuid,
+					Type:     "subtitle.download",
+					Title:    "Downloading subtitles",
+					Progress: 100,
+				},
+			}},
+		}, userID)
+	}()
 }
 
 // SubtitleUpload is optionally implemented by Deps.Subtitles: Plex Web's
