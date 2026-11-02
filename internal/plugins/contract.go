@@ -372,6 +372,12 @@ type Host interface {
 	FoldersList(ctx context.Context, root, path string) ([]FolderEntry, error)
 	FoldersStat(ctx context.Context, root, path string) (FolderEntry, error)
 
+	// Settings returns the plugin's current non-secret settings. Plugins
+	// read them per request instead of keeping them in instance memory,
+	// because hosted plugins run in a pool of instances that restart.
+	// Secrets stay behind SecretGet.
+	Settings(ctx context.Context) (map[string]any, error)
+
 	// NotifyOwner posts a console notice (rate-limited).
 	NotifyOwner(ctx context.Context, text string) error
 	// Log appends to the plugin's log ring (redacted, rate-limited).

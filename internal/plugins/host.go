@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/braedonsaunders/ether/internal/safefetch"
 )
 
 // host implements Host for one plugin. Grants are re-read on every call,
@@ -90,6 +93,22 @@ func (h *host) KVList(ctx context.Context, prefix string) ([]string, error) {
 	return h.m.store.kvList(ctx, h.plugin, prefix)
 }
 
+// Settings returns the plugin's stored non-secret settings.
+func (h *host) Settings(ctx context.Context) (map[string]any, error) {
+	if _, _, err := h.record(ctx); err != nil {
+		return nil, err
+	}
+	row, err := h.m.store.settings(ctx, h.plugin)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]any, len(row.Settings))
+	for k, v := range row.Settings {
+		out[k] = v
+	}
+	return out, nil
+}
+
 func (h *host) SecretGet(ctx context.Context, name string) (string, error) {
 	r, g, err := h.record(ctx)
 	if err != nil {
@@ -133,6 +152,25 @@ func hostAllowed(patterns []string, host string) bool {
 	return false
 }
 
+// ErrFetchFailed is returned when a plugin's outbound request fails. Its
+// message names only the host and a category: request URLs can carry
+// plugin secrets (API keys in the query), and net/http errors include the
+// full URL, so neither the URL nor the underlying error text is exposed.
+var ErrFetchFailed = errors.New("plugins: request failed")
+
+func fetchError(host string, err error) error {
+	reason := "network error"
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		reason = "timed out"
+	case errors.Is(err, context.Canceled):
+		reason = "canceled"
+	case errors.Is(err, safefetch.ErrBlocked):
+		return fmt.Errorf("%w: %s is not allowed (%w)", ErrFetchFailed, host, safefetch.ErrBlocked)
+	}
+	return fmt.Errorf("%w: %s: %s", ErrFetchFailed, host, reason)
+}
+
 func (h *host) HTTPFetch(ctx context.Context, req FetchRequest) (FetchResponse, error) {
 	r, g, err := h.record(ctx)
 	if err != nil {
@@ -160,22 +198,24 @@ func (h *host) HTTPFetch(ctx context.Context, req FetchRequest) (FetchResponse, 
 	}
 	resp, err := h.m.client.Do(hr)
 	if err != nil {
-		return FetchResponse{}, err
+		return FetchResponse{}, fetchError(u.Hostname(), err)
 	}
 	defer resp.Body.Close() //nolint:errcheck
 	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxFetchBytes+1))
 	if err != nil {
-		return FetchResponse{}, err
+		return FetchResponse{}, fetchError(u.Hostname(), err)
 	}
 	if len(body) > MaxFetchBytes {
 		return FetchResponse{}, fmt.Errorf("plugins: response larger than %d bytes", MaxFetchBytes)
 	}
 	// Privacy label: record the observed host and bytes.
+	h.m.healthMu.Lock()
 	if hh, err := h.m.store.health(ctx, h.plugin); err == nil {
 		hh.Observed[u.Hostname()]++
 		hh.EgressBytes += int64(len(body) + len(req.Body))
 		_ = h.m.store.putHealth(ctx, h.plugin, hh)
 	}
+	h.m.healthMu.Unlock()
 	out := FetchResponse{Status: resp.StatusCode, Headers: map[string]string{}, Body: body}
 	for k := range resp.Header {
 		out.Headers[k] = resp.Header.Get(k)
