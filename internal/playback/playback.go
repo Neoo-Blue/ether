@@ -251,6 +251,7 @@ type Manager struct {
 	lastCaps       map[int64]core.ClientCaps
 	warm           map[identity]*warmEntry
 	warmRequests   map[warmBudgetKey][]time.Time
+	warmMisses     map[identity]time.Time // warm-ups that ended without a source (warmMissTTL)
 
 	pinMu        sync.Mutex
 	livePins     map[string]int
@@ -354,7 +355,7 @@ func New(deps Deps, cfg config.Config, opts Options) (*Manager, error) {
 		flights:  map[flightKey]*flight{},
 		pending:  map[int64]int{},
 		lastCaps: map[int64]core.ClientCaps{},
-		warm:     map[identity]*warmEntry{}, warmRequests: map[warmBudgetKey][]time.Time{},
+		warm:     map[identity]*warmEntry{}, warmRequests: map[warmBudgetKey][]time.Time{}, warmMisses: map[identity]time.Time{},
 		livePins:     map[string]int{},
 		progressPins: map[string]bool{},
 		pinKick:      make(chan struct{}, 1),

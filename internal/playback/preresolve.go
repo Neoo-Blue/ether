@@ -13,6 +13,14 @@ import (
 
 const (
 	preResolveTTL = 60 * time.Minute
+	// warmMissTTL is how long a warm-up that found no source keeps the
+	// same viewer, device and title from warming again. Clients re-request
+	// a detail page many times while it is open; each warm-up searches
+	// every indexer and may grab NZBs, so a title whose top releases are
+	// broken would otherwise walk further down its list on every refresh
+	// (#224). Play is unaffected: it always resolves in full.
+	warmMissTTL   = 15 * time.Minute
+	maxWarmMisses = 1024
 	// takeWarmBudget is how long Play waits for an in-flight warm-up
 	// before resolving itself. A usenet RAR can sit in probe/prefetch
 	// for tens of seconds; a cached debrid remux must not wait behind it.
@@ -174,6 +182,13 @@ func (m *Manager) Prewarm(_ context.Context, user *core.User, key core.RatingKey
 		m.mu.Unlock()
 		return false
 	}
+	if at, ok := m.warmMisses[id]; ok {
+		if now.Sub(at) < warmMissTTL {
+			m.mu.Unlock()
+			return false
+		}
+		delete(m.warmMisses, id)
+	}
 	active := 0
 	for ident, e := range m.warm {
 		select {
@@ -255,6 +270,11 @@ func (m *Manager) Prewarm(_ context.Context, user *core.User, key core.RatingKey
 			m.mu.Lock()
 			if e.res == nil && m.warm[id] == e {
 				delete(m.warm, id)
+				// A warm-up superseded by another title was removed above
+				// and is not a miss; neither is one cut short by shutdown.
+				if m.ctx.Err() == nil {
+					m.recordWarmMissLocked(id)
+				}
 			}
 			m.mu.Unlock()
 			e.ready.Do(func() { close(e.done) })
@@ -702,4 +722,27 @@ func warmResolutionHeight(w, h int) int {
 	default:
 		return h
 	}
+}
+
+// recordWarmMissLocked remembers a warm-up that ended without a source.
+// The memo is bounded: expired entries go first, then the oldest.
+func (m *Manager) recordWarmMissLocked(id identity) {
+	now := m.now()
+	if len(m.warmMisses) >= maxWarmMisses {
+		var oldest identity
+		var at time.Time
+		for ident, t := range m.warmMisses {
+			if now.Sub(t) >= warmMissTTL {
+				delete(m.warmMisses, ident)
+				continue
+			}
+			if at.IsZero() || t.Before(at) {
+				oldest, at = ident, t
+			}
+		}
+		if len(m.warmMisses) >= maxWarmMisses {
+			delete(m.warmMisses, oldest)
+		}
+	}
+	m.warmMisses[id] = now
 }
