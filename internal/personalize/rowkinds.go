@@ -68,6 +68,23 @@ func (r *RowKindRegistry) Register(k RowSourceKind) error {
 	return nil
 }
 
+// Unregister removes a runtime row source kind by kind id.
+func (r *RowKindRegistry) Unregister(kind string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.kinds[kind]; !ok {
+		return
+	}
+	delete(r.kinds, kind)
+	out := r.order[:0]
+	for _, cur := range r.order {
+		if cur != kind {
+			out = append(out, cur)
+		}
+	}
+	r.order = out
+}
+
 func (r *RowKindRegistry) Lookup(kind string) (RowSourceKind, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -133,6 +150,9 @@ func (e *Engine) rowKindRegistry() *RowKindRegistry {
 
 // RegisterRowSourceKind adds a row source kind to this engine.
 func (e *Engine) RegisterRowSourceKind(k RowSourceKind) error { return e.rowKindRegistry().Register(k) }
+
+// UnregisterRowSourceKind removes a runtime row source kind from this engine.
+func (e *Engine) UnregisterRowSourceKind(kind string) { e.rowKindRegistry().Unregister(kind) }
 
 // RowKindRegistry exposes this engine's row-kind registry.
 func (e *Engine) RowKindRegistry() *RowKindRegistry { return e.rowKindRegistry() }

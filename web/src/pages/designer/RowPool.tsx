@@ -32,6 +32,9 @@ import {
 import { PolicyEditor } from "./PolicyEditor";
 import { isPluginDescriptor, textOf, useRegistry, type Descriptor } from "../../lib/extend";
 import { useLocale } from "../../i18n/react";
+import { useNavigate } from "react-router-dom";
+import { blankSpec, newSourceFromDescriptor, type CollectionSourceMeta } from "../../lib/rules";
+import { newCollectionHref } from "../collections/links";
 
 interface PoolEntry {
   row: string;
@@ -40,6 +43,7 @@ interface PoolEntry {
   group: RowGroup | "custom";
   kind?: string;
   owner?: string;
+  collectionSource?: string;
 }
 
 /** Mirrors internal/extend.RowSourceMeta. */
@@ -84,6 +88,8 @@ export function RowPool({
   focusRow: string | null;
   onFocusRow: (row: string | null) => void;
 }) {
+  const navigate = useNavigate();
+  const collectionKinds = useRegistry<CollectionSourceMeta>("collectionSource");
   const [q, setQ] = useState("");
   const [custom, setCustom] = useState("");
   const [patternOpen, setPatternOpen] = useState(false);
@@ -109,7 +115,12 @@ export function RowPool({
       registry.descriptors.map((d) => [d.id, d]),
     );
     const out: PoolEntry[] = available
-      .filter((a) => !FRONT_END_ROWS.has(a.kind) && rowFits(a, section))
+      .filter(
+        (a) =>
+          !FRONT_END_ROWS.has(a.kind) &&
+          !byKind.get(a.kind)?.meta?.collectionSource &&
+          rowFits(a, section),
+      )
       .map((a) => {
         const d = byKind.get(a.kind);
         return {
@@ -130,9 +141,10 @@ export function RowPool({
         row: hubId,
         title: textOf(d.label),
         description: textOf(d.hint),
-        group: (d.group as RowGroup | undefined) ?? "picks",
+        group: "collections",
         kind: d.meta?.rowKind ?? d.id,
         owner: d.owner,
+        collectionSource: d.meta?.collectionSource,
       });
     }
     // Policies for patterns or hub ids that are not in the catalogue.
@@ -200,6 +212,23 @@ export function RowPool({
                 <PoolItem
                   key={e.row}
                   entry={e}
+                  onCreate={
+                    e.collectionSource
+                      ? () => {
+                          const descriptor = collectionKinds.descriptors.find(
+                            (d) => d.id === e.collectionSource,
+                          );
+                          if (!descriptor) return;
+                          const media = section === "shows" ? "show" : "movie";
+                          const spec = blankSpec(media);
+                          spec.name = e.title;
+                          spec.sources = [newSourceFromDescriptor(descriptor, media)];
+                          spec.targets.homeRow = true;
+                          spec.enabled = true;
+                          navigate(newCollectionHref(), { state: { spec } });
+                        }
+                      : undefined
+                  }
                   insight={insightFor(insights, e)}
                   draft={draft}
                   onChange={onChange}
@@ -312,6 +341,7 @@ function Engagement({ insight }: { insight?: RowInsight }) {
 
 function PoolItem({
   entry,
+  onCreate,
   insight,
   draft,
   onChange,
@@ -322,6 +352,7 @@ function PoolItem({
   onToggle,
 }: {
   entry: PoolEntry;
+  onCreate?: () => void;
   insight?: RowInsight;
   draft: HomeLayout;
   onChange: (d: HomeLayout) => void;
@@ -393,21 +424,29 @@ function PoolItem({
             </div>
           ) : null}
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-7 shrink-0"
-          aria-expanded={open}
-          aria-label={t("Constraints for {title}", { title: entry.title })}
-          onClick={onToggle}
-        >
-          {open ? <ChevronDown size={15} /> : <SlidersHorizontal size={14} />}
+        {!onCreate && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 shrink-0"
+            aria-expanded={open}
+            aria-label={t("Constraints for {title}", { title: entry.title })}
+            onClick={onToggle}
+          >
+            {open ? <ChevronDown size={15} /> : <SlidersHorizontal size={14} />}
+          </Button>
+        )}
+      </div>
+      {onCreate ? (
+        <Button type="button" variant="outline" size="sm" onClick={onCreate}>
+          {t("Create collection")}
         </Button>
-      </div>
-      <div className="mt-2 flex items-center justify-between gap-2">
-        <p className="text-xs text-fg-muted">{STATUS_LABEL[effective.status]}</p>
-        <Engagement insight={insight} />
-      </div>
+      ) : (
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <p className="text-xs text-fg-muted">{STATUS_LABEL[effective.status]}</p>
+          <Engagement insight={insight} />
+        </div>
+      )}
       {layer === "global" && own ? (
         <p className="mt-1.5 text-[11px] text-fg-muted">
           {tn(

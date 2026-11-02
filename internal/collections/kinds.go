@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/extend"
@@ -29,6 +30,19 @@ type SourceKind interface {
 	Describe() KindDescribe
 	Validate(ve *ValidationError, path string, src core.CollectionSource)
 	Gather(g *Gather)
+}
+
+// minimumSourceRefresh respects source-specific lower bounds on refresh cadence.
+func (s *Service) minimumSourceRefresh(sp core.CollectionSpec) time.Duration {
+	var min time.Duration
+	for _, src := range sp.Sources {
+		if k, ok := s.kindRegistry().Lookup(src.Kind); ok {
+			if timed, ok := k.(interface{ MinRefresh() time.Duration }); ok && timed.MinRefresh() > min {
+				min = timed.MinRefresh()
+			}
+		}
+	}
+	return min
 }
 
 // KindDescribe carries everything the console needs to offer a kind in the
@@ -56,9 +70,68 @@ type Gather struct {
 	Res   sourceResult
 }
 
+// Fail ends a preview when a source cannot be evaluated.
+func (g *Gather) Fail(err error) { g.Res.err = err }
+
 func (g *Gather) Warn(format string, args ...any) {
 	g.Res.warnings = append(g.Res.warnings, fmt.Sprintf(format, args...))
 }
+
+type previewContextKey struct{}
+
+// IsPreview reports whether a gather belongs to an owner-initiated preview.
+func IsPreview(ctx context.Context) bool { return ctx.Value(previewContextKey{}) == true }
+
+// ExternalRef identifies one item from an external or plugin list source.
+type ExternalRef struct {
+	TMDB  int64
+	IMDB  string
+	TVDB  int64
+	Type  string // "movie" or "show"
+	Title string
+	Year  int
+}
+
+// ResolveExternal resolves external references to catalogue titles, appends
+// matched titles to the gather result, records warnings for unmatched items,
+// and returns the matched titles and unmatched count.
+func (g *Gather) ResolveExternal(sourceLabel string, refs []ExternalRef) ([]core.Title, int) {
+	if len(refs) == 0 {
+		return nil, 0
+	}
+	ext := make([]extRef, len(refs))
+	for i, r := range refs {
+		ext[i] = extRef{
+			TMDB:  r.TMDB,
+			IMDB:  r.IMDB,
+			TVDB:  r.TVDB,
+			Type:  r.Type,
+			Title: r.Title,
+			Year:  r.Year,
+		}
+	}
+	if sourceLabel == "" {
+		sourceLabel = sourceName(g.Src)
+	}
+	titles, unresolved, pending := g.Svc.resolveExternal(g.Ctx, g.Src.Kind, ext)
+	g.Res.titles = append(g.Res.titles, titles...)
+	if unresolved > 0 {
+		g.Warn("%d of %d items in %s could not be matched to TMDB", unresolved, len(refs), sourceLabel)
+	}
+	if pending > 0 {
+		g.Warn("%d items in %s are still being matched; they will appear after the next refresh", pending, sourceLabel)
+	}
+	return titles, unresolved + pending
+}
+
+// Titles returns the titles gathered so far.
+func (g *Gather) Titles() []core.Title { return append([]core.Title(nil), g.Res.titles...) }
+
+// Warnings returns the warnings recorded so far.
+func (g *Gather) Warnings() []string { return append([]string(nil), g.Res.warnings...) }
+
+// Add records a validation error on field if one is not already present.
+func (e *ValidationError) Add(field, msg string) { e.add(field, msg) }
 
 // NeedTMDB reports whether TMDB is available, recording a warning.
 func (g *Gather) NeedTMDB() bool {
@@ -106,6 +179,23 @@ func (r *KindRegistry) Register(k SourceKind) error {
 	r.kinds[k.ID()] = k
 	r.order = append(r.order, k.ID())
 	return nil
+}
+
+// Unregister removes a runtime source kind by id.
+func (r *KindRegistry) Unregister(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.kinds[id]; !ok {
+		return
+	}
+	delete(r.kinds, id)
+	out := r.order[:0]
+	for _, cur := range r.order {
+		if cur != id {
+			out = append(out, cur)
+		}
+	}
+	r.order = out
 }
 
 // Lookup returns the kind with id, if registered.
@@ -170,6 +260,9 @@ func (s *Service) validate(sp *core.CollectionSpec) error { return validateWith(
 // KindRegistry.Descriptors (or Service.SourceDescriptors) and register the
 // result with the extend registry.
 func (s *Service) RegisterSourceKind(k SourceKind) error { return s.kindRegistry().Register(k) }
+
+// UnregisterSourceKind removes a runtime source kind from this service.
+func (s *Service) UnregisterSourceKind(id string) { s.kindRegistry().Unregister(id) }
 
 // KindRegistry exposes this service's source-kind registry.
 func (s *Service) KindRegistry() *KindRegistry { return s.kindRegistry() }

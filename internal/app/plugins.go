@@ -15,6 +15,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/identity"
 	"github.com/braedonsaunders/ether/internal/playback"
 	"github.com/braedonsaunders/ether/internal/plugins"
+	"github.com/braedonsaunders/ether/internal/plugins/adapters"
 	"github.com/braedonsaunders/ether/internal/plugins/catalogue"
 	"github.com/braedonsaunders/ether/internal/plugins/kit"
 	"github.com/braedonsaunders/ether/internal/plugins/remote"
@@ -158,6 +159,7 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 		return scheme + "://" + host + remote.TunnelPath
 	}
 	a.closers = append(a.closers, func() { _ = tunnel.Close() })
+	adapters.Attach(mgr, a.collections, a.personalize, a.livetv)
 	if err := mgr.Start(ctx); err != nil {
 		return nil, err
 	}

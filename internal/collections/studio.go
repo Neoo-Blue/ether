@@ -168,8 +168,22 @@ func (s *Service) Preview(ctx context.Context, sp core.CollectionSpec, n int) (*
 	if err := s.validate(&named); err != nil {
 		return nil, err
 	}
+	pluginPreview := false
+	for _, src := range named.Sources {
+		if strings.HasPrefix(src.Kind, "plugin:") {
+			pluginPreview = true
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			break
+		}
+	}
+	ctx = context.WithValue(ctx, previewContextKey{}, true)
 	res, err := s.evaluate(ctx, named, evalOptions{seed: named.Name})
 	if err != nil {
+		if pluginPreview && errors.Is(err, context.DeadlineExceeded) {
+			return nil, fmt.Errorf("plugin list preview timed out: %w", err)
+		}
 		return nil, err
 	}
 	keys := res.keys

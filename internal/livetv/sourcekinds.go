@@ -3,8 +3,11 @@ package livetv
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/braedonsaunders/ether/internal/extend"
 )
@@ -51,9 +54,10 @@ type SourceDescribe struct {
 
 // KindRegistry holds the Live TV source kinds. Safe for concurrent use.
 type KindRegistry struct {
-	mu    sync.RWMutex
-	kinds map[string]SourceKind
-	order []string
+	mu           sync.RWMutex
+	kinds        map[string]SourceKind
+	order        []string
+	streamOpener func(ctx context.Context, c Channel, src StreamSource) (string, http.Header, error)
 }
 
 // NewKindRegistry returns a registry holding the built-in kinds.
@@ -77,8 +81,31 @@ func (r *KindRegistry) Register(k SourceKind) error {
 		return fmt.Errorf("live TV source kind %q already registered", k.ID())
 	}
 	r.kinds[k.ID()] = k
+	if strings.HasPrefix(k.ID(), "plugin:") {
+		if idx := slices.Index(r.order, "m3u"); idx >= 0 {
+			r.order = slices.Insert(r.order, idx, k.ID())
+			return nil
+		}
+	}
 	r.order = append(r.order, k.ID())
 	return nil
+}
+
+// Unregister removes a runtime source kind by id.
+func (r *KindRegistry) Unregister(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.kinds[id]; !ok {
+		return
+	}
+	delete(r.kinds, id)
+	out := r.order[:0]
+	for _, cur := range r.order {
+		if cur != id {
+			out = append(out, cur)
+		}
+	}
+	r.order = out
 }
 
 func (r *KindRegistry) Lookup(id string) (SourceKind, bool) {
@@ -99,8 +126,8 @@ func (r *KindRegistry) Kinds() []SourceKind {
 }
 
 // Classify returns the first registered kind that recognises src, in
-// registration order (xtream before m3u, so an Xtream login is never
-// mistaken for a plain playlist URL).
+// registration order (xtream and plugin kinds before m3u, so an Xtream
+// login or plugin source is never mistaken for a plain playlist URL).
 func (r *KindRegistry) Classify(src Source) (SourceKind, bool) {
 	for _, k := range r.Kinds() {
 		if k.Matches(src) {
@@ -142,8 +169,22 @@ func (s *Service) kindRegistry() *KindRegistry {
 // RegisterSourceKind adds a source kind to this service.
 func (s *Service) RegisterSourceKind(k SourceKind) error { return s.kindRegistry().Register(k) }
 
+// UnregisterSourceKind removes a runtime source kind from this service.
+func (s *Service) UnregisterSourceKind(id string) { s.kindRegistry().Unregister(id) }
+
 // KindRegistry exposes this service's source-kind registry.
 func (s *Service) KindRegistry() *KindRegistry { return s.kindRegistry() }
+
+// Now returns the service's clock reading.
+func (s *Service) Now() time.Time { return s.o.Now() }
+
+// SetStreamOpener installs a lazy stream resolver for plugin:// stream inputs.
+func (s *Service) SetStreamOpener(fn func(ctx context.Context, c Channel, src StreamSource) (string, http.Header, error)) {
+	r := s.kindRegistry()
+	r.mu.Lock()
+	r.streamOpener = fn
+	r.mu.Unlock()
+}
 
 // SourceKindOf classifies a saved source ("xtream", "guideOnly", "m3u").
 func (s *Service) SourceKindOf(src Source) string {

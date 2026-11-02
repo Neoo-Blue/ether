@@ -242,6 +242,21 @@ function SourceBody({
           {...searchSelectLabels()}
         />
       );
+    case "plugin": {
+      const params = (source.params ?? {}) as Record<string, string>;
+      return (
+        <GenericParams
+          descriptor={descriptor}
+          source={params}
+          label={label}
+          set={(patch) => {
+            const next = { ...params };
+            for (const [key, value] of Object.entries(patch)) next[key] = String(value);
+            set({ params: next });
+          }}
+        />
+      );
+    }
     case "discover":
       return (
         <DiscoverParams
@@ -267,7 +282,7 @@ function ParamInput({
   label,
 }: {
   field: ParamField;
-  source: SourceRecord;
+  source: Record<string, unknown>;
   set: (patch: Record<string, unknown>) => void;
   label: string;
 }) {
@@ -291,7 +306,7 @@ function ParamInput({
       <label className="flex items-center gap-2 text-sm text-fg">
         <input
           type="checkbox"
-          checked={Boolean(value)}
+          checked={value === true || value === "true"}
           onChange={(e) => set({ [field.name]: e.currentTarget.checked })}
         />
         {textOf(field.label)}
@@ -323,7 +338,7 @@ function GenericParams({
   label,
 }: {
   descriptor?: SourceDescriptor;
-  source: SourceRecord;
+  source: Record<string, unknown>;
   set: (patch: Record<string, unknown>) => void;
   label: string;
 }) {

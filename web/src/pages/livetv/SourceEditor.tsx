@@ -100,6 +100,7 @@ export function SourceEditor({
       d.meta?.editor !== "guide" &&
       d.meta?.editor !== "xtream",
   );
+  const selectedPlugin = pluginKinds.find((d) => d.id === draft.playlistUrl);
   useEffect(() => {
     setDraft(
       source
@@ -327,7 +328,10 @@ export function SourceEditor({
             <Segmented
               ariaLabel={t("Source type")}
               value={kind}
-              onChange={setKind}
+              onChange={(next) => {
+                setKind(next);
+                if (selectedPlugin) setDraft((d) => ({ ...d, playlistUrl: "" }));
+              }}
               options={typeDescriptors.map((d) => ({
                 value: (d.meta?.editor === "guide" ? "guide" : "playlist") as SourceKind,
                 label: textOf(d.label),
@@ -347,9 +351,24 @@ export function SourceEditor({
             {pluginKinds.length ? (
               <div className="flex flex-wrap items-center gap-1.5">
                 {pluginKinds.map((d) => (
-                  <Badge key={d.id} variant="secondary">
-                    {t("{label} (from {owner})", { label: textOf(d.label), owner: d.owner })}
-                  </Badge>
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => {
+                      setKind("playlist");
+                      setDraft((s) => ({
+                        ...s,
+                        playlistUrl: d.id,
+                        playlist: "",
+                        auth: undefined,
+                        name: s.name || textOf(d.label),
+                      }));
+                    }}
+                  >
+                    <Badge variant={draft.playlistUrl === d.id ? "default" : "secondary"}>
+                      {t("{label} (from {owner})", { label: textOf(d.label), owner: d.owner })}
+                    </Badge>
+                  </button>
                 ))}
               </div>
             ) : null}
@@ -365,7 +384,7 @@ export function SourceEditor({
             }
           />
         </Field>
-        {kind === "playlist" ? (
+        {kind === "playlist" && !selectedPlugin ? (
           <Field label={t("Connect with")}>
             <Segmented
               ariaLabel={t("Connect with")}
@@ -441,7 +460,7 @@ export function SourceEditor({
             </Field>
           </div>
         ) : null}
-        {kind === "playlist" && !xtream ? (
+        {kind === "playlist" && !xtream && !selectedPlugin ? (
           <UrlOrFile
             id="src-m3u"
             label={t("M3U playlist")}
@@ -453,31 +472,35 @@ export function SourceEditor({
             onFile={(f) => void upload(f, "playlist")}
           />
         ) : null}
-        <UrlOrFile
-          id="src-xmltv"
-          label={
-            xtream
-              ? t("XMLTV guide override (optional)")
-              : kind === "playlist"
-                ? t("XMLTV guide (optional)")
-                : t("XMLTV guide")
-          }
-          url={draft.guideUrl}
-          fileReady={Boolean(files.guide)}
-          accept=".xml,.gz,application/xml,text/xml,application/gzip"
-          placeholder={
-            xtream ? t("Leave blank to use the panel's guide") : t("https://…/guide.xml or .xml.gz")
-          }
-          hint={
-            xtream
-              ? t("Ether uses the panel's own XMLTV export unless you set one here.")
-              : t("Gzipped guides (.xml.gz) are fine.")
-          }
-          onUrl={(v) => setDraft({ ...draft, guideUrl: v, guide: "" })}
-          onFile={(f) => void upload(f, "guide")}
-        />
-        {!xtream ? <SignIn auth={auth} onChange={setAuth} /> : null}
-        <ClientIdentity auth={auth} onChange={setAuth} />
+        {!selectedPlugin && (
+          <UrlOrFile
+            id="src-xmltv"
+            label={
+              xtream
+                ? t("XMLTV guide override (optional)")
+                : kind === "playlist"
+                  ? t("XMLTV guide (optional)")
+                  : t("XMLTV guide")
+            }
+            url={draft.guideUrl}
+            fileReady={Boolean(files.guide)}
+            accept=".xml,.gz,application/xml,text/xml,application/gzip"
+            placeholder={
+              xtream
+                ? t("Leave blank to use the panel's guide")
+                : t("https://…/guide.xml or .xml.gz")
+            }
+            hint={
+              xtream
+                ? t("Ether uses the panel's own XMLTV export unless you set one here.")
+                : t("Gzipped guides (.xml.gz) are fine.")
+            }
+            onUrl={(v) => setDraft({ ...draft, guideUrl: v, guide: "" })}
+            onFile={(f) => void upload(f, "guide")}
+          />
+        )}
+        {!xtream && !selectedPlugin ? <SignIn auth={auth} onChange={setAuth} /> : null}
+        {!selectedPlugin && <ClientIdentity auth={auth} onChange={setAuth} />}
         <Field
           label={t("Keep it fresh")}
           hint={

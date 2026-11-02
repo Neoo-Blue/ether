@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -38,9 +40,17 @@ type streamSourceHealth struct {
 	StreamSourceStatus
 }
 
+func validStreamURL(raw string) bool {
+	if validHTTP(raw) {
+		return true
+	}
+	u, e := url.Parse(raw)
+	return e == nil && u.Scheme == "plugin" && u.Host != "" && strings.Trim(u.Path, "/") != ""
+}
+
 func normalizeStreamSources(c *Channel) error {
 	if len(c.StreamSources) == 0 {
-		if !validHTTP(c.StreamURL) {
+		if !validStreamURL(c.StreamURL) {
 			return fmt.Errorf("IPTV needs an HTTP(S) stream source")
 		}
 		id := stableID(c.ID, "primary")
@@ -58,7 +68,7 @@ func normalizeStreamSources(c *Channel) error {
 		src := &c.StreamSources[i]
 		src.URL = strings.TrimSpace(src.URL)
 		src.Name = strings.TrimSpace(src.Name)
-		if !validHTTP(src.URL) {
+		if !validStreamURL(src.URL) {
 			return fmt.Errorf("stream source %d must use HTTP(S)", i+1)
 		}
 		if src.ID == "" {
@@ -205,6 +215,39 @@ func (s *Service) recordSourceHealth(channelID string, src StreamSource, err err
 	s.sourceHealth[key] = h
 }
 
+// ResolveStreamSource resolves a channel's stream input at tune time. HTTP(S)
+// URLs return directly; plugin:// inputs delegate to the installed stream
+// opener under its Open deadline.
+func (s *Service) ResolveStreamSource(ctx context.Context, c Channel, src StreamSource) (string, http.Header, error) {
+	headers, err := s.upstreamHeaders(ctx, c, src)
+	if err != nil {
+		return "", nil, err
+	}
+	if !strings.HasPrefix(src.URL, "plugin://") {
+		return src.URL, headers, nil
+	}
+	r := s.kindRegistry()
+	r.mu.RLock()
+	opener := r.streamOpener
+	r.mu.RUnlock()
+	if opener == nil {
+		return "", nil, core.ErrNotAvailable
+	}
+	resolved, extra, err := opener(ctx, c, src)
+	if err != nil {
+		return "", nil, err
+	}
+	if !validHTTP(resolved) {
+		return "", nil, core.ErrNotAvailable
+	}
+	for k, vals := range extra {
+		for _, v := range vals {
+			headers.Add(k, v)
+		}
+	}
+	return resolved, headers, nil
+}
+
 // startIPTV selects one input per viewing session, under the caller's existing
 // ten-second startup deadline. It never substitutes another provider's bytes,
 // keys or media sequence into the active HLS resource map.
@@ -231,19 +274,24 @@ func (s *Service) startIPTV(ctx context.Context, ss *session) error {
 			// backup can still be tried. Fast failures advance immediately.
 			attemptCtx, cancel = context.WithTimeout(ctx, 5*time.Second)
 		}
-		ss.inputURL, ss.inputSource = src.URL, src
-		headers, err := s.upstreamHeaders(attemptCtx, c, src)
+		resolvedURL, headers, err := s.ResolveStreamSource(attemptCtx, c, src)
 		if err != nil {
 			cancel()
 			last = err
+			if !errors.Is(ctx.Err(), context.Canceled) {
+				s.recordSourceHealth(c.ID, src, err, false)
+			}
 			continue
 		}
+		grantSrc := src
+		grantSrc.URL = resolvedURL
+		ss.inputURL, ss.inputSource = resolvedURL, src
 		ss.inputHeaders = headers.Clone()
 		ss.info.MediaInfo, ss.relayInfo = nil, nil
 		ss.resources = map[string]string{}
 		// ffmpeg and ffprobe read this input through a loopback grant, never
 		// with the provider URL or headers on their command line.
-		err = s.grantInput(ss, src, headers)
+		err = s.grantInput(ss, grantSrc, headers)
 		if err == nil {
 			err = s.startIPTVSource(attemptCtx, ss)
 		}
