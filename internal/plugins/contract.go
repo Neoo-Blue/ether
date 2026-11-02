@@ -361,6 +361,7 @@ type Host interface {
 	CatalogGet(ctx context.Context, id string) (json.RawMessage, error)
 
 	// ViewerHistory needs viewers.watch_history for that viewer.
+	ViewerGranted(ctx context.Context) (json.RawMessage, error)
 	ViewerHistory(ctx context.Context, viewerID int64, limit, offset int) (json.RawMessage, error)
 	// SetWatchState needs viewers.write_watch_state; journalled.
 	SetWatchState(ctx context.Context, viewerID int64, titleID string, watched bool) error

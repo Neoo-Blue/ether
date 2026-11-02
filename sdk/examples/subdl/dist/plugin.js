@@ -1615,8 +1615,9 @@ var EtherPlugin = (() => {
   var subdl = plugin({ manifest: settingsManifest, routes: {
     subtitles(req, ctx) {
       const id = req.id.split(":");
-      if (!/^tt\d+$/.test(id[0]) || !ctx.settings.apiKey) return { subtitles: [] };
-      let url = "https://api.subdl.com/api/v1/subtitles?api_key=" + encodeURIComponent(ctx.settings.apiKey) + "&imdb_id=" + encodeURIComponent(id[0]) + "&subs_per_page=30&client=custom_integration";
+      const apiKey = ctx.ether.secret.get("apiKey");
+      if (!/^tt\d+$/.test(id[0]) || !apiKey) return { subtitles: [] };
+      let url = "https://api.subdl.com/api/v1/subtitles?api_key=" + encodeURIComponent(apiKey) + "&imdb_id=" + encodeURIComponent(id[0]) + "&subs_per_page=30&client=custom_integration";
       if (req.type === "series" && /^\d+$/.test(id[1] || "") && /^\d+$/.test(id[2] || "")) url += "&type=tv&season_number=" + id[1] + "&episode_number=" + id[2];
       const response = ctx.ether.http.fetch({ url });
       if (response.status !== 200) return fail("Subtitle search failed.");
@@ -1626,12 +1627,13 @@ var EtherPlugin = (() => {
     },
     subtitlesDownload(req, ctx) {
       if (!/^\/subtitle\/[0-9]+-[0-9]+\.zip$/.test(req.id) || req.format !== "srt") return fail("Invalid subtitle selection.");
-      const response = ctx.ether.http.fetch({ url: "https://dl.subdl.com" + req.id, headers: { "x-api-key": ctx.settings.apiKey } });
+      const response = ctx.ether.http.fetch({ url: "https://dl.subdl.com" + req.id, headers: { "x-api-key": ctx.ether.secret.get("apiKey") } });
       if (response.status !== 200 || !response.bodyBase64) return fail("Subtitle download failed.");
       return { format: "srt", encoding: "utf8", data: archive(response.bodyBase64) };
     },
     test(ctx) {
-      return { ok: !!ctx.settings.apiKey, message: ctx.settings.apiKey ? "API key saved." : "Enter an API key." };
+      const key = ctx.ether.secret.get("apiKey");
+      return { ok: !!key, message: key ? "API key saved." : "Enter an API key." };
     }
   } });
   var handle = subdl.handle;

@@ -799,7 +799,7 @@ export interface AvailabilityConfig {
 
 export interface ReleaseCondition {
   field: string;
-  operator: "equals" | "contains" | "regex" | "range";
+  operator: "equals" | "contains" | "regex" | "range" | "in";
   value?: string;
   min?: number;
   max?: number;

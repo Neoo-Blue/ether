@@ -193,6 +193,11 @@ func fromResponse(resp Response) plugins.Response {
 // this package's sentinels so the HTTP layer maps them precisely.
 type HostAdapter struct {
 	HostFor func(pluginID string) plugins.Host
+	// SettingsWithSecrets, when set, returns the plugin's settings with its own
+	// secrets (Manager.PluginSettings); a remote sidecar cannot call
+	// secret.get, so this is how it recovers configuration after a
+	// restart or reconnect. Without it only non-secret settings are served.
+	SettingsWithSecrets func(ctx context.Context, pluginID string) (map[string]any, error)
 }
 
 func (a HostAdapter) host(pluginID string) (plugins.Host, error) {
@@ -279,6 +284,15 @@ func (a HostAdapter) CatalogGet(ctx context.Context, pluginID, id string) (json.
 	return out, mapHostErr(err)
 }
 
+func (a HostAdapter) ViewerGranted(ctx context.Context, pluginID string) (json.RawMessage, error) {
+	h, err := a.host(pluginID)
+	if err != nil {
+		return nil, err
+	}
+	out, err := h.ViewerGranted(ctx)
+	return out, mapHostErr(err)
+}
+
 func (a HostAdapter) ViewerHistory(ctx context.Context, pluginID string, viewerID int64, limit, offset int) (json.RawMessage, error) {
 	h, err := a.host(pluginID)
 	if err != nil {
@@ -305,6 +319,13 @@ func (a HostAdapter) CollectionsUpsert(ctx context.Context, pluginID string, col
 }
 
 func (a HostAdapter) Settings(ctx context.Context, pluginID string) (map[string]any, error) {
+	if a.SettingsWithSecrets != nil {
+		if _, err := a.host(pluginID); err != nil {
+			return nil, err
+		}
+		v, err := a.SettingsWithSecrets(ctx, pluginID)
+		return v, mapHostErr(err)
+	}
 	h, err := a.host(pluginID)
 	if err != nil {
 		return nil, err

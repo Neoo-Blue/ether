@@ -1,0 +1,17 @@
+{
+  "summary": "Explore a viewer's year in titles.",
+  "page": "Ether Wrapped",
+  "description": "Your year in titles, one story at a time.",
+  "list": "Your year in titles",
+  "list_hint": "Build a collection from a viewer's year.",
+  "viewer": "Viewer",
+  "year": "Year",
+  "plays": "Completed plays",
+  "titles": "Titles",
+  "top_titles": "Top titles",
+  "empty": "No completed titles found.",
+  "genres": "Top genres",
+  "activity": "Activity by month",
+  "previous": "Previous viewers",
+  "next": "Next viewers"
+}

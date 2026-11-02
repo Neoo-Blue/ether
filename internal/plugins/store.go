@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/braedonsaunders/ether/internal/config"
@@ -381,8 +380,15 @@ func (s *storage) kvDelete(ctx context.Context, plugin, key string) error {
 	return err
 }
 
+// kvListLimit caps one prefix listing.
+const kvListLimit = 10000
+
 func (s *storage) kvList(ctx context.Context, plugin, prefix string) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT kkey FROM plugins_kv WHERE plugin=? ORDER BY kkey LIMIT 1000`, plugin)
+	// The prefix is matched in the query, before the limit, so a plugin
+	// with many keys still sees every key under the prefix it asks for
+	// (up to kvListLimit; the per-plugin KV quota bounds the total).
+	rows, err := s.db.QueryContext(ctx, `SELECT kkey FROM plugins_kv WHERE plugin=? AND substr(kkey, 1, ?)=? ORDER BY kkey LIMIT ?`,
+		plugin, len(prefix), prefix, kvListLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -393,9 +399,7 @@ func (s *storage) kvList(ctx context.Context, plugin, prefix string) ([]string, 
 		if err := rows.Scan(&k); err != nil {
 			return nil, err
 		}
-		if strings.HasPrefix(k, prefix) {
-			out = append(out, k)
-		}
+		out = append(out, k)
 	}
 	return out, rows.Err()
 }

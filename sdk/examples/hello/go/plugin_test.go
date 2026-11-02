@@ -42,6 +42,9 @@ func (noopHost) CatalogSearch(context.Context, string, int, int) (json.RawMessag
 	return json.RawMessage(`{"titles":[]}`), nil
 }
 func (noopHost) CatalogGet(context.Context, string) (json.RawMessage, error) { return nil, nil }
+func (noopHost) ViewerGranted(context.Context) (json.RawMessage, error) {
+	return json.RawMessage(`[]`), nil
+}
 func (noopHost) ViewerHistory(context.Context, int64, int, int) (json.RawMessage, error) {
 	return nil, plugins.ErrPermissionDenied
 }
@@ -57,6 +60,7 @@ func (noopHost) FoldersList(context.Context, string, string) ([]plugins.FolderEn
 func (noopHost) FoldersStat(context.Context, string, string) (plugins.FolderEntry, error) {
 	return plugins.FolderEntry{}, plugins.ErrPermissionDenied
 }
+func (noopHost) Settings(context.Context) (map[string]any, error)          { return map[string]any{}, nil }
 func (noopHost) NotifyOwner(context.Context, string) error                 { return nil }
 func (noopHost) Log(context.Context, string, string, map[string]any) error { return nil }
 

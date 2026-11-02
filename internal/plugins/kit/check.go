@@ -520,7 +520,7 @@ func (h *recordingHost) CallHost(ctx context.Context, name string, raw json.RawM
 		resp := map[string]any{
 			"status":  200,
 			"headers": map[string]string{"content-type": "application/json"},
-			"body":    `{"ok":true}`,
+			"body":    `{"ok":true,"status":true,"subtitles":[]}`,
 		}
 		b, _ := json.Marshal(resp)
 		return b, nil
@@ -534,6 +534,8 @@ func (h *recordingHost) CallHost(ctx context.Context, name string, raw json.RawM
 			return nil, wasm.Forbidden("catalog permission not declared")
 		}
 		return json.RawMessage(`{"id":1,"title":"The Kid","type":"movie","year":1921}`), nil
+	case "viewers.granted":
+		return json.RawMessage(`[]`), nil
 	case "viewers.history":
 		if h.man.Ether.Permissions.Viewers.WatchHistory == "" || h.man.Ether.Permissions.Viewers.WatchHistory == "none" {
 			return nil, wasm.Forbidden("viewers.watch_history permission not declared")

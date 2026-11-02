@@ -34,6 +34,7 @@ var sensitive = map[string]bool{
 	"secret": true, "clientsecret": true, "apikey": true, "xapikey": true, "apitoken": true,
 	"authorization": true, "proxyauthorization": true, "cookie": true, "setcookie": true,
 	"rsskey": true,
+	"jwt":    true, "sig": true, "signature": true,
 }
 
 // normalise lowercases name and drops everything but letters and digits.
@@ -78,13 +79,17 @@ var (
 	scheme = regexp.MustCompile(`(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{6,}`)
 	// Ether's own credentials: console sessions and cast delegations.
 	own = regexp.MustCompile(`\bether-(admin|cast|recovery)-[A-Za-z0-9]+`)
+	// JSON Web Tokens by shape (header.payload.signature, base64url), so a
+	// signed stream URL or a token under any name is masked.
+	jwt = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{4,}\.eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]+`)
 )
 
 // String returns s with credentials replaced by Mask.
 func String(s string) string {
-	if s == "" || !strings.ContainsAny(s, "=:@") && !strings.Contains(s, "ether-") && !strings.Contains(strings.ToLower(s), "earer") && !strings.Contains(strings.ToLower(s), "basic ") {
+	if s == "" || !strings.ContainsAny(s, "=:@") && !strings.Contains(s, "ether-") && !strings.Contains(s, "eyJ") && !strings.Contains(strings.ToLower(s), "earer") && !strings.Contains(strings.ToLower(s), "basic ") {
 		return s
 	}
+	s = jwt.ReplaceAllString(s, Mask)
 	s = maskValue(cookie, s)
 	s = maskValue(tokenHeader, s)
 	s = maskValue(authHeader, s)

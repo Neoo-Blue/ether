@@ -510,6 +510,11 @@ test("createRemoteHostClient talks to /ether/plugin-host/* endpoints with creden
       body,
     });
 
+    if (req.url === "/ether/plugin-host/viewers/granted" && req.method === "GET") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify([{ id: 7, name: "Viewer" }]));
+      return;
+    }
     if (req.url === "/ether/plugin-host/kv/greeting" && req.method === "GET") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ key: "greeting", value: "hello" }));
@@ -530,6 +535,7 @@ test("createRemoteHostClient talks to /ether/plugin-host/* endpoints with creden
 
   try {
     const client = createRemoteHostClient({ baseUrl, credential: "cred-xyz" });
+    assert.deepEqual(await client.viewers.granted(), [{ id: 7, name: "Viewer" }]);
     const val = await client.kv.get("greeting");
     assert.equal(val, "hello");
 

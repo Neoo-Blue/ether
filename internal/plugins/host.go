@@ -254,6 +254,22 @@ func (h *host) CatalogGet(ctx context.Context, id string) (json.RawMessage, erro
 	return h.m.deps.Backends.CatalogGet(ctx, id)
 }
 
+func (h *host) ViewerGranted(ctx context.Context) (json.RawMessage, error) {
+	r, g, err := h.record(ctx)
+	if err != nil {
+		return nil, err
+	}
+	p := r.Manifest.Ether.Permissions.Viewers
+	allowed := (!g.revoked("viewers.watch_history") && normLevel(p.WatchHistory) != "none") || (!g.revoked("viewers.identity") && normLevel(p.Identity) != "none")
+	if !allowed || len(g.Viewers) == 0 {
+		return json.RawMessage(`[]`), nil
+	}
+	if h.m.deps.Backends.ViewerNames == nil {
+		return nil, ErrUnavailable
+	}
+	return h.m.deps.Backends.ViewerNames(ctx, g.Viewers)
+}
+
 func (h *host) ViewerHistory(ctx context.Context, viewerID int64, limit, offset int) (json.RawMessage, error) {
 	r, g, err := h.record(ctx)
 	if err != nil {
@@ -412,12 +428,35 @@ func (h *host) folderCheck(ctx context.Context, root, path string) (string, erro
 		h.noteDenied("folders")
 		return "", fmt.Errorf("%w: folder was not picked for this plugin", ErrPermissionDenied)
 	}
+	return h.resolveFolderPath(root, path)
+}
+
+// resolveFolderPath confines path to the picked root, lexically and after
+// resolving symlinks.
+func (h *host) resolveFolderPath(root, path string) (string, error) {
 	cleanRoot := filepath.Clean(root)
 	joined := filepath.Clean(filepath.Join(cleanRoot, path))
-	if joined != cleanRoot && !strings.HasPrefix(joined, cleanRoot+string(filepath.Separator)) {
+	if !within(cleanRoot, joined) {
 		return "", fmt.Errorf("%w: path leaves the picked folder", ErrPermissionDenied)
 	}
-	return joined, nil
+	// Symlinks are resolved on both sides, so a link inside the picked
+	// folder cannot expose anything outside it.
+	realRoot, err := filepath.EvalSymlinks(cleanRoot)
+	if err != nil {
+		return "", err
+	}
+	real, err := filepath.EvalSymlinks(joined)
+	if err != nil {
+		return "", err
+	}
+	if !within(realRoot, real) {
+		return "", fmt.Errorf("%w: path leaves the picked folder", ErrPermissionDenied)
+	}
+	return real, nil
+}
+
+func within(root, path string) bool {
+	return path == root || strings.HasPrefix(path, root+string(filepath.Separator))
 }
 
 func (h *host) FoldersList(ctx context.Context, root, path string) ([]FolderEntry, error) {
@@ -429,9 +468,30 @@ func (h *host) FoldersList(ctx context.Context, root, path string) ([]FolderEntr
 	if err != nil {
 		return nil, err
 	}
+	realRoot, err := filepath.EvalSymlinks(filepath.Clean(root))
+	if err != nil {
+		return nil, err
+	}
 	out := make([]FolderEntry, 0, len(entries))
 	for _, e := range entries {
 		fe := FolderEntry{Name: e.Name(), Path: filepath.Join(path, e.Name()), Dir: e.IsDir()}
+		if e.Type()&os.ModeSymlink != 0 {
+			// Follow a link only when its target stays inside the grant.
+			target, err := filepath.EvalSymlinks(filepath.Join(dir, e.Name()))
+			if err != nil || !within(realRoot, target) {
+				continue
+			}
+			info, err := os.Stat(target)
+			if err != nil {
+				continue
+			}
+			fe.Dir, fe.Size, fe.Mtime = info.IsDir(), info.Size(), info.ModTime().Unix()
+			out = append(out, fe)
+			if len(out) >= 1000 {
+				break
+			}
+			continue
+		}
 		if info, err := e.Info(); err == nil {
 			fe.Size, fe.Mtime = info.Size(), info.ModTime().Unix()
 		}

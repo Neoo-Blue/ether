@@ -35,3 +35,7 @@ node_modules/
 /drift-watch-out/
 
 /internal/conform/specs/.downloaded/
+
+# Python bytecode (SDK and examples)
+__pycache__/
+*.pyc

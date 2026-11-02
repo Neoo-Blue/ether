@@ -19,6 +19,12 @@ type fixtureHost struct {
 	badArchive bool
 }
 
+func (h *fixtureHost) SecretGet(_ context.Context, name string) (string, error) {
+	if name != "apiKey" {
+		return "", nil
+	}
+	return "fixture-key", nil
+}
 func (h *fixtureHost) HTTPFetch(_ context.Context, req plugins.FetchRequest) (plugins.FetchResponse, error) {
 	h.calls = append(h.calls, req.URL)
 	file := "testdata/search.json"
