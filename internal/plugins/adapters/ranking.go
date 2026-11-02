@@ -78,10 +78,17 @@ func (s *rankingSession) declared(kind extend.Kind, step, owner string) bool {
 	d, ok := s.registry.Get(kind, step)
 	return ok && d.Owner == owner
 }
-func (s *rankingSession) Rank(step string, releases []core.Release, verified []bool) []int64 {
+func (s *rankingSession) Rank(step string, config json.RawMessage, releases []core.Release, verified []bool) []int64 {
 	id, _, ok := splitHotID(step)
 	if !ok || !s.declared(extend.KindRankingStep, step, id) {
 		return nil
+	}
+	desc, _ := s.registry.Get(extend.KindRankingStep, step)
+	if err := resolver.ValidateStepConfig(desc.Meta, config); err != nil {
+		return nil
+	}
+	if len(config) == 0 {
+		config = json.RawMessage(`{}`)
 	}
 	rt := s.runtime(id)
 	if rt == nil || !rt.hot.HasRankKey() {
@@ -92,7 +99,7 @@ func (s *rankingSession) Rank(step string, releases []core.Release, verified []b
 		v := i < len(verified) && verified[i]
 		facts[i] = candidateFacts(r, s.caps, v)
 	}
-	keys, out, err := rt.hot.RankBatch(s.ctx, facts, json.RawMessage(`{}`))
+	keys, out, err := rt.hot.RankBatch(s.ctx, facts, config)
 	slow := out.Slow
 	if (err != nil || (out.Status != "" && out.Status != "ok")) && slow == 0 {
 		slow = len(releases)

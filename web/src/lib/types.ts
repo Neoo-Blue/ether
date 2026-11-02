@@ -411,6 +411,7 @@ export interface EtherConfig {
 export interface QualityProfile {
   releaseRules?: ReleaseRule[] | null;
   ranking?: string[] | null;
+  rankingConfig?: Record<string, Record<string, unknown>> | null;
   name: string;
   maxHeight: number;
   minHeight: number;

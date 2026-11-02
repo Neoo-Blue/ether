@@ -347,7 +347,27 @@ function WhatMattersMostSection({
     const plugin = desc ? isPluginDescriptor(desc) : step.startsWith("plugin:");
     const title = desc ? textOf(desc.label) || step : step;
     const summary = stepSummary(desc);
-    const expandable = meta?.editor === "ordered_list" && !!meta.configKey;
+    const editor = typeof meta?.editor === "object" ? meta.editor : null;
+    const editorKind =
+      editor?.kind ?? editor?.editor ?? (typeof meta?.editor === "string" ? meta.editor : "none");
+    const pluginChoices = (
+      editor?.options ??
+      editor?.choices ??
+      meta?.options ??
+      meta?.choices ??
+      []
+    ).map((o) =>
+      typeof o === "string"
+        ? { value: o, label: o }
+        : { value: o.value, label: textOf(o.label) || o.value },
+    );
+    const pluginOptions = pluginChoices.map((o) => o.value);
+    const config = draft.rankingConfig?.[step] ?? {};
+    const setConfig = (next: Record<string, unknown>) =>
+      patch({ rankingConfig: { ...draft.rankingConfig, [step]: next } });
+    const expandable =
+      (editorKind === "ordered_list" && !!meta?.configKey) ||
+      (plugin && ["ordered_list", "choice", "range", "toggle"].includes(editorKind));
     const isExpanded = expanded === step;
     const options = (meta?.options ?? meta?.choices ?? []).map((o) => o.value);
 
@@ -409,6 +429,71 @@ function WhatMattersMostSection({
             </Button>
           ) : null}
         </div>
+        {isExpanded && plugin ? (
+          <div className="space-y-3 border-t border-border pt-3">
+            {editorKind === "toggle" ? (
+              <label className="flex items-center gap-2 text-sm">
+                <Switch
+                  aria-label={title}
+                  checked={config.value === true}
+                  onChange={(e) => setConfig({ value: e.currentTarget.checked })}
+                />
+                {t("Enabled")}
+              </label>
+            ) : null}
+            {editorKind === "choice" ? (
+              <SearchSelect
+                {...searchSelectLabels()}
+                ariaLabel={title}
+                value={typeof config.value === "string" ? config.value : ""}
+                options={pluginChoices}
+                onChange={(value) => setConfig({ value })}
+              />
+            ) : null}
+            {editorKind === "ordered_list" ? (
+              <PreferenceList
+                label={title}
+                all={pluginOptions}
+                value={
+                  Array.isArray(config.value)
+                    ? config.value.filter((v): v is string => typeof v === "string")
+                    : []
+                }
+                onChange={(value) => setConfig({ value })}
+              />
+            ) : null}
+            {editorKind === "range" ? (
+              <div className="grid grid-cols-2 gap-3">
+                <label className="space-y-1 text-sm">
+                  {t("Minimum")}
+                  <NumberInput
+                    aria-label={t("Minimum")}
+                    value={typeof config.min === "number" ? config.min : 0}
+                    onChange={(min) =>
+                      setConfig({
+                        min,
+                        max: Math.max(min, typeof config.max === "number" ? config.max : 0),
+                      })
+                    }
+                  />
+                </label>
+                <label className="space-y-1 text-sm">
+                  {t("Maximum")}
+                  <NumberInput
+                    aria-label={t("Maximum")}
+                    value={typeof config.max === "number" ? config.max : 0}
+                    onChange={(max) =>
+                      setConfig({
+                        min: Math.min(max, typeof config.min === "number" ? config.min : 0),
+                        max,
+                      })
+                    }
+                  />
+                </label>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         {isExpanded && meta?.configKey === "preferredLanguages" ? (
           <div className="space-y-1.5 border-t border-border pt-3">
             <ListInput

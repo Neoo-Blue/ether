@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	"github.com/braedonsaunders/ether/internal/core"
@@ -15,7 +16,7 @@ type RankingHooks interface {
 // RankingSession batches steps and evaluates external conditions within budgets.
 type RankingSession interface {
 	Close()
-	Rank(step string, releases []core.Release, verified []bool) []int64
+	Rank(step string, config json.RawMessage, releases []core.Release, verified []bool) []int64
 	Match(core.Release, core.ReleaseCondition, bool) (bool, bool)
 }
 

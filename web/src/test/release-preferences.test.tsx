@@ -202,3 +202,32 @@ describe("profile rules and ranking ladder", () => {
     );
   });
 });
+
+it("edits and saves a plugin ranking step's configuration", async () => {
+  const descriptor = {
+    kind: "rankingStep" as const,
+    id: "plugin:test.example/dub",
+    owner: "test.example",
+    label: { source: "Dub preference" },
+    meta: { editor: { kind: "toggle" }, canMove: true, defaultPosition: 0 },
+  };
+  rankingDescriptors.push(descriptor);
+  try {
+    const { resetRegistryCache } = await import("../lib/extend");
+    resetRegistryCache();
+    const { fake, drawer } = await openProfile();
+    fireEvent.click(within(drawer).getByRole("button", { name: "Step to add" }));
+    fireEvent.click(await screen.findByRole("option", { name: /Dub preference/ }, WAIT));
+    fireEvent.click(within(drawer).getByRole("button", { name: "Add a step" }));
+    fireEvent.click(within(drawer).getByRole("button", { name: "Configure Dub preference" }));
+    fireEvent.click(within(drawer).getByRole("switch", { name: "Dub preference" }));
+    fireEvent.click(within(drawer).getByRole("button", { name: "Save profile" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), WAIT);
+    const saved = fake.state.config.quality.profiles!.find((p) => p.name === "1080p")!;
+    expect(saved.rankingConfig?.[descriptor.id]).toEqual({ value: true });
+  } finally {
+    rankingDescriptors.splice(rankingDescriptors.indexOf(descriptor), 1);
+    const { resetRegistryCache } = await import("../lib/extend");
+    resetRegistryCache();
+  }
+});

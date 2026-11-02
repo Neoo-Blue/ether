@@ -29,8 +29,8 @@ const (
 const (
 	RankRulePrefix = "rule:"
 	// RankPluginPrefix namespaces plugin-contributed ranking steps:
-	// "plugin:<plugin id>/<key>" (additive, WS1a). Execution arrives with
-	// the plugin host; until then a plugin step ranks neutral.
+	// "plugin:<plugin id>/<key>". The resolver uses a neutral key when
+	// its hosted runtime is unavailable.
 	RankPluginPrefix = "plugin:"
 	RankLanguage     = "language"
 	RankConnection   = "connection"
@@ -227,13 +227,14 @@ type Resolution struct {
 // QualityProfile is an owner-editable rule set ranking releases for a class
 // of client.
 type QualityProfile struct {
-	ReleaseRules         []ReleaseRule  `json:"releaseRules,omitempty"`
-	Ranking              []string       `json:"ranking,omitempty"`
-	AllowedQualities     []string       `json:"allowedQualities,omitempty"` // imported source-resolution gates
-	CustomFormatScores   map[string]int `json:"customFormatScores,omitempty"`
-	MinCustomFormatScore *int           `json:"minCustomFormatScore,omitempty"`
-	Name                 string         `json:"name"`
-	MaxHeight            int            `json:"maxHeight"` // cap, e.g. 1080
+	ReleaseRules         []ReleaseRule              `json:"releaseRules,omitempty"`
+	Ranking              []string                   `json:"ranking,omitempty"`
+	RankingConfig        map[string]json.RawMessage `json:"rankingConfig,omitempty"`
+	AllowedQualities     []string                   `json:"allowedQualities,omitempty"` // imported source-resolution gates
+	CustomFormatScores   map[string]int             `json:"customFormatScores,omitempty"`
+	MinCustomFormatScore *int                       `json:"minCustomFormatScore,omitempty"`
+	Name                 string                     `json:"name"`
+	MaxHeight            int                        `json:"maxHeight"` // cap, e.g. 1080
 	// ConfiguredMaxHeight is MaxHeight as the owner configured it,
 	// before download reshaping or a client's caps clamped the
 	// effective MaxHeight. -1 means the owner set no ceiling ("Any");

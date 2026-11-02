@@ -71,7 +71,7 @@ func TestRankingHostedJSAndSlowFallback(t *testing.T) {
 	m := fixtureRanking(t)
 	session := (Ranking{Manager: m, Registry: m.registry}).NewResolve(context.Background(), core.ClientCaps{})
 	rels := []core.Release{{ID: "a", Name: "film.1080p"}, {ID: "b", Name: "film.DUB.1080p"}}
-	keys := session.Rank("plugin:test.dub/dub", rels, nil)
+	keys := session.Rank("plugin:test.dub/dub", nil, rels, nil)
 	if session.(*rankingSession).slow["test.dub"] > 0 {
 		t.Skip("hosted runtime exhausted its budget under load")
 	}
@@ -102,7 +102,7 @@ func TestRankingSlowFallback(t *testing.T) {
 	var session resolver.RankingSession
 	m.rt = slowHot{m.rt}
 	session = (Ranking{Manager: m, Registry: m.registry}).NewResolve(context.Background(), core.ClientCaps{})
-	if v := session.Rank("plugin:test.dub/dub", rels, nil); v != nil {
+	if v := session.Rank("plugin:test.dub/dub", nil, rels, nil); v != nil {
 		t.Fatalf("timeout must neutralize step: %v", v)
 	}
 	if matched, _ := session.Match(rels[1], cond, false); matched {
@@ -186,7 +186,7 @@ func TestUnreadyAndMissingPluginAreNeutral(t *testing.T) {
 	m.notReady = true
 	session := (Ranking{Manager: m, Registry: m.registry}).NewResolve(context.Background(), core.ClientCaps{})
 	r := core.Release{ID: "1", Name: "DUB"}
-	if keys := session.Rank("plugin:test.dub/dub", []core.Release{r}, nil); keys != nil {
+	if keys := session.Rank("plugin:test.dub/dub", nil, []core.Release{r}, nil); keys != nil {
 		t.Fatalf("unready keys: %v", keys)
 	}
 	cond := core.ReleaseCondition{Field: "plugin:test.dub/dub", Operator: "equals", Value: "x"}
@@ -200,5 +200,40 @@ func TestUnreadyAndMissingPluginAreNeutral(t *testing.T) {
 	session.Close()
 	if m.slow != 0 {
 		t.Fatalf("warming recorded as slow: %d", m.slow)
+	}
+}
+
+type configHot struct {
+	plugins.HotRuntime
+	config json.RawMessage
+}
+
+func (h *configHot) RankBatch(_ context.Context, c []plugins.CandidateFacts, config json.RawMessage) ([]int64, plugins.HotOutcome, error) {
+	h.config = append(json.RawMessage(nil), config...)
+	return make([]int64, len(c)), plugins.HotOutcome{Status: "ok"}, nil
+}
+func TestRankingPassesValidatedStepConfig(t *testing.T) {
+	m := fixtureRanking(t)
+	hot := &configHot{HotRuntime: m.rt}
+	m.rt = hot
+	d, ok := m.registry.Get(extend.KindRankingStep, "plugin:test.dub/dub")
+	if !ok {
+		t.Fatal("missing descriptor")
+	}
+	d.Meta = json.RawMessage(`{"editor":{"kind":"toggle"}}`)
+	if err := m.registry.ReplaceOwner("test.dub", []extend.Descriptor{d}); err != nil {
+		t.Fatal(err)
+	}
+	s := (Ranking{Manager: m, Registry: m.registry}).NewResolve(context.Background(), core.ClientCaps{})
+	defer s.Close()
+	rels := []core.Release{{ID: "r"}}
+	s.Rank(d.ID, json.RawMessage(`{"value":true}`), rels, nil)
+	if string(hot.config) != `{"value":true}` {
+		t.Fatalf("config %s", hot.config)
+	}
+	hot.config = nil
+	s.Rank(d.ID, json.RawMessage(`{"value":"bad"}`), rels, nil)
+	if hot.config != nil {
+		t.Fatal("invalid config reached plugin")
 	}
 }

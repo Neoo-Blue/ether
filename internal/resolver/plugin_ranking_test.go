@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -12,7 +13,7 @@ type dubHooks struct{ batches int }
 
 func (d *dubHooks) Close()                                                     {}
 func (d *dubHooks) NewResolve(context.Context, core.ClientCaps) RankingSession { return d }
-func (d *dubHooks) Rank(_ string, rels []core.Release, _ []bool) []int64 {
+func (d *dubHooks) Rank(_ string, _ json.RawMessage, rels []core.Release, _ []bool) []int64 {
 	d.batches++
 	keys := make([]int64, len(rels))
 	for i, r := range rels {

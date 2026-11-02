@@ -171,14 +171,6 @@ func (r *Runner) replayRanking(ctx context.Context, target *resolvedTarget, para
 		},
 	}
 
-	cfgJSON := params.Config
-	if len(cfgJSON) == 0 && len(target.settings) > 0 {
-		cfgJSON, _ = json.Marshal(target.settings)
-	}
-	if len(cfgJSON) == 0 {
-		cfgJSON = json.RawMessage("{}")
-	}
-
 	operator := params.Operator
 	if operator == "" {
 		operator = "equals"
@@ -233,8 +225,9 @@ func (r *Runner) replayRanking(ctx context.Context, target *resolvedTarget, para
 		if isCondition {
 			var batchDur time.Duration
 			var batchUnits int64
+			batchCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 			for i, wc := range wasmCands {
-				matched, out, _ := target.wasmPlug.CondMatch(ctx, wc, operator, params.Value)
+				matched, out, _ := target.wasmPlug.CondMatch(batchCtx, wc, operator, params.Value)
 				condMatched[i] = matched
 				if matched {
 					scores[i] = 1
@@ -243,6 +236,7 @@ func (r *Runner) replayRanking(ctx context.Context, target *resolvedTarget, para
 				batchUnits += out.Units
 				accumulateOutcome(&report.Budget, out)
 			}
+			cancel()
 			totalPluginDur += batchDur
 			batchCount++
 			if batchDur > maxBatchDur {
@@ -252,8 +246,15 @@ func (r *Runner) replayRanking(ctx context.Context, target *resolvedTarget, para
 				report.Budget.MaxBatchUnits = batchUnits
 			}
 		} else {
-			gotScores, out, _ := target.wasmPlug.RankBatch(ctx, wasmCands, cfgJSON)
-			if len(gotScores) == len(eligible) {
+			cfgJSON := params.Config
+			if len(cfgJSON) == 0 {
+				cfgJSON = prof.RankingConfig[pluginStepID]
+			}
+			if len(cfgJSON) == 0 {
+				cfgJSON = json.RawMessage(`{}`)
+			}
+			gotScores, out, err := target.wasmPlug.RankBatch(ctx, wasmCands, cfgJSON)
+			if err == nil && out.Status == wasm.StatusOK && out.SlowCandidates == 0 && len(gotScores) == len(eligible) {
 				scores = gotScores
 			}
 			totalPluginDur += out.Duration

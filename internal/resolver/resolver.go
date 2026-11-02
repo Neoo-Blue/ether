@@ -1284,7 +1284,7 @@ func (s *Service) rankCandidates(ctx context.Context, req core.ResolveRequest, s
 			if !core.IsPluginRankingStep(step) {
 				continue
 			}
-			keys := hot.Rank(step, releases, verified)
+			keys := hot.Rank(step, profile.RankingConfig[step], releases, verified)
 			if len(keys) != len(cands) {
 				continue
 			}
