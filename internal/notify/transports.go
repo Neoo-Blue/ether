@@ -14,113 +14,20 @@ import (
 	"net/http"
 	"net/mail"
 	"net/smtp"
-	"net/url"
-	"strconv"
 	"strings"
 	"time"
 )
 
-func validateChannel(c Channel) error {
-	switch c.Kind {
-	case "webpush":
-		if err := validatePush(c.Subscription); err != nil {
-			return err
-		}
-	case "discord", "slack", "webhook", "ntfy", "gotify":
-		u, err := url.Parse(c.Endpoint)
-		if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || strings.ContainsAny(c.Endpoint, "\r\n") {
-			return errors.New("HTTP(S) endpoint without embedded username required")
-		}
-	case "telegram":
-		if c.Token == "" || c.Target == "" || strings.ContainsAny(c.Token, "/?#\r\n") {
-			return errors.New("Telegram bot token and chat ID required")
-		}
-	case "smtp":
-		host, port, err := net.SplitHostPort(c.Endpoint)
-		n, portErr := strconv.Atoi(port)
-		if err != nil || host == "" || portErr != nil || n < 1 || n > 65535 {
-			return errors.New("SMTP host and port (1–65535) required")
-		}
-		if c.SMTPMode != "" && c.SMTPMode != "starttls" && c.SMTPMode != "tls" {
-			return errors.New("SMTP security must be STARTTLS or implicit TLS")
-		}
-		for _, v := range []string{c.From, c.To, c.Username} {
-			if strings.ContainsAny(v, "\r\n") {
-				return errors.New("SMTP fields cannot contain newlines")
-			}
-		}
-		if _, err := mail.ParseAddress(c.From); err != nil {
-			return errors.New("valid sender email address required")
-		}
-		recipients, err := mail.ParseAddressList(c.To)
-		if err != nil || len(recipients) == 0 || len(recipients) > 50 {
-			return errors.New("provide 1–50 recipient email addresses, separated by commas")
-		}
-		if c.Password != "" && c.Username == "" {
-			return errors.New("SMTP username required when a password is set")
-		}
-
-	default:
-		return errors.New("unsupported channel kind")
-	}
-	for _, v := range c.Events {
-		if v != "*" && !known(v) {
-			return errors.New("unsupported event rule")
-		}
-	}
-	return nil
-}
-func (s *Service) deliver(ctx context.Context, c Channel, e Event) error {
-	if c.Kind == "webpush" {
-		return s.sendPush(ctx, c, e)
-	}
-	if c.Kind == "smtp" {
-		return sendSMTP(ctx, c, e)
-	}
-	endpoint := c.Endpoint
-	payload := any(e)
-	switch c.Kind {
-	case "discord":
-		payload = map[string]any{"content": clip(e.Title+"\n"+e.Message, 1900), "allowed_mentions": map[string]any{"parse": []string{}}}
-	case "slack":
-		payload = map[string]string{"text": clip(e.Title+"\n"+e.Message, 3900)}
-	case "telegram":
-		endpoint = "https://api.telegram.org/bot" + c.Token + "/sendMessage"
-		payload = map[string]string{"chat_id": c.Target, "text": clip(e.Title+"\n"+e.Message, 4000)}
-	case "gotify":
-		payload = map[string]any{"title": e.Title, "message": e.Message, "priority": 5}
-	case "ntfy":
-	}
-	var body []byte
-	var err error
-	if c.Kind == "ntfy" {
-		body = []byte(e.Message)
-	} else {
-		body, err = json.Marshal(payload)
-		if err != nil {
-			return errors.New("encode notification failed")
-		}
-	}
+// post sends one notification over HTTP. Errors never echo the endpoint,
+// token or response body: any of them may hold a credential.
+func post(ctx context.Context, s *Service, endpoint string, body []byte, contentType string, headers map[string]string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return errors.New("invalid notification request")
 	}
-	req.Header.Set("Content-Type", "application/json")
-	if c.Kind == "ntfy" {
-		req.Header.Set("Content-Type", "text/plain; charset=utf-8")
-		req.Header.Set("Title", strings.Map(func(r rune) rune {
-			if r == '\n' || r == '\r' {
-				return -1
-			}
-			return r
-		}, e.Title))
-	}
-	if c.Token != "" {
-		if c.Kind == "gotify" {
-			req.Header.Set("X-Gotify-Key", c.Token)
-		} else if c.Kind != "telegram" {
-			req.Header.Set("Authorization", "Bearer "+c.Token)
-		}
+	req.Header.Set("Content-Type", contentType)
+	for k, v := range headers {
+		req.Header.Set(k, v)
 	}
 	resp, err := s.opts.Client.Do(req)
 	if err != nil {
@@ -133,6 +40,66 @@ func (s *Service) deliver(ctx context.Context, c Channel, e Event) error {
 	}
 	return nil
 }
+
+func postJSON(ctx context.Context, s *Service, endpoint string, payload any, headers map[string]string) error {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return errors.New("encode notification failed")
+	}
+	return post(ctx, s, endpoint, body, "application/json", headers)
+}
+
+func bearerHeaders(c Channel) map[string]string {
+	if tok := c.Secret("token"); tok != "" {
+		return map[string]string{"Authorization": "Bearer " + tok}
+	}
+	return nil
+}
+
+func deliverWebhook(ctx context.Context, s *Service, c Channel, e Event) error {
+	return postJSON(ctx, s, c.Secret("endpoint"), e, bearerHeaders(c))
+}
+
+func deliverDiscord(ctx context.Context, s *Service, c Channel, e Event) error {
+	return postJSON(ctx, s, c.Secret("endpoint"),
+		map[string]any{"content": clip(e.Title+"\n"+e.Message, 1900), "allowed_mentions": map[string]any{"parse": []string{}}},
+		bearerHeaders(c))
+}
+
+func deliverSlack(ctx context.Context, s *Service, c Channel, e Event) error {
+	return postJSON(ctx, s, c.Secret("endpoint"),
+		map[string]string{"text": clip(e.Title+"\n"+e.Message, 3900)}, bearerHeaders(c))
+}
+
+func deliverTelegram(ctx context.Context, s *Service, c Channel, e Event) error {
+	endpoint := "https://api.telegram.org/bot" + c.Secret("token") + "/sendMessage"
+	return postJSON(ctx, s, endpoint,
+		map[string]string{"chat_id": c.Setting("target"), "text": clip(e.Title+"\n"+e.Message, 4000)}, nil)
+}
+
+func deliverGotify(ctx context.Context, s *Service, c Channel, e Event) error {
+	var headers map[string]string
+	if tok := c.Secret("token"); tok != "" {
+		headers = map[string]string{"X-Gotify-Key": tok}
+	}
+	return postJSON(ctx, s, c.Secret("endpoint"),
+		map[string]any{"title": e.Title, "message": e.Message, "priority": 5}, headers)
+}
+
+func deliverNtfy(ctx context.Context, s *Service, c Channel, e Event) error {
+	headers := bearerHeaders(c)
+	if headers == nil {
+		headers = map[string]string{}
+	}
+	headers["Title"] = strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\r' {
+			return -1
+		}
+		return r
+	}, e.Title)
+	return post(ctx, s, c.Secret("endpoint"), []byte(e.Message), "text/plain; charset=utf-8", headers)
+}
+
 func clip(s string, n int) string {
 	r := []rune(s)
 	if len(r) > n {
@@ -140,11 +107,14 @@ func clip(s string, n int) string {
 	}
 	return s
 }
+
 func sendSMTP(ctx context.Context, c Channel, e Event) error {
 	return sendSMTPWithTLS(ctx, c, e, nil)
 }
+
 func sendSMTPWithTLS(ctx context.Context, c Channel, e Event, trusted *tls.Config) error {
-	host, port, err := net.SplitHostPort(c.Endpoint)
+	endpoint := c.Secret("endpoint")
+	host, port, err := net.SplitHostPort(endpoint)
 	if err != nil {
 		return errors.New("invalid SMTP address")
 	}
@@ -155,11 +125,12 @@ func sendSMTPWithTLS(ctx context.Context, c Channel, e Event, trusted *tls.Confi
 	}
 	dialer := net.Dialer{Timeout: 15 * time.Second}
 	var conn net.Conn
-	implicitTLS := c.SMTPMode == "tls" || (c.SMTPMode == "" && port == "465")
+	mode := c.Setting("smtpMode")
+	implicitTLS := mode == "tls" || (mode == "" && port == "465")
 	if implicitTLS {
-		conn, err = (&tls.Dialer{NetDialer: &dialer, Config: tlsConfig}).DialContext(ctx, "tcp", c.Endpoint)
+		conn, err = (&tls.Dialer{NetDialer: &dialer, Config: tlsConfig}).DialContext(ctx, "tcp", endpoint)
 	} else {
-		conn, err = dialer.DialContext(ctx, "tcp", c.Endpoint)
+		conn, err = dialer.DialContext(ctx, "tcp", endpoint)
 	}
 	if err != nil {
 		return errors.New("SMTP connection failed")
@@ -182,16 +153,16 @@ func sendSMTPWithTLS(ctx context.Context, c Channel, e Event, trusted *tls.Confi
 			return errors.New("SMTP requires TLS")
 		}
 	}
-	if c.Username != "" {
-		if err := cl.Auth(smtp.PlainAuth("", c.Username, c.Password, host)); err != nil {
+	if username := c.Secret("username"); username != "" {
+		if err := cl.Auth(smtp.PlainAuth("", username, c.Secret("password"), host)); err != nil {
 			return errors.New("SMTP authentication failed")
 		}
 	}
-	from, err := mail.ParseAddress(c.From)
+	from, err := mail.ParseAddress(c.Setting("from"))
 	if err != nil {
 		return errors.New("invalid sender email address")
 	}
-	recipients, err := mail.ParseAddressList(c.To)
+	recipients, err := mail.ParseAddressList(c.Setting("to"))
 	if err != nil || len(recipients) == 0 {
 		return errors.New("invalid recipient email addresses")
 	}
@@ -218,7 +189,7 @@ func sendSMTPWithTLS(ctx context.Context, c Channel, e Event, trusted *tls.Confi
 	qp := quotedprintable.NewWriter(&encoded)
 	_, _ = qp.Write([]byte(body))
 	_ = qp.Close()
-	_, err = fmt.Fprintf(w, "From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nMIME-Version: 1.0\r\nContent-Type: %s; charset=utf-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n%s\r\n", from.String(), c.To, subject, time.Now().Format(time.RFC1123Z), contentType, encoded.String())
+	_, err = fmt.Fprintf(w, "From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nMIME-Version: 1.0\r\nContent-Type: %s; charset=utf-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n%s\r\n", from.String(), c.Setting("to"), subject, time.Now().Format(time.RFC1123Z), contentType, encoded.String())
 	if err != nil {
 		return errors.New("SMTP write failed")
 	}
