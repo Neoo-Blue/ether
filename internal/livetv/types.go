@@ -77,7 +77,6 @@ type Channel struct {
 	Favorite      bool           `json:"favorite"`
 	Logo          string         `json:"logo,omitempty"`
 	Rating        string         `json:"rating,omitempty"`
-	AllowedUsers  []int64        `json:"allowedUsers,omitempty"`
 	SourceID      string         `json:"sourceId,omitempty"`
 	GuideID       string         `json:"guideId,omitempty"`
 	StreamURL     string         `json:"streamUrl,omitempty"`     // owner API only
@@ -161,12 +160,20 @@ func (p Programme) Offset(at time.Time) time.Duration {
 	return at.Sub(p.Start)
 }
 
+// Policy is one viewer's Live TV access. It is the only channel allow-list:
+// the owner edits it from the viewer's page and from each channel.
 type Policy struct {
-	UserID    int64    `json:"userId"`
-	Disabled  bool     `json:"disabled"`
-	Channels  []string `json:"channels,omitempty"` // empty permits all
-	Favorites []string `json:"favorites,omitempty"`
-	MaxRating string   `json:"maxRating,omitempty"`
+	UserID   int64 `json:"userId"`
+	Disabled bool  `json:"disabled"`
+	// Restricted limits the viewer to Channels (none when empty). Unrestricted
+	// viewers see every channel, including ones added later, and Channels is
+	// empty.
+	Restricted bool     `json:"restricted"`
+	Channels   []string `json:"channels,omitempty"`
+	Favorites  []string `json:"favorites,omitempty"`
+	MaxRating  string   `json:"maxRating,omitempty"`
+
+	channelSet map[string]struct{} // Channels as a set for long lists; see indexChannels
 }
 type Options struct {
 	CanPlay     func(*core.User, bool, time.Time) bool

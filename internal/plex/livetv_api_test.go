@@ -178,8 +178,7 @@ func TestLiveTVHonestPassAndViewerRestrictions(t *testing.T) {
 		t.Fatal("Pass spoofed")
 	}
 	f.srv.d.Identity.MyPlexSubscription = true
-	c.AllowedUsers = []int64{ownerUser.ID}
-	if _, e := service.SaveChannel(context.Background(), c); e != nil {
+	if e := service.SetChannelViewers(context.Background(), c.ID, livetv.ChannelViewers{Deny: []int64{friendUser.ID}}); e != nil {
 		t.Fatal(e)
 	}
 	channels := f.request(t, "GET", liveProviderPath+"/lineups/dvr/channels", map[string]string{"Accept": "application/json", "X-Plex-Token": friendToken})
@@ -191,8 +190,7 @@ func TestLiveTVHonestPassAndViewerRestrictions(t *testing.T) {
 		t.Fatal("restricted channel tuned")
 	}
 	f.srv.d.Auth.(*fakeAuth).users["kid-live"] = core.User{ID: 99, MaxContentRating: "G"}
-	c.AllowedUsers = nil
-	if _, e := service.SaveChannel(context.Background(), c); e != nil {
+	if e := service.SetChannelViewers(context.Background(), c.ID, livetv.ChannelViewers{Allow: []int64{friendUser.ID}}); e != nil {
 		t.Fatal(e)
 	}
 	guide := f.request(t, "GET", liveProviderPath+"/grid?date=2026-10-18", map[string]string{"X-Plex-Token": "kid-live"})

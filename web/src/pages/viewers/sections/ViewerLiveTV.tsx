@@ -20,7 +20,9 @@ import { useAsync } from "../../../lib/hooks";
 type Policy = {
   userId: number;
   disabled: boolean;
-  channels: string[];
+  /** Only `channels` (none when empty); otherwise every channel, new ones too. */
+  restricted: boolean;
+  channels?: string[];
   favorites: string[];
   maxRating: string;
 };
@@ -55,7 +57,12 @@ export function ViewerLiveTVAccess({ viewerId }: { viewerId: number }) {
       </div>
     );
 
+  // The same allow-list each channel's Viewers tab edits.
   const allowed = draft.channels ?? [];
+  const permits = (id: string) => !draft.restricted || allowed.includes(id);
+  const allowedCount = channels.data
+    ? sorted.filter((c) => allowed.includes(c.id)).length
+    : allowed.length;
   const save = async () => {
     setSaving(true);
     setError(null);
@@ -120,13 +127,15 @@ export function ViewerLiveTVAccess({ viewerId }: { viewerId: number }) {
       <SettingsSection
         title={t("Allowed channels")}
         description={
-          allowed.length
-            ? tn(
-                allowed.length,
-                "Only the channel selected below.",
-                "Only the {count} channels selected below.",
-              )
-            : t("All channels. Select channels to allow only those.")
+          !draft.restricted
+            ? t("All channels, including new ones.")
+            : allowedCount
+              ? tn(
+                  allowedCount,
+                  "Only the channel selected below.",
+                  "Only the {count} channels selected below.",
+                )
+              : t("No channels.")
         }
       >
         {channels.error ? (
@@ -151,14 +160,17 @@ export function ViewerLiveTVAccess({ viewerId }: { viewerId: number }) {
                   <Switch
                     id={`livetv-${viewerId}-channel-${c.id}`}
                     aria-label={t("Allow {name}", { name: c.name })}
-                    checked={allowed.includes(c.id)}
+                    checked={permits(c.id)}
                     disabled={draft.disabled}
                     onChange={(e) =>
                       setDraft({
                         ...draft,
+                        restricted: true,
                         channels: e.currentTarget.checked
                           ? [...allowed, c.id]
-                          : allowed.filter((id) => id !== c.id),
+                          : (draft.restricted ? allowed : sorted.map((x) => x.id)).filter(
+                              (id) => id !== c.id,
+                            ),
                       })
                     }
                   />
@@ -171,12 +183,12 @@ export function ViewerLiveTVAccess({ viewerId }: { viewerId: number }) {
                 </div>
               ))}
             </div>
-            {allowed.length ? (
+            {draft.restricted ? (
               <Button
                 variant="ghost"
                 size="sm"
                 disabled={draft.disabled}
-                onClick={() => setDraft({ ...draft, channels: [] })}
+                onClick={() => setDraft({ ...draft, restricted: false, channels: [] })}
               >
                 {t("Allow all channels")}
               </Button>
