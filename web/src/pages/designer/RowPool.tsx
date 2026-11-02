@@ -30,6 +30,7 @@ import {
   type LayerKey,
 } from "../../lib/layout";
 import { PolicyEditor } from "./PolicyEditor";
+import { isPluginDescriptor, textOf, useRegistry, type Descriptor } from "../../lib/extend";
 import { useLocale } from "../../i18n/react";
 
 interface PoolEntry {
@@ -38,6 +39,16 @@ interface PoolEntry {
   description: string;
   group: RowGroup | "custom";
   kind?: string;
+  owner?: string;
+}
+
+/** Mirrors internal/extend.RowSourceMeta. */
+interface RowSourceMeta {
+  hubId: string;
+  rowKind?: string;
+  sections?: string[];
+  source?: string;
+  collectionSource?: string;
 }
 
 const GROUPS = localized<{ key: RowGroup | "custom"; label: string; hint: string }[]>(() => [
@@ -88,16 +99,42 @@ export function RowPool({
     };
   }, []);
   const { locale } = useLocale();
+  // Row kinds come from the descriptor registry: built-in titles and
+  // descriptions render from it, and plugin row sources join the catalogue
+  // with a badge. Dynamic rows (owner collections, extra hubs) still
+  // arrive through the layout API in `available`.
+  const registry = useRegistry<RowSourceMeta>("rowSource");
   const entries = useMemo<PoolEntry[]>(() => {
+    const byKind = new Map<string, Descriptor<RowSourceMeta>>(
+      registry.descriptors.map((d) => [d.id, d]),
+    );
     const out: PoolEntry[] = available
       .filter((a) => !FRONT_END_ROWS.has(a.kind) && rowFits(a, section))
-      .map((a) => ({
-        row: a.hubId,
-        title: a.title,
-        description: a.description,
-        group: a.group ?? "picks",
-        kind: a.kind,
-      }));
+      .map((a) => {
+        const d = byKind.get(a.kind);
+        return {
+          row: a.hubId,
+          title: d ? textOf(d.label) : a.title,
+          description: d ? textOf(d.hint) : a.description,
+          group: a.group ?? "picks",
+          kind: a.kind,
+        };
+      });
+    for (const d of registry.descriptors) {
+      if (!isPluginDescriptor(d)) continue;
+      const hubId = d.meta?.hubId ?? d.id;
+      if (out.some((e) => e.row === hubId)) continue;
+      if (!rowFits({ sections: d.meta?.sections as LayoutSection[] | undefined }, section))
+        continue;
+      out.push({
+        row: hubId,
+        title: textOf(d.label),
+        description: textOf(d.hint),
+        group: (d.group as RowGroup | undefined) ?? "picks",
+        kind: d.meta?.rowKind ?? d.id,
+        owner: d.owner,
+      });
+    }
     // Policies for patterns or hub ids that are not in the catalogue.
     for (const layerKey of ["global", layer] as LayerKey[]) {
       for (const p of pageOf(draft, layerKey, section)?.rows ?? []) {
@@ -111,7 +148,7 @@ export function RowPool({
       }
     }
     return out;
-  }, [available, draft, layer, section, locale]);
+  }, [available, draft, layer, section, locale, registry.descriptors]);
   const needle = q.trim().toLowerCase();
   const shown = needle
     ? entries.filter(
@@ -177,6 +214,14 @@ export function RowPool({
           </div>
         );
       })}
+      {registry.error ? (
+        <p role="alert" className="px-1 py-2 text-xs text-danger">
+          {t("Row kinds could not be loaded.")}{" "}
+          <Button type="button" variant="ghost" size="sm" onClick={registry.reload}>
+            {t("Try again")}
+          </Button>
+        </p>
+      ) : null}
       {shown.length === 0 ? (
         <p className="px-1 py-3 text-center text-xs text-fg-muted">{t("No rows match.")}</p>
       ) : null}
@@ -326,6 +371,9 @@ function PoolItem({
             <span className="truncate text-sm font-medium text-fg" title={entry.description}>
               {entry.title}
             </span>
+            {entry.owner ? (
+              <Badge variant="secondary">{t("From {owner}", { owner: entry.owner })}</Badge>
+            ) : null}
             {source === "override" ? (
               <Badge variant="info">{t("Override")}</Badge>
             ) : source === "global" && layer !== "global" ? (

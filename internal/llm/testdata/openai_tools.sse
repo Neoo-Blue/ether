@@ -1,0 +1,10 @@
+data: {"choices":[{"delta":{"content":"Checking. "}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"server_status","arguments":""}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"verbose\":true}"}}]},"finish_reason":null}]}
+
+data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":42,"completion_tokens":9}}
+
+data: [DONE]
+

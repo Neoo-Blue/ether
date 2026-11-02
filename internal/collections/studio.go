@@ -61,7 +61,7 @@ func (s *Service) GetSpec(ctx context.Context, id string) (*core.CollectionSpec,
 // bounded; if it runs long it finishes in the background.
 func (s *Service) CreateSpec(ctx context.Context, sp core.CollectionSpec) (*core.CollectionSpec, error) {
 	Normalize(&sp)
-	if err := Validate(&sp); err != nil {
+	if err := s.validate(&sp); err != nil {
 		return nil, err
 	}
 	row, err := s.insertRow(ctx, sp, 0)
@@ -82,7 +82,7 @@ func (s *Service) UpdateSpec(ctx context.Context, id string, sp core.CollectionS
 	if row.builtin {
 		sp = mergeBuiltin(row.spec, sp)
 	}
-	if err := Validate(&sp); err != nil {
+	if err := s.validate(&sp); err != nil {
 		return nil, err
 	}
 	if err := s.updateRow(ctx, row.id, sp); err != nil {
@@ -165,7 +165,7 @@ func (s *Service) Preview(ctx context.Context, sp core.CollectionSpec, n int) (*
 	if named.Name == "" {
 		named.Name = "Untitled"
 	}
-	if err := Validate(&named); err != nil {
+	if err := s.validate(&named); err != nil {
 		return nil, err
 	}
 	res, err := s.evaluate(ctx, named, evalOptions{seed: named.Name})
