@@ -165,13 +165,13 @@ func parseKV(line string) map[string]string {
 }
 
 type exportLog struct {
-	At       time.Time `json:"at"`
-	Level    string    `json:"level,omitempty"`
-	Device   string    `json:"device,omitempty"`
-	Session  string    `json:"session,omitempty"`
-	Attempt  string    `json:"attempt,omitempty"`
-	Status   string    `json:"status,omitempty"`
-	Kind     string    `json:"kind,omitempty"`
+	At      time.Time `json:"at"`
+	Level   string    `json:"level,omitempty"`
+	Device  string    `json:"device,omitempty"`
+	Session string    `json:"session,omitempty"`
+	Attempt string    `json:"attempt,omitempty"`
+	Status  string    `json:"status,omitempty"`
+	Kind    string    `json:"kind,omitempty"`
 	// Method, Route and Dur describe a request line: which endpoint the
 	// device asked for and how long it took, with identifying segments masked.
 	Method    string `json:"method,omitempty"`
@@ -179,9 +179,9 @@ type exportLog struct {
 	Dur       string `json:"dur,omitempty"`
 	PageStart string `json:"pageStart,omitempty"`
 	PageSize  string `json:"pageSize,omitempty"`
-	Username string    `json:"username,omitempty"`
-	Peer     string    `json:"peer,omitempty"`
-	Title    string    `json:"title,omitempty"`
+	Username  string `json:"username,omitempty"`
+	Peer      string `json:"peer,omitempty"`
+	Title     string `json:"title,omitempty"`
 }
 
 type logIdentity struct {
