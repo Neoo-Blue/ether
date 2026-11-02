@@ -77,3 +77,18 @@ func TestHotReadyNeverBlocksAndWarmsInBackground(t *testing.T) {
 		t.Fatal("a disabled plugin must not serve the hot path")
 	}
 }
+
+func TestPlainStremioManifestUsesTheRemoteRuntime(t *testing.T) {
+	env := newTestEnv(t)
+	plain := Record{ID: "community.stremio.addon", Manifest: Manifest{ID: "community.stremio.addon", Version: "1.0.0", Name: "Add-on"}}
+	if got := plain.Manifest.RuntimeKind(); got != "remote" {
+		t.Fatalf("runtime kind = %q, want remote", got)
+	}
+	rt, err := env.m.runtimeFor(context.Background(), plain)
+	if err != nil || rt == nil {
+		t.Fatalf("a plain Stremio add-on must open on the remote runtime: %v", err)
+	}
+	if env.fake.inst.ID != plain.ID {
+		t.Fatalf("remote factory opened %q", env.fake.inst.ID)
+	}
+}
