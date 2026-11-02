@@ -523,6 +523,7 @@ export function createFakeServer(opts: FakeOptions = {}) {
   const cacheMock = createCacheMock(opts.cacheRestart);
   const liveTV = createLiveTVMock(catalog);
   const calendar = createCalendarMock();
+  const safetyPolicies = new Map<number, Record<string, unknown>>();
   const state = {
     boot: {
       ok: true,
@@ -3357,6 +3358,23 @@ export function createFakeServer(opts: FakeOptions = {}) {
           plexWatch.set(id, next);
           return json(next);
         }
+      }
+    }
+    // Per-viewer safety policy (Viewer › Limits). Presets fill a kids policy.
+    if (seg[0] === "safety" && seg[1] === "policies") {
+      if (seg[2] === "presets" && seg[3] && method === "GET") {
+        const age = Number(q.get("age") ?? 10);
+        return json({
+          maxContentRating: age < 8 ? "G" : age < 13 ? "PG" : "PG-13",
+          blockedGenres: [],
+          blockedKeywords: [],
+        });
+      }
+      const id = Number(seg[2]);
+      if (Number.isFinite(id) && method === "GET") return json(safetyPolicies.get(id) ?? {});
+      if (Number.isFinite(id) && method === "PUT") {
+        safetyPolicies.set(id, (body ?? {}) as Record<string, unknown>);
+        return json(safetyPolicies.get(id));
       }
     }
     if (seg[0] === "users" && seg[1] && /^\d+$/.test(seg[1])) {
