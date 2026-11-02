@@ -52,6 +52,7 @@ import {
   tv,
   type Channel,
   type Coverage,
+  type LiveTVPolicy,
   type Programme,
   type Source,
 } from "./model";
@@ -105,6 +106,7 @@ export default function LiveTV() {
   const [channels, setChannels] = useState<Channel[] | null>(null);
   const [sources, setSources] = useState<Source[]>([]);
   const [users, setUsers] = useState<EtherUser[]>([]);
+  const [policies, setPolicies] = useState<Map<number, LiveTVPolicy>>(new Map());
   const [collections, setCollections] = useState<CollectionChoice[]>([]);
   const [programmes, setProgrammes] = useState<Programme[]>([]);
   const [coverageList, setCoverageList] = useState<Coverage[] | null | "unsupported">(null);
@@ -127,6 +129,10 @@ export default function LiveTV() {
     const [c, s] = await Promise.all([tv.channels(signal), tv.sources(signal)]);
     setChannels(c ?? []);
     setSources(s ?? []);
+  }, []);
+  const loadPolicies = useCallback(async (signal?: AbortSignal) => {
+    const list = await tv.policies(signal);
+    setPolicies(new Map((list ?? []).map((p) => [p.userId, p])));
   }, []);
   const loadCoverage = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -154,7 +160,12 @@ export default function LiveTV() {
     const ctl = new AbortController();
     // Collections only feed the virtual-channel pickers: a failure there
     // leaves the list empty instead of taking the whole page down.
-    Promise.all([loadCore(ctl.signal), api.users(), api.collections().catch(() => [])])
+    Promise.all([
+      loadCore(ctl.signal),
+      api.users(),
+      api.collections().catch(() => []),
+      loadPolicies(ctl.signal),
+    ])
       .then(([, u, cs]) => {
         if (ctl.signal.aborted) return;
         setUsers(u);
@@ -165,7 +176,7 @@ export default function LiveTV() {
       });
     void loadCoverage(ctl.signal);
     return () => ctl.abort();
-  }, [loadCore, loadCoverage]);
+  }, [loadCore, loadCoverage, loadPolicies]);
   useEffect(() => {
     const ctl = new AbortController();
     void loadGuide(ctl.signal);
@@ -305,21 +316,37 @@ export default function LiveTV() {
     setSaving(true);
     try {
       const saved = await tv.saveChannel(body);
+      // Who may watch lives in each viewer's policy, saved once the channel
+      // exists.
+      const viewers = draft.viewers;
+      let viewersError: unknown = null;
+      if (viewers && saved?.id) {
+        const ids = Object.keys(viewers);
+        try {
+          await tv.setChannelViewers(saved.id, {
+            allow: ids.filter((id) => viewers[id]).map(Number),
+            deny: ids.filter((id) => !viewers[id]).map(Number),
+          });
+          await loadPolicies();
+        } catch (e) {
+          viewersError = e;
+        }
+      }
       toast.success(body.id ? t("Channel saved") : t("Channel created"), {
         description: t("Plex's lineup updates in a moment."),
       });
+      if (viewersError)
+        toast.error(t("Couldn't save who can watch this channel"), {
+          description: errorMessage(viewersError),
+        });
       await loadCore();
       void loadGuide();
       void loadCoverage();
-      if (!body.id && saved?.id) {
+      if (saved) {
         const d = studioDraft(saved);
         setDraft(d);
         setBaseline(JSON.stringify(d));
-        await go({ kind: "channel", id: saved.id }, { force: true });
-      } else if (saved) {
-        const d = studioDraft(saved);
-        setDraft(d);
-        setBaseline(JSON.stringify(d));
+        if (!body.id && saved.id) await go({ kind: "channel", id: saved.id }, { force: true });
       }
     } catch (e) {
       toast.error(t("Couldn't save the channel"), { description: errorMessage(e) });
@@ -665,6 +692,7 @@ export default function LiveTV() {
             coverage={draft.channel.id ? coverage?.get(draft.channel.id) : undefined}
             sources={sources}
             users={users}
+            policies={policies}
             collections={collections}
             now={now}
             onDelete={() => void deleteChannel()}

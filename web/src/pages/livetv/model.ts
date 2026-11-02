@@ -52,7 +52,6 @@ export type Channel = {
   favorite: boolean;
   rating?: string;
   logo?: string;
-  allowedUsers?: number[];
   sourceId?: string;
   guideId?: string;
   /** The source whose XMLTV guide feeds this channel (blank: its own source). */
@@ -182,6 +181,27 @@ const json = (method: string, body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 });
 
+/**
+ * One viewer's Live TV access: the only channel allow-list. The viewer's page
+ * and each channel's Viewers tab both edit it. Restricted viewers see only
+ * `channels` (none when empty); the rest see every channel, new ones too.
+ */
+export type LiveTVPolicy = {
+  userId: number;
+  disabled: boolean;
+  restricted: boolean;
+  channels?: string[];
+  favorites?: string[];
+  maxRating?: string;
+};
+
+/** Whether a viewer's policy (none: every channel) lets them watch a channel. */
+export function policyPermits(p: LiveTVPolicy | undefined, channelId: string): boolean {
+  if (!p) return true;
+  if (p.disabled) return false;
+  return !p.restricted || (p.channels ?? []).includes(channelId);
+}
+
 export const tv = {
   channels: (signal?: AbortSignal) => apiFetch<Channel[]>("/livetv/channels", { signal }),
   sources: (signal?: AbortSignal) => apiFetch<Source[]>("/livetv/sources", { signal }),
@@ -206,6 +226,10 @@ export const tv = {
     apiFetch<PreviewSession>(`/livetv/channels/${enc(id)}/play`, { method: "POST", body: "{}" }),
   stopPreview: (session: string) =>
     apiFetch(`/livetv/sessions/${enc(session)}`, { method: "DELETE" }),
+  policies: (signal?: AbortSignal) => apiFetch<LiveTVPolicy[]>("/livetv/policies", { signal }),
+  /** Allow or deny viewers on one channel by editing their policies. */
+  setChannelViewers: (id: string, change: { allow: number[]; deny: number[] }) =>
+    apiFetch(`/livetv/channels/${enc(id)}/viewers`, json("PUT", change)),
   deleteChannel: (id: string) => apiFetch(`/livetv/channels/${enc(id)}`, { method: "DELETE" }),
   preview: (c: Channel, signal?: AbortSignal, window?: { from: Date; until: Date }) => {
     const q = new URLSearchParams();
