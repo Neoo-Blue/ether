@@ -118,6 +118,10 @@ type Options struct {
 	CatalogNow func() time.Time
 	// plextvHTTP, when set, is the HTTP client used by the plex.tv client in tests.
 	plextvHTTP *http.Client
+	// diskUsage, when set, replaces the cache volume measurement behind the
+	// segment cache's free-space floor, so tests never depend on the free
+	// space of the machine running them.
+	diskUsage segcache.DiskUsageFunc
 	// front is Serve's listener, bound before the database opens; nil
 	// when an App is run on its own (tests), which then binds in Run.
 	front *frontDoor

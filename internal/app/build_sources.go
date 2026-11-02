@@ -43,7 +43,11 @@ func (a *App) buildSources(ctx context.Context, cfg config.Config) error {
 	a.closers = append(a.closers, func() { a.cache.Close() })
 	// Keep part of the cache's volume free whatever the budget says.
 	cacheDir := a.cache.Directory()
-	a.cache.SetDiskUsage(func() (int64, int64, error) { return admin.DiskUsage(cacheDir) })
+	diskUsage := a.opts.diskUsage
+	if diskUsage == nil {
+		diskUsage = func() (int64, int64, error) { return admin.DiskUsage(cacheDir) }
+	}
+	a.cache.SetDiskUsage(diskUsage)
 	a.configureCache(cfg.Cache)
 	a.engine = stream.New(a.fetcher, a.cache, stream.OptionsFromConfig(cfg), log.With("component", "stream"))
 	a.closers = append(a.closers, func() { a.engine.Close() })

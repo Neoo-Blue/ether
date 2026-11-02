@@ -76,6 +76,11 @@ func setupTestAppWith(t *testing.T, complete bool, opts Options) *App {
 	if opts.plextvHTTP == nil {
 		opts.plextvHTTP = &http.Client{Transport: fakePlexTVTransport{}}
 	}
+	if opts.diskUsage == nil {
+		// A roomy volume, so the cache's free-space floor never evicts test
+		// data because the machine running the tests is short of space.
+		opts.diskUsage = func() (int64, int64, error) { return 1 << 40, 1 << 39, nil }
+	}
 	a, err := New(context.Background(), opts)
 	if err != nil {
 		t.Fatal(err)

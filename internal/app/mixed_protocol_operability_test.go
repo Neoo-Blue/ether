@@ -228,6 +228,7 @@ func TestMixedProtocolOperability(t *testing.T) {
 		FixtureMedia:      media,
 		FixtureTranscoder: budget,
 		plextvHTTP:        &http.Client{Transport: fakePlexTVTransport{}},
+		diskUsage:         func() (int64, int64, error) { return 1 << 40, 1 << 39, nil },
 	})
 	if err != nil {
 		t.Fatal(err)
