@@ -56,7 +56,6 @@ func viewerBrowseFilter(filter core.Filter, v *core.User, ex LibraryPageExclusio
 	if v != nil {
 		filter.MaxContentRating = tightenRating(filter.MaxContentRating, v.MaxContentRating)
 	}
-	filter.MaxContentRating = tightenRating(filter.MaxContentRating, ex.MaxContentRating)
 	share := ex.Movie
 	if typ == core.TypeShow || typ == core.TypeSeason || typ == core.TypeEpisode {
 		share = ex.Television

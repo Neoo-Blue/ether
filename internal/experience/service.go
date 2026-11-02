@@ -31,7 +31,6 @@ type Library struct {
 type LibraryPageExclusions struct {
 	Keys                           []core.RatingKey
 	ExcludeGenres, ExcludeKeywords []string
-	MaxContentRating               string
 	Movie, Television              core.Filter
 }
 

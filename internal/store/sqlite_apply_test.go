@@ -125,3 +125,53 @@ func TestSQLiteApplyIsSQLiteOnlyAndKeepsVersionBookkeeping(t *testing.T) {
 		t.Fatalf("committed probe rows %d (%v)", n, err)
 	}
 }
+
+func TestRegisterPostgresApplyRefusesUnregisteredVersion(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("RegisterPostgresApply created a version")
+		}
+	}()
+	RegisterPostgresApply("pg_apply_missing", 1, func(context.Context, *sql.Tx) error { return nil })
+}
+
+func TestRegisterApplyBindsBothDialects(t *testing.T) {
+	const component = "applyboth"
+	regMu.Lock()
+	orig := append([]migration(nil), migrations...)
+	regMu.Unlock()
+	t.Cleanup(func() {
+		regMu.Lock()
+		migrations = orig
+		regMu.Unlock()
+	})
+	var calls int
+	Register(component, 1, "SELECT 1;")
+	RegisterApply(component, 1, func(ctx context.Context, tx *sql.Tx) error {
+		calls++
+		_, err := tx.ExecContext(ctx, `CREATE TABLE applyboth(id INTEGER PRIMARY KEY)`)
+		return err
+	})
+	regMu.Lock()
+	var bound bool
+	for _, m := range migrations {
+		if m.component == component && m.version == 1 {
+			bound = m.sqliteApply != nil && m.pgApply != nil
+		}
+	}
+	regMu.Unlock()
+	if !bound {
+		t.Fatal("RegisterApply did not bind both dialects")
+	}
+	db, err := openSQLite(context.Background(), filepath.Join(t.TempDir(), "both.db"), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if calls != 1 {
+		t.Fatalf("apply ran %d times", calls)
+	}
+	if _, err := db.Exec(`INSERT INTO applyboth(id) VALUES (1)`); err != nil {
+		t.Fatal(err)
+	}
+}

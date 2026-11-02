@@ -246,9 +246,14 @@ func migratePostgres(ctx context.Context, db *sql.DB, gate MigrationGate, progre
 		}
 		// No arguments: pgx sends this over the simple query protocol, which
 		// accepts several ;-separated statements in one round trip.
-		// sqliteApply is not called on PostgreSQL. sqlFor returns the
-		// RegisterDialect override when one exists (auth/4 drops NOT NULL).
-		if _, err := tx.ExecContext(ctx, m.sqlFor(Postgres)); err != nil {
+		// sqliteApply is not called on PostgreSQL; pgApply, when bound, runs
+		// instead of the SQL. sqlFor returns the RegisterDialect override when
+		// one exists (auth/4 drops NOT NULL).
+		if m.pgApply != nil {
+			if err := m.pgApply(ctx, tx); err != nil {
+				return fmt.Errorf("migration %s/%d: %w", m.component, m.version, err)
+			}
+		} else if _, err := tx.ExecContext(ctx, m.sqlFor(Postgres)); err != nil {
 			return fmt.Errorf("migration %s/%d: %w", m.component, m.version, err)
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations(component, version) VALUES (?, ?)`, m.component, m.version); err != nil {

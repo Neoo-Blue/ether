@@ -49,9 +49,12 @@ type Selection struct {
 }
 type Options struct {
 	ShowName func(context.Context, int64) string
-	// SyncSubtitleLanguages mirrors the ordered list onto auth_users.subtitle_languages.
-	// User 0 is the shared default and is not an account row.
-	SyncSubtitleLanguages func(context.Context, int64, []string) error
+	// SyncLanguages mirrors a viewer's ordered audio and subtitle lists onto
+	// auth_users.audio_languages and auth_users.subtitle_languages, for code
+	// that reads them from the user record. It runs after every write of the
+	// viewer's rules, with empty lists when the rules are deleted. User 0 is
+	// the shared default and is not an account row.
+	SyncLanguages func(ctx context.Context, user int64, audio, subtitles []string) error
 	// ServerLanguage is the catalog metadata language (config catalog.language,
 	// for example en-US). It is not the console locale.
 	ServerLanguage func() string
@@ -155,7 +158,7 @@ func (s *Service) PutRules(ctx context.Context, user int64, r Rules) error {
 		return err
 	}
 	s.forgetRules()
-	return s.syncLanguages(ctx, user, r.SubtitleLanguages)
+	return s.syncLanguages(ctx, user, r)
 }
 
 // HasViewerRules reports whether this viewer stored their own rules. GetRules
@@ -242,11 +245,11 @@ func overlayRules(base, over Rules) Rules {
 	return base
 }
 func (s *Service) DeleteRules(ctx context.Context, user int64) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM trackprefs_rules WHERE user_id=?`, user)
-	if err == nil {
-		s.forgetRules()
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM trackprefs_rules WHERE user_id=?`, user); err != nil {
+		return err
 	}
-	return err
+	s.forgetRules()
+	return s.syncLanguages(ctx, user, Default())
 }
 
 // memoryTarget is the row id for a remembered track. Episodes share one row
@@ -674,7 +677,7 @@ func (s *Service) updateViewerRules(ctx context.Context, user int64, update func
 		}
 		if n == 1 {
 			s.forgetRules()
-			return s.syncLanguages(ctx, user, rules.SubtitleLanguages)
+			return s.syncLanguages(ctx, user, rules)
 		}
 		var active int
 		if err = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM auth_users WHERE id=? AND active=1`, user).Scan(&active); err != nil {
@@ -687,9 +690,9 @@ func (s *Service) updateViewerRules(ctx context.Context, user int64, update func
 	return errors.New("trackprefs: concurrent update retry limit")
 }
 
-func (s *Service) syncLanguages(ctx context.Context, user int64, languages []string) error {
-	if user <= 0 || s.options.SyncSubtitleLanguages == nil {
+func (s *Service) syncLanguages(ctx context.Context, user int64, r Rules) error {
+	if user <= 0 || s.options.SyncLanguages == nil {
 		return nil
 	}
-	return s.options.SyncSubtitleLanguages(ctx, user, append([]string(nil), languages...))
+	return s.options.SyncLanguages(ctx, user, append([]string{}, r.AudioLanguages...), append([]string{}, r.SubtitleLanguages...))
 }

@@ -38,6 +38,7 @@ type migration struct {
 	sql         string
 	overrides   map[Dialect]string
 	sqliteApply func(context.Context, *sql.Tx) error
+	pgApply     func(context.Context, *sql.Tx) error
 }
 
 var (
@@ -120,6 +121,38 @@ func RegisterSQLiteApply(component string, version int, apply func(context.Conte
 		}
 	}
 	panic("store: RegisterSQLiteApply " + component + "/" + strconv.Itoa(version) + " is not registered")
+}
+
+// RegisterPostgresApply binds apply to a migration Register or
+// RegisterDialect already recorded, for PostgreSQL. It is the counterpart of
+// RegisterSQLiteApply, for data migrations that need Go (for example label
+// normalisation) rather than SQL. PostgreSQL Migrate calls apply inside the
+// migration transaction instead of that version's PostgreSQL SQL; `?`
+// placeholders are rebound as for every other statement. SQLite never calls
+// it. Version bookkeeping is unchanged.
+func RegisterPostgresApply(component string, version int, apply func(context.Context, *sql.Tx) error) {
+	if apply == nil {
+		panic("store: RegisterPostgresApply requires a function")
+	}
+	regMu.Lock()
+	defer regMu.Unlock()
+	for i := range migrations {
+		if migrations[i].component == component && migrations[i].version == version {
+			if migrations[i].pgApply != nil {
+				panic("store: RegisterPostgresApply " + component + "/" + strconv.Itoa(version) + " already bound")
+			}
+			migrations[i].pgApply = apply
+			return
+		}
+	}
+	panic("store: RegisterPostgresApply " + component + "/" + strconv.Itoa(version) + " is not registered")
+}
+
+// RegisterApply binds one Go data migration to both dialects. The function
+// must use portable SQL with `?` placeholders.
+func RegisterApply(component string, version int, apply func(context.Context, *sql.Tx) error) {
+	RegisterSQLiteApply(component, version, apply)
+	RegisterPostgresApply(component, version, apply)
 }
 
 // sqlFor returns the migration text to run on dialect d.

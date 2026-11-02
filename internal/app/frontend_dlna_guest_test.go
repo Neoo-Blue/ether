@@ -12,8 +12,11 @@ func TestCreateDLNAGuestIsRestrictedAndPasswordless(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if viewer.MaxContentRating != "PG" {
+		t.Fatalf("guest rating limit %q", viewer.MaxContentRating)
+	}
 	policy := a.safety.Get(viewer.ID)
-	if policy.MaxContentRating != "PG" || len(policy.BlockedKeywords) == 0 {
+	if len(policy.BlockedKeywords) == 0 {
 		t.Fatalf("policy: %+v", policy)
 	}
 	local, _ := identity.NewLocal(a.db)

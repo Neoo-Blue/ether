@@ -22,11 +22,11 @@ func TestOwnedPolicyEvaluatorsMatchService(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	p := Policy{MaxContentRating: "PG", BlockedGenres: []string{"horror"}, BlockedKeywords: []string{"violence"}, RemoteDisabled: true, StreamLimit: 2, AllowedHours: []int{9}, Timezone: "UTC"}
+	p := Policy{BlockedGenres: []string{"horror"}, BlockedKeywords: []string{"violence"}, RemoteDisabled: true, AllowedHours: []int{9}, Timezone: "UTC"}
 	if err := s.Put(ctx, 1, p); err != nil {
 		t.Fatal(err)
 	}
-	viewer := &core.User{ID: 1, MaxContentRating: "PG-13", StreamLimit: 4}
+	viewer := &core.User{ID: 1, MaxContentRating: "PG", StreamLimit: 4}
 	titles := []*core.Title{nil, {Adult: true}, {ContentRating: "PG"}, {ContentRating: "R"}, {Genres: []string{" HORROR "}}, {Keywords: []string{"violence"}}}
 	for i, title := range titles {
 		if got, want := AllowedWithPolicy(viewer, title, p), s.Allowed(viewer, title); got != want {
@@ -44,7 +44,7 @@ func TestOwnedPolicyEvaluatorsMatchService(t *testing.T) {
 			}
 		}
 	}
-	if got, want := UserPolicyWithPolicy(viewer, p), s.UserPolicy(viewer); !reflect.DeepEqual(got, want) {
-		t.Fatalf("user policy got=%+v want=%+v", got, want)
+	if got := s.UserPolicy(viewer); !reflect.DeepEqual(got, viewer) || got == viewer {
+		t.Fatalf("user policy got=%+v want an equal copy of %+v", got, viewer)
 	}
 }

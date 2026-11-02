@@ -7,7 +7,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/braedonsaunders/ether/internal/contentrating"
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/viewerpolicy"
 )
@@ -110,9 +109,9 @@ func confirmFallback(restricted bool) (*core.User, error) {
 }
 
 func readFreshPlayback(ctx context.Context, tx *sql.Tx, u *core.User) (*core.User, Policy, error) {
-	var active, owner int
+	var active, owner, streams int
 	var rating, allowed, plexSecs, raw string
-	err := tx.QueryRowContext(ctx, `SELECT active, is_owner, max_content_rating, allowed_sections, plex_sections, COALESCE((SELECT policy FROM safety_policies WHERE user_id=auth_users.id), '') FROM auth_users WHERE id=?`, u.ID).Scan(&active, &owner, &rating, &allowed, &plexSecs, &raw)
+	err := tx.QueryRowContext(ctx, `SELECT active, is_owner, stream_limit, max_content_rating, allowed_sections, plex_sections, COALESCE((SELECT policy FROM safety_policies WHERE user_id=auth_users.id), '') FROM auth_users WHERE id=?`, u.ID).Scan(&active, &owner, &streams, &rating, &allowed, &plexSecs, &raw)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && active != 1) {
 		return nil, Policy{}, core.ErrUnauthorized
 	}
@@ -130,6 +129,7 @@ func readFreshPlayback(ctx context.Context, tx *sql.Tx, u *core.User) (*core.Use
 	}
 	out := *u
 	out.IsOwner = owner == 1
+	out.StreamLimit = streams
 	out.MaxContentRating = rating
 	var sections, plex []int
 	_ = json.Unmarshal([]byte(allowed), &sections)
@@ -138,11 +138,5 @@ func readFreshPlayback(ctx context.Context, tx *sql.Tx, u *core.User) (*core.Use
 		sections = plex
 	}
 	out.AllowedSections = append([]int(nil), sections...)
-	if policy.MaxContentRating != "" && (out.MaxContentRating == "" || int(contentrating.LevelOf(policy.MaxContentRating)) < int(contentrating.LevelOf(out.MaxContentRating))) {
-		out.MaxContentRating = policy.MaxContentRating
-	}
-	if policy.StreamLimit > 0 && (out.StreamLimit <= 0 || policy.StreamLimit < out.StreamLimit) {
-		out.StreamLimit = policy.StreamLimit
-	}
 	return &out, policy, nil
 }
