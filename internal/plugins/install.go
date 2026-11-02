@@ -24,7 +24,8 @@ type Source struct {
 	ID      string
 	Version string
 	// SHA256 is the expected lowercase hex SHA-256 of the downloaded artifact.
-	SHA256 string
+	SHA256   string
+	reviewed *CatalogueArtifact
 	// Pkg is the .etherpkg bytes (kind "pkg") or a Studio package.
 	Pkg []byte
 	// Manifest and Files install directly (Studio with loose files).
@@ -118,6 +119,7 @@ func (m *Manager) resolveCatalogueSource(ctx context.Context, src Source) (Sourc
 		src.Version = art.Version
 		src.URL = art.URL
 		src.SHA256 = art.SHA256
+		src.reviewed = &art
 		src.Verified = true
 		return src, nil
 	}
@@ -403,6 +405,16 @@ func (m *Manager) PreviewInstall(ctx context.Context, src Source) (*Preview, err
 	if err := man.Validate(); err != nil {
 		return nil, err
 	}
+	if src.reviewed != nil {
+		reviewed := src.reviewed
+		if man.Ether == nil || man.Ether.Kind != reviewed.Kind {
+			return nil, fmt.Errorf("plugins: manifest kind does not match the catalogue review")
+		}
+		approved := Manifest{Ether: &EtherBlock{Permissions: reviewed.Permissions, Capabilities: reviewed.Capabilities}}
+		if added := PermissionDiff(approved, man); len(added) != 0 {
+			return nil, fmt.Errorf("plugins: manifest requests permissions beyond the catalogue review: %s", strings.Join(added, "; "))
+		}
+	}
 	if src.ID != "" && man.ID != src.ID {
 		return nil, fmt.Errorf("plugins: manifest id %q does not match catalogue entry %q", man.ID, src.ID)
 	}
@@ -436,9 +448,23 @@ type InstallOptions struct {
 func (m *Manager) Install(ctx context.Context, p *Preview, opts InstallOptions) (Record, error) {
 	man := p.Manifest
 	if cat := m.getCatalogue(); cat != nil {
-		if _, err := cat.Resolve(ctx, man.ID, ""); err != nil && errors.Is(err, ErrRevoked) {
+		if p.source.Kind == "catalogue" {
+			current, err := cat.Resolve(ctx, man.ID, man.Version)
+			if err != nil {
+				return Record{}, err
+			}
+			if p.source.reviewed == nil || current.URL != p.source.URL || !strings.EqualFold(current.SHA256, p.source.SHA256) {
+				return Record{}, fmt.Errorf("plugins: catalogue entry changed since the package was reviewed")
+			}
+			approved := Manifest{Ether: &EtherBlock{Permissions: current.Permissions, Capabilities: current.Capabilities}}
+			if man.Ether == nil || man.Ether.Kind != current.Kind || len(PermissionDiff(approved, man)) != 0 {
+				return Record{}, fmt.Errorf("plugins: catalogue review changed since the package was reviewed")
+			}
+		} else if _, err := cat.Resolve(ctx, man.ID, ""); err != nil && errors.Is(err, ErrRevoked) {
 			return Record{}, err
 		}
+	} else if p.source.Kind == "catalogue" {
+		return Record{}, fmt.Errorf("plugins: no signed catalogue is configured")
 	}
 	cur, curErr := m.store.record(ctx, man.ID)
 	existing := curErr == nil
@@ -580,6 +606,14 @@ func (m *Manager) ApplyUpdate(ctx context.Context, id string, acceptAdded bool) 
 	}
 	if r.UpdateVersion == "" || r.updateManifest == "" {
 		return Record{}, fmt.Errorf("plugins: no update is waiting for %s", id)
+	}
+	if r.SourceKind == "catalogue" {
+		g, _ := m.store.grants(ctx, id)
+		p, err := m.PreviewInstall(ctx, Source{Kind: "catalogue", ID: id, Version: r.UpdateVersion, LAN: g.LAN})
+		if err != nil {
+			return Record{}, err
+		}
+		return m.Install(ctx, p, InstallOptions{AutoUpdate: r.AutoUpdate, Shadow: r.Shadow, AcceptAddedPermissions: acceptAdded})
 	}
 	man, err := ParseManifest([]byte(r.updateManifest))
 	if err != nil {

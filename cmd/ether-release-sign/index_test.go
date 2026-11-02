@@ -66,3 +66,23 @@ versions:
 		t.Fatalf("expected cmdIndex verify to fail on tampered index.json")
 	}
 }
+
+func TestCmdIndexCheckWithoutSigningKey(t *testing.T) {
+	t.Setenv("ETHER_CATALOGUE_PRIVATE_KEY", "")
+	t.Setenv("ETHER_UPDATE_PRIVATE_KEY", "")
+	dir := t.TempDir()
+	index := filepath.Join(dir, "index.json")
+	if err := cmdIndex([]string{"-check", "-dir", dir, "-out", index}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"entries": []`) {
+		t.Fatalf("expected empty array, got %s", data)
+	}
+	if _, err := os.Stat(index + ".sig"); !os.IsNotExist(err) {
+		t.Fatalf("unexpected signature: %v", err)
+	}
+}

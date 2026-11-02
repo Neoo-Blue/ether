@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -44,6 +45,7 @@ type Service struct {
 	log      *slog.Logger
 	now      func() time.Time
 
+	ingestMu  sync.Mutex
 	mu        sync.RWMutex
 	idx       Index
 	fetchedAt time.Time
@@ -79,7 +81,7 @@ func New(opts Options) (*Service, error) {
 		log:      opts.Log,
 		now:      opts.Now,
 	}
-	if idx, t, ok := s.cache.load(context.Background(), pub); ok {
+	if idx, t, ok := s.cache.load(context.Background(), pub, s.indexURL); ok && s.Configured() {
 		s.idx = idx
 		s.fetchedAt = t
 	}
@@ -89,6 +91,26 @@ func New(opts Options) (*Service, error) {
 // Configured reports whether both an index URL and a public key are set.
 func (s *Service) Configured() bool {
 	return s.indexURL != "" && len(s.pubKey) == ed25519.PublicKeySize
+}
+
+// EnforceCachedRevocations applies the last verified index before plugins start.
+// This also closes the gap if Ether stopped after caching an index but before
+// its revocations were applied.
+func (s *Service) EnforceCachedRevocations(ctx context.Context) error {
+	if s.mgr == nil {
+		return nil
+	}
+	s.mu.RLock()
+	entries := append([]Entry(nil), s.idx.Entries...)
+	s.mu.RUnlock()
+	for _, entry := range entries {
+		if entry.Revoked {
+			if _, err := s.mgr.Revoke(ctx, entry.ID, entry.Reason); err != nil {
+				return fmt.Errorf("catalogue: apply cached revocation for %s: %w", entry.ID, err)
+			}
+		}
+	}
+	return nil
 }
 
 // Run refreshes the catalogue immediately and then on every tick of interval
@@ -142,6 +164,8 @@ func (s *Service) Refresh(ctx context.Context) (Index, error) {
 // Ingest verifies and stores an index and signature directly, then reconciles
 // installed plugins.
 func (s *Service) Ingest(ctx context.Context, indexBytes, sigBytes []byte) (Index, error) {
+	s.ingestMu.Lock()
+	defer s.ingestMu.Unlock()
 	if len(s.pubKey) != ed25519.PublicKeySize {
 		err := fmt.Errorf("catalogue: public key is not configured")
 		s.setErr(err)
@@ -153,7 +177,7 @@ func (s *Service) Ingest(ctx context.Context, indexBytes, sigBytes []byte) (Inde
 		return Index{}, err
 	}
 	now := s.now()
-	if err := s.cache.save(ctx, idx, indexBytes, strings.TrimSpace(string(sigBytes)), now); err != nil {
+	if err := s.cache.save(ctx, idx, indexBytes, strings.TrimSpace(string(sigBytes)), now, s.indexURL); err != nil {
 		s.setErr(err)
 		return Index{}, err
 	}
@@ -177,29 +201,35 @@ func (s *Service) setErr(err error) {
 }
 
 func (s *Service) sigURL() string {
-	return s.indexURL + ".sig"
+	u, err := url.Parse(s.indexURL)
+	if err != nil {
+		return s.indexURL + ".sig"
+	}
+	u.Path += ".sig"
+	u.RawPath = ""
+	return u.String()
 }
 
 func (s *Service) fetch(ctx context.Context, rawURL string, max int64) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("catalogue: invalid request URL")
 	}
 	req.Header.Set("User-Agent", "Ether plugin catalogue")
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("catalogue: fetch %s: %w", rawURL, err)
+		return nil, fmt.Errorf("catalogue: request failed")
 	}
 	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("catalogue: fetch %s: status %d", rawURL, resp.StatusCode)
+		return nil, fmt.Errorf("catalogue: request returned status %d", resp.StatusCode)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, max+1))
 	if err != nil {
 		return nil, err
 	}
 	if int64(len(body)) > max {
-		return nil, fmt.Errorf("catalogue: %s exceeds %d bytes", rawURL, max)
+		return nil, fmt.Errorf("catalogue: response exceeds %d bytes", max)
 	}
 	return body, nil
 }
@@ -285,11 +315,22 @@ func (s *Service) Resolve(ctx context.Context, idOrURL string, version string) (
 			}
 			return plugins.CatalogueArtifact{}, fmt.Errorf("catalogue: %s version %s not found", e.ID, version)
 		}
+		permissions := e.Permissions
+		if v.Permissions != nil {
+			permissions = *v.Permissions
+		}
+		capabilities := make([]plugins.Capability, len(e.Capabilities))
+		for i, capability := range e.Capabilities {
+			capabilities[i] = plugins.Capability(capability)
+		}
 		return plugins.CatalogueArtifact{
-			ID:      e.ID,
-			Version: v.Version,
-			URL:     v.URL,
-			SHA256:  v.SHA256,
+			ID:           e.ID,
+			Version:      v.Version,
+			URL:          v.URL,
+			SHA256:       v.SHA256,
+			Kind:         plugins.Kind(e.Kind),
+			Permissions:  permissions,
+			Capabilities: capabilities,
 		}, nil
 	}
 	return plugins.CatalogueArtifact{}, plugins.ErrNotFound
@@ -357,17 +398,21 @@ func (s *Service) Search(ctx context.Context, f Filter) []CatalogueItem {
 			continue
 		}
 		item := CatalogueItem{Entry: e}
+		permissions := e.Permissions
 		if latest, ok := e.Latest(); ok {
 			item.LatestVersion = latest.Version
 			item.ArtifactURL = latest.URL
 			item.SHA256 = latest.SHA256
+			if latest.Permissions != nil {
+				permissions = *latest.Permissions
+			}
 		}
 		lines, _, _ := plugins.PermissionSheet(plugins.Manifest{
 			ID:   e.ID,
 			Name: e.Name,
 			Ether: &plugins.EtherBlock{
 				Kind:        plugins.Kind(e.Kind),
-				Permissions: e.Permissions,
+				Permissions: permissions,
 			},
 		})
 		item.PermissionLines = lines
@@ -408,7 +453,7 @@ func matchesQuery(e Entry, q string) bool {
 
 // ServeHTTP serves GET /api/plugins/catalogue and POST /api/plugins/catalogue/refresh.
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost || r.URL.Query().Get("refresh") == "1" {
+	if r.Method == http.MethodPost {
 		if !s.Configured() {
 			writeJSON(w, http.StatusOK, map[string]any{
 				"entries":    []CatalogueItem{},

@@ -87,6 +87,10 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 	// Hosted plugins run sandboxed in-process (SPEC §5.2).
 	engine := wasm.NewEngine(a.log.With("component", "plugins-wasm"))
 	mgr.RegisterRuntime("hosted", plugins.HostedRuntimeFactory(engine))
+	if err := cat.EnforceCachedRevocations(ctx); err != nil {
+		_ = engine.Close()
+		return nil, err
+	}
 	a.closers = append(a.closers, func() { _ = engine.Close() })
 	if err := mgr.Start(ctx); err != nil {
 		return nil, err

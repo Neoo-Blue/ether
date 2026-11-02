@@ -144,13 +144,16 @@ func TestSignAndVerifyDetached(t *testing.T) {
 }
 
 func TestLoadCatalogueTemplateDir(t *testing.T) {
-	dir := filepath.Join("..", "..", "..", "sdk", "catalogue-template", "plugins")
+	dir := filepath.Join("..", "..", "..", "sdk", "catalogue-template", "examples")
 	idx, err := LoadEntriesDir(dir)
 	if err != nil {
 		t.Fatalf("LoadEntriesDir(%s): %v", dir, err)
 	}
-	if len(idx.Entries) < 2 {
-		t.Fatalf("expected at least 2 template entries, got %d", len(idx.Entries))
+	if len(idx.Entries) != 1 {
+		t.Fatalf("expected one template entry, got %d", len(idx.Entries))
+	}
+	if got := idx.Entries[0].Permissions.Viewers.WatchHistory; got != "granted_viewers" {
+		t.Fatalf("watch history permission lost: %q", got)
 	}
 }
 
@@ -309,6 +312,46 @@ func TestCatalogueInstallRevokeAndAutoUpdate(t *testing.T) {
 	tamperPkg = false
 	srvMu.Unlock()
 
+	// A digest alone cannot turn unreviewed permissions into verified access.
+	var initial Index
+	if err := json.Unmarshal(currentIndex, &initial); err != nil {
+		t.Fatal(err)
+	}
+	underReviewed := initial
+	underReviewed.Entries = append([]Entry(nil), initial.Entries...)
+	underReviewed.Entries[0].Permissions.Network = nil
+	publishIndex(underReviewed)
+	if _, err := cat.Refresh(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mgr.PreviewInstall(ctx, plugins.Source{Kind: "catalogue", ID: "community.plutotv.ether"}); err == nil || !strings.Contains(err.Error(), "beyond the catalogue review") {
+		t.Fatalf("unreviewed permissions accepted: %v", err)
+	}
+	publishIndex(initial)
+	if _, err := cat.Refresh(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	preview, err := mgr.PreviewInstall(ctx, plugins.Source{Kind: "catalogue", ID: "community.plutotv.ether"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := initial
+	changed.Entries = append([]Entry(nil), initial.Entries...)
+	changed.Entries[0].Versions = append([]Version(nil), initial.Entries[0].Versions...)
+	changed.Entries[0].Versions[0].SHA256 = strings.Repeat("a", 64)
+	publishIndex(changed)
+	if _, err := cat.Refresh(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mgr.Install(ctx, preview, plugins.InstallOptions{}); err == nil {
+		t.Fatal("stale preview installed after its signed digest changed")
+	}
+	publishIndex(initial)
+	if _, err := cat.Refresh(ctx); err != nil {
+		t.Fatal(err)
+	}
+
 	// 3. Install from catalogue via HTTP API sets Verified: true and AutoUpdate: true.
 	installBody := `{"kind":"catalogue","id":"community.plutotv.ether","autoUpdate":true}`
 	instResp, err := http.Post(apiSrv.URL+"/install", "application/json", strings.NewReader(installBody))
@@ -411,6 +454,26 @@ func TestCatalogueInstallRevokeAndAutoUpdate(t *testing.T) {
 	if rec.Version != "1.1.0" || rec.UpdateVersion != "1.2.0" {
 		t.Fatalf("expected update paused at 1.1.0 with pending 1.2.0, got version=%s updateVersion=%s", rec.Version, rec.UpdateVersion)
 	}
+	// A pending update cannot be applied after its version is removed from the index.
+	var withUpdate Index
+	if err := json.Unmarshal(currentIndex, &withUpdate); err != nil {
+		t.Fatal(err)
+	}
+	withoutUpdate := withUpdate
+	withoutUpdate.Entries = append([]Entry(nil), withUpdate.Entries...)
+	withoutUpdate.Entries[0].Versions = append([]Version(nil), withUpdate.Entries[0].Versions[:2]...)
+	publishIndex(withoutUpdate)
+	if _, err := cat.Refresh(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mgr.ApplyUpdate(ctx, "community.plutotv.ether", true); err == nil {
+		t.Fatal("removed catalogue version was applied")
+	}
+	publishIndex(withUpdate)
+	if _, err := cat.Refresh(ctx); err != nil {
+		t.Fatal(err)
+	}
+
 	// Applying without accepting added permissions must fail.
 	if _, err := mgr.ApplyUpdate(ctx, "community.plutotv.ether", false); err == nil {
 		t.Fatalf("expected ApplyUpdate without acceptAdded to fail")
@@ -480,6 +543,22 @@ func TestCatalogueInstallRevokeAndAutoUpdate(t *testing.T) {
 		t.Fatalf("expected revoked notice with reason, got %+v", gotNotices)
 	}
 
+	// Simulate a crash after saving a revocation but before disabling the plugin.
+	if _, err := db.Exec(`UPDATE plugins_installed SET enabled = 1 WHERE id = ?`, "community.plutotv.ether"); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err := New(Options{DB: db, Manager: mgr, IndexURL: srv.URL + "/index.json", PublicKey: pubB64, Client: srv.Client()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := restarted.EnforceCachedRevocations(ctx); err != nil {
+		t.Fatal(err)
+	}
+	rec, err = mgr.Get(ctx, "community.plutotv.ether")
+	if err != nil || rec.Enabled {
+		t.Fatalf("cached revocation not enforced: enabled=%v err=%v", rec.Enabled, err)
+	}
+
 	// Re-enabling a revoked plugin must be refused with ErrRevoked.
 	if err := mgr.SetEnabled(ctx, "community.plutotv.ether", true); !errors.Is(err, plugins.ErrRevoked) {
 		t.Fatalf("expected ErrRevoked when re-enabling revoked plugin, got %v", err)
@@ -494,23 +573,75 @@ func TestCacheRequiresCurrentSigningKey(t *testing.T) {
 	}
 	raw := []byte(`{"schema":1,"entries":[]}`)
 	cache := cacheStore{db: db}
-	if err := cache.save(context.Background(), Index{Schema: 1}, raw, SignDetached(raw, priv), time.Now()); err != nil {
+	if err := cache.save(context.Background(), Index{Schema: 1}, raw, SignDetached(raw, priv), time.Now(), "https://example.invalid/index.json"); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, ok := cache.load(context.Background(), pub); !ok {
+	if _, _, ok := cache.load(context.Background(), pub, "https://example.invalid/index.json"); !ok {
 		t.Fatal("valid cached index rejected")
+	}
+	if _, _, ok := cache.load(context.Background(), pub, "https://other.invalid/index.json"); ok {
+		t.Fatal("cached index trusted for another source")
 	}
 	other, _, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, ok := cache.load(context.Background(), other); ok {
+	if _, _, ok := cache.load(context.Background(), other, "https://example.invalid/index.json"); ok {
 		t.Fatal("cached index trusted under a different key")
 	}
 	if _, err := db.Exec(`UPDATE plugins_catalogue_index SET raw_json = '{"schema":1,"entries":[] }'`); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, ok := cache.load(context.Background(), pub); ok {
+	if _, _, ok := cache.load(context.Background(), pub, "https://example.invalid/index.json"); ok {
 		t.Fatal("tampered cached index trusted")
+	}
+}
+
+func TestHexKeysAndSignature(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decodedPub, err := ParsePublicKey(hex.EncodeToString(pub))
+	if err != nil || !bytes.Equal(decodedPub, pub) {
+		t.Fatalf("hex public key: %v", err)
+	}
+	decodedPriv, err := ParsePrivateKey(hex.EncodeToString(priv))
+	if err != nil || !bytes.Equal(decodedPriv, priv) {
+		t.Fatalf("hex private key: %v", err)
+	}
+	raw := []byte(`{"schema":1,"entries":[]}`)
+	if err := VerifyDetached(raw, []byte(hex.EncodeToString(ed25519.Sign(priv, raw))), pub); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLatestIncludesPrereleaseOrdering(t *testing.T) {
+	e := Entry{Versions: []Version{{Version: "1.0.0-beta.2"}, {Version: "1.0.0-beta.10"}, {Version: "1.0.0"}}}
+	v, ok := e.Latest()
+	if !ok || v.Version != "1.0.0" {
+		t.Fatalf("latest = %q", v.Version)
+	}
+	if plugins.CompareSemVer("1.0.0-beta.2", "1.0.0-beta.10") >= 0 {
+		t.Fatal("numeric prerelease order is wrong")
+	}
+	if plugins.CompareSemVer("1.0.0", "1.0.0-rc.1") <= 0 {
+		t.Fatal("release must sort after prerelease")
+	}
+}
+
+func TestLatestVersionReviewedPermissionsDisplayed(t *testing.T) {
+	permissions := plugins.Permissions{Network: []string{"latest.example"}}
+	s := &Service{idx: Index{Entries: []Entry{{ID: "test", Name: "Test", Kind: "extension", Versions: []Version{{Version: "1.0.0", Permissions: &permissions}}}}}}
+	items := s.Search(context.Background(), Filter{})
+	if len(items) != 1 || len(items[0].PermissionLines) != 1 || !strings.Contains(items[0].PermissionLines[0], "latest.example") {
+		t.Fatalf("incorrect reviewed permission lines: %+v", items)
+	}
+}
+
+func TestSignatureURLPreservesQuery(t *testing.T) {
+	s := &Service{indexURL: "https://catalogue.example/index.json?token=value"}
+	if got := s.sigURL(); got != "https://catalogue.example/index.json.sig?token=value" {
+		t.Fatalf("signature URL = %q", got)
 	}
 }

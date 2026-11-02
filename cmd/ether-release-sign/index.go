@@ -26,6 +26,7 @@ func cmdIndex(args []string) error {
 	sigPath := fs.String("sig", "", "detached signature path (default: <out>.sig)")
 	keySpec := fs.String("key", "", "ed25519 private key (base64, hex, or file; or $ETHER_CATALOGUE_PRIVATE_KEY / $ETHER_UPDATE_PRIVATE_KEY)")
 	pubSpec := fs.String("pub", "", "ed25519 public key for -verify (base64, hex, or file; or $ETHER_CATALOGUE_PUBLIC_KEY / $ETHER_UPDATE_PUBLIC_KEY)")
+	check := fs.Bool("check", false, "validate and compile the index without signing")
 	verify := fs.Bool("verify", false, "verify an existing index.json and detached signature")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -94,6 +95,9 @@ func cmdIndex(args []string) error {
 		}
 	}
 
+	if *check {
+		return nil
+	}
 	priv, err := loadCataloguePrivateKey(*keySpec)
 	if err != nil {
 		return err

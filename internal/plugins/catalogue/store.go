@@ -3,7 +3,9 @@ package catalogue
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"time"
 
@@ -30,13 +32,14 @@ CREATE TABLE IF NOT EXISTS plugins_catalogue_entries (
   updated_at INTEGER NOT NULL
 );
 `)
+	store.Register("plugins_catalogue", 2, `ALTER TABLE plugins_catalogue_index ADD COLUMN source_hash TEXT NOT NULL DEFAULT '';`)
 }
 
 type cacheStore struct {
 	db *sql.DB
 }
 
-func (s *cacheStore) save(ctx context.Context, idx Index, rawJSON []byte, sig string, fetchedAt time.Time) error {
+func (s *cacheStore) save(ctx context.Context, idx Index, rawJSON []byte, sig string, fetchedAt time.Time, source string) error {
 	if s.db == nil {
 		return nil
 	}
@@ -48,12 +51,13 @@ func (s *cacheStore) save(ctx context.Context, idx Index, rawJSON []byte, sig st
 	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `
-INSERT INTO plugins_catalogue_index (id, raw_json, signature, fetched_at)
-VALUES (1, ?, ?, ?)
+INSERT INTO plugins_catalogue_index (id, raw_json, signature, fetched_at, source_hash)
+VALUES (1, ?, ?, ?, ?)
 ON CONFLICT (id) DO UPDATE SET
   raw_json = excluded.raw_json,
   signature = excluded.signature,
-  fetched_at = excluded.fetched_at`, string(rawJSON), sig, unix); err != nil {
+  fetched_at = excluded.fetched_at,
+  source_hash = excluded.source_hash`, string(rawJSON), sig, unix, sourceHash(source)); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM plugins_catalogue_entries`); err != nil {
@@ -78,14 +82,14 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	return tx.Commit()
 }
 
-func (s *cacheStore) load(ctx context.Context, key ed25519.PublicKey) (Index, time.Time, bool) {
+func (s *cacheStore) load(ctx context.Context, key ed25519.PublicKey, source string) (Index, time.Time, bool) {
 	if s.db == nil {
 		return Index{}, time.Time{}, false
 	}
-	var raw, signature string
+	var raw, signature, cachedSource string
 	var fetched int64
-	err := s.db.QueryRowContext(ctx, `SELECT raw_json, signature, fetched_at FROM plugins_catalogue_index WHERE id = 1`).Scan(&raw, &signature, &fetched)
-	if err != nil || raw == "" {
+	err := s.db.QueryRowContext(ctx, `SELECT raw_json, signature, fetched_at, source_hash FROM plugins_catalogue_index WHERE id = 1`).Scan(&raw, &signature, &fetched, &cachedSource)
+	if err != nil || raw == "" || cachedSource != sourceHash(source) {
 		return Index{}, time.Time{}, false
 	}
 	idx, err := ParseAndVerify([]byte(raw), []byte(signature), key)
@@ -93,4 +97,9 @@ func (s *cacheStore) load(ctx context.Context, key ed25519.PublicKey) (Index, ti
 		return Index{}, time.Time{}, false
 	}
 	return idx, time.Unix(fetched, 0).UTC(), true
+}
+
+func sourceHash(source string) string {
+	sum := sha256.Sum256([]byte(source))
+	return hex.EncodeToString(sum[:])
 }

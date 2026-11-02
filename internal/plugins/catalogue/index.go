@@ -1,6 +1,7 @@
 package catalogue
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/hex"
@@ -125,6 +126,11 @@ func ParsePrivateKey(raw string) (ed25519.PrivateKey, error) {
 }
 
 func decodeBytes(s string) ([]byte, error) {
+	if len(s) == 64 || len(s) == 128 {
+		if b, err := hex.DecodeString(s); err == nil {
+			return b, nil
+		}
+	}
 	for _, enc := range []*base64.Encoding{
 		base64.StdEncoding,
 		base64.RawStdEncoding,
@@ -241,8 +247,8 @@ func (e Entry) Validate() error {
 	}
 	seenVer := make(map[string]bool, len(e.Versions))
 	for j, v := range e.Versions {
-		if strings.TrimSpace(v.Version) == "" {
-			return fmt.Errorf("versions[%d]: version is required", j)
+		if _, ok := plugins.ParseSemVer(v.Version); !ok {
+			return fmt.Errorf("versions[%d]: invalid version %q", j, v.Version)
 		}
 		if seenVer[v.Version] {
 			return fmt.Errorf("duplicate version %q", v.Version)
@@ -270,7 +276,9 @@ func isHexDigest(s string) bool {
 // ParseEntryYAML parses a single plugin YAML file into an Entry.
 func ParseEntryYAML(data []byte) (Entry, error) {
 	var e Entry
-	if err := yaml.Unmarshal(data, &e); err != nil {
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&e); err != nil {
 		return Entry{}, fmt.Errorf("catalogue: parse yaml: %w", err)
 	}
 	for i := range e.Versions {
@@ -288,7 +296,7 @@ func LoadEntriesDir(dir string) (Index, error) {
 	if err != nil {
 		return Index{}, fmt.Errorf("catalogue: read dir %s: %w", dir, err)
 	}
-	var out []Entry
+	out := make([]Entry, 0)
 	for _, de := range entries {
 		if de.IsDir() {
 			continue
