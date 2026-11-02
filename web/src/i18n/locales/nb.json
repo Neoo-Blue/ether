@@ -3490,6 +3490,7 @@
   "m_15364765e67f5a": "Egendefinert bilde-URL",
   "m_153824e8dc2503": "Leveringskøen er full. Noen fullføringer ble ikke lagt i kø.",
   "m_153a49b5cbdb2d": "Importert oppføring bruker påloggingen til kilden sin; tillagte reserver bruker ingen",
+  "m_153a60303fb806": "VA-API",
   "m_153b158679b645": {
     "one": "Strømmen stopper. Den kan startes igjen om omtrent ett minutt.",
     "other": "Disse strømmene stopper. De kan startes igjen om omtrent ett minutt."
@@ -3687,6 +3688,7 @@
   "m_1667b6eab4ed93": "Brukt",
   "m_166862fb32e906": "Malkategori",
   "m_166a5e9e166c52": "Klikk på en plakat for å feste den for alle. Merk plakater med sjangrene eller personene de viser, slik at smakstilpasning kan velge én per seer.",
+  "m_166bac23ab098e": "Intel VA-API",
   "m_166ca4aa4ef047": "Lærer",
   "m_166dbc83ba73fc": "Legg til debrid-konto",
   "m_16745cd45e3b9e": "Bygget rundt serier og sesonger",

@@ -140,7 +140,7 @@ func openPayloadStore(ctx context.Context, db *sql.DB, dir string) (*payloadStor
 		return nil, err
 	}
 	if !reliable {
-		return nil, errPayloadFilesystem
+		return nil, payloadFilesystemError(dir)
 	}
 	locks := filepath.Join(dir, ".owners")
 	if err := os.MkdirAll(locks, 0700); err != nil {
@@ -852,7 +852,7 @@ func (p *payloadStore) verifyProof(f *os.File, incarnation string) error {
 		return err
 	}
 	if !reliable {
-		return errPayloadFilesystem
+		return payloadFilesystemError(p.dir)
 	}
 	if f == nil {
 		return core.ErrNotAvailable
@@ -909,7 +909,7 @@ func (p *payloadStore) reconcileSlots(ctx context.Context) error {
 		return err
 	}
 	if !reliable {
-		return errPayloadFilesystem
+		return payloadFilesystemError(p.dir)
 	}
 	p.mu.Lock()
 	first := p.cursor

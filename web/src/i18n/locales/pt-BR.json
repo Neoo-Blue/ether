@@ -3594,6 +3594,7 @@
   "m_15364765e67f5a": "URL da imagem personalizada",
   "m_153824e8dc2503": "A fila de entrega está cheia; algumas conclusões não foram enfileiradas.",
   "m_153a49b5cbdb2d": "A entrada importada usa o login da própria fonte; os backups adicionados não usam nenhum",
+  "m_153a60303fb806": "VA-API",
   "m_153b158679b645": {
     "many": "Estes streams serão interrompidos. Eles podem ser iniciados novamente em cerca de um minuto.",
     "one": "O stream será interrompido. Ele pode ser iniciado novamente em cerca de um minuto.",
@@ -3797,6 +3798,7 @@
   "m_1667b6eab4ed93": "Usado",
   "m_166862fb32e906": "Categoria do modelo",
   "m_166a5e9e166c52": "Clique em um pôster para fixá-lo para todos. Marque os pôsteres com os gêneros ou as pessoas que aparecem neles para que a combinação por gosto escolha um para cada espectador.",
+  "m_166bac23ab098e": "Intel VA-API",
   "m_166ca4aa4ef047": "Aprendendo",
   "m_166dbc83ba73fc": "Adicionar conta debrid",
   "m_16745cd45e3b9e": "Montadas em torno de séries e temporadas",

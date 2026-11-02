@@ -3490,6 +3490,7 @@
   "m_15364765e67f5a": "Eigen afbeeldings-URL",
   "m_153824e8dc2503": "De bezorgwachtrij is vol; sommige voltooide afspeelacties zijn niet in de wachtrij geplaatst.",
   "m_153a49b5cbdb2d": "Geïmporteerde invoer gebruikt de login van de bron; toegevoegde back-ups gebruiken er geen",
+  "m_153a60303fb806": "VA-API",
   "m_153b158679b645": {
     "one": "De stream stopt. Hij kan over ongeveer een minuut opnieuw worden gestart.",
     "other": "Deze streams stoppen. Ze kunnen over ongeveer een minuut opnieuw worden gestart."
@@ -3687,6 +3688,7 @@
   "m_1667b6eab4ed93": "Gebruikt",
   "m_166862fb32e906": "Sjablooncategorie",
   "m_166a5e9e166c52": "Klik op een poster om hem voor iedereen vast te pinnen. Tag posters met de genres of personen die erop staan, zodat smaakafstemming er per kijker een kan kiezen.",
+  "m_166bac23ab098e": "Intel VA-API",
   "m_166ca4aa4ef047": "Aan het leren",
   "m_166dbc83ba73fc": "Debrid-account toevoegen",
   "m_16745cd45e3b9e": "Gebouwd rond series en seizoenen",

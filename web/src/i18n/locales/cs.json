@@ -3698,6 +3698,7 @@
   "m_15364765e67f5a": "URL vlastního obrázku",
   "m_153824e8dc2503": "Fronta doručování je plná; některá dokončení nebyla zařazena do fronty.",
   "m_153a49b5cbdb2d": "Importovaná položka používá přihlášení svého zdroje; přidané záložní zdroje žádné nepoužívají",
+  "m_153a60303fb806": "VA-API",
   "m_153b158679b645": {
     "few": "Tyto streamy se zastaví. Znovu je bude možné spustit asi za minutu.",
     "many": "Tyto streamy se zastaví. Znovu je bude možné spustit asi za minutu.",
@@ -3907,6 +3908,7 @@
   "m_1667b6eab4ed93": "Použito",
   "m_166862fb32e906": "Kategorie šablony",
   "m_166a5e9e166c52": "Kliknutím na plakát ho připnete pro všechny. Označte plakáty žánry nebo lidmi, kteří na nich jsou, aby podle vkusu mohl být vybrán jeden pro každého diváka.",
+  "m_166bac23ab098e": "Intel VA-API",
   "m_166ca4aa4ef047": "Učí se",
   "m_166dbc83ba73fc": "Přidat účet debridu",
   "m_16745cd45e3b9e": "Postaveno na seriálech a řadách",

@@ -3594,6 +3594,7 @@
   "m_15364765e67f5a": "URL dell'immagine personalizzata",
   "m_153824e8dc2503": "La coda di invio è piena; alcuni completamenti non sono stati messi in coda.",
   "m_153a49b5cbdb2d": "La voce importata usa l'accesso della sua fonte; i backup aggiunti non ne usano nessuno",
+  "m_153a60303fb806": "VA-API",
   "m_153b158679b645": {
     "many": "Questi stream si interrompono. Potranno essere riavviati tra circa un minuto.",
     "one": "Lo stream si interrompe. Potrà essere riavviato tra circa un minuto.",
@@ -3797,6 +3798,7 @@
   "m_1667b6eab4ed93": "Usato",
   "m_166862fb32e906": "Categoria del modello",
   "m_166a5e9e166c52": "Fai clic su una locandina per fissarla per tutti. Aggiungi alle locandine tag con i generi o le persone che compaiono, così l'abbinamento ai gusti può sceglierne una per spettatore.",
+  "m_166bac23ab098e": "Intel VA-API",
   "m_166ca4aa4ef047": "In apprendimento",
   "m_166dbc83ba73fc": "Aggiungi account debrid",
   "m_16745cd45e3b9e": "Costruite attorno a serie e stagioni",

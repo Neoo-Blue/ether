@@ -3490,6 +3490,7 @@
   "m_15364765e67f5a": "Özel görsel URL'si",
   "m_153824e8dc2503": "Teslim kuyruğu dolu; bazı tamamlanma bildirimleri kuyruğa alınmadı.",
   "m_153a49b5cbdb2d": "İçe aktarılan kayıt kaynağının girişini kullanır; eklenen yedekler hiçbirini kullanmaz",
+  "m_153a60303fb806": "VA-API",
   "m_153b158679b645": {
     "one": "Akış durur. Yaklaşık bir dakika sonra yeniden başlatılabilir.",
     "other": "Bu akışlar durur. Yaklaşık bir dakika sonra yeniden başlatılabilirler."
@@ -3687,6 +3688,7 @@
   "m_1667b6eab4ed93": "Kullanıldı",
   "m_166862fb32e906": "Şablon kategorisi",
   "m_166a5e9e166c52": "Bir posteri herkes için sabitlemek üzere tıklayın. Posterleri içerdikleri türler veya kişilerle etiketleyin; böylece zevk eşleştirmesi izleyici başına birini seçebilir.",
+  "m_166bac23ab098e": "Intel VA-API",
   "m_166ca4aa4ef047": "Öğreniyor",
   "m_166dbc83ba73fc": "Debrid hesabı ekle",
   "m_16745cd45e3b9e": "Diziler ve sezonlar etrafında oluşturulmuş",
