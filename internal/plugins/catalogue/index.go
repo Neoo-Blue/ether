@@ -319,7 +319,7 @@ func LoadEntriesDir(dir string) (Index, error) {
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	idx := Index{
 		Schema:      1,
-		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+		GeneratedAt: time.Now().UTC().Format(time.RFC3339Nano),
 		Entries:     out,
 	}
 	if err := idx.Validate(); err != nil {

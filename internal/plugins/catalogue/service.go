@@ -176,8 +176,20 @@ func (s *Service) Ingest(ctx context.Context, indexBytes, sigBytes []byte) (Inde
 		s.setErr(err)
 		return Index{}, err
 	}
+	if _, err := time.Parse(time.RFC3339Nano, idx.GeneratedAt); err != nil {
+		err = fmt.Errorf("catalogue: valid generation time required")
+		s.setErr(err)
+		return Index{}, err
+	}
+	s.mu.RLock()
+	previous := s.idx
+	s.mu.RUnlock()
+	if err := rejectRollback(previous, idx); err != nil {
+		s.setErr(err)
+		return Index{}, err
+	}
 	now := s.now()
-	if err := s.cache.save(ctx, idx, indexBytes, strings.TrimSpace(string(sigBytes)), now, s.indexURL); err != nil {
+	if err := s.cache.save(ctx, idx, indexBytes, strings.TrimSpace(string(sigBytes)), now, s.indexURL, s.pubKey); err != nil {
 		s.setErr(err)
 		return Index{}, err
 	}

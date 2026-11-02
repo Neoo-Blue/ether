@@ -205,8 +205,11 @@ func TestCatalogueInstallRevokeAndAutoUpdate(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	generation := time.Date(2026, 11, 2, 0, 0, 0, 0, time.UTC)
 	publishIndex := func(idx Index) {
 		t.Helper()
+		generation = generation.Add(time.Second)
+		idx.GeneratedAt = generation.Format(time.RFC3339Nano)
 		raw, err := json.Marshal(idx)
 		if err != nil {
 			t.Fatalf("marshal index: %v", err)
@@ -573,7 +576,7 @@ func TestCacheRequiresCurrentSigningKey(t *testing.T) {
 	}
 	raw := []byte(`{"schema":1,"entries":[]}`)
 	cache := cacheStore{db: db}
-	if err := cache.save(context.Background(), Index{Schema: 1}, raw, SignDetached(raw, priv), time.Now(), "https://example.invalid/index.json"); err != nil {
+	if err := cache.save(context.Background(), Index{Schema: 1}, raw, SignDetached(raw, priv), time.Now(), "https://example.invalid/index.json", pub); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, ok := cache.load(context.Background(), pub, "https://example.invalid/index.json"); !ok {
@@ -643,5 +646,42 @@ func TestSignatureURLPreservesQuery(t *testing.T) {
 	s := &Service{indexURL: "https://catalogue.example/index.json?token=value"}
 	if got := s.sigURL(); got != "https://catalogue.example/index.json.sig?token=value" {
 		t.Fatalf("signature URL = %q", got)
+	}
+}
+
+func TestSignedIndexCannotRollBackAfterRestart(t *testing.T) {
+	ctx := context.Background()
+	db := store.OpenTest(t)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts := Options{DB: db, IndexURL: "https://catalogue.example/index.json", PublicKey: base64.StdEncoding.EncodeToString(pub)}
+	service, err := New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newer, _ := json.Marshal(Index{Schema: 1, GeneratedAt: "2026-11-02T12:00:00Z", Entries: []Entry{}})
+	older, _ := json.Marshal(Index{Schema: 1, GeneratedAt: "2026-11-01T12:00:00Z", Entries: []Entry{}})
+	if _, err := service.Ingest(ctx, newer, []byte(SignDetached(newer, priv))); err != nil {
+		t.Fatal(err)
+	}
+	service, err = New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Ingest(ctx, older, []byte(SignDetached(older, priv))); err == nil {
+		t.Fatal("accepted an older signed index")
+	}
+	missing, _ := json.Marshal(Index{Schema: 1, Entries: []Entry{}})
+	if _, err := service.Ingest(ctx, missing, []byte(SignDetached(missing, priv))); err == nil {
+		t.Fatal("accepted a timestamp-free index")
+	}
+	if _, err := service.Ingest(ctx, newer, []byte(SignDetached(newer, priv))); err != nil {
+		t.Fatalf("identical index rejected: %v", err)
+	}
+	other := []byte(`{"schema":1,"generatedAt":"2026-11-02T12:00:00Z","entries":null}`)
+	if _, err := service.Ingest(ctx, other, []byte(SignDetached(other, priv))); err == nil {
+		t.Fatal("accepted conflicting index with same timestamp")
 	}
 }
