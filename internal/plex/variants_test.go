@@ -900,3 +900,36 @@ func TestPlexWebVersionKeepsTracksAndIndexDuringPlayback(t *testing.T) {
 		t.Errorf("playing version tracks audio=%d subs=%d, want the session probe's 2/2", audio, subs)
 	}
 }
+
+// Only Plex Web keeps the full version list during a session (#267). The
+// other apps keep seeing the playing version alone, as before.
+func TestNonWebClientsSeeThePlayingVersionDuringPlayback(t *testing.T) {
+	f, pb := newVariantPlaybackFixture(t)
+	path := "/library/metadata/" + fightClub.Key.String()
+	atv := []string{"X-Plex-Product", "Plex for Apple TV", "X-Plex-Platform", "tvOS", "Accept", "application/json"}
+	count := func() int {
+		t.Helper()
+		var body struct {
+			MediaContainer struct {
+				Metadata []struct {
+					Media []json.RawMessage `json:"Media"`
+				} `json:"Metadata"`
+			} `json:"MediaContainer"`
+		}
+		rec := f.get(t, path, atv...)
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || len(body.MediaContainer.Metadata) != 1 {
+			t.Fatalf("%v %s", err, rec.Body.String())
+		}
+		return len(body.MediaContainer.Metadata[0].Media)
+	}
+	if n := count(); n != 3 {
+		t.Fatalf("before playback: %d media, want 3", n)
+	}
+	rec := f.get(t, "/video/:/transcode/universal/decision?path="+urlEsc(path)+"&mediaIndex=1&partIndex=0&session=atv267&directPlay=0&directStream=1&protocol=hls", atv[:4]...)
+	if rec.Code != http.StatusOK || len(pb.variantCalls) != 1 {
+		t.Fatalf("decision: %d %v", rec.Code, pb.variantCalls)
+	}
+	if n := count(); n != 1 {
+		t.Fatalf("during playback: %d media, want the playing version alone", n)
+	}
+}
