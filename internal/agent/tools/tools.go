@@ -85,6 +85,21 @@ type Result struct {
 	Navigate string `json:"navigate,omitempty"`
 	// Proposal, when set, becomes an approval card; nothing has changed yet.
 	Proposal *Proposal `json:"proposal,omitempty"`
+	// Secret, when set, asks the owner for a credential through a secret
+	// card. The value goes straight to sealed storage through Store and is
+	// never returned to the tool, the transcript or a model.
+	Secret *SecretRequest `json:"secret,omitempty"`
+}
+
+// SecretRequest asks the owner for one credential.
+type SecretRequest struct {
+	ProviderLabel   string `json:"providerLabel"`   // English source, e.g. "Real-Debrid"
+	CredentialLabel string `json:"credentialLabel"` // English source, e.g. "API token"
+	Purpose         string `json:"purpose"`         // English source, one sentence
+	HelpURL         string `json:"helpUrl,omitempty"`
+	// Store seals the value into its destination. It runs once, after the
+	// owner submits, and must never log or echo the value.
+	Store func(ctx context.Context, value string) error `json:"-"`
 }
 
 // Tool is one catalogue entry.
