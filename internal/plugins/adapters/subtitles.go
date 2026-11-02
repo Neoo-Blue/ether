@@ -151,6 +151,7 @@ func (p *subtitleProvider) Download(ctx context.Context, c subtitles.Candidate) 
 		Data     string `json:"data"`
 	}
 	if json.Unmarshal(resp.Body, &result) != nil {
+		p.mgr.RecordFailure(ctx, p.id, "invalid subtitle download response")
 		return nil, fmt.Errorf("invalid subtitle download response")
 	}
 	var b []byte
@@ -163,9 +164,11 @@ func (p *subtitleProvider) Download(ctx context.Context, c subtitles.Candidate) 
 		err = fmt.Errorf("invalid subtitle encoding")
 	}
 	if err != nil {
+		p.mgr.RecordFailure(ctx, p.id, "invalid subtitle encoding")
 		return nil, err
 	}
 	if len(b) > 2<<20 {
+		p.mgr.RecordFailure(ctx, p.id, "subtitle exceeds 2 MiB")
 		return nil, fmt.Errorf("subtitle exceeds 2 MiB")
 	}
 	return b, nil

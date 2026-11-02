@@ -768,6 +768,18 @@ class PluginInstance:
                 return _ok_response(fn(ctx))
             return _ok_response({"status": "ok"})
 
+        if method == "POST" and path == "/ether/subtitles/download":
+            if not ctx.pick_token or not ctx.pick_token.strip():
+                return _error_response(403, "pick_required", "Subtitle downloads require an X-Ether-Pick token.")
+            fn = self.routes.get("subtitle_download") or self.routes.get("subtitleDownload")
+            if not fn:
+                return _error_response(404, "not_found", "Subtitle download handler is not registered.")
+            try:
+                body_obj = _parse_json_body(req.get("body"))
+            except Exception:
+                return _error_response(400, "invalid_json", "Request body must be valid JSON.")
+            return _ok_response(fn(body_obj, ctx))
+
         if method == "POST" and path == "/ether/configure":
             try:
                 body_obj = _parse_json_body(req.get("body"))
@@ -998,12 +1010,6 @@ class PluginInstance:
             if stremio:
                 resource = stremio["resource"]
                 if resource == "subtitles":
-                    if not ctx.pick_token or not ctx.pick_token.strip():
-                        return _error_response(
-                            403,
-                            "pick_required",
-                            "Subtitles requests require an X-Ether-Pick token.",
-                        )
                     fn = self.routes.get("subtitles")
                     if not fn:
                         return _error_response(

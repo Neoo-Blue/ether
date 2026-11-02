@@ -92,7 +92,9 @@ func ValidateConfig(cfg config.Config) []FieldError {
 				v.add(field+".url", "enter a valid Stremio add-on URL")
 			}
 		default:
-			v.add(field+".kind", "unknown subtitle provider")
+			if !strings.HasPrefix(provider.Kind, "plugin:") || !strings.HasSuffix(provider.Kind, "/subtitles") || provider.ID != provider.Kind {
+				v.add(field+".kind", "unknown subtitle provider")
+			}
 		}
 	}
 	if cfg.LiveTV.HealthSweepMinutes < -1 || cfg.LiveTV.HealthSweepMinutes > 1440 {

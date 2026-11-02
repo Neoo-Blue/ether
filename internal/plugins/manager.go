@@ -426,7 +426,7 @@ func (m *Manager) Call(ctx context.Context, pluginID string, req Request) (Respo
 		var body struct {
 			ID string `json:"id"`
 		}
-		if json.Unmarshal(req.Body, &body) != nil || !m.consumeSubtitlePick(req.Headers["X-Ether-Pick"], pluginID, req.Headers["X-Ether-Title"], body.ID) {
+		if req.Method != http.MethodPost || json.Unmarshal(req.Body, &body) != nil || !m.consumeSubtitlePick(req.Headers["X-Ether-Pick"], pluginID, req.Headers["X-Ether-Title"], body.ID) {
 			return Response{Status: http.StatusForbidden}, ErrPermissionDenied
 		}
 	}
@@ -458,7 +458,7 @@ func (m *Manager) Call(ctx context.Context, pluginID string, req Request) (Respo
 	ms := m.now().Sub(start).Milliseconds()
 	rec := CallRecord{Plugin: pluginID, Route: req.Path, Method: req.Method, Status: resp.Status, MS: ms,
 		Request: redactJSON(req.Body), Response: redactJSON(resp.Body)}
-	if req.Path == "/ether/notify" || req.Path == "/ether/configure" {
+	if req.Path == "/ether/notify" || req.Path == "/ether/configure" || strings.HasPrefix(req.Path, "/subtitles/") || req.Path == "/ether/subtitles/download" {
 		rec.Request = ""
 		rec.Response = ""
 	}

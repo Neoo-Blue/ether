@@ -69,3 +69,56 @@ func (s *Service) mergeSources(ctx context.Context, key core.RatingKey, d time.D
 	}
 	return out
 }
+
+// DeletePlugin removes cached results when a plugin is disabled or removed.
+func (s *Service) DeletePlugin(ctx context.Context, source string) error {
+	if s.o.DB == nil {
+		return nil
+	}
+	_, err := s.o.DB.ExecContext(ctx, `DELETE FROM markers_plugin_cache WHERE source=?`, source)
+	return err
+}
+
+func init() {
+	store.Register("markers", 3, `CREATE TABLE markers_refresh_queue(rating_key INTEGER NOT NULL,runtime_ms INTEGER NOT NULL,last_played INTEGER NOT NULL,PRIMARY KEY(rating_key,runtime_ms));`)
+}
+
+type RefreshTarget struct {
+	Key        core.RatingKey
+	Duration   time.Duration
+	LastPlayed time.Time
+}
+
+// RememberRefreshTarget persists the bounded set of recently played and upcoming titles.
+func (s *Service) RememberRefreshTarget(ctx context.Context, key core.RatingKey, duration time.Duration) error {
+	if s.o.DB == nil {
+		return nil
+	}
+	now := s.o.Now().Unix()
+	_, err := s.o.DB.ExecContext(ctx, `INSERT INTO markers_refresh_queue VALUES(?,?,?) ON CONFLICT(rating_key,runtime_ms) DO UPDATE SET last_played=excluded.last_played`, int64(key), duration.Milliseconds(), now)
+	return err
+}
+func (s *Service) RefreshTargets(ctx context.Context) ([]RefreshTarget, error) {
+	if s.o.DB == nil {
+		return nil, nil
+	}
+	cutoff := s.o.Now().Add(-30 * 24 * time.Hour).Unix()
+	_, err := s.o.DB.ExecContext(ctx, `DELETE FROM markers_refresh_queue WHERE last_played<?`, cutoff)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.o.DB.QueryContext(ctx, `SELECT rating_key,runtime_ms,last_played FROM markers_refresh_queue ORDER BY last_played DESC LIMIT 500`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []RefreshTarget
+	for rows.Next() {
+		var key, ms, at int64
+		if err := rows.Scan(&key, &ms, &at); err != nil {
+			return nil, err
+		}
+		out = append(out, RefreshTarget{core.RatingKey(key), time.Duration(ms) * time.Millisecond, time.Unix(at, 0)})
+	}
+	return out, rows.Err()
+}

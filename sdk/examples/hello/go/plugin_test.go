@@ -217,8 +217,12 @@ func TestTypeScriptHelloCompiledWithWasmCompileInHostedRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Call /subtitles without pick: %v", err)
 	}
-	if subDenied.Status != http.StatusForbidden {
-		t.Fatalf("expected 403 without X-Ether-Pick, got %d (%s)", subDenied.Status, subDenied.Body)
+	if subDenied.Status != http.StatusOK {
+		t.Fatalf("expected listing without X-Ether-Pick, got %d (%s)", subDenied.Status, subDenied.Body)
+	}
+	denied, err := rt.Call(ctx, plugins.Request{Method: "POST", Path: "/ether/subtitles/download", Body: json.RawMessage(`{"id":"sub","lang":"en","format":"srt"}`)})
+	if err != nil || denied.Status != http.StatusForbidden {
+		t.Fatalf("download without pick: %+v %v", denied, err)
 	}
 	subOK, err := rt.Call(ctx, plugins.Request{
 		Method:  "GET",

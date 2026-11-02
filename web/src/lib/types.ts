@@ -355,7 +355,13 @@ export interface EtherConfig {
   };
   trakt: { enabled: boolean; clientId: string; clientSecret: string };
   simkl?: { enabled: boolean; clientId: string; clientSecret: string };
-  markers?: { theIntroDb: boolean; apiKey: string; skipIntro?: boolean; skipCredits?: boolean };
+  markers?: {
+    theIntroDb: boolean;
+    apiKey: string;
+    skipIntro?: boolean;
+    skipCredits?: boolean;
+    sourceOrder?: string[];
+  };
   liveTV?: { logoIndexUrl?: string; healthSweepMinutes?: number };
   subtitles?: {
     providers?: { id: string; kind: string; name?: string; url?: string; enabled: boolean }[];

@@ -599,7 +599,11 @@ func (s *Service) download(ctx context.Context, c Candidate) ([]byte, error) {
 		if p == nil {
 			return nil, core.ErrNotFound
 		}
-		return p.Download(ctx, c)
+		raw, err := p.Download(ctx, c)
+		if err != nil {
+			return nil, err
+		}
+		return unzipSubtitleCandidate(raw, c)
 	}
 	if c.DownloadURL != "" {
 		return s.downloadStremio(ctx, c)

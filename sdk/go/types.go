@@ -437,6 +437,20 @@ type SubtitlesResponse struct {
 	Subtitles []SubtitleItem `json:"subtitles"`
 }
 
+// SubtitleDownloadRequest identifies a viewer-picked subtitle.
+type SubtitleDownloadRequest struct {
+	ID     string `json:"id"`
+	Lang   string `json:"lang"`
+	Format string `json:"format"`
+}
+
+// SubtitleDownloadResponse carries subtitle text or base64-encoded bytes.
+type SubtitleDownloadResponse struct {
+	Format   string `json:"format"`
+	Encoding string `json:"encoding"`
+	Data     string `json:"data"`
+}
+
 // MarkerItem is one intro/credits/recap/preview marker.
 type MarkerItem struct {
 	Kind  string  `json:"kind"`

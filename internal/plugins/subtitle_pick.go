@@ -83,7 +83,10 @@ func (m *Manager) FetchPickedSubtitle(ctx context.Context, plugin, title, subtit
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, fmt.Errorf("subtitle download failed")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
