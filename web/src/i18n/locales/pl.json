@@ -2897,6 +2897,7 @@
   "m_1086584d9aca6a": "Ogólne",
   "m_108685d2f9e078": "Wszystko sprawne",
   "m_1088e8316eb2f9": "Indeksator odzyskał sprawność",
+  "m_108a5844831529": "Otwieraj tę konsolę spoza swojej sieci",
   "m_108b41637f364f": "Kategoria",
   "m_108bd8cfca2c2c": "Format dźwięku",
   "m_108ce7d935381c": "Odtwarzanie nie powiodło się",
@@ -2949,6 +2950,7 @@
   "m_10bb309f1fd724": "Ten widz",
   "m_10bbf84592ffe8": "Waga: {name}",
   "m_10bda438fc4f4d": "Intel Quick Sync",
+  "m_10bff7d9eed0a7": "Do łączenia się z tą konsolą przez własną domenę lub odwrotne proxy, gdy jesteś poza domem. Zalogować może się tylko konto Plex, do którego należy ten serwer. Wyłączone ogranicza ją do sieci domowej i VPN.",
   "m_10c14b3ecd05a7": "Mały",
   "m_10c25d9a0b1c4b": {
     "few": "Zalogowano i wyszukano: {count} wyniki.",

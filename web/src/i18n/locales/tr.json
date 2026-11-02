@@ -2749,6 +2749,7 @@
   "m_1086584d9aca6a": "Genel",
   "m_108685d2f9e078": "Hepsi sağlıklı",
   "m_1088e8316eb2f9": "Dizinleyici düzeldi",
+  "m_108a5844831529": "Bu konsolu ağınızın dışından açın",
   "m_108b41637f364f": "Kategori",
   "m_108bd8cfca2c2c": "Ses biçimi",
   "m_108ce7d935381c": "Oynatma başarısız oldu",
@@ -2793,6 +2794,7 @@
   "m_10bb309f1fd724": "Bu izleyici",
   "m_10bbf84592ffe8": "{name} ağırlığı",
   "m_10bda438fc4f4d": "Intel Quick Sync",
+  "m_10bff7d9eed0a7": "Evden uzaktayken bu konsola kendi alan adınız veya ters proxy üzerinden ulaşmak için. Yalnızca bu sunucunun sahibi olan Plex hesabı oturum açabilir. Kapalıyken yalnızca ev ağınız ve VPN ile erişilir.",
   "m_10c14b3ecd05a7": "Küçük",
   "m_10c25d9a0b1c4b": {
     "one": "Oturum açıldı ve arama yapıldı: {count} sonuç.",

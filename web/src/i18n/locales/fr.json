@@ -2823,6 +2823,7 @@
   "m_1086584d9aca6a": "Général",
   "m_108685d2f9e078": "Tout est en bonne santé",
   "m_1088e8316eb2f9": "Indexeur rétabli",
+  "m_108a5844831529": "Ouvrir cette console depuis l'extérieur de votre réseau",
   "m_108b41637f364f": "Catégorie",
   "m_108bd8cfca2c2c": "Format audio",
   "m_108ce7d935381c": "Échec de la lecture",
@@ -2871,6 +2872,7 @@
   "m_10bb309f1fd724": "Ce spectateur",
   "m_10bbf84592ffe8": "Poids de {name}",
   "m_10bda438fc4f4d": "Intel Quick Sync",
+  "m_10bff7d9eed0a7": "Pour accéder à cette console via votre propre domaine ou un proxy inverse quand vous n'êtes pas chez vous. Seul le compte Plex propriétaire de ce serveur peut se connecter. Désactivé, elle reste limitée à votre réseau domestique et au VPN.",
   "m_10c14b3ecd05a7": "Petit",
   "m_10c25d9a0b1c4b": {
     "many": "Connexion et recherche réussies : {count} de résultats.",

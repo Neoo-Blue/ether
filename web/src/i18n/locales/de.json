@@ -2749,6 +2749,7 @@
   "m_1086584d9aca6a": "Allgemein",
   "m_108685d2f9e078": "Alles in Ordnung",
   "m_1088e8316eb2f9": "Indexer wieder erreichbar",
+  "m_108a5844831529": "Diese Konsole auch außerhalb deines Netzwerks öffnen",
   "m_108b41637f364f": "Kategorie",
   "m_108bd8cfca2c2c": "Audioformat",
   "m_108ce7d935381c": "Wiedergabe fehlgeschlagen",
@@ -2793,6 +2794,7 @@
   "m_10bb309f1fd724": "Dieser Zuschauer",
   "m_10bbf84592ffe8": "Gewichtung von {name}",
   "m_10bda438fc4f4d": "Intel Quick Sync",
+  "m_10bff7d9eed0a7": "Damit du diese Konsole unterwegs über deine eigene Domain oder einen Reverse Proxy erreichst. Anmelden kann sich nur das Plex-Konto, dem dieser Server gehört. Aus beschränkt sie auf dein Heimnetz und VPN.",
   "m_10c14b3ecd05a7": "Klein",
   "m_10c25d9a0b1c4b": {
     "one": "Angemeldet und gesucht: {count} Ergebnis.",

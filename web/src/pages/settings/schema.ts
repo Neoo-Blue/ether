@@ -41,6 +41,14 @@ export const SERVER: FieldGroup[] = localized(() => [
         step: 1,
         help: t("Plex apps expect 32400. A restart is needed after changing it."),
       },
+      {
+        key: "allowRemoteConsole",
+        label: t("Open this console from outside your network"),
+        kind: "bool",
+        help: t(
+          "For reaching this console through your own domain or reverse proxy when you're away. Only the Plex account that owns this server can sign in. Off keeps it to your home network and VPN.",
+        ),
+      },
     ],
     more: [
       {

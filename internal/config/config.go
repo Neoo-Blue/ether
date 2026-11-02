@@ -75,6 +75,10 @@ type Frontend struct {
 type Server struct {
 	// TrustedProxyCIDRs are proxy peer networks whose forwarding headers are trusted.
 	TrustedProxyCIDRs []string `json:"trustedProxyCIDRs,omitempty"`
+	// AllowRemoteConsole lets the owner console (/ether/) answer clients
+	// outside the home network (through a domain or reverse proxy). Off by
+	// default; sign-in still admits only the owner's Plex account.
+	AllowRemoteConsole bool `json:"allowRemoteConsole,omitempty"`
 	// Port for the Plex API and web UI. PMS uses 32400.
 	Port         int    `json:"port"`
 	BindAddress  string `json:"bindAddress"`
@@ -788,6 +792,14 @@ func (s *Store) Get() Config {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return clone(s.cfg)
+}
+
+// AllowRemoteConsole reports the owner's opt-in to reach the console from
+// outside the home network.
+func (s *Store) AllowRemoteConsole() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.Server.AllowRemoteConsole
 }
 
 // TrustedProxyCIDRs is the live trusted-proxy list. The returned slice is a

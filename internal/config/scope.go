@@ -73,6 +73,7 @@ var mixedSections = map[string]map[string]Scope{
 		"moviesLibraryName":  Shared,
 		"tvShowsLibraryName": Shared,
 		"webFrameOrigins":    Shared,
+		"allowRemoteConsole": Shared,
 		"machineIdentifier":  Shared, // one server identity for the cluster
 		"defaultStreamLimit": Shared,
 		"maxStreams":         Shared,

@@ -694,6 +694,7 @@ func (a *App) Run(ctx context.Context) error {
 	}
 	front.setTLS(a.certs.TLSConfig)
 	front.setProxies(a.cfg.TrustedProxyCIDRs)
+	front.setRemote(a.cfg.AllowRemoteConsole)
 	// A restore applied at this start counts from here: the server is
 	// about to serve on it. If it cannot be recorded, nothing is served
 	// and Serve puts the original data back.

@@ -2897,6 +2897,7 @@
   "m_1086584d9aca6a": "Obecné",
   "m_108685d2f9e078": "Vše v pořádku",
   "m_1088e8316eb2f9": "Indexer se zotavil",
+  "m_108a5844831529": "Otevírat tuto konzoli i mimo domácí síť",
   "m_108b41637f364f": "Kategorie",
   "m_108bd8cfca2c2c": "Formát zvuku",
   "m_108ce7d935381c": "Přehrávání selhalo",
@@ -2949,6 +2950,7 @@
   "m_10bb309f1fd724": "Tento divák",
   "m_10bbf84592ffe8": "Váha: {name}",
   "m_10bda438fc4f4d": "Intel Quick Sync",
+  "m_10bff7d9eed0a7": "Pro přístup k této konzoli přes vlastní doménu nebo reverzní proxy, když nejste doma. Přihlásit se může jen účet Plex, který tento server vlastní. Vypnuto ji omezí na domácí síť a VPN.",
   "m_10c14b3ecd05a7": "Malý",
   "m_10c25d9a0b1c4b": {
     "few": "Přihlášeno a vyhledáno: {count} výsledky.",

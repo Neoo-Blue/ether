@@ -45,6 +45,7 @@ type frontDoor struct {
 	// policy: from the settings on disk until a server is ready, then from
 	// its live settings.
 	proxies atomic.Pointer[func() []string]
+	remote  atomic.Pointer[func() bool]
 }
 
 func newFrontDoor(tracker *startup.Tracker, log *slog.Logger) *frontDoor {
@@ -57,7 +58,7 @@ func newFrontDoor(tracker *startup.Tracker, log *slog.Logger) *frontDoor {
 	f.gate = &startup.Gate{
 		Tracker: f.tracker,
 		Shell:   admin.Shell(),
-		Console: func(h http.Handler) http.Handler { return lanOnly(h, f.trustedProxies) },
+		Console: func(h http.Handler) http.Handler { return lanOnly(h, f.trustedProxies, f.remoteConsole) },
 		Recovery: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if h := f.recovery.Load(); h != nil {
 				(*h).ServeHTTP(w, r)
@@ -78,6 +79,16 @@ func (f *frontDoor) trustedProxies() []string {
 	return nil
 }
 
+func (f *frontDoor) remoteConsole() bool {
+	if fn := f.remote.Load(); fn != nil {
+		return (*fn)()
+	}
+	return false
+}
+
+// setRemote sets where the remote-console opt-in comes from.
+func (f *frontDoor) setRemote(fn func() bool) { f.remote.Store(&fn) }
+
 // setProxies sets where the trusted proxy CIDRs come from.
 func (f *frontDoor) setProxies(fn func() []string) { f.proxies.Store(&fn) }
 
@@ -88,8 +99,9 @@ func (f *frontDoor) bind(server config.Server, envPort bool) error {
 	if err != nil {
 		return err
 	}
-	cidrs := server.TrustedProxyCIDRs
+	cidrs, remote := server.TrustedProxyCIDRs, server.AllowRemoteConsole
 	f.setProxies(func() []string { return cidrs })
+	f.setRemote(func() bool { return remote })
 	f.serve(ln)
 	f.moved = moved
 	return nil

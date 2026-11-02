@@ -2749,6 +2749,7 @@
   "m_1086584d9aca6a": "Allmänt",
   "m_108685d2f9e078": "Allt fungerar",
   "m_1088e8316eb2f9": "Indexeraren har återhämtat sig",
+  "m_108a5844831529": "Öppna den här konsolen utanför ditt nätverk",
   "m_108b41637f364f": "Kategori",
   "m_108bd8cfca2c2c": "Ljudformat",
   "m_108ce7d935381c": "Uppspelningen misslyckades",
@@ -2793,6 +2794,7 @@
   "m_10bb309f1fd724": "Den här tittaren",
   "m_10bbf84592ffe8": "Vikt för {name}",
   "m_10bda438fc4f4d": "Intel Quick Sync",
+  "m_10bff7d9eed0a7": "För att nå den här konsolen via din egen domän eller en omvänd proxy när du är borta. Bara Plex-kontot som äger servern kan logga in. Av begränsar den till ditt hemnätverk och VPN.",
   "m_10c14b3ecd05a7": "Liten",
   "m_10c25d9a0b1c4b": {
     "one": "Inloggad och sökte: {count} resultat.",

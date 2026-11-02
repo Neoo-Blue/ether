@@ -2749,6 +2749,7 @@
   "m_1086584d9aca6a": "Yleiset",
   "m_108685d2f9e078": "Kaikki kunnossa",
   "m_1088e8316eb2f9": "Indeksoija palautui",
+  "m_108a5844831529": "Avaa tämä konsoli myös kotiverkon ulkopuolelta",
   "m_108b41637f364f": "Luokka",
   "m_108bd8cfca2c2c": "Äänimuoto",
   "m_108ce7d935381c": "Toisto epäonnistui",
@@ -2793,6 +2794,7 @@
   "m_10bb309f1fd724": "Tämä katsoja",
   "m_10bbf84592ffe8": "Paino: {name}",
   "m_10bda438fc4f4d": "Intel Quick Sync",
+  "m_10bff7d9eed0a7": "Kun haluat käyttää tätä konsolia omalla verkkotunnuksella tai käänteisvälityspalvelimen kautta kotoa poissa ollessasi. Vain tämän palvelimen omistava Plex-tili voi kirjautua. Pois päältä rajaa sen kotiverkkoon ja VPN:ään.",
   "m_10c14b3ecd05a7": "Pieni",
   "m_10c25d9a0b1c4b": {
     "one": "Kirjauduttu ja haettu: {count} tulos.",
