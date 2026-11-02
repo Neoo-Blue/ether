@@ -271,6 +271,17 @@ func (s *Store) GetApproval(ctx context.Context, id string) (Approval, bool, err
 	return a, true, nil
 }
 
+// ClaimApproval atomically prevents multiple decisions or applications, even
+// when requests arrive at different cluster nodes.
+func (s *Store) ClaimApproval(ctx context.Context, id string) (bool, error) {
+	result, err := s.db.ExecContext(ctx, `UPDATE agent_approvals SET status='applying' WHERE id=? AND status='pending'`, id)
+	if err != nil {
+		return false, err
+	}
+	n, err := result.RowsAffected()
+	return n == 1, err
+}
+
 func (s *Store) UpdateApproval(ctx context.Context, a Approval) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE agent_approvals SET status=?,decision_note=?,failure_reason=?,decided_at=? WHERE id=?`,
 		a.Status, a.DecisionNote, a.FailureReason, nowMs(), a.ID)

@@ -311,6 +311,16 @@ func (s *Service) DecideApproval(ctx context.Context, p tools.Principal, id, dec
 	if appr.Status != "pending" {
 		return appr, fmt.Errorf("approval is already %s", appr.Status)
 	}
+	if decision != "approved" && decision != "rejected" {
+		return appr, fmt.Errorf("decision must be approved or rejected")
+	}
+	claimed, err := s.store.ClaimApproval(ctx, id)
+	if err != nil {
+		return appr, err
+	}
+	if !claimed {
+		return appr, fmt.Errorf("approval is already being decided")
+	}
 	appr.DecisionNote = note
 	switch decision {
 	case "rejected":
@@ -326,7 +336,10 @@ func (s *Service) DecideApproval(ctx context.Context, p tools.Principal, id, dec
 	default:
 		return appr, fmt.Errorf("decision must be approved or rejected")
 	}
-	if err := s.store.UpdateApproval(ctx, appr); err != nil {
+	// Persist the outcome even if the caller disconnects after claiming it.
+	finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := s.store.UpdateApproval(finishCtx, appr); err != nil {
 		return appr, err
 	}
 	s.patchPart(ctx, appr.ThreadID, appr.MessageID, "approval-request", "approvalId", appr.ID, map[string]any{

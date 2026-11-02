@@ -585,3 +585,33 @@ func TestApprovalPreservesCollectionDraft(t *testing.T) {
 		t.Fatalf("approval=%+v err=%v applied=%q generated=%d", approval, err, applied, generated)
 	}
 }
+
+func TestApprovalCannotBeRejectedWhileBeingApplied(t *testing.T) {
+	fx := newFixture(t, &fakeModel{}, Options{})
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	err := fx.svc.catalogue.Register(tools.Tool{Name: "slow_write", Title: "Slow", Description: "write", InputSchema: json.RawMessage(`{"type":"object"}`), Audience: tools.AudienceOwner, Owner: "builtin", Execute: func(context.Context, tools.Principal, map[string]any) (tools.Result, error) {
+		return tools.Result{Proposal: &tools.Proposal{Apply: func(context.Context) (tools.Result, error) { close(entered); <-release; return tools.Result{}, nil }}}, nil
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	appr, err := fx.store.CreateApproval(context.Background(), Approval{ToolName: "slow_write", Input: map[string]any{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := fx.svc.DecideApproval(context.Background(), fx.p, appr.ID, "approved", "")
+		done <- err
+	}()
+	<-entered
+	_, rejectErr := fx.svc.DecideApproval(context.Background(), fx.p, appr.ID, "rejected", "")
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if rejectErr == nil {
+		t.Fatal("rejected an approval already being applied")
+	}
+}
