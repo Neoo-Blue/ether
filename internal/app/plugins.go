@@ -12,6 +12,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/extend"
 	"github.com/braedonsaunders/ether/internal/playback"
 	"github.com/braedonsaunders/ether/internal/plugins"
+	"github.com/braedonsaunders/ether/internal/plugins/wasm"
 	"github.com/braedonsaunders/ether/internal/state"
 )
 
@@ -63,6 +64,10 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 	if err != nil {
 		return nil, err
 	}
+	// Hosted plugins run sandboxed in-process (SPEC §5.2).
+	engine := wasm.NewEngine(a.log.With("component", "plugins-wasm"))
+	mgr.RegisterRuntime("hosted", plugins.HostedRuntimeFactory(engine))
+	a.closers = append(a.closers, func() { _ = engine.Close() })
 	if err := mgr.Start(ctx); err != nil {
 		return nil, err
 	}
