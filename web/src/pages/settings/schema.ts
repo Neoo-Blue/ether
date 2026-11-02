@@ -582,7 +582,12 @@ export const TRAKT: FieldGroup[] = localized(() => [
     fields: [
       { key: "enabled", label: t("Enabled"), kind: "bool" },
       { key: "clientId", label: t("Client ID"), kind: "text", wide: true },
-      { key: "clientSecret", label: t("Client secret"), kind: "secret" },
+      {
+        key: "clientSecret",
+        label: t("Client secret"),
+        kind: "secret",
+        help: t("Optional. Trakt apps created since October 2026 don't have one; leave it empty."),
+      },
     ],
   },
 ]);

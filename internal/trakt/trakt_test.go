@@ -281,3 +281,53 @@ func TestDisabledIsInert(t *testing.T) {
 		t.Fatal("disabled client made calls")
 	}
 }
+
+// Apps created on Trakt since 2026-10-01 have no client secret. Trakt must
+// still be enabled with a client ID alone, and token requests must not send
+// an empty client_secret; an app that has a secret still sends it.
+func TestDeviceSignInWithoutClientSecret(t *testing.T) {
+	for _, secret := range []string{"", "sec"} {
+		var bodies []map[string]any
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if r.URL.Path == "/oauth/device/token" {
+				bodies = append(bodies, body)
+			}
+			switch r.URL.Path {
+			case "/oauth/device/code":
+				_, _ = w.Write([]byte(`{"device_code":"dev","user_code":"ABCD","verification_url":"https://trakt.tv/activate","expires_in":600,"interval":5}`))
+			case "/oauth/device/token":
+				_, _ = w.Write([]byte(`{"access_token":"acc","refresh_token":"ref","expires_in":7776000,"created_at":1}`))
+			case "/users/me":
+				_, _ = w.Write([]byte(`{"username":"etherfan"}`))
+			default:
+				w.WriteHeader(http.StatusNotFound)
+			}
+		}))
+		db, err := store.OpenMemory(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		c := New(Options{Config: config.Trakt{Enabled: true, ClientID: "cid", ClientSecret: secret}, DB: db, BaseURL: srv.URL, MaxRetryAfter: time.Second, MinPostInterval: -1})
+		if !c.Enabled() {
+			t.Fatalf("secret %q: Trakt not enabled with a client ID", secret)
+		}
+		dc, err := c.StartDevice(context.Background())
+		if err != nil {
+			t.Fatalf("secret %q: device code: %v", secret, err)
+		}
+		if st, err := c.PollDevice(context.Background(), 1, dc.DeviceCode); err != nil || st != PollAuthorized {
+			t.Fatalf("secret %q: poll %v %v", secret, st, err)
+		}
+		got, sent := bodies[0]["client_secret"]
+		if secret == "" && sent {
+			t.Fatalf("sent client_secret %v for an app without one", got)
+		}
+		if secret != "" && got != secret {
+			t.Fatalf("client_secret %v, want %q", got, secret)
+		}
+		srv.Close()
+		db.Close()
+	}
+}

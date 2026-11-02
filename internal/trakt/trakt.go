@@ -228,11 +228,23 @@ func (c *Client) UpdateConfig(cfg config.Trakt) {
 	c.mu.Unlock()
 }
 
-// Enabled reports whether Trakt is configured.
+// Enabled reports whether Trakt is configured. Only a client ID is needed:
+// Trakt stopped issuing client secrets to new apps on 2026-10-01, and the
+// device-code sign-in works without one. Apps that have a secret still send
+// it.
 func (c *Client) Enabled() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.cfg.Enabled && c.cfg.ClientID != "" && c.cfg.ClientSecret != ""
+	return c.cfg.Enabled && c.cfg.ClientID != ""
+}
+
+// withSecret adds client_secret to a token request body when the app has
+// one. Apps created since 2026-10-01 have none and must not send it.
+func withSecret(body map[string]string, secret string) map[string]string {
+	if secret != "" {
+		body["client_secret"] = secret
+	}
+	return body
 }
 
 func (c *Client) creds() (id, secret string) {
@@ -412,7 +424,7 @@ func (c *Client) StartDevice(ctx context.Context) (*DeviceCode, error) {
 func (c *Client) PollDevice(ctx context.Context, userID int64, deviceCode string) (PollStatus, error) {
 	id, secret := c.creds()
 	status, b, err := c.do(ctx, http.MethodPost, "/oauth/device/token",
-		map[string]string{"code": deviceCode, "client_id": id, "client_secret": secret}, "")
+		withSecret(map[string]string{"code": deviceCode, "client_id": id}, secret), "")
 	if err != nil {
 		return "", err
 	}
@@ -510,10 +522,10 @@ func (c *Client) Refresh(ctx context.Context, userID int64) error {
 		return err
 	}
 	id, secret := c.creds()
-	status, b, err := c.do(ctx, http.MethodPost, "/oauth/token", map[string]string{
-		"refresh_token": t.RefreshToken, "client_id": id, "client_secret": secret,
+	status, b, err := c.do(ctx, http.MethodPost, "/oauth/token", withSecret(map[string]string{
+		"refresh_token": t.RefreshToken, "client_id": id,
 		"grant_type": "refresh_token",
-	}, "")
+	}, secret), "")
 	if err != nil {
 		return err
 	}

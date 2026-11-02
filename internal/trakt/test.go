@@ -13,8 +13,9 @@ import (
 )
 
 // Test checks the owner's Trakt application credentials: Trakt accepts the
-// client ID on a lightweight public request. The client secret is only
-// exercised when a viewer connects their account.
+// client ID on a lightweight public request. A client secret is optional
+// (Trakt no longer issues one to new apps) and is only exercised when a
+// viewer connects their account.
 func Test(ctx context.Context, cfg config.Trakt) error {
 	return test(ctx, &http.Client{Timeout: 10 * time.Second}, defaultBaseURL, cfg)
 }
@@ -23,9 +24,6 @@ func test(ctx context.Context, hc *http.Client, base string, cfg config.Trakt) e
 	id := strings.TrimSpace(cfg.ClientID)
 	if id == "" {
 		return errors.New("a Trakt client ID is required")
-	}
-	if strings.TrimSpace(cfg.ClientSecret) == "" {
-		return errors.New("a Trakt client secret is required")
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(base, "/")+"/movies/trending?limit=1", nil)
 	if err != nil {
