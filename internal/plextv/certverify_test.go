@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"errors"
 	"math/big"
 	"net"
 	"testing"
@@ -81,7 +82,7 @@ func TestVerifyPlexDirectCertificate(t *testing.T) {
 		dials++
 		return nil
 	})
-	ok, reason := m.VerifyTrust(context.Background(), hash, "x."+hash+".plex.direct:32400")
+	ok, reason := m.VerifyTrust(context.Background(), hash, "x."+hash+".plex.direct", "x."+hash+".plex.direct:32400")
 	if !ok || reason != "" || dials != 1 {
 		t.Fatalf("trusted: ok=%v reason=%q dials=%d", ok, reason, dials)
 	}
@@ -94,7 +95,7 @@ func TestVerifyPlexDirectCertificate(t *testing.T) {
 		t.Fatalf("status poll redialed: %d", dials)
 	}
 
-	ok, reason = m.VerifyTrust(context.Background(), "ffffffffffffffffffffffffffffffff", "x."+hash+".plex.direct:32400")
+	ok, reason = m.VerifyTrust(context.Background(), "ffffffffffffffffffffffffffffffff", "x."+hash+".plex.direct", "x."+hash+".plex.direct:32400")
 	if ok || reason != CertReasonIdentity || dials != 1 {
 		t.Fatalf("identity: ok=%v reason=%q dials=%d", ok, reason, dials)
 	}
@@ -105,7 +106,7 @@ func TestVerifyPlexDirectCertificate(t *testing.T) {
 		t.Fatal("handshake ran for an untrusted chain")
 		return nil
 	})
-	ok, reason = untrusted.VerifyTrust(context.Background(), hash, "x."+hash+".plex.direct:32400")
+	ok, reason = untrusted.VerifyTrust(context.Background(), hash, "x."+hash+".plex.direct", "x."+hash+".plex.direct:32400")
 	if ok || reason != CertReasonChain {
 		t.Fatalf("chain: ok=%v reason=%q", ok, reason)
 	}
@@ -113,7 +114,7 @@ func TestVerifyPlexDirectCertificate(t *testing.T) {
 	expiredLeaf, expiredPair, expiredPool := testPlexLeaf(t, hash, now, now.Add(-time.Minute))
 	expired := &CertManager{o: CertManagerOptions{Now: func() time.Time { return now }}, trustRoots: expiredPool}
 	installLeaf(expired, expiredPair, expiredLeaf)
-	ok, reason = expired.VerifyTrust(context.Background(), hash, "x."+hash+".plex.direct:32400")
+	ok, reason = expired.VerifyTrust(context.Background(), hash, "x."+hash+".plex.direct", "x."+hash+".plex.direct:32400")
 	if ok || reason != CertReasonDates {
 		t.Fatalf("dates: ok=%v reason=%q", ok, reason)
 	}
@@ -122,7 +123,7 @@ func TestVerifyPlexDirectCertificate(t *testing.T) {
 		dials++
 		return context.DeadlineExceeded
 	})
-	ok, reason = m.VerifyTrust(context.Background(), hash, "x."+hash+".plex.direct:32400")
+	ok, reason = m.VerifyTrust(context.Background(), hash, "x."+hash+".plex.direct", "x."+hash+".plex.direct:32400")
 	if ok || reason != CertReasonHandshake || dials != 3 {
 		t.Fatalf("handshake: ok=%v reason=%q dials=%d", ok, reason, dials)
 	}
@@ -140,5 +141,45 @@ func TestLocalPlexDirectDialPicksThePublishedLANAddress(t *testing.T) {
 	want := "192-168-1-5." + hash + ".plex.direct:32400"
 	if got != want {
 		t.Fatalf("dial %q, want %q", got, want)
+	}
+}
+
+// The handshake check dials Ether's own listener first, with the plex.direct
+// name for SNI, so no DNS lookup is needed. A router that blocks
+// *.plex.direct names, or a Docker host without hairpin NAT, cannot make a
+// working certificate look broken. The advertised address is the fallback
+// (#251).
+func TestVerifyTrustDialsOwnListenerFirst(t *testing.T) {
+	now := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
+	const hash = "abc123def456abc123def456abc123de"
+	leaf, pair, pool := testPlexLeaf(t, hash, now, now.Add(180*24*time.Hour))
+	m := &CertManager{o: CertManagerOptions{Now: func() time.Time { return now }}, trustRoots: pool}
+	installLeaf(m, pair, leaf)
+	host := "192-168-1-5." + hash + ".plex.direct"
+	var addrs, names []string
+	m.setTrustDial(func(_ context.Context, _, addr string, cfg *tls.Config) error {
+		addrs, names = append(addrs, addr), append(names, cfg.ServerName)
+		if addr == host+":32400" {
+			return errors.New("no such host") // DNS rebinding protection
+		}
+		return nil
+	})
+	if ok, reason := m.VerifyTrust(context.Background(), hash, host, "127.0.0.1:32400", host+":32400"); !ok || reason != "" {
+		t.Fatalf("own listener: ok=%v reason=%q", ok, reason)
+	}
+	if len(addrs) != 1 || addrs[0] != "127.0.0.1:32400" || names[0] != host {
+		t.Fatalf("dialed %v with names %v", addrs, names)
+	}
+	// Own listener refused: the advertised address is still tried.
+	addrs, names = nil, nil
+	m.setTrustDial(func(_ context.Context, _, addr string, cfg *tls.Config) error {
+		addrs = append(addrs, addr)
+		if addr == "127.0.0.1:32400" {
+			return errors.New("connection refused")
+		}
+		return nil
+	})
+	if ok, _ := m.VerifyTrust(context.Background(), hash, host, "127.0.0.1:32400", host+":32400"); !ok || addrs[len(addrs)-1] != host+":32400" {
+		t.Fatalf("fallback: ok=%v dialed %v", ok, addrs)
 	}
 }
