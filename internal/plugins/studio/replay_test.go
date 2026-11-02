@@ -310,19 +310,29 @@ func TestEventReplayDryRunRecordsWithoutApplying(t *testing.T) {
 	mgr.RegisterRuntime("hosted", plugins.HostedRuntimeFactory(eng))
 
 	ctx := context.Background()
-	mgr.Publish(ctx, plugins.Event{
+	fixtureEvents := []plugins.Event{{
 		ID:       "ev-1",
 		Name:     plugins.EventPlaybackCompleted,
 		At:       time.Now().UTC().Add(-2 * time.Hour),
 		ViewerID: 7,
 		Payload:  json.RawMessage(`{"ratingKey":501,"title":"Dune (2021)"}`),
-	})
-	mgr.Publish(ctx, plugins.Event{
+	}, {
 		ID:      "ev-2",
 		Name:    plugins.EventTitleAvailable,
 		At:      time.Now().UTC().Add(-1 * time.Hour),
 		Payload: json.RawMessage(`{"ratingKey":502,"title":"Nosferatu (2024)"}`),
-	})
+	}}
+	// Replay consumes retained log rows; seed them directly rather than
+	// relying on publication before any plugin has subscribed.
+	for _, event := range fixtureEvents {
+		raw, err := json.Marshal(event)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(`INSERT INTO plugins_event_log(name,payload,created) VALUES(?,?,?)`, event.Name, string(raw), time.Now().Unix()); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	eventManifest := json.RawMessage(`{
 		"id": "org.example.scrobbler",

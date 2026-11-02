@@ -138,6 +138,9 @@ type Options struct {
 	Kinds *KindRegistry
 }
 type Service struct {
+	subscriberMu            sync.RWMutex
+	subscribers             map[uint64]func(Event)
+	nextSubscriber          uint64
 	monitorDone             <-chan struct{}
 	watchMu                 sync.Mutex
 	watchUpdate             func() error
@@ -160,6 +163,31 @@ func (s *Service) Kinds() *KindRegistry { return s.kinds }
 
 // RegisterChannelKind adds a channel kind (plugin kinds; WS9f).
 func (s *Service) RegisterChannelKind(k ChannelKind) error { return s.kinds.Register(k) }
+
+// Subscribe observes successfully emitted events, independent of channel selection.
+func (s *Service) Subscribe(fn func(Event)) func() {
+	s.subscriberMu.Lock()
+	if s.subscribers == nil {
+		s.subscribers = make(map[uint64]func(Event))
+	}
+	s.nextSubscriber++
+	id := s.nextSubscriber
+	s.subscribers[id] = fn
+	s.subscriberMu.Unlock()
+	return func() { s.subscriberMu.Lock(); delete(s.subscribers, id); s.subscriberMu.Unlock() }
+}
+
+func (s *Service) publishEvent(e Event) {
+	s.subscriberMu.RLock()
+	fns := make([]func(Event), 0, len(s.subscribers))
+	for _, fn := range s.subscribers {
+		fns = append(fns, fn)
+	}
+	s.subscriberMu.RUnlock()
+	for _, fn := range fns {
+		fn(e)
+	}
+}
 
 // HTTPClient is the client channel kinds deliver with.
 func (s *Service) HTTPClient() *http.Client { return s.opts.Client }
@@ -344,8 +372,12 @@ func (s *Service) Save(ctx context.Context, c Channel) error {
 }
 func (s *Service) Emit(ctx context.Context, e Event) error {
 	e, selected, err := s.prepare(ctx, e)
-	if err != nil || len(selected) == 0 {
+	if err != nil {
 		return err
+	}
+	if len(selected) == 0 {
+		s.publishEvent(e)
+		return nil
 	}
 	// Commit every destination together. A failed fan-out can be retried
 	// without duplicating notifications already queued for earlier channels.
@@ -359,7 +391,11 @@ func (s *Service) Emit(ctx context.Context, e Event) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.publishEvent(e)
+	return nil
 }
 
 // prepare validates e, stamps its time and selects the channels it goes to.

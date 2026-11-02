@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/braedonsaunders/ether/internal/agent"
 	"github.com/braedonsaunders/ether/internal/agent/tools"
 	"github.com/braedonsaunders/ether/internal/extend"
 )
@@ -95,7 +96,7 @@ func DescriptorsFor(man Manifest) []extend.Descriptor {
 	}
 	if man.HasCapability(CapNotify) && c.Notification != nil {
 		add(extend.KindChannelKind, "notify", textOf(id, man.Name), map[string]any{
-			"fields": c.Notification.Fields, "formats": c.Notification.Formats, "maxLength": c.Notification.MaxLength})
+			"fields": notificationFields(id, c.Notification.Fields), "sendTest": c.Notification.SendTest, "selectable": true, "formats": c.Notification.Formats, "maxLength": c.Notification.MaxLength})
 	}
 	if man.HasCapability(CapSubtitles) && c.Subtitles != nil {
 		add(extend.KindSubtitleProvider, "subtitles", textOf(id, man.Name), map[string]any{
@@ -129,6 +130,8 @@ func ToolName(plugin, name string) string {
 // syncDescriptors replaces a plugin's registry descriptors and tools to
 // match its record: none while disabled.
 func (m *Manager) syncDescriptors(ctx context.Context, r Record) {
+	m.indexEventSubscriptions(r)
+	m.syncNotificationKind(r)
 	m.mu.Lock()
 	m.shadow[r.ID] = r.Shadow
 	m.mu.Unlock()
@@ -182,12 +185,16 @@ func (m *Manager) pluginTool(r Record, tl ToolMeta) tools.Tool {
 		if resp.Status >= 300 {
 			return tools.Result{}, tools.Userf("Plugin %s tool %s failed with status %d.", pluginID, name, resp.Status)
 		}
+		if len(resp.Body) > 64*1024 {
+			return tools.Result{}, tools.Userf("Plugin tool output is too large.")
+		}
 		var data map[string]any
 		if len(resp.Body) > 0 {
 			if err := json.Unmarshal(resp.Body, &data); err != nil {
-				data = map[string]any{"result": string(resp.Body)}
+				return tools.Result{}, tools.Userf("Plugin tool returned invalid output.")
 			}
 		}
+		redactValue(data)
 		return tools.Result{Data: data}, nil
 	}
 	return tools.Tool{
@@ -195,14 +202,31 @@ func (m *Manager) pluginTool(r Record, tl ToolMeta) tools.Tool {
 		InputSchema: tl.InputSchema, ReadOnly: tl.ReadOnly, Destructive: tl.Destructive,
 		OpenWorld: tl.OpenWorld, Audience: tools.AudienceOwner, Owner: pluginID,
 		Execute: func(ctx context.Context, _ tools.Principal, input map[string]any) (tools.Result, error) {
+			encoded, err := json.Marshal(input)
+			if err != nil || len(encoded) > 64*1024 {
+				return tools.Result{}, tools.Userf("Tool input is invalid or too large.")
+			}
+			var snapshot map[string]any
+			if err := json.Unmarshal(encoded, &snapshot); err != nil {
+				return tools.Result{}, tools.Userf("Tool input is invalid.")
+			}
+			if err := agent.ValidateToolInput(tl.InputSchema, snapshot); err != nil {
+				return tools.Result{}, tools.Userf("Invalid tool input: %s", err)
+			}
 			if tl.ReadOnly {
-				return run(ctx, input)
+				return run(ctx, snapshot)
 			}
 			return tools.Result{Proposal: &tools.Proposal{
 				Category:    fmt.Sprintf("Run %s from %s", title, r.Name),
 				Description: tl.Description,
-				Input:       input,
-				Apply:       func(ctx context.Context) (tools.Result, error) { return run(ctx, input) },
+				Input:       snapshot,
+				Apply: func(ctx context.Context) (tools.Result, error) {
+					var approved map[string]any
+					if err := json.Unmarshal(encoded, &approved); err != nil {
+						return tools.Result{}, err
+					}
+					return run(ctx, approved)
+				},
 			}}, nil
 		},
 	}

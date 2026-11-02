@@ -13,6 +13,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/extend"
 	"github.com/braedonsaunders/ether/internal/identity"
+	"github.com/braedonsaunders/ether/internal/notify"
 	"github.com/braedonsaunders/ether/internal/playback"
 	"github.com/braedonsaunders/ether/internal/plugins"
 	"github.com/braedonsaunders/ether/internal/plugins/adapters"
@@ -38,7 +39,7 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 	mgr, err := plugins.New(plugins.Deps{
 		DB: a.db, Sealer: a.cfg,
 		CheckPackage: kit.CheckInstall,
-		Registry:     a.extendRT.registry, Tools: a.extendRT.tools,
+		Registry:     a.extendRT.registry, Tools: a.extendRT.tools, Notifications: a.notifications,
 		Logger:   a.log.With("component", "plugins"),
 		IsLeader: func() bool { return a.cluster == nil || a.cluster.IsLeader() },
 		Bus:      clusterbus.FromCluster(a.cluster),
@@ -178,9 +179,7 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 		Logger: a.log.With("component", "plugins-studio"),
 	})
 
-	// Event sources (SPEC §5.7): playback and watch state. Normalized
-	// notify kinds (title.available, user.joined) reach plugins through
-	// Manager.Publish; the notify service has no subscribe hook yet.
+	// Event sources (SPEC §5.7): playback, watch state and notifications.
 	publish := func(ev plugins.Event) {
 		pctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -221,6 +220,19 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 			publish(plugins.Event{Name: name, At: ev.At, ViewerID: ev.UserID, Payload: payload})
 		})
 	}
+	stopNotify := func() {}
+	if a.notifications != nil {
+		stopNotify = a.notifications.Subscribe(func(ev notify.Event) {
+			if ev.Kind != "title.available" && ev.Kind != "user.joined" {
+				return
+			}
+			payload := json.RawMessage(`{}`)
+			if ev.Kind == "title.available" {
+				payload, _ = json.Marshal(map[string]any{"title": ev.Title, "message": ev.Message})
+			}
+			publish(plugins.Event{Name: plugins.NormalizeNotify(ev.Kind), At: ev.At, Payload: payload})
+		})
+	}
 
 	runCtx, cancelRun := context.WithCancel(context.Background())
 	go mgr.Run(runCtx)
@@ -229,6 +241,7 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 		cancelRun()
 		stopPlayback()
 		stopState()
+		stopNotify()
 		unsubscribe()
 	})
 	return &pluginRuntime{mgr: mgr, cat: cat, studio: studioSvc, tunnel: tunnel, pairing: pairing, pluginHost: host}, nil

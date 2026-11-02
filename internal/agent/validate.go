@@ -20,14 +20,21 @@ func validateInput(schema json.RawMessage, input any) error {
 	return validateValue(s, input, "input")
 }
 
+// ValidateToolInput validates inputs for callers that invoke catalogue tools directly.
+func ValidateToolInput(schema json.RawMessage, input any) error { return validateInput(schema, input) }
+
 func validateValue(schema map[string]any, v any, path string) error {
 	if enum, ok := schema["enum"].([]any); ok {
+		matched := false
 		for _, e := range enum {
 			if reflect.DeepEqual(e, v) {
-				return nil // enum match is sufficient here
+				matched = true
+				break
 			}
 		}
-		return fmt.Errorf("%s must be one of the allowed values", path)
+		if !matched {
+			return fmt.Errorf("%s must be one of the allowed values", path)
+		}
 	}
 	switch typ, _ := schema["type"].(string); typ {
 	case "object", "":

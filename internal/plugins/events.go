@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -23,17 +24,22 @@ func (m *Manager) Publish(ctx context.Context, ev Event) {
 	if !KnownEvents[ev.Name] {
 		return
 	}
+	m.mu.Lock()
+	recs := make([]Record, 0, len(m.eventSubs[ev.Name]))
+	for _, r := range m.eventSubs[ev.Name] {
+		recs = append(recs, r)
+	}
+	m.mu.Unlock()
+	if len(recs) == 0 {
+		return
+	}
 	if ev.ID == "" {
 		ev.ID = newEventID()
 	}
 	if ev.At.IsZero() {
 		ev.At = m.now()
 	}
-	m.store.logEvent(ctx, ev)
-	recs, err := m.store.list(ctx)
-	if err != nil {
-		return
-	}
+	logged := false
 	for _, r := range recs {
 		if !r.Enabled || r.Manifest.Ether == nil || !r.Manifest.HasCapability(CapEvents) {
 			continue
@@ -49,9 +55,13 @@ func (m *Manager) Publish(ctx context.Context, ev Event) {
 		if !sub {
 			continue
 		}
-		g, _ := m.store.grants(ctx, r.ID)
-		if g.revoked("events") {
+		g, err := m.store.grants(ctx, r.ID)
+		if err != nil || g.revoked("events") {
 			continue
+		}
+		if !logged {
+			m.store.logEvent(ctx, ev)
+			logged = true
 		}
 		out := ev
 		if !viewerOK(g, normLevel(r.Manifest.Ether.Permissions.Viewers.Identity), ev.ViewerID) {
@@ -60,27 +70,63 @@ func (m *Manager) Publish(ctx context.Context, ev Event) {
 		}
 		dropped, err := m.store.enqueue(ctx, r.ID, out)
 		if err == nil && dropped > 0 {
+			m.healthMu.Lock()
 			if h, err := m.store.health(ctx, r.ID); err == nil {
 				h.Drops += int64(dropped)
 				_ = m.store.putHealth(ctx, r.ID, h)
 			}
+			m.healthMu.Unlock()
 		}
 	}
 }
 
+// indexEventSubscriptions is updated together with the plugin's descriptors.
+func (m *Manager) indexEventSubscriptions(r Record) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, subscribers := range m.eventSubs {
+		delete(subscribers, r.ID)
+	}
+	if !r.Enabled || r.Manifest.Ether == nil || !r.Manifest.HasCapability(CapEvents) || r.Manifest.Ether.Contributes.Events == nil {
+		return
+	}
+	for _, name := range r.Manifest.Ether.Contributes.Events.Subscribe {
+		if !KnownEvents[name] {
+			continue
+		}
+		if m.eventSubs[name] == nil {
+			m.eventSubs[name] = make(map[string]Record)
+		}
+		m.eventSubs[name][r.ID] = r
+	}
+}
+
 func stripViewer(payload json.RawMessage) json.RawMessage {
-	var doc map[string]any
+	var doc any
 	if json.Unmarshal(payload, &doc) != nil {
-		return payload
+		return json.RawMessage(`{}`)
 	}
 	changed := false
-	for k := range doc {
-		lk := strings.ToLower(k)
-		if strings.Contains(lk, "viewer") || strings.Contains(lk, "user") {
-			delete(doc, k)
-			changed = true
+	var strip func(any)
+	strip = func(v any) {
+		switch value := v.(type) {
+		case map[string]any:
+			for k, child := range value {
+				lk := strings.ToLower(k)
+				if strings.Contains(lk, "viewer") || strings.Contains(lk, "user") {
+					delete(value, k)
+					changed = true
+				} else {
+					strip(child)
+				}
+			}
+		case []any:
+			for _, child := range value {
+				strip(child)
+			}
 		}
 	}
+	strip(doc)
 	if !changed {
 		return payload
 	}
@@ -149,6 +195,9 @@ func (m *Manager) DeliverOutbox(ctx context.Context, pluginID string) error {
 		resp, err := m.Call(ctx, pluginID, Request{Method: "POST", Path: "/ether/event", Body: body})
 		if err != nil {
 			return err
+		}
+		if resp.Status < 200 || resp.Status >= 300 {
+			return fmt.Errorf("event delivery failed with status %d", resp.Status)
 		}
 		var out struct {
 			Ack []string `json:"ack"`

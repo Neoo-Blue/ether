@@ -820,6 +820,9 @@ func (m *Manager) mergedSettings(ctx context.Context, id string) (map[string]any
 // (secrets sealed per plugin; a "Saved" value keeps the stored secret),
 // then calls the plugin's /ether/configure and surfaces its field errors.
 func (m *Manager) Configure(ctx context.Context, id string, incoming map[string]any) (map[string]string, error) {
+	lock := m.notificationLock(id)
+	lock.Lock()
+	defer lock.Unlock()
 	r, err := m.store.record(ctx, id)
 	if err != nil {
 		return nil, err
