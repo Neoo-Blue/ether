@@ -27,20 +27,20 @@ const (
 
 // Ranking ladder step keys for QualityProfile.Ranking.
 const (
-	RankRulePrefix  = "rule:"
+	RankRulePrefix = "rule:"
 	// RankPluginPrefix namespaces plugin-contributed ranking steps:
 	// "plugin:<plugin id>/<key>" (additive, WS1a). Execution arrives with
 	// the plugin host; until then a plugin step ranks neutral.
 	RankPluginPrefix = "plugin:"
-	RankLanguage    = "language"
-	RankConnection  = "connection"
-	RankResolution  = "resolution"
-	RankReleaseType = "releaseType"
-	RankHDR         = "hdr"
-	RankVerified    = "verified"
-	RankVideoCodec  = "videoCodec"
-	RankAudioFormat = "audioFormat"
-	RankSize        = "size"
+	RankLanguage     = "language"
+	RankConnection   = "connection"
+	RankResolution   = "resolution"
+	RankReleaseType  = "releaseType"
+	RankHDR          = "hdr"
+	RankVerified     = "verified"
+	RankVideoCodec   = "videoCodec"
+	RankAudioFormat  = "audioFormat"
+	RankSize         = "size"
 )
 
 // DefaultRankingSteps is the built-in ranking ladder order after any Prefer rules.

@@ -35,52 +35,52 @@ func builtinRankingDescriptors() []extend.Descriptor {
 
 func rankingStepDescriptors() []extend.Descriptor {
 	type stepCopy struct {
-		configKey string
-		hint             extend.Text
-		editor           extend.RankingEditorKind
-		options          []extend.DescriptorOption
+		configKey         string
+		hint              extend.Text
+		editor            extend.RankingEditorKind
+		options           []extend.DescriptorOption
 		required, movable bool
 	}
 	copy := map[string]stepCopy{
 		core.RankLanguage: {
-			editor: extend.RankingEditorOrderedList,
+			editor:    extend.RankingEditorOrderedList,
 			configKey: "preferredLanguages", movable: true,
 		},
 		core.RankConnection: {
 			editor: extend.RankingEditorNone,
-			hint: extend.T("Fits the viewer's bandwidth"), required: true,
+			hint:   extend.T("Fits the viewer's bandwidth"), required: true,
 		},
 		core.RankResolution: {
-			editor: extend.RankingEditorRange,
+			editor:    extend.RankingEditorRange,
 			configKey: "heightRange", movable: true,
 			options: extend.Options("480", "720", "1080", "2160"),
 		},
 		core.RankReleaseType: {
-			editor: extend.RankingEditorOrderedList,
+			editor:    extend.RankingEditorOrderedList,
 			configKey: "preferredSources", movable: true,
 			options: extend.Options("remux", "bluray", "webdl", "webrip", "hdtv", "dvd", "screener", "cam"),
 		},
 		core.RankHDR: {
-			editor: extend.RankingEditorChoice,
+			editor:    extend.RankingEditorChoice,
 			configKey: "hdr", movable: true,
 			options: extend.Options("dv", "hdr10", "sdr"),
 		},
 		core.RankVerified: {
 			editor: extend.RankingEditorNone,
-			hint: extend.T("Verified streams rank ahead of untested ones"), required: true,
+			hint:   extend.T("Verified streams rank ahead of untested ones"), required: true,
 		},
 		core.RankVideoCodec: {
-			editor: extend.RankingEditorOrderedList,
+			editor:    extend.RankingEditorOrderedList,
 			configKey: "preferredCodecs", movable: true,
 			options: extend.Options("av1", "hevc", "h264", "vp9", "mpeg2"),
 		},
 		core.RankAudioFormat: {
-			editor: extend.RankingEditorOrderedList,
+			editor:    extend.RankingEditorOrderedList,
 			configKey: "preferredAudio", movable: true,
 			options: extend.Options("truehd", "dtshd", "eac3", "ac3", "dts", "aac", "flac", "opus"),
 		},
 		core.RankSize: {
-			editor: extend.RankingEditorToggle,
+			editor:    extend.RankingEditorToggle,
 			configKey: "preferLargest", movable: true,
 		},
 	}
