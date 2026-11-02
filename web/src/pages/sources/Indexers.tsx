@@ -828,7 +828,10 @@ export function IndexerList({
                         <SearchSelect
                           value={draft.clientIdentity ?? ""}
                           onChange={(v) => set({ clientIdentity: v })}
-                          options={[{ value: "", label: t("Inherit") }, ...searchIdentityOptions(false)]}
+                          options={[
+                            { value: "", label: t("Inherit") },
+                            ...searchIdentityOptions(false),
+                          ]}
                           ariaLabel={t("Identity")}
                           placeholder={t("Select…")}
                           searchPlaceholder={t("Search…")}
