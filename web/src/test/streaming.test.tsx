@@ -379,12 +379,11 @@ describe("Release selection", () => {
     });
   });
 
-  it("tucks How Ether searches under More options on the Searching tab", async () => {
+  it("shows all four search controls without a disclosure", async () => {
     renderApp("/quality/searching");
     expect(await screen.findByRole("heading", { name: "How Ether searches" }, WAIT)).toBeVisible();
-    expect(screen.queryByLabelText("Releases to keep ready")).toBeNull();
     expect(screen.queryByLabelText("Same-quality versions to offer")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "More options: How Ether searches" }));
+    expect(screen.queryByRole("button", { name: "More options: How Ether searches" })).toBeNull();
     expect(screen.getByLabelText("Releases to keep ready")).toHaveValue(3);
     expect(screen.getByLabelText("Health check samples")).toHaveValue(12);
     expect(screen.getByLabelText("Remember searches for")).toHaveValue("6h0m0s");

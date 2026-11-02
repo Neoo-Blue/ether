@@ -195,7 +195,7 @@ export const PAGES = localized<PageDef[]>(() => [
         title: t("Profiles"),
         keywords: searchTerms(
           msg(
-            "quality profiles resolution 4k 1080p remote away bitrate cam scoring trash custom formats ranking source order usenet debrid versions who gets what",
+            "quality profiles resolution 4k 1080p remote away bitrate cam scoring trash custom formats ranking source order usenet debrid versions",
           ),
         ),
       },
@@ -203,6 +203,11 @@ export const PAGES = localized<PageDef[]>(() => [
         key: "rules",
         title: t("Rules"),
         keywords: searchTerms(msg("device client viewer profile max quality limit")),
+      },
+      {
+        key: "check",
+        title: t("Check quality"),
+        keywords: searchTerms(msg("who gets what viewer app device resolution hdr bitrate")),
       },
       {
         key: "searching",

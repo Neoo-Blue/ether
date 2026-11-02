@@ -22,10 +22,10 @@ const headline = () => screen.getByTestId("quality-headline").textContent;
 describe("who gets what", () => {
   it("checks the owner on the first app at home, then away", async () => {
     const fake = await renderChecker();
-    await settleUi(() => expect(headline()).toBe("4K · HDR and Dolby Vision"));
+    await settleUi(() => expect(headline()).toBe("4KHDRDolby Vision"));
     const layers = screen.getByRole("list", { name: "What decided it" });
     const rule = within(layers).getByText("Rule 1 picks 4K.").closest("li")!;
-    expect(within(rule).getByText("Decides")).toBeInTheDocument();
+    expect(within(rule).getByText("Sets the limit")).toBeInTheDocument();
     expect(calls(fake, "POST", "/quality/explain").at(-1)?.body).toEqual({
       userId: 1,
       clientId: "plex-apple-tv",
@@ -33,10 +33,10 @@ describe("who gets what", () => {
     });
 
     fireEvent.click(screen.getByRole("radio", { name: "Away" }));
-    await settleUi(() => expect(headline()).toBe("4K · HDR and Dolby Vision · Up to 8 Mbps"));
+    await settleUi(() => expect(headline()).toBe("4KHDRDolby VisionUp to 8 Mbps"));
     expect(screen.getByText("Rule 1 picks 4K, ahead of the Away profile.")).toBeInTheDocument();
     const cap = screen.getByText("Away from home is limited to 8 Mbps.").closest("li")!;
-    expect(within(cap).getByText("Decides")).toBeInTheDocument();
+    expect(within(cap).getByText("Sets the limit")).toBeInTheDocument();
   });
 
   it("shows the device ceiling and the viewer's own limits", async () => {
@@ -52,7 +52,7 @@ describe("who gets what", () => {
     fireEvent.click(await screen.findByRole("option", { name: "Sam Rivera" }, WAIT));
     fireEvent.click(screen.getByRole("button", { name: "App" }));
     fireEvent.click(await screen.findByRole("option", { name: "Plex for Android" }, WAIT));
-    await settleUi(() => expect(headline()).toBe("1080p · HDR off · Up to 4 Mbps"));
+    await settleUi(() => expect(headline()).toBe("1080pSDRUp to 4 Mbps"));
     expect(screen.getByText("No rule matches, so 1080p applies.")).toBeInTheDocument();
     expect(screen.getByText("Sam Rivera is limited to 4 Mbps.")).toBeInTheDocument();
 

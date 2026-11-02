@@ -135,6 +135,7 @@ export function settingsIndex(): SettingHit[] {
     // Quality
     ...rows("/quality/profiles", `${quality} › ${away}`, [t("Away profile"), t("Bitrate limit")]),
     ...rows("/quality/profiles", quality, [t("Source order")]),
+    ...rows("/quality/check", quality, [t("Check quality")]),
     ...groupHits(S.PLAY_VERSIONS, "/quality/profiles", quality),
     ...rows("/quality/searching", `${quality} › ${t("Start speed")}`, [
       t("Start before the health check finishes"),

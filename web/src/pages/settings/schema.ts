@@ -376,8 +376,7 @@ export const RELEASE_SEARCH: FieldGroup[] = localized(() => [
   {
     title: t("How Ether searches"),
     description: t("The defaults are enough for a household."),
-    fields: [],
-    more: [
+    fields: [
       {
         key: "maxCandidates",
         label: t("Releases to keep ready"),

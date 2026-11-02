@@ -25,7 +25,6 @@ import type { QualityProfile, ReleaseRule } from "../../lib/types";
 import { QUALITY_AUDIO, QUALITY_CODECS, QUALITY_SOURCES } from "../settings/schema";
 import { SourceOrderSection } from "../sources/EqualQuality";
 import { AwaySection } from "./AwaySection";
-import { WhoGetsWhat } from "./WhoGetsWhat";
 import { ConfigSection } from "../../components/ConfigSection";
 import { PLAY_VERSIONS } from "../settings/schema";
 import {
@@ -517,7 +516,6 @@ export function QualityTab() {
         commit={commit}
         refresh={refresh}
       />
-      <WhoGetsWhat refreshKey={quality} />
       <AwaySection quality={quality} onSaved={refresh} />
       <SourceOrderSection />
       <ConfigSection
@@ -710,9 +708,6 @@ function ProfileList({
         description={t("Resolution, HDR, release type and language rules used to rank releases.")}
         actions={
           <>
-            <Button size="sm" variant="outline" onClick={() => setImporting(true)}>
-              <Download size={14} /> {t("Import from TRaSH Guides")}
-            </Button>
             <Button
               size="sm"
               onClick={() => open(profiles.length, blankProfile(profiles.length + 1))}
@@ -779,6 +774,18 @@ function ProfileList({
       >
         {draft ? (
           <>
+            {isNew ? (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setEditing(null);
+                  setImporting(true);
+                }}
+              >
+                <Download size={16} />
+                {t("Import from TRaSH Guides")}
+              </Button>
+            ) : null}
             <SettingsSection title={t("Profile")}>
               <TextRow
                 label={t("Name")}

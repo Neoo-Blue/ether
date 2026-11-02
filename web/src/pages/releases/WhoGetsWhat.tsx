@@ -3,7 +3,7 @@ import { useState } from "react";
 import { ErrorPanel, LoadingRows } from "../../components/feedback";
 import { Segmented } from "../../components/fields";
 import { useViewers, viewerName } from "../../components/pickers";
-import { SettingsRow } from "../../components/SettingsRow";
+import { MonitorCheck, ShieldCheck } from "lucide-react";
 import { t } from "../../i18n";
 import { searchSelectLabels } from "../../i18n/appkit-labels";
 import { api } from "../../lib/api";
@@ -89,48 +89,64 @@ export function layerText(l: QualityLayer, viewer: string): string {
   return l.reason;
 }
 
-function layerMeta(l: QualityLayer): string {
-  switch (l.kind) {
-    case "profile":
-    case "device":
-    case "rule-height":
-    case "android-lift":
-      return heightName(l.maxHeight);
-    case "remote-cap":
-    case "viewer-cap":
-      return l.bitrateKbps ? rateName(l.bitrateKbps) : t("No limit");
-  }
-  return "";
-}
-
 function Answer({ answer, viewer }: { answer: QualityAnswer; viewer: string }) {
+  const labels: Record<string, string> = {
+    profile: t("Profile"),
+    device: t("Device"),
+    "rule-height": t("Rule"),
+    "android-lift": t("Rule"),
+    "remote-cap": t("Away limit"),
+    "viewer-cap": t("Viewer limit"),
+    "remote-blocked": t("Access"),
+  };
   return (
-    <div className="space-y-3 px-5 py-4" aria-live="polite">
-      <div>
-        <p className="text-2xl font-semibold text-fg" data-testid="quality-headline">
-          {answerHeadline(answer)}
-        </p>
-        {!answer.blocked ? (
-          <p className="text-sm text-fg-muted">
-            {t("Uses the {profile} profile.", { profile: answer.profile })}
-          </p>
-        ) : null}
+    <div className="space-y-5 border-t border-border p-5" aria-live="polite">
+      <div className="flex items-center gap-4 rounded-xl border border-primary/20 bg-primary/5 p-5">
+        <MonitorCheck size={36} className="shrink-0 text-primary" />
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-fg-muted">{t("Available quality")}</p>
+          <div data-testid="quality-headline" className="flex flex-wrap items-center gap-2">
+            <span className="text-3xl font-semibold tracking-tight">
+              {answer.blocked ? t("Can't play away from home") : heightName(answer.maxHeight)}
+            </span>
+            {!answer.blocked ? (
+              <>
+                <Badge variant="secondary">{answer.hdr ? t("HDR") : t("SDR")}</Badge>
+                {answer.dolbyVision ? <Badge variant="secondary">{t("Dolby Vision")}</Badge> : null}
+                {answer.bitrateKbps ? (
+                  <Badge variant="outline">
+                    {t("Up to {rate}", { rate: rateName(answer.bitrateKbps) })}
+                  </Badge>
+                ) : null}
+              </>
+            ) : null}
+          </div>
+        </div>
       </div>
-      <ol className="space-y-2" aria-label={t("What decided it")}>
+      <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label={t("What decided it")}>
         {answer.layers.map((l, i) => (
           <li
             key={`${l.kind}-${i}`}
             className={cn(
-              "flex flex-wrap items-start justify-between gap-2 text-sm",
-              l.ignored && "text-fg-muted line-through",
+              "space-y-3 rounded-xl border border-border bg-surface p-4",
+              l.ignored && "opacity-60",
+              l.decisive && "border-primary/40",
             )}
           >
-            <span className="min-w-0 flex-1">{layerText(l, viewer)}</span>
-            <span className="flex shrink-0 items-center gap-2">
-              {l.edited ? <Badge variant="secondary">{t("Edited")}</Badge> : null}
-              {layerMeta(l) ? <span className="text-fg-muted">{layerMeta(l)}</span> : null}
-              {l.decisive ? <Badge variant="info">{t("Decides")}</Badge> : null}
-            </span>
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <span className="text-fg-muted">{i + 1}</span>
+              {labels[l.kind] ?? t("Limit")}
+            </div>
+            <p className={cn("text-sm text-fg-muted", l.ignored && "line-through")}>
+              {layerText(l, viewer)}
+            </p>
+            {l.decisive ? (
+              <Badge variant="info">
+                <ShieldCheck size={12} />
+                {t("Sets the limit")}
+              </Badge>
+            ) : null}
+            {l.edited ? <Badge variant="secondary">{t("Edited")}</Badge> : null}
           </li>
         ))}
       </ol>
@@ -169,7 +185,7 @@ export function WhoGetsWhat({ refreshKey }: { refreshKey?: unknown }) {
   const failed = viewersError ?? clients.error;
   return (
     <SettingsSection
-      title={t("Who gets what")}
+      title={t("Check quality")}
       description={t("See the quality a viewer gets on an app, and why.")}
     >
       {failed ? (
@@ -178,10 +194,10 @@ export function WhoGetsWhat({ refreshKey }: { refreshKey?: unknown }) {
         <LoadingRows rows={3} />
       ) : (
         <>
-          <SettingsRow
-            title={t("Viewer")}
-            control={
-              <div className="w-56">
+          <div className="grid gap-4 px-5 py-4 sm:grid-cols-3">
+            <div className="min-w-0 space-y-2">
+              <p className="text-xs font-medium text-fg-muted">{t("Viewer")}</p>{" "}
+              <div className="w-full">
                 <SearchSelect
                   {...searchSelectLabels()}
                   value={String(viewerId)}
@@ -190,12 +206,10 @@ export function WhoGetsWhat({ refreshKey }: { refreshKey?: unknown }) {
                   ariaLabel={t("Viewer")}
                 />
               </div>
-            }
-          />
-          <SettingsRow
-            title={t("App")}
-            control={
-              <div className="w-56">
+            </div>
+            <div className="min-w-0 space-y-2">
+              <p className="text-xs font-medium text-fg-muted">{t("App")}</p>{" "}
+              <div className="w-full">
                 <SearchSelect
                   {...searchSelectLabels()}
                   value={clientId}
@@ -204,11 +218,9 @@ export function WhoGetsWhat({ refreshKey }: { refreshKey?: unknown }) {
                   ariaLabel={t("App")}
                 />
               </div>
-            }
-          />
-          <SettingsRow
-            title={t("Where")}
-            control={
+            </div>
+            <div className="min-w-0 space-y-2">
+              <p className="text-xs font-medium text-fg-muted">{t("Where")}</p>{" "}
               <Segmented
                 ariaLabel={t("Where")}
                 size="sm"
@@ -219,8 +231,8 @@ export function WhoGetsWhat({ refreshKey }: { refreshKey?: unknown }) {
                   { value: "away", label: t("Away") },
                 ]}
               />
-            }
-          />
+            </div>
+          </div>
           {answer.error ? (
             <ErrorPanel error={answer.error} onRetry={() => void answer.reload()} />
           ) : answer.data ? (
