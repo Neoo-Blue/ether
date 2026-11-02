@@ -12,7 +12,7 @@ import {
 import { X } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ListInput, NumberInput, SecretInput } from "../../components/fields";
-import { TitleSearch } from "../../components/pickers";
+import { TitleSearch, viewerName } from "../../components/pickers";
 import { DragHandle, SortableList } from "../../components/Sortable";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/react";
@@ -307,19 +307,58 @@ export function useSchemaOptions(id: string, fieldKey: string): string[] {
  * A whole served schema as one form. This is the entry point other surfaces
  * (plugin settings, channel kinds, integration cards) render with.
  */
+function pointerKey(seg: string): string {
+  return seg.replace(/~/g, "~0").replace(/\//g, "~1");
+}
+
+/**
+ * Looks up a field error by full dotted path (`server.port`), relative dotted
+ * path (`port`, `rtxVideo.mode`), or JSON pointer (`/port`, `/rtxVideo/mode`).
+ */
+export function errorForPath(
+  errors: Record<string, string> | undefined,
+  path: string,
+): string | undefined {
+  if (!errors) return undefined;
+  if (errors[path]) return errors[path];
+  const fullPtr = "/" + path.split(".").map(pointerKey).join("/");
+  if (errors[fullPtr]) return errors[fullPtr];
+  const dot = path.indexOf(".");
+  if (dot > 0) {
+    const rel = path.slice(dot + 1);
+    if (errors[rel]) return errors[rel];
+    const relPtr = "/" + rel.split(".").map(pointerKey).join("/");
+    if (errors[relPtr]) return errors[relPtr];
+  }
+  return undefined;
+}
+
+export function hasFieldError(
+  f: FieldDef,
+  errors: Record<string, string>,
+  parentPath: string,
+): boolean {
+  const path = parentPath ? `${parentPath}.${f.key}` : f.key;
+  if (errorForPath(errors, path)) return true;
+  if (f.kind === "group") {
+    return f.fields.some((child) => hasFieldError(child, errors, path));
+  }
+  return false;
+}
+
 export function SchemaForm({
   schema,
   value,
   onChange,
   errors = {},
-  prefix,
+  prefix = "settings",
   loadOptions,
 }: {
   schema: ServedSchema;
   value: Obj;
   onChange: (v: Obj) => void;
   errors?: Record<string, string>;
-  prefix: string;
+  prefix?: string;
   loadOptions?: LoadOptions;
 }) {
   const { locale } = useLocale();
@@ -357,13 +396,14 @@ export function SchemaField({
   path: string;
   loadOptions?: LoadOptions;
 }) {
+  const resolvedError = error ?? errorForPath(errors, path);
   const id = `f-${path.replace(/[^a-z0-9]+/gi, "-")}`;
   const description = (
     <>
       {def.help}
-      {error ? (
+      {resolvedError ? (
         <span className="mt-1 block text-xs text-danger" role="alert">
-          {error}
+          {resolvedError}
         </span>
       ) : null}
     </>
@@ -380,14 +420,14 @@ export function SchemaField({
               value={nested[field.key]}
               path={`${path}.${field.key}`}
               errors={errors}
-              error={errors?.[`${path}.${field.key}`]}
+              error={errorForPath(errors, `${path}.${field.key}`)}
               loadOptions={loadOptions}
               onChange={(v) => onChange({ ...nested, [field.key]: v })}
             />
           ))}
-          {error ? (
+          {resolvedError ? (
             <p role="alert" className="text-sm text-danger">
-              {error}
+              {resolvedError}
             </p>
           ) : null}
         </div>
@@ -396,7 +436,7 @@ export function SchemaField({
     case "hidden":
       return null;
     case "json":
-      return <JsonRow label={def.label} value={value} onChange={onChange} error={error} />;
+      return <JsonRow label={def.label} value={value} onChange={onChange} error={resolvedError} />;
     case "bool":
       return (
         <SettingsRow
@@ -422,7 +462,7 @@ export function SchemaField({
               <NumberInput
                 id={id}
                 aria-label={def.label}
-                aria-invalid={error ? true : undefined}
+                aria-invalid={resolvedError ? true : undefined}
                 className="w-28"
                 value={Number(value ?? 0)}
                 min={def.min}
@@ -460,22 +500,42 @@ export function SchemaField({
     }
     case "select":
       return (
-        <SelectRow def={def} value={value} onChange={onChange} description={description} loadOptions={loadOptions} />
+        <SelectRow
+          def={def}
+          value={value}
+          onChange={onChange}
+          description={description}
+          loadOptions={loadOptions}
+        />
       );
     case "multiSelect":
       return (
-        <MultiSelectRow def={def} value={value} onChange={onChange} description={description} loadOptions={loadOptions} />
+        <MultiSelectRow
+          def={def}
+          value={value}
+          onChange={onChange}
+          description={description}
+          loadOptions={loadOptions}
+        />
       );
     case "orderedList":
       return (
-        <OrderedListRow def={def} value={value} onChange={onChange} description={description} loadOptions={loadOptions} />
+        <OrderedListRow
+          def={def}
+          value={value}
+          onChange={onChange}
+          description={description}
+          loadOptions={loadOptions}
+        />
       );
     case "language":
       return <LanguageRow def={def} value={value} onChange={onChange} description={description} />;
     case "viewer":
       return <ViewerRow def={def} value={value} onChange={onChange} description={description} />;
     case "collection":
-      return <CollectionRow def={def} value={value} onChange={onChange} description={description} />;
+      return (
+        <CollectionRow def={def} value={value} onChange={onChange} description={description} />
+      );
     case "title":
       return <TitleRow def={def} value={value} onChange={onChange} description={description} />;
     case "folder":
@@ -484,7 +544,7 @@ export function SchemaField({
         <Input
           id={id}
           aria-label={def.label}
-          aria-invalid={error ? true : undefined}
+          aria-invalid={resolvedError ? true : undefined}
           type={def.kind === "url" ? "url" : "text"}
           inputMode={def.kind === "url" ? "url" : undefined}
           value={String(value ?? "")}
@@ -495,11 +555,19 @@ export function SchemaField({
         />
       );
       return def.wide ? (
-        <SettingsRow stacked title={<label htmlFor={id}>{def.label}</label>} description={description}>
+        <SettingsRow
+          stacked
+          title={<label htmlFor={id}>{def.label}</label>}
+          description={description}
+        >
           {input}
         </SettingsRow>
       ) : (
-        <SettingsRow title={<label htmlFor={id}>{def.label}</label>} description={description} control={input} />
+        <SettingsRow
+          title={<label htmlFor={id}>{def.label}</label>}
+          description={description}
+          control={input}
+        />
       );
     }
     case "list":
@@ -512,7 +580,7 @@ export function SchemaField({
           <ListInput
             id={id}
             ariaLabel={def.label}
-            invalid={Boolean(error)}
+            invalid={Boolean(resolvedError)}
             value={(value as (string | number)[] | null) ?? []}
             onChange={onChange}
             placeholder={def.placeholder}
@@ -533,7 +601,7 @@ export function SchemaField({
             value={String(value ?? "")}
             onChange={onChange}
             placeholder={def.placeholder}
-            invalid={Boolean(error)}
+            invalid={Boolean(resolvedError)}
           />
         </SettingsRow>
       );
@@ -557,7 +625,7 @@ export function SchemaField({
         <Input
           id={id}
           aria-label={def.label}
-          aria-invalid={error ? true : undefined}
+          aria-invalid={resolvedError ? true : undefined}
           value={String(value ?? "")}
           placeholder={
             def.placeholder ?? (def.kind === "duration" ? t("e.g. 24h or 30m") : undefined)
@@ -615,7 +683,11 @@ function useFieldOptions(def: OptionDef, loadOptions?: LoadOptions) {
       live = false;
     };
   }, [from, loadOptions]);
-  return { options: loaded ?? def.options, loading: Boolean(from && loadOptions && !loaded && !loadError), loadError };
+  return {
+    options: loaded ?? def.options,
+    loading: Boolean(from && loadOptions && !loaded && !loadError),
+    loadError,
+  };
 }
 
 function optionNote(loading: boolean, loadError: string | null): ReactNode {
@@ -629,7 +701,13 @@ function optionNote(loading: boolean, loadError: string | null): ReactNode {
   return null;
 }
 
-function SelectRow({ def, value, onChange, description, loadOptions }: RowProps<Extract<FieldDef, { kind: "select" }>>) {
+function SelectRow({
+  def,
+  value,
+  onChange,
+  description,
+  loadOptions,
+}: RowProps<Extract<FieldDef, { kind: "select" }>>) {
   const { options, loading, loadError } = useFieldOptions(def, loadOptions);
   return (
     <SettingsRow
@@ -772,7 +850,12 @@ function OrderedListRow({
   );
 }
 
-function LanguageRow({ def, value, onChange, description }: RowProps<Extract<FieldDef, { kind: "language" }>>) {
+function LanguageRow({
+  def,
+  value,
+  onChange,
+  description,
+}: RowProps<Extract<FieldDef, { kind: "language" }>>) {
   const { locale } = useLocale();
   const current = String(value ?? "");
   const options = useMemo(() => {
@@ -823,11 +906,16 @@ function LanguageRow({ def, value, onChange, description }: RowProps<Extract<Fie
   );
 }
 
-function ViewerRow({ def, value, onChange, description }: RowProps<Extract<FieldDef, { kind: "viewer" }>>) {
+function ViewerRow({
+  def,
+  value,
+  onChange,
+  description,
+}: RowProps<Extract<FieldDef, { kind: "viewer" }>>) {
   const viewers = useAsync(() => api.viewers(), []);
   const options = (viewers.data ?? []).map((v) => ({
     value: String(v.id),
-    label: v.title || v.username,
+    label: viewerName(v),
   }));
   return (
     <SettingsRow
@@ -862,7 +950,12 @@ function ViewerRow({ def, value, onChange, description }: RowProps<Extract<Field
   );
 }
 
-function CollectionRow({ def, value, onChange, description }: RowProps<Extract<FieldDef, { kind: "collection" }>>) {
+function CollectionRow({
+  def,
+  value,
+  onChange,
+  description,
+}: RowProps<Extract<FieldDef, { kind: "collection" }>>) {
   const collections = useAsync(() => api.collections(), []);
   const options = (collections.data ?? [])
     .filter((c) => c.id)
@@ -900,7 +993,12 @@ function CollectionRow({ def, value, onChange, description }: RowProps<Extract<F
   );
 }
 
-function TitleRow({ def, value, onChange, description }: RowProps<Extract<FieldDef, { kind: "title" }>>) {
+function TitleRow({
+  def,
+  value,
+  onChange,
+  description,
+}: RowProps<Extract<FieldDef, { kind: "title" }>>) {
   const current = String(value ?? "");
   const [pickedName, setPickedName] = useState("");
   return (
@@ -936,7 +1034,15 @@ function TitleRow({ def, value, onChange, description }: RowProps<Extract<FieldD
 }
 
 /** A group's advanced (more) fields, collapsed until asked or in error. */
-function MoreFields({ title, children, hasError }: { title?: string; children: ReactNode; hasError: boolean }) {
+function MoreFields({
+  title,
+  children,
+  hasError,
+}: {
+  title?: string;
+  children: ReactNode;
+  hasError: boolean;
+}) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (hasError) setOpen(true);
@@ -977,7 +1083,7 @@ export function SchemaGroups({
   const [active, setActive] = useState("0");
   useEffect(() => {
     const at = groups.findIndex((g) =>
-      [...g.fields, ...(g.more ?? [])].some((f) => errors[`${prefix}.${f.key}`]),
+      [...g.fields, ...(g.more ?? [])].some((f) => hasFieldError(f, errors, prefix)),
     );
     if (at >= 0) setActive(String(at));
   }, [errors, groups, prefix]);
@@ -1011,7 +1117,7 @@ export function SchemaGroups({
                 def={f}
                 value={value[f.key]}
                 path={`${prefix}.${f.key}`}
-                error={errors[`${prefix}.${f.key}`]}
+                error={errorForPath(errors, `${prefix}.${f.key}`)}
                 errors={errors}
                 loadOptions={loadOptions}
                 onChange={(v) => onChange({ ...value, [f.key]: v })}
@@ -1020,7 +1126,7 @@ export function SchemaGroups({
             {g.more?.length ? (
               <MoreFields
                 title={g.title}
-                hasError={g.more.some((f) => Boolean(errors[`${prefix}.${f.key}`]))}
+                hasError={g.more.some((f) => hasFieldError(f, errors, prefix))}
               >
                 {g.more.map((f) => (
                   <SchemaField

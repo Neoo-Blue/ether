@@ -89,6 +89,12 @@ export function scanGoExtendT(text) {
   const literals = [];
   const dynamic = [];
   const isExtendPkg = /^\s*package\s+extend\s*$/m.test(text.split("\n").slice(0, 40).join("\n"));
+  const extendNames = new Set(["extend"]);
+  for (const m of text.matchAll(
+    /^\s*(?:import\s+)?([A-Za-z_][A-Za-z0-9_]*)\s+"github\.com\/braedonsaunders\/ether\/internal\/extend"/gm,
+  )) {
+    if (m[1] !== "import") extendNames.add(m[1]);
+  }
   const n = text.length;
   let i = 0;
   let line = 1;
@@ -134,7 +140,7 @@ export function scanGoExtendT(text) {
       const id = identAt(i);
       const callLine = line;
       let after = null;
-      if (id.word === "extend") {
+      if (extendNames.has(id.word)) {
         // extend . T (
         if (text[id.end] === ".") {
           const second = identAt(id.end + 1);
@@ -373,7 +379,8 @@ const TEXT_PROPS = new Set([
   "warning",
 ]);
 
-const WRAPPERS = new Set(["t", "tn", "tx", "msg"]);
+const WRAPPERS = new Set(["t", "tn", "tx", "msg", "textOf"]);
+const EXTEND_TEXT_PROPS = new Set(["label", "hint", "title", "description", "help", "unit"]);
 const IGNORE_CALLS = new Set([
   "cn",
   "clsx",
@@ -520,6 +527,14 @@ export function audit(files = [...sourceFiles(), ...goSourceFiles()]) {
         if (TEXT_PROPS.has(name) && looksLikeCopy(value) && !insideWrapper(node.initializer)) {
           text = value;
         }
+      } else if (
+        ts.isPropertyAccessExpression(node) &&
+        node.name.text === "source" &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        EXTEND_TEXT_PROPS.has(node.expression.name.text) &&
+        !insideWrapper(node)
+      ) {
+        text = `${node.getText(sf)} rendered without t() or textOf()`;
       } else if (isStringish(node) && copyContext(node)) {
         const raw = ts.isTemplateExpression(node) ? node.getText(sf).slice(1, -1) : node.text;
         if (looksLikeCopy(raw) && !insideWrapper(node) && !inOtherAttr(node, sf)) text = raw;

@@ -164,3 +164,31 @@ func TestValidateSchemaPluginRules(t *testing.T) {
 		t.Fatalf("clean plugin schema rejected: %v", err)
 	}
 }
+
+func TestBuiltinDescriptorsRegister(t *testing.T) {
+	ds, err := schema.BuiltinDescriptors()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := extend.New()
+	if err := r.Register(ds...); err != nil {
+		t.Fatal(err)
+	}
+	got := r.List(extend.KindSettingsSchema)
+	if len(got) != len(schema.Builtins()) {
+		t.Fatalf("got %d registered settingsSchema descriptors, want %d", len(got), len(schema.Builtins()))
+	}
+	for i, d := range got {
+		want := schema.Builtins()[i]
+		if d.ID != want.ID || d.Owner != extend.Builtin {
+			t.Fatalf("descriptor %d = %s (%s), want %s (builtin)", i, d.ID, d.Owner, want.ID)
+		}
+		meta, err := extend.MetaOf[extend.SettingsSchemaMeta](d)
+		if err != nil {
+			t.Fatalf("%s: MetaOf: %v", d.ID, err)
+		}
+		if meta.ConfigKey != want.ConfigKey {
+			t.Fatalf("%s: configKey = %q, want %q", d.ID, meta.ConfigKey, want.ConfigKey)
+		}
+	}
+}

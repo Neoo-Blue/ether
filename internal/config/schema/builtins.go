@@ -1,6 +1,10 @@
 package schema
 
-import "github.com/braedonsaunders/ether/internal/extend"
+import (
+	"fmt"
+
+	"github.com/braedonsaunders/ether/internal/extend"
+)
 
 // Builtins are Ether's own settings forms, served as settingsSchema
 // descriptors. They moved here from web/src/pages/settings/schema.ts with
@@ -256,4 +260,24 @@ func Builtins() []Builtin {
 			}},
 		}}},
 	}
+}
+
+// BuiltinDescriptors wraps Builtins as settingsSchema descriptors ready for
+// extend.Registry.Register.
+func BuiltinDescriptors() ([]extend.Descriptor, error) {
+	builtins := Builtins()
+	ds := make([]extend.Descriptor, 0, len(builtins))
+	for i, b := range builtins {
+		if err := ValidateSchema(b.Schema, false); err != nil {
+			return nil, fmt.Errorf("settings schema %s: %w", b.ID, err)
+		}
+		ds = append(ds, extend.Descriptor{
+			Kind:  extend.KindSettingsSchema,
+			ID:    b.ID,
+			Owner: extend.Builtin,
+			Label: b.Label,
+			Order: i,
+		}.WithMeta(b.Schema.Meta(b.ConfigKey)))
+	}
+	return ds, nil
 }

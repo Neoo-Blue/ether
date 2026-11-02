@@ -261,6 +261,9 @@ function WhatMattersMostSection({
   rankingError?: string;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
+  const qualitySources = useSchemaOptions("quality", "sources");
+  const qualityCodecs = useSchemaOptions("quality", "codecs");
+  const qualityAudio = useSchemaOptions("quality", "audio");
   const ladder = normalizeRanking(draft);
   const rules = draft.releaseRules ?? [];
 
@@ -423,7 +426,7 @@ function WhatMattersMostSection({
           <div className="border-t border-border pt-3">
             <PreferenceList
               label={t("Release type")}
-              all={QUALITY_SOURCES}
+              all={qualitySources}
               value={draft.preferredSources}
               onChange={(v) => patch({ preferredSources: v })}
             />
@@ -433,7 +436,7 @@ function WhatMattersMostSection({
           <div className="border-t border-border pt-3">
             <PreferenceList
               label={t("Video codec")}
-              all={QUALITY_CODECS}
+              all={qualityCodecs}
               value={draft.preferredCodecs}
               onChange={(v) => patch({ preferredCodecs: v })}
             />
@@ -443,7 +446,7 @@ function WhatMattersMostSection({
           <div className="border-t border-border pt-3">
             <PreferenceList
               label={t("Audio format")}
-              all={QUALITY_AUDIO}
+              all={qualityAudio}
               value={draft.preferredAudio}
               onChange={(v) => patch({ preferredAudio: v })}
             />

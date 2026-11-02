@@ -9,12 +9,7 @@ import { t, tx } from "../../i18n";
 import { api, ApiError, errorMessage } from "../../lib/api";
 import { useAsync } from "../../lib/hooks";
 import { isRuleComplete } from "../../lib/rules";
-import {
-  asObj,
-  SchemaField,
-  useSettingsSchema,
-  type FieldGroup,
-} from "../settings/SchemaForm";
+import { asObj, SchemaField, useSettingsSchema, type FieldGroup } from "../settings/SchemaForm";
 import { CatalogPickers, isCatalogPicker } from "./CatalogPickers";
 import {
   HomeReleaseSettings,
@@ -95,7 +90,9 @@ export function CatalogSettings() {
     }
   }, [config, draft, refreshDashboard]);
   const catalog = useSettingsSchema("catalog");
-  const groups = [...(catalog.groups ?? []), HomeReleaseSettings, UpcomingEpisodeSettings].map(briefGroup);
+  const groups = [...(catalog.groups ?? []), HomeReleaseSettings, UpcomingEpisodeSettings].map(
+    briefGroup,
+  );
   return (
     <div className="catalog-scroll app-scroll">
       <div className="space-y-5 p-5 lg:p-7">

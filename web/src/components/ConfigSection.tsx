@@ -7,6 +7,7 @@ import { useAsync } from "../lib/hooks";
 import type { EtherConfig } from "../lib/types";
 import {
   asObj,
+  hasFieldError,
   SchemaField,
   useSettingsSchemas,
   type FieldDef,
@@ -203,7 +204,7 @@ export function ConfigSection({
             {g.more?.length ? (
               <MoreOptions
                 label={g.title ? t("More options: {title}", { title: g.title }) : t("More options")}
-                hasError={g.more.some((f) => Boolean(errors[`${configKey}.${f.key}`]))}
+                hasError={g.more.some((f) => hasFieldError(f, errors, configKey))}
               >
                 {g.more.map((f, j) => renderField(f, `more-${f.key}-${j}`))}
               </MoreOptions>

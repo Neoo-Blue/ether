@@ -32,11 +32,7 @@ import type {
   DebridProviderStatus,
   EtherConfig,
 } from "../../lib/types";
-import {
-  SchemaField,
-  useSettingsSchema,
-  type FieldDef,
-} from "../settings/SchemaForm";
+import { SchemaField, useSettingsSchema, type FieldDef } from "../settings/SchemaForm";
 import { DEBRID_KINDS, DEBRID_TOKEN_URL, SourceCard, debridFix } from "./cards";
 import { debridMark } from "./marks";
 
