@@ -14,7 +14,13 @@ import { Segmented } from "../../components/fields";
 import { localized, t, tx } from "../../i18n";
 import { api, ApiError, errorMessage } from "../../lib/api";
 import type { CollectionSpec } from "../../lib/contract";
-import { describeRule, describeSource, normalizeSpec } from "../../lib/rules";
+import {
+  describeRule,
+  describeSource,
+  normalizeSpec,
+  type SourceDescriptor,
+} from "../../lib/rules";
+import { useRegistry } from "../../lib/extend";
 
 const EXAMPLES = localized(() => [
   t("Cosy British mysteries under two hours"),
@@ -40,6 +46,7 @@ export function DescribeDialog({
   applyLabel?: string;
   secondary?: { label: string; onApply: (spec: CollectionSpec) => void };
 }) {
+  const sourceKinds = useRegistry("collectionSource");
   const [prompt, setPrompt] = useState("");
   const [media, setMedia] = useState<"movie" | "show" | "mixed">("movie");
   const [busy, setBusy] = useState(false);
@@ -190,7 +197,7 @@ export function DescribeDialog({
             <div className="flex flex-wrap gap-1.5">
               {result.spec.sources.map((s, i) => (
                 <Badge key={`s${i}`} variant="info">
-                  {describeSource(s)}
+                  {describeSource(s, sourceKinds.descriptors as SourceDescriptor[])}
                 </Badge>
               ))}
               {result.spec.rules.map((r, i) => (
