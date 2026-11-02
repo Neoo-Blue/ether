@@ -1,6 +1,6 @@
 // Command ether-release-sign manages Ether's release-signing keys and
-// signs update manifests. It is a CI/maintainer tool; it is not shipped in
-// installers.
+// signs update manifests and plugin catalogue indexes. It is a CI/maintainer
+// tool; it is not shipped in installers.
 //
 // Usage:
 //
@@ -20,6 +20,11 @@
 //	ether-release-sign manifest -version 1.2.0 -channel stable -artifact file:os:arch:kind:url [-artifact ...] [-notes URL] [-out manifest.json]
 //	    Build an unsigned manifest from local artifact files (hashes and
 //	    sizes are computed here, so CI cannot publish a wrong checksum).
+//
+//	ether-release-sign index [-dir plugins/] [-in index.json] [-out index.json] [-sig index.json.sig] -key <b64|file>
+//	    Validate (and optionally compile from YAML) index.json and write its
+//	    detached ed25519 signature index.json.sig. Pass -verify -pub <b64|file>
+//	    to verify an existing signed index.
 package main
 
 import (
@@ -54,6 +59,8 @@ func main() {
 		err = cmdManifest(os.Args[2:])
 	case "renew":
 		err = cmdRenew(os.Args[2:])
+	case "index":
+		err = cmdIndex(os.Args[2:])
 	case "-h", "--help", "help":
 		usage()
 	default:
@@ -67,7 +74,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: ether-release-sign <keygen|sign|verify|manifest|renew> [flags]  (see package docs)")
+	fmt.Fprintln(os.Stderr, "usage: ether-release-sign <keygen|sign|verify|manifest|renew|index> [flags]  (see package docs)")
 }
 
 func cmdKeygen(args []string) error {

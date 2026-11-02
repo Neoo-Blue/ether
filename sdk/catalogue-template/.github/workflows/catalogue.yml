@@ -1,0 +1,47 @@
+name: Catalogue CI
+
+on:
+  pull_request:
+    paths:
+      - "plugins/**"
+      - ".github/workflows/catalogue.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "plugins/**"
+
+permissions:
+  contents: write
+
+jobs:
+  check-and-sign:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+
+      - name: Check plugin packages when present
+        run: |
+          if command -v ether >/dev/null 2>&1; then
+            for dir in plugins/*/; do
+              if [ -f "${dir}manifest.json" ]; then
+                ether plugin check "${dir}"
+              fi
+            done
+          fi
+
+      - name: Build and sign index.json
+        env:
+          ETHER_CATALOGUE_PRIVATE_KEY: ${{ secrets.ETHER_CATALOGUE_PRIVATE_KEY }}
+          ETHER_CATALOGUE_PUBLIC_KEY: ${{ secrets.ETHER_CATALOGUE_PUBLIC_KEY }}
+        run: |
+          if [ -n "${ETHER_CATALOGUE_PRIVATE_KEY}" ]; then
+            ether-release-sign index -dir plugins -out index.json -key "${ETHER_CATALOGUE_PRIVATE_KEY}"
+            ether-release-sign index -verify -in index.json -pub "${ETHER_CATALOGUE_PUBLIC_KEY}"
+          fi

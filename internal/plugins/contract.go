@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 )
 
@@ -457,6 +458,24 @@ type ClientCaps struct {
 	Codecs    []string `json:"codecs,omitempty"`
 }
 
+// CatalogueArtifact is a resolved version from the signed plugin catalogue (WS12).
+type CatalogueArtifact struct {
+	ID      string
+	Version string
+	URL     string
+	SHA256  string
+}
+
+// Catalogue is the signed catalogue hook used by the owner API, install
+// and update flows (WS12).
+type Catalogue interface {
+	http.Handler
+	// Resolve looks up a plugin in the verified catalogue by plugin ID (or
+	// artifact URL) and optional version (empty means latest). It fails when
+	// the plugin is not in the catalogue or is revoked.
+	Resolve(ctx context.Context, idOrURL, version string) (CatalogueArtifact, error)
+}
+
 // Sentinel errors. Adapters and the API map them to plain reasons.
 var (
 	ErrNotFound         = errors.New("plugins: not found")
@@ -467,6 +486,8 @@ var (
 	ErrNoRuntime        = errors.New("plugins: no runtime registered for this plugin")
 	ErrUnavailable      = errors.New("plugins: host service unavailable")
 	ErrShadow           = errors.New("plugins: write recorded in shadow mode")
+	ErrDigestMismatch   = errors.New("plugins: artifact digest does not match")
+	ErrRevoked          = errors.New("plugins: plugin was revoked")
 )
 
 // FieldError is one validation problem, keyed by a dotted field path.
