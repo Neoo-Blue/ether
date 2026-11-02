@@ -72,6 +72,9 @@ func (e *frameError) error() error {
 	if e == nil {
 		return errors.New("remote: plugin error")
 	}
+	if e.Code == "deadline" {
+		return fmt.Errorf("%w: %s", context.DeadlineExceeded, e.Message)
+	}
 	return fmt.Errorf("remote: plugin error %s: %s", e.Code, e.Message)
 }
 
@@ -698,6 +701,22 @@ func (c *tunnelConn) callStream(ctx context.Context, req Request, credential str
 			Body:    &tunnelBody{conn: c, id: id, p: p, done: done},
 		}, nil
 	case err := <-p.done:
+		// If response headers and body arrived together before we read
+		// p.start, drain p.start first so a fast response is not lost.
+		select {
+		case start := <-p.start:
+			if start.err == nil && err == nil {
+				return &StreamResponse{
+					Status:  start.status,
+					Headers: start.headers,
+					Body:    &tunnelBody{conn: c, id: id, p: p, done: done, ended: true},
+				}, nil
+			}
+			if start.err != nil {
+				err = start.err
+			}
+		default:
+		}
 		done()
 		if err == nil {
 			err = io.ErrUnexpectedEOF
@@ -720,14 +739,23 @@ type tunnelBody struct {
 
 func (b *tunnelBody) Read(out []byte) (int, error) {
 	for len(b.buf) == 0 {
+		if b.closed {
+			return 0, io.ErrClosedPipe
+		}
+		// Always drain buffered chunks before acting on a terminal done
+		// signal, because Go's select picks randomly when both chunks
+		// and done are ready.
+		select {
+		case chunk := <-b.p.chunks:
+			b.buf = chunk
+			continue
+		default:
+		}
 		if b.err != nil {
 			return 0, b.err
 		}
 		if b.ended {
 			return 0, io.EOF
-		}
-		if b.closed {
-			return 0, io.ErrClosedPipe
 		}
 		select {
 		case chunk := <-b.p.chunks:
@@ -736,9 +764,7 @@ func (b *tunnelBody) Read(out []byte) (int, error) {
 			b.ended = true
 			if err != nil {
 				b.err = err
-				return 0, err
 			}
-			return 0, io.EOF
 		}
 	}
 	n := copy(out, b.buf)
