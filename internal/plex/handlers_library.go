@@ -216,7 +216,14 @@ func (s *Server) handleSection(w http.ResponseWriter, r *http.Request) {
 	mc.Directory = append(mc.Directory, model.Directory{Key: "search?type=" + tn, Prompt: "Search " + typeTitle, Search: model.Ptr(true), Title: "Search..."})
 	mc.Size = len(mc.Directory)
 	q := r.URL.Query()
-	if q.Get("includeDetails") == "1" || q.Get("includeMeta") == "1" {
+	switch {
+	case q.Get("includeDetails") == "1":
+		// Section details carry the filter schema at the root, as PMS does:
+		// Plex Web's library details (Advanced Filters) read Type and
+		// FieldType there and spin forever on a nested Meta (#273).
+		meta := s.meta(sec, sec.Type, "")
+		mc.Type, mc.FieldType = meta.Type, meta.FieldType
+	case q.Get("includeMeta") == "1":
 		mc.Meta = s.meta(sec, sec.Type, "")
 	}
 	s.write(w, r, mc)
