@@ -2173,6 +2173,7 @@
   "m_0c3d819cf7e682": "Sprawdź profil",
   "m_0c3f67bc47272f": "Sprawdzaj listy obserwowanych widzów pod kątem tytułów, które stały się dostępne.",
   "m_0c3fd14d544818": "Ramówka bloku czasowego {number}",
+  "m_0c416952c0e7ce": "Dziedziczenie używa karty Tożsamość klienta na stronie Indeksatory.",
   "m_0c429982a24dd8": "Brak tytułów. Użyj wyszukiwania powyżej, aby je dodać.",
   "m_0c46ccd40e821c": "wysyłanie",
   "m_0c4ad661fd7dc1": "Druga ocena obok niej.",
@@ -2896,7 +2897,6 @@
   "m_108b41637f364f": "Kategoria",
   "m_108bd8cfca2c2c": "Format dźwięku",
   "m_108ce7d935381c": "Odtwarzanie nie powiodło się",
-  "m_108e33c52365a6": "Wysyłane, gdy tożsamością powyżej jest Własny. Wartości są przechowywane zaszyfrowane i po zapisaniu pokazywane jako ••••.",
   "m_109052bf1479d2": "Zobacz, jaką jakość widz dostaje w aplikacji i dlaczego.",
   "m_109127d5c5b105": "Języki napisów",
   "m_10948de1366c4a": "Wspólna baza danych PostgreSQL jest osiągalna",
@@ -2928,6 +2928,7 @@
     "one": "Dokończ lub usuń niekompletną regułę.",
     "other": "Dokończ lub usuń niekompletne reguły ({count})."
   },
+  "m_10b76770e44e85": "Wysyłane do każdego indeksatora z tożsamością Własny, więc nie wpisuj tu loginu jednej strony. Wartości są zapisywane w postaci zaszyfrowanej i po zapisaniu wyświetlane jako ••••.",
   "m_10b79dfae40906": "Wszyscy ({count})",
   "m_10b7dd055ff58b": "Ulubione w Plexie",
   "m_10b96b8683017c": {
@@ -3235,6 +3236,7 @@
     "one": "Dziś wykorzystano {used} z {count} żądania API",
     "other": "Dziś wykorzystano {used} z {count} żądania API"
   },
+  "m_1258cfc611553a": "Za co ten indeksator uważa Ether.",
   "m_125952708f2adf": "{service} (region domyślny)",
   "m_125a3da17154a8": "{indexer} nie będzie już przeszukiwany.",
   "m_125a82d7760449": "Dźwięk: {choice}",
@@ -3841,7 +3843,6 @@
   "m_15d3628feca6f4": "Z programem",
   "m_15d55b589f2dc8": "Reguła dodana",
   "m_15d59f48c42b08": "Pamięć",
-  "m_15d5d2ba209588": "Jak ten indekser widzi Ether. „Odziedzicz” używa ustawienia globalnego z tej strony.",
   "m_15d85ff317b4f6": "Decyduje pierwsze dopasowanie. Klasyfikacje porównuje się według wieku.",
   "m_15d8e22869ff2d": "strona główna wszystkich",
   "m_15da6d9c7b8503": "Grafiki tytułu",
@@ -5543,7 +5544,6 @@
   "m_1f63847755c543": "Zakotwicz „{title}” przez przeciągnięcie",
   "m_1f63dd73d695c0": "Podgląd zapisanej kolejności",
   "m_1f664f6b9eec3b": "Połącz konto Simkl widza, aby zaimportować historię oglądania i wysyłać ukończone odtworzenia.",
-  "m_1f66e0e814303e": "„Odziedzicz” używa tożsamości wybranej powyżej.",
   "m_1f68e194414929": "Nowy kanał wirtualny",
   "m_1f69767390b86a": "Rok",
   "m_1f6c206c676272": "Brak hosta",

@@ -2061,6 +2061,7 @@
   "m_0c3d819cf7e682": "Profil prüfen",
   "m_0c3f67bc47272f": "Die Merklisten der Zuschauer auf Titel prüfen, die verfügbar geworden sind.",
   "m_0c3fd14d544818": "Programm von Zeitblock {number}",
+  "m_0c416952c0e7ce": "„Übernehmen“ verwendet die Karte Client-Identität auf der Seite Indexer.",
   "m_0c429982a24dd8": "Noch keine Titel. Suche oben, um welche hinzuzufügen.",
   "m_0c46ccd40e821c": "wird gesendet",
   "m_0c4ad661fd7dc1": "Die zweite Wertung daneben.",
@@ -2748,7 +2749,6 @@
   "m_108b41637f364f": "Kategorie",
   "m_108bd8cfca2c2c": "Audioformat",
   "m_108ce7d935381c": "Wiedergabe fehlgeschlagen",
-  "m_108e33c52365a6": "Wird gesendet, wenn oben die Identität „Eigene“ gewählt ist. Werte werden verschlüsselt gespeichert und nach dem Speichern als •••• angezeigt.",
   "m_109052bf1479d2": "Sieh, welche Qualität ein Zuschauer in einer App bekommt und warum.",
   "m_109127d5c5b105": "Untertitelsprachen",
   "m_10948de1366c4a": "Gemeinsame PostgreSQL-Datenbank erreichbar",
@@ -2776,6 +2776,7 @@
     "one": "Vervollständige oder entferne die unvollständige Regel.",
     "other": "Vervollständige oder entferne {count} unvollständige Regeln."
   },
+  "m_10b76770e44e85": "Wird an jeden Indexer mit der Identität Eigene gesendet – trage hier also keine Anmeldedaten einer einzelnen Seite ein. Werte werden verschlüsselt gespeichert und nach dem Speichern als •••• angezeigt.",
   "m_10b79dfae40906": "Alle ({count})",
   "m_10b7dd055ff58b": "Favoriten in Plex",
   "m_10b96b8683017c": {
@@ -3061,6 +3062,7 @@
     "one": "{used} von {count} API-Anfrage heute verbraucht",
     "other": "{used} von {count} API-Anfragen heute verbraucht"
   },
+  "m_1258cfc611553a": "Als was dieser Indexer Ether sieht.",
   "m_125952708f2adf": "{service} (Standardregion)",
   "m_125a3da17154a8": "{indexer} wird nicht mehr durchsucht.",
   "m_125a82d7760449": "Audio: {choice}",
@@ -3627,7 +3629,6 @@
   "m_15d3628feca6f4": "Eingetragen",
   "m_15d55b589f2dc8": "Regel hinzugefügt",
   "m_15d59f48c42b08": "Arbeitsspeicher",
-  "m_15d5d2ba209588": "Wie dieser Indexer Ether sieht. „Übernehmen“ nutzt die globale Auswahl auf dieser Seite.",
   "m_15d85ff317b4f6": "Die erste Übereinstimmung gilt. Altersfreigaben werden nach Stufe verglichen.",
   "m_15d8e22869ff2d": "Startseite für alle",
   "m_15da6d9c7b8503": "Titel-Artwork",
@@ -5245,7 +5246,6 @@
   "m_1f63847755c543": "{title} durch Ziehen verankern",
   "m_1f63dd73d695c0": "Gespeicherte Reihenfolge ansehen",
   "m_1f664f6b9eec3b": "Verbinde das Simkl-Konto eines Zuschauers, um den Wiedergabeverlauf zu importieren und abgeschlossene Wiedergaben zu senden.",
-  "m_1f66e0e814303e": "„Übernehmen“ nutzt die oben gewählte Identität.",
   "m_1f68e194414929": "Neuer virtueller Sender",
   "m_1f69767390b86a": "Jahr",
   "m_1f6c206c676272": "Kein Host",

@@ -816,13 +816,11 @@ export function IndexerList({
                 </SettingsSection>
                 <SettingsSection
                   title={t("Client identity")}
-                  description={t(
-                    "What this indexer sees Ether as. Inherit uses the global choice on this page.",
-                  )}
+                  description={t("What this indexer sees Ether as.")}
                 >
                   <SettingsRow
                     title={t("Identity")}
-                    description={t("Inherit uses the identity chosen above.")}
+                    description={t("Inherit uses the Client identity card on the Indexers page.")}
                     control={
                       <div className="w-56">
                         <SearchSelect

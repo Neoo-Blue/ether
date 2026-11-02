@@ -2173,6 +2173,7 @@
   "m_0c3d819cf7e682": "Zkontrolovat profil",
   "m_0c3f67bc47272f": "Kontrolovat seznamy k zhlédnutí diváků, zda některé tituly nejsou nově dostupné.",
   "m_0c3fd14d544818": "Program časového bloku {number}",
+  "m_0c416952c0e7ce": "Zděděná volba použije kartu Identita klienta na stránce Indexery.",
   "m_0c429982a24dd8": "Zatím žádné tituly. Vyhledejte je výše a přidejte.",
   "m_0c46ccd40e821c": "odesílá se",
   "m_0c4ad661fd7dc1": "Druhé skóre vedle něj.",
@@ -2896,7 +2897,6 @@
   "m_108b41637f364f": "Kategorie",
   "m_108bd8cfca2c2c": "Formát zvuku",
   "m_108ce7d935381c": "Přehrávání selhalo",
-  "m_108e33c52365a6": "Odesílá se, když je výše vybrána identita Vlastní. Hodnoty se ukládají zašifrované a po uložení se zobrazují jako ••••.",
   "m_109052bf1479d2": "Podívejte se, jakou kvalitu divák v aplikaci dostane a proč.",
   "m_109127d5c5b105": "Jazyky titulků",
   "m_10948de1366c4a": "Sdílená databáze PostgreSQL je dostupná",
@@ -2928,6 +2928,7 @@
     "one": "Dokončete nebo odeberte nedokončené pravidlo.",
     "other": "Dokončete nebo odeberte {count} nedokončených pravidel."
   },
+  "m_10b76770e44e85": "Posílá se každému indexeru s identitou Vlastní, proto sem nedávejte přihlašovací údaje jednoho webu. Hodnoty jsou uložené zašifrovaně a po uložení se zobrazí jako ••••.",
   "m_10b79dfae40906": "Všichni ({count})",
   "m_10b7dd055ff58b": "Oblíbené v Plexu",
   "m_10b96b8683017c": {
@@ -3235,6 +3236,7 @@
     "one": "Dnes využito {used} z {count} požadavku API",
     "other": "Dnes využito {used} z {count} požadavků API"
   },
+  "m_1258cfc611553a": "Za co tento indexer považuje Ether.",
   "m_125952708f2adf": "{service} (výchozí region)",
   "m_125a3da17154a8": "{indexer} se již nebude prohledávat.",
   "m_125a82d7760449": "Zvuk: {choice}",
@@ -3841,7 +3843,6 @@
   "m_15d3628feca6f4": "V seznamu",
   "m_15d55b589f2dc8": "Pravidlo přidáno",
   "m_15d59f48c42b08": "Paměť",
-  "m_15d5d2ba209588": "Jak tento indexer vidí Ether. „Zdědit“ použije globální volbu na této stránce.",
   "m_15d85ff317b4f6": "Platí první shoda. Věková hodnocení se porovnávají podle úrovně.",
   "m_15d8e22869ff2d": "Domů pro všechny",
   "m_15da6d9c7b8503": "Artwork titulu",
@@ -5543,7 +5544,6 @@
   "m_1f63847755c543": "Ukotvit {title} přetažením",
   "m_1f63dd73d695c0": "Náhled uloženého pořadí",
   "m_1f664f6b9eec3b": "Připojte účet Simkl diváka, abyste mohli importovat historii sledování a odesílat dokončená přehrávání.",
-  "m_1f66e0e814303e": "„Zdědit“ použije identitu vybranou výše.",
   "m_1f68e194414929": "Nový virtuální kanál",
   "m_1f69767390b86a": "Rok",
   "m_1f6c206c676272": "Žádný hostitel",

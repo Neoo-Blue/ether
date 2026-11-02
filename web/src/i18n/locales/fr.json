@@ -2117,6 +2117,7 @@
   "m_0c3d819cf7e682": "Vérifier le profil",
   "m_0c3f67bc47272f": "Vérifie dans les listes de suivi des spectateurs les titres devenus disponibles.",
   "m_0c3fd14d544818": "Programmation de la plage horaire {number}",
+  "m_0c416952c0e7ce": "Hériter utilise la carte Identité du client de la page Indexeurs.",
   "m_0c429982a24dd8": "Aucun titre pour le moment. Utilisez la recherche ci-dessus pour en ajouter.",
   "m_0c46ccd40e821c": "envoi en cours",
   "m_0c4ad661fd7dc1": "Le second score à côté.",
@@ -2822,7 +2823,6 @@
   "m_108b41637f364f": "Catégorie",
   "m_108bd8cfca2c2c": "Format audio",
   "m_108ce7d935381c": "Échec de la lecture",
-  "m_108e33c52365a6": "Envoyé quand l'identité ci-dessus est Personnalisé. Les valeurs sont stockées chiffrées et affichées •••• après l'enregistrement.",
   "m_109052bf1479d2": "Voyez la qualité qu’un spectateur obtient sur une application, et pourquoi.",
   "m_109127d5c5b105": "Langues des sous-titres",
   "m_10948de1366c4a": "Base de données PostgreSQL partagée joignable",
@@ -2852,6 +2852,7 @@
     "one": "Terminez ou supprimez la règle incomplète.",
     "other": "Terminez ou supprimez {count} règles incomplètes."
   },
+  "m_10b76770e44e85": "Envoyés à chaque indexeur dont l'identité est Personnalisé : n'y mettez donc pas les identifiants d'un seul site. Les valeurs sont chiffrées au repos et affichées comme •••• après l'enregistrement.",
   "m_10b79dfae40906": "Tous ({count})",
   "m_10b7dd055ff58b": "Favoris dans Plex",
   "m_10b96b8683017c": {
@@ -3148,6 +3149,7 @@
     "one": "{used} requête API sur {count} utilisée aujourd’hui",
     "other": "{used} requêtes API sur {count} utilisées aujourd’hui"
   },
+  "m_1258cfc611553a": "Ce que cet indexeur voit d'Ether.",
   "m_125952708f2adf": "{service} (région par défaut)",
   "m_125a3da17154a8": "{indexer} ne sera plus interrogé.",
   "m_125a82d7760449": "Audio : {choice}",
@@ -3734,7 +3736,6 @@
   "m_15d3628feca6f4": "Avec programmes",
   "m_15d55b589f2dc8": "Règle ajoutée",
   "m_15d59f48c42b08": "Mémoire",
-  "m_15d5d2ba209588": "Ce que cet indexeur voit d'Ether. « Hériter » utilise le choix global de cette page.",
   "m_15d85ff317b4f6": "La première correspondance l’emporte. Les classifications se comparent par âge.",
   "m_15d8e22869ff2d": "l’accueil de tout le monde",
   "m_15da6d9c7b8503": "Illustration du titre",
@@ -5394,7 +5395,6 @@
   "m_1f63847755c543": "Ancrer {title} par glisser-déposer",
   "m_1f63dd73d695c0": "Aperçu de l’ordre enregistré",
   "m_1f664f6b9eec3b": "Connectez le compte Simkl d’un spectateur pour importer l’historique de visionnage et envoyer les lectures terminées.",
-  "m_1f66e0e814303e": "« Hériter » utilise l'identité choisie ci-dessus.",
   "m_1f68e194414929": "Nouvelle chaîne virtuelle",
   "m_1f69767390b86a": "Année",
   "m_1f6c206c676272": "Aucun hôte",

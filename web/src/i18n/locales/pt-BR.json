@@ -2117,6 +2117,7 @@
   "m_0c3d819cf7e682": "Revisar perfil",
   "m_0c3f67bc47272f": "Verifique as listas para assistir dos espectadores em busca de títulos que ficaram disponíveis.",
   "m_0c3fd14d544818": "Programação do bloco de horário {number}",
+  "m_0c416952c0e7ce": "Herdar usa o cartão Identidade do cliente na página Indexadores.",
   "m_0c429982a24dd8": "Nenhum título ainda. Pesquise acima para adicionar alguns.",
   "m_0c46ccd40e821c": "enviando",
   "m_0c4ad661fd7dc1": "A segunda nota ao lado dela.",
@@ -2822,7 +2823,6 @@
   "m_108b41637f364f": "Categoria",
   "m_108bd8cfca2c2c": "Formato de áudio",
   "m_108ce7d935381c": "Falha na reprodução",
-  "m_108e33c52365a6": "Enviado quando a identidade acima é Personalizado. Os valores são guardados criptografados e mostrados como •••• após salvar.",
   "m_109052bf1479d2": "Veja a qualidade que um espectador recebe em um app e por quê.",
   "m_109127d5c5b105": "Idiomas das legendas",
   "m_10948de1366c4a": "Banco de dados PostgreSQL compartilhado acessível",
@@ -2852,6 +2852,7 @@
     "one": "Conclua ou remova a regra incompleta.",
     "other": "Conclua ou remova {count} regras incompletas."
   },
+  "m_10b76770e44e85": "Enviados a todo indexador com a identidade Personalizado, então não coloque aqui o login de um único site. Os valores são guardados criptografados e aparecem como •••• depois de salvar.",
   "m_10b79dfae40906": "Todos ({count})",
   "m_10b7dd055ff58b": "Favoritos no Plex",
   "m_10b96b8683017c": {
@@ -3148,6 +3149,7 @@
     "one": "{used} de {count} solicitação de API usada hoje",
     "other": "{used} de {count} solicitações de API usadas hoje"
   },
+  "m_1258cfc611553a": "Como este indexador vê o Ether.",
   "m_125952708f2adf": "{service} (região padrão)",
   "m_125a3da17154a8": "{indexer} deixará de ser pesquisado.",
   "m_125a82d7760449": "Áudio: {choice}",
@@ -3734,7 +3736,6 @@
   "m_15d3628feca6f4": "Com programação",
   "m_15d55b589f2dc8": "Regra adicionada",
   "m_15d59f48c42b08": "Memória",
-  "m_15d5d2ba209588": "Como este indexador vê o Ether. “Herdar” usa a escolha global desta página.",
   "m_15d85ff317b4f6": "A primeira correspondência vale. As classificações se comparam por idade.",
   "m_15d8e22869ff2d": "Início de todos",
   "m_15da6d9c7b8503": "Arte do título",
@@ -5394,7 +5395,6 @@
   "m_1f63847755c543": "Ancore {title} arrastando",
   "m_1f63dd73d695c0": "Pré-visualizar ordem salva",
   "m_1f664f6b9eec3b": "Conecte a conta do Simkl de um espectador para importar o histórico de reprodução e enviar as reproduções concluídas.",
-  "m_1f66e0e814303e": "“Herdar” usa a identidade escolhida acima.",
   "m_1f68e194414929": "Novo canal virtual",
   "m_1f69767390b86a": "Ano",
   "m_1f6c206c676272": "Sem host",

@@ -246,10 +246,15 @@ func applyAttr(r *rawItem, name, val string) {
 	case "password", "haspassword":
 		r.password = val == "1" || strings.EqualFold(val, "true") || strings.EqualFold(val, "yes")
 	case "category":
-		// May be "2040" or "Movies > HD"; keep first numeric token.
+		// May be "2040" or "Movies > HD"; keep first numeric token. Torznab
+		// feeds list a standard Newznab category and then the site's own
+		// (2000, then 100001): a standard one, once seen, is kept, so the
+		// media type (and the grab identity) follows it.
 		for _, f := range strings.FieldsFunc(val, func(ru rune) bool { return ru == '>' || ru == ',' || ru == ' ' }) {
 			if n, err := strconv.Atoi(f); err == nil {
-				r.category = n
+				if r.category == 0 || (!standardCategory(r.category) && standardCategory(n)) {
+					r.category = n
+				}
 				break
 			}
 		}
@@ -414,3 +419,7 @@ func asString(v any) string {
 		return fmt.Sprint(vv)
 	}
 }
+
+// standardCategory reports a Newznab standard category (1000–8999);
+// site-specific categories are numbered from 10000.
+func standardCategory(n int) bool { return n >= 1000 && n < 10000 }

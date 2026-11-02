@@ -2117,6 +2117,7 @@
   "m_0c3d819cf7e682": "Revisar perfil",
   "m_0c3f67bc47272f": "Comprueba las listas de seguimiento de los espectadores en busca de títulos que hayan pasado a estar disponibles.",
   "m_0c3fd14d544818": "Programación del bloque horario {number}",
+  "m_0c416952c0e7ce": "Heredar usa la tarjeta Identidad del cliente de la página Indexadores.",
   "m_0c429982a24dd8": "Aún no hay títulos. Busca arriba para añadir alguno.",
   "m_0c46ccd40e821c": "enviando",
   "m_0c4ad661fd7dc1": "La segunda puntuación a su lado.",
@@ -2822,7 +2823,6 @@
   "m_108b41637f364f": "Categoría",
   "m_108bd8cfca2c2c": "Formato de audio",
   "m_108ce7d935381c": "Falló la reproducción",
-  "m_108e33c52365a6": "Se envía cuando la identidad de arriba es Personalizado. Los valores se guardan cifrados y se muestran como •••• tras guardar.",
   "m_109052bf1479d2": "Mira qué calidad recibe un espectador en una aplicación y por qué.",
   "m_109127d5c5b105": "Idiomas de subtítulos",
   "m_10948de1366c4a": "Base de datos PostgreSQL compartida accesible",
@@ -2852,6 +2852,7 @@
     "one": "Completa o quita la regla incompleta.",
     "other": "Completa o quita {count} reglas incompletas."
   },
+  "m_10b76770e44e85": "Se envían a todos los indexadores con la identidad Personalizado, así que no pongas aquí el inicio de sesión de un solo sitio. Los valores se guardan cifrados y se muestran como •••• después de guardar.",
   "m_10b79dfae40906": "Todos ({count})",
   "m_10b7dd055ff58b": "Favoritos en Plex",
   "m_10b96b8683017c": {
@@ -3148,6 +3149,7 @@
     "one": "{used} de {count} solicitud de API usada hoy",
     "other": "{used} de {count} solicitudes de API usadas hoy"
   },
+  "m_1258cfc611553a": "Cómo ve este indexador a Ether.",
   "m_125952708f2adf": "{service} (región predeterminada)",
   "m_125a3da17154a8": "Ya no se buscará en {indexer}.",
   "m_125a82d7760449": "Audio: {choice}",
@@ -3734,7 +3736,6 @@
   "m_15d3628feca6f4": "Con programación",
   "m_15d55b589f2dc8": "Regla añadida",
   "m_15d59f48c42b08": "Memoria",
-  "m_15d5d2ba209588": "Cómo ve este indexador a Ether. «Heredar» usa la elección global de esta página.",
   "m_15d85ff317b4f6": "Gana la primera coincidencia. Las clasificaciones se comparan por edad.",
   "m_15d8e22869ff2d": "el Inicio de todos",
   "m_15da6d9c7b8503": "Póster del título",
@@ -5394,7 +5395,6 @@
   "m_1f63847755c543": "Ancla {title} arrastrando",
   "m_1f63dd73d695c0": "Vista previa del orden guardado",
   "m_1f664f6b9eec3b": "Conecta la cuenta de Simkl de un espectador para importar el historial de reproducción y enviar las reproducciones completadas.",
-  "m_1f66e0e814303e": "«Heredar» usa la identidad elegida arriba.",
   "m_1f68e194414929": "Nuevo canal virtual",
   "m_1f69767390b86a": "Año",
   "m_1f6c206c676272": "Sin host",

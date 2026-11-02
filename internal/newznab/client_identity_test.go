@@ -319,3 +319,37 @@ func TestClientIdentityNoEtherLeak(t *testing.T) {
 		}
 	}
 }
+
+// Torznab lists the standard category and then the site's own; the standard
+// one decides the media type, so a movie is grabbed with the movie identity.
+func TestTorznabStandardCategoryWins(t *testing.T) {
+	const xmlFeed = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+<channel><item>
+<title>Movie.2026.1080p.WEB-DL</title><guid>g1</guid>
+<link>http://ix.example/api?t=get&amp;id=g1</link>
+<torznab:attr name="category" value="2000"/>
+<torznab:attr name="category" value="100001"/>
+</item></channel></rss>`
+	rs, err := parseFeed([]byte(xmlFeed), "ix")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rs) != 1 || rs[0].Category != 2000 || releaseIsTV(rs[0]) {
+		t.Fatalf("multi-category movie: %+v", rs)
+	}
+}
+
+// Caps, the connection test and the recent feed are neither TV nor movie:
+// with only movie searches moved off Ether they use the movie identity, so a
+// site that rejects Ether/1.0 still answers them.
+func TestGeneralRequestsFollowTheOnlyCustomSearchIdentity(t *testing.T) {
+	ws := newWireServer(t)
+	c := New(wireConfig(ws.srv.URL), nil, Options{ClientIdentity: config.ClientIdentity{MovieSearch: config.IdentityRadarr}})
+	if _, err := c.Caps(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := ws.last(); got.ua != "Radarr/6.4.4.10685 (ubuntu 26.04)" {
+		t.Fatalf("caps with only movie searches set: %+v", got)
+	}
+}

@@ -2061,6 +2061,7 @@
   "m_0c3d819cf7e682": "Gjennomgå profil",
   "m_0c3f67bc47272f": "Sjekk seeres se-lister for titler som har blitt tilgjengelige.",
   "m_0c3fd14d544818": "Program for tidsblokk {number}",
+  "m_0c416952c0e7ce": "Arv bruker kortet Klientidentitet på siden Indekserere.",
   "m_0c429982a24dd8": "Ingen titler ennå. Søk ovenfor for å legge til noen.",
   "m_0c46ccd40e821c": "sender",
   "m_0c4ad661fd7dc1": "Den andre vurderingen ved siden av.",
@@ -2748,7 +2749,6 @@
   "m_108b41637f364f": "Kategori",
   "m_108bd8cfca2c2c": "Lydformat",
   "m_108ce7d935381c": "Avspilling mislyktes",
-  "m_108e33c52365a6": "Sendes når identiteten over er Egendefinert. Verdier lagres kryptert og vises som •••• etter lagring.",
   "m_109052bf1479d2": "Se hvilken kvalitet en seer får i en app, og hvorfor.",
   "m_109127d5c5b105": "Undertekstspråk",
   "m_10948de1366c4a": "Den delte PostgreSQL-databasen kan nås",
@@ -2776,6 +2776,7 @@
     "one": "Fullfør eller fjern den ufullstendige regelen.",
     "other": "Fullfør eller fjern {count} ufullstendige regler."
   },
+  "m_10b76770e44e85": "Sendes til alle indekserere med identiteten Egendefinert, så ikke legg inn påloggingen til ett nettsted her. Verdiene lagres kryptert og vises som •••• etter lagring.",
   "m_10b79dfae40906": "Alle ({count})",
   "m_10b7dd055ff58b": "Favoritter i Plex",
   "m_10b96b8683017c": {
@@ -3061,6 +3062,7 @@
     "one": "{used} av {count} API-forespørsel brukt i dag",
     "other": "{used} av {count} API-forespørsler brukt i dag"
   },
+  "m_1258cfc611553a": "Hva denne indeksereren ser Ether som.",
   "m_125952708f2adf": "{service} (standardregion)",
   "m_125a3da17154a8": "{indexer} blir ikke lenger søkt i.",
   "m_125a82d7760449": "Lyd: {choice}",
@@ -3627,7 +3629,6 @@
   "m_15d3628feca6f4": "Oppført",
   "m_15d55b589f2dc8": "Regel lagt til",
   "m_15d59f48c42b08": "Minne",
-  "m_15d5d2ba209588": "Hvordan denne indekseren ser Ether. «Arv» bruker det globale valget på denne siden.",
   "m_15d85ff317b4f6": "Første treff gjelder. Aldersgrenser sammenlignes etter nivå.",
   "m_15d8e22869ff2d": "alles Hjem",
   "m_15da6d9c7b8503": "Tittelomslag",
@@ -5245,7 +5246,6 @@
   "m_1f63847755c543": "Forankre {title} ved å dra",
   "m_1f63dd73d695c0": "Forhåndsvis lagret rekkefølge",
   "m_1f664f6b9eec3b": "Koble til en seers Simkl-konto for å importere visningshistorikk og sende fullførte avspillinger.",
-  "m_1f66e0e814303e": "«Arv» bruker identiteten valgt over.",
   "m_1f68e194414929": "Ny virtuell kanal",
   "m_1f69767390b86a": "År",
   "m_1f6c206c676272": "Ingen vert",

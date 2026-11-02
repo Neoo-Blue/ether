@@ -955,7 +955,7 @@ function identityOptions(includeCustom: boolean, includeEther = true) {
 /**
  * Search-side presets: SABnzbd and NZBGet never send a Newznab query, so a
  * search presented as one is a client that cannot exist. They stay available
- * for grabs and for the per-indexer override.
+ * for grabs only; the per-indexer override excludes them as well.
  */
 export function searchIdentityOptions(includeCustom: boolean, includeEther = true) {
   return identityOptions(includeCustom, includeEther).filter(
@@ -1010,7 +1010,7 @@ export const CLIENT_IDENTITY: FieldGroup[] = localized(() => [
         label: t("Custom headers"),
         kind: "map",
         help: t(
-          "Sent when an identity above is Custom. Values are sealed at rest and shown as •••• after saving.",
+          "Sent to every indexer whose identity is Custom, so don't put one site's login here. Values are sealed at rest and shown as •••• after saving.",
         ),
       },
     ],

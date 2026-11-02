@@ -2061,6 +2061,7 @@
   "m_0c3d819cf7e682": "Profili gözden geçir",
   "m_0c3f67bc47272f": "Kullanılabilir hale gelen başlıklar için izleyicilerin izleme listelerini denetleyin.",
   "m_0c3fd14d544818": "Zaman bloğu {number} programlaması",
+  "m_0c416952c0e7ce": "Devral, Dizinleyiciler sayfasındaki İstemci kimliği kartını kullanır.",
   "m_0c429982a24dd8": "Henüz başlık yok. Eklemek için yukarıdan arayın.",
   "m_0c46ccd40e821c": "gönderiliyor",
   "m_0c4ad661fd7dc1": "Yanındaki ikinci puan.",
@@ -2748,7 +2749,6 @@
   "m_108b41637f364f": "Kategori",
   "m_108bd8cfca2c2c": "Ses biçimi",
   "m_108ce7d935381c": "Oynatma başarısız oldu",
-  "m_108e33c52365a6": "Yukarıdaki kimlik Özel olduğunda gönderilir. Değerler şifrelenmiş olarak saklanır ve kaydettikten sonra •••• olarak gösterilir.",
   "m_109052bf1479d2": "Bir izleyicinin bir uygulamada aldığı kaliteyi ve nedenini görün.",
   "m_109127d5c5b105": "Altyazı dilleri",
   "m_10948de1366c4a": "Paylaşılan PostgreSQL veritabanına ulaşılabiliyor",
@@ -2776,6 +2776,7 @@
     "one": "Tamamlanmamış kuralı bitirin veya kaldırın.",
     "other": "Tamamlanmamış {count} kuralı bitirin veya kaldırın."
   },
+  "m_10b76770e44e85": "Kimliği Özel olan her dizinleyiciye gönderilir; bu yüzden buraya tek bir sitenin giriş bilgilerini koymayın. Değerler şifrelenmiş olarak saklanır ve kaydettikten sonra •••• olarak gösterilir.",
   "m_10b79dfae40906": "Tümü ({count})",
   "m_10b7dd055ff58b": "Plex'teki favoriler",
   "m_10b96b8683017c": {
@@ -3061,6 +3062,7 @@
     "one": "Bugün {count} API isteğinden {used} tanesi kullanıldı",
     "other": "Bugün {count} API isteğinden {used} tanesi kullanıldı"
   },
+  "m_1258cfc611553a": "Bu dizinleyicinin Ether'i ne olarak gördüğü.",
   "m_125952708f2adf": "{service} (varsayılan bölge)",
   "m_125a3da17154a8": "{indexer} artık aranmayacak.",
   "m_125a82d7760449": "Ses: {choice}",
@@ -3627,7 +3629,6 @@
   "m_15d3628feca6f4": "Listelendi",
   "m_15d55b589f2dc8": "Kural eklendi",
   "m_15d59f48c42b08": "Bellek",
-  "m_15d5d2ba209588": "Bu dizinin Ether'ı nasıl gördüğü. «Devral» bu sayfadaki genel seçimi kullanır.",
   "m_15d85ff317b4f6": "İlk eşleşme geçerlidir. Yaş dereceleri düzeye göre karşılaştırılır.",
   "m_15d8e22869ff2d": "herkesin Ana Sayfası",
   "m_15da6d9c7b8503": "Başlık görseli",
@@ -5245,7 +5246,6 @@
   "m_1f63847755c543": "{title} öğesini sürükleyerek sabitle",
   "m_1f63dd73d695c0": "Kaydedilen sırayı önizle",
   "m_1f664f6b9eec3b": "İzleme geçmişini içe aktarmak ve tamamlanan oynatmaları göndermek için bir izleyicinin Simkl hesabını bağlayın.",
-  "m_1f66e0e814303e": "«Devral» yukarıda seçilen kimliği kullanır.",
   "m_1f68e194414929": "Yeni sanal kanal",
   "m_1f69767390b86a": "Yıl",
   "m_1f6c206c676272": "Ana makine yok",

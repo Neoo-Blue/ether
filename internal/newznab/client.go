@@ -280,6 +280,23 @@ func (c *Client) clientIdentityFor(tv, grab bool) config.Identity {
 	return c.idSearchMov
 }
 
+// generalIdentity is the identity for requests that are neither a TV nor a
+// movie search: caps, the connection test and the recent-release feed. It
+// is the TV search choice, or the movie one when only movie searches were
+// moved off Ether, so a site that rejects Ether/1.0 still answers them.
+func (c *Client) generalIdentity() config.Identity {
+	c.idMu.RLock()
+	defer c.idMu.RUnlock()
+	if isEtherIdentity(c.idSearchTV) && !isEtherIdentity(c.idSearchMov) {
+		return c.idSearchMov
+	}
+	return c.idSearchTV
+}
+
+func isEtherIdentity(id config.Identity) bool {
+	return id.Preset == "" || id.Preset == config.IdentityEther
+}
+
 // Name implements core.Indexer.
 func (c *Client) Name() string {
 	cfg := c.Config()
@@ -563,7 +580,7 @@ func (c *Client) Caps(ctx context.Context) (*Caps, error) {
 }
 
 func (c *Client) fetchCaps(ctx context.Context) (*Caps, error) {
-	id := c.clientIdentityFor(true, false)
+	id := c.generalIdentity()
 	u, err := c.apiURL(url.Values{"t": {"caps"}}, id)
 	if err != nil {
 		return nil, err
@@ -1488,7 +1505,7 @@ func TestWithOptions(ctx context.Context, cfg config.Indexer, opts Options) erro
 		return humanError(name, err)
 	}
 	params := url.Values{"t": {"search"}, "q": {"test"}, "limit": {"1"}, "extended": {"1"}}
-	id := c.clientIdentityFor(true, false)
+	id := c.generalIdentity()
 	if id.Offset0 {
 		params.Set("offset", "0")
 	}

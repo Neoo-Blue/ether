@@ -2117,6 +2117,7 @@
   "m_0c3d819cf7e682": "Rivedi il profilo",
   "m_0c3f67bc47272f": "Controlla le watchlist degli spettatori per i titoli diventati disponibili.",
   "m_0c3fd14d544818": "Programmazione della fascia oraria {number}",
+  "m_0c416952c0e7ce": "Eredita usa la scheda Identità del client nella pagina Indexer.",
   "m_0c429982a24dd8": "Ancora nessun titolo. Cerca qui sopra per aggiungerne.",
   "m_0c46ccd40e821c": "invio in corso",
   "m_0c4ad661fd7dc1": "Il secondo punteggio accanto.",
@@ -2822,7 +2823,6 @@
   "m_108b41637f364f": "Categoria",
   "m_108bd8cfca2c2c": "Formato audio",
   "m_108ce7d935381c": "Riproduzione non riuscita",
-  "m_108e33c52365a6": "Inviato quando l'identità sopra è Personalizzato. I valori sono archiviati cifrati e mostrati come •••• dopo il salvataggio.",
   "m_109052bf1479d2": "Vedi la qualità che uno spettatore ottiene su un’app e perché.",
   "m_109127d5c5b105": "Lingue dei sottotitoli",
   "m_10948de1366c4a": "Database PostgreSQL condiviso raggiungibile",
@@ -2852,6 +2852,7 @@
     "one": "Completa o rimuovi la regola incompleta.",
     "other": "Completa o rimuovi {count} regole incomplete."
   },
+  "m_10b76770e44e85": "Inviati a ogni indexer con identità Personalizzato, quindi non inserire qui l'accesso di un solo sito. I valori sono cifrati e dopo il salvataggio appaiono come ••••.",
   "m_10b79dfae40906": "Tutti ({count})",
   "m_10b7dd055ff58b": "Preferiti in Plex",
   "m_10b96b8683017c": {
@@ -3148,6 +3149,7 @@
     "one": "{used} di {count} richiesta API usata oggi",
     "other": "{used} di {count} richieste API usate oggi"
   },
+  "m_1258cfc611553a": "Come questo indexer vede Ether.",
   "m_125952708f2adf": "{service} (regione predefinita)",
   "m_125a3da17154a8": "{indexer} non verrà più cercato.",
   "m_125a82d7760449": "Audio: {choice}",
@@ -3734,7 +3736,6 @@
   "m_15d3628feca6f4": "Con programmi",
   "m_15d55b589f2dc8": "Regola aggiunta",
   "m_15d59f48c42b08": "Memoria",
-  "m_15d5d2ba209588": "Come questo indexer vede Ether. «Eredita» usa la scelta globale di questa pagina.",
   "m_15d85ff317b4f6": "Vale la prima corrispondenza. Le classificazioni si confrontano per età.",
   "m_15d8e22869ff2d": "la Home di tutti",
   "m_15da6d9c7b8503": "Grafica del titolo",
@@ -5394,7 +5395,6 @@
   "m_1f63847755c543": "Ancora {title} trascinando",
   "m_1f63dd73d695c0": "Anteprima dell'ordine salvato",
   "m_1f664f6b9eec3b": "Connetti l’account Simkl di uno spettatore per importare la cronologia di visione e inviare le riproduzioni completate.",
-  "m_1f66e0e814303e": "«Eredita» usa l'identità scelta sopra.",
   "m_1f68e194414929": "Nuovo canale virtuale",
   "m_1f69767390b86a": "Anno",
   "m_1f6c206c676272": "Nessun host",

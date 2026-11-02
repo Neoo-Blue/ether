@@ -2061,6 +2061,7 @@
   "m_0c3d819cf7e682": "Gennemse profil",
   "m_0c3f67bc47272f": "Tjek seeres overvågningslister for titler, der er blevet tilgængelige.",
   "m_0c3fd14d544818": "Programlægning af tidsblok {number}",
+  "m_0c416952c0e7ce": "Arv bruger kortet Klientidentitet på siden Indexere.",
   "m_0c429982a24dd8": "Ingen titler endnu. Søg ovenfor for at tilføje nogle.",
   "m_0c46ccd40e821c": "sender",
   "m_0c4ad661fd7dc1": "Den anden score ved siden af.",
@@ -2748,7 +2749,6 @@
   "m_108b41637f364f": "Kategori",
   "m_108bd8cfca2c2c": "Lydformat",
   "m_108ce7d935381c": "Afspilning mislykkedes",
-  "m_108e33c52365a6": "Sendes, når identiteten ovenfor er Brugerdefineret. Værdier gemmes krypteret og vises som •••• efter lagring.",
   "m_109052bf1479d2": "Se, hvilken kvalitet en seer får i en app, og hvorfor.",
   "m_109127d5c5b105": "Undertekstsprog",
   "m_10948de1366c4a": "Den delte PostgreSQL-database kan nås",
@@ -2776,6 +2776,7 @@
     "one": "Gør den ufuldstændige regel færdig, eller fjern den.",
     "other": "Gør {count} ufuldstændige regler færdige, eller fjern dem."
   },
+  "m_10b76770e44e85": "Sendes til alle indexere med identiteten Brugerdefineret, så læg ikke ét websteds login her. Værdierne gemmes krypteret og vises som •••• efter gemning.",
   "m_10b79dfae40906": "Alle ({count})",
   "m_10b7dd055ff58b": "Favoritter i Plex",
   "m_10b96b8683017c": {
@@ -3061,6 +3062,7 @@
     "one": "{used} af {count} API-forespørgsel brugt i dag",
     "other": "{used} af {count} API-forespørgsler brugt i dag"
   },
+  "m_1258cfc611553a": "Hvad denne indexer ser Ether som.",
   "m_125952708f2adf": "{service} (standardregion)",
   "m_125a3da17154a8": "{indexer} søges ikke længere.",
   "m_125a82d7760449": "Lyd: {choice}",
@@ -3627,7 +3629,6 @@
   "m_15d3628feca6f4": "Med program",
   "m_15d55b589f2dc8": "Regel tilføjet",
   "m_15d59f48c42b08": "Hukommelse",
-  "m_15d5d2ba209588": "Hvordan denne indexer ser Ether. „Overtag“ bruger det globale valg på denne side.",
   "m_15d85ff317b4f6": "Første match gælder. Aldersklassificeringer sammenlignes efter niveau.",
   "m_15d8e22869ff2d": "alles Hjem",
   "m_15da6d9c7b8503": "Titelgrafik",
@@ -5245,7 +5246,6 @@
   "m_1f63847755c543": "Forankr {title} ved at trække",
   "m_1f63dd73d695c0": "Forhåndsvis gemt rækkefølge",
   "m_1f664f6b9eec3b": "Tilslut en seers Simkl-konto for at importere visningshistorik og sende afsluttede afspilninger.",
-  "m_1f66e0e814303e": "„Overtag“ bruger identiteten valgt ovenfor.",
   "m_1f68e194414929": "Ny virtuel kanal",
   "m_1f69767390b86a": "År",
   "m_1f6c206c676272": "Ingen vært",

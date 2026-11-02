@@ -2061,6 +2061,7 @@
   "m_0c3d819cf7e682": "Review profile",
   "m_0c3f67bc47272f": "Check viewers' watchlists for titles that have become available.",
   "m_0c3fd14d544818": "Time block {number} programming",
+  "m_0c416952c0e7ce": "Inherit uses the Client identity card on the Indexers page.",
   "m_0c429982a24dd8": "No titles yet. Search above to add some.",
   "m_0c46ccd40e821c": "sending",
   "m_0c4ad661fd7dc1": "The second score beside it.",
@@ -2748,7 +2749,6 @@
   "m_108b41637f364f": "Category",
   "m_108bd8cfca2c2c": "Audio format",
   "m_108ce7d935381c": "Playback failed",
-  "m_108e33c52365a6": "Sent when an identity above is Custom. Values are sealed at rest and shown as •••• after saving.",
   "m_109052bf1479d2": "See the quality a viewer gets on an app, and why.",
   "m_109127d5c5b105": "Subtitle languages",
   "m_10948de1366c4a": "Shared PostgreSQL database reachable",
@@ -2776,6 +2776,7 @@
     "one": "Finish or remove the incomplete rule.",
     "other": "Finish or remove {count} incomplete rules."
   },
+  "m_10b76770e44e85": "Sent to every indexer whose identity is Custom, so don't put one site's login here. Values are sealed at rest and shown as •••• after saving.",
   "m_10b79dfae40906": "All ({count})",
   "m_10b7dd055ff58b": "Favorites in Plex",
   "m_10b96b8683017c": {
@@ -3061,6 +3062,7 @@
     "one": "{used} of {count} API request used today",
     "other": "{used} of {count} API requests used today"
   },
+  "m_1258cfc611553a": "What this indexer sees Ether as.",
   "m_125952708f2adf": "{service} (default region)",
   "m_125a3da17154a8": "{indexer} will no longer be searched.",
   "m_125a82d7760449": "Audio: {choice}",
@@ -3627,7 +3629,6 @@
   "m_15d3628feca6f4": "Listed",
   "m_15d55b589f2dc8": "Rule added",
   "m_15d59f48c42b08": "Memory",
-  "m_15d5d2ba209588": "What this indexer sees Ether as. Inherit uses the global choice on this page.",
   "m_15d85ff317b4f6": "First match wins. Ratings match by age level.",
   "m_15d8e22869ff2d": "everyone's Home",
   "m_15da6d9c7b8503": "Title artwork",
@@ -5245,7 +5246,6 @@
   "m_1f63847755c543": "Anchor {title} by dragging",
   "m_1f63dd73d695c0": "Preview saved order",
   "m_1f664f6b9eec3b": "Connect a viewer's Simkl account to import watched history and send completed playback.",
-  "m_1f66e0e814303e": "Inherit uses the identity chosen above.",
   "m_1f68e194414929": "New virtual channel",
   "m_1f69767390b86a": "Year",
   "m_1f6c206c676272": "No host",

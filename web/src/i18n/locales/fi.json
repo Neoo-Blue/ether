@@ -2061,6 +2061,7 @@
   "m_0c3d819cf7e682": "Tarkista profiili",
   "m_0c3f67bc47272f": "Tarkista katselijoiden seurantalistat saataville tulleiden nimikkeiden varalta.",
   "m_0c3fd14d544818": "Aikalohkon {number} ohjelmasisältö",
+  "m_0c416952c0e7ce": "Peri käyttää Indeksoijat-sivun Asiakasidentiteetti-korttia.",
   "m_0c429982a24dd8": "Ei vielä nimikkeitä. Lisää niitä yllä olevalla haulla.",
   "m_0c46ccd40e821c": "lähetetään",
   "m_0c4ad661fd7dc1": "Toiset pisteet sen vieressä.",
@@ -2748,7 +2749,6 @@
   "m_108b41637f364f": "Luokka",
   "m_108bd8cfca2c2c": "Äänimuoto",
   "m_108ce7d935381c": "Toisto epäonnistui",
-  "m_108e33c52365a6": "Lähetetään, kun yllä oleva identiteetti on Oma. Arvot tallennetaan salattuina ja näytetään tallennuksen jälkeen muodossa ••••.",
   "m_109052bf1479d2": "Katso, minkä laadun katsoja saa sovelluksessa ja miksi.",
   "m_109127d5c5b105": "Tekstityskielet",
   "m_10948de1366c4a": "Jaettu PostgreSQL-tietokanta on tavoitettavissa",
@@ -2776,6 +2776,7 @@
     "one": "Viimeistele tai poista keskeneräinen sääntö.",
     "other": "Viimeistele tai poista {count} keskeneräistä sääntöä."
   },
+  "m_10b76770e44e85": "Lähetetään jokaiselle indeksoijalle, jonka identiteetti on Oma, joten älä lisää tähän yhden sivuston kirjautumistietoja. Arvot tallennetaan salattuina ja näytetään tallennuksen jälkeen muodossa ••••.",
   "m_10b79dfae40906": "Kaikki ({count})",
   "m_10b7dd055ff58b": "Suosikit Plexissä",
   "m_10b96b8683017c": {
@@ -3061,6 +3062,7 @@
     "one": "{used} / {count} API-pyynnöstä käytetty tänään",
     "other": "{used} / {count} API-pyynnöstä käytetty tänään"
   },
+  "m_1258cfc611553a": "Miksi tämä indeksoija näkee Etherin.",
   "m_125952708f2adf": "{service} (oletusalue)",
   "m_125a3da17154a8": "Indeksoijaa {indexer} ei enää haeta.",
   "m_125a82d7760449": "Ääni: {choice}",
@@ -3627,7 +3629,6 @@
   "m_15d3628feca6f4": "Listattu",
   "m_15d55b589f2dc8": "Sääntö lisätty",
   "m_15d59f48c42b08": "Muisti",
-  "m_15d5d2ba209588": "Miltä Ether näyttää tällä hakemistolla. ”Peri” käyttää tämän sivun yleistä valintaa.",
   "m_15d85ff317b4f6": "Ensimmäinen osuma ratkaisee. Ikärajoja verrataan tason mukaan.",
   "m_15d8e22869ff2d": "kaikkien etusivu",
   "m_15da6d9c7b8503": "Nimikkeen kuvitus",
@@ -5245,7 +5246,6 @@
   "m_1f63847755c543": "Ankkuroi {title} vetämällä",
   "m_1f63dd73d695c0": "Esikatsele tallennettua järjestystä",
   "m_1f664f6b9eec3b": "Yhdistä katsojan Simkl-tili tuodaksesi katseluhistorian ja lähettääksesi valmiiksi katsotut toistot.",
-  "m_1f66e0e814303e": "”Peri” käyttää yllä valittua identiteettiä.",
   "m_1f68e194414929": "Uusi virtuaalikanava",
   "m_1f69767390b86a": "Vuosi",
   "m_1f6c206c676272": "Ei isäntää",
