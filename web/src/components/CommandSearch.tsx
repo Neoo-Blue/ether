@@ -1,50 +1,22 @@
 import {
   GlobalSearch,
+  toast,
   type GlobalSearchGroup,
   type GlobalSearchResult,
 } from "@braedonsaunders/appkit-ui";
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../lib/api";
-import { localized, t, tn, msg, searchTerms } from "../i18n";
-import { destinations } from "../lib/sitemap";
+import { api, apiFetch, errorMessage } from "../lib/api";
+import { t, tn } from "../i18n";
+import { BUILTIN, textOf, useRegistry, type Descriptor } from "../lib/extend";
+import {
+  pluginPageRoute,
+  searchTextOf,
+  type CommandMeta,
+  type PageMeta,
+} from "../lib/console-descriptors";
+import { destinationsFrom } from "../lib/sitemap";
 import { loadViewers, viewerName } from "./pickers";
-
-const ACTIONS = localized(() => [
-  {
-    title: t("Record a problem"),
-    href: "/maintenance/logs?record=1",
-    keywords: searchTerms(msg("support zip diagnostic capture")),
-  },
-  {
-    title: t("Add an indexer"),
-    href: "/sources/indexers",
-    keywords: searchTerms(msg("newznab prowlarr")),
-  },
-  {
-    title: t("Add a Usenet provider"),
-    href: "/sources/usenet",
-    keywords: searchTerms(msg("nntp")),
-  },
-  {
-    title: t("Add a debrid provider"),
-    href: "/sources/debrid",
-    keywords: searchTerms(
-      msg("real-debrid torbox alldebrid premiumize debrid-link debridlink offcloud torrent"),
-    ),
-  },
-  { title: t("New collection"), href: "/collections/new", keywords: searchTerms(msg("create")) },
-  {
-    title: t("New notification channel"),
-    href: "/notifications/channels",
-    keywords: searchTerms(msg("alert")),
-  },
-  {
-    title: t("Back up now"),
-    href: "/maintenance/backups",
-    keywords: searchTerms(msg("backup snapshot")),
-  },
-]);
 
 function matches(q: string, ...fields: (string | undefined)[]): boolean {
   const hay = fields.filter(Boolean).join(" ").toLowerCase();
@@ -55,13 +27,32 @@ function matches(q: string, ...fields: (string | undefined)[]): boolean {
     .every((w) => hay.includes(w));
 }
 
-/** ⌘K: jump to any page, section, viewer or collection, or start a common task. */
+const ACTION_PREFIX = "action:";
+
+interface PluginActionOutcome {
+  toast?: string | { text: string; kind?: "success" | "error" | "info" };
+  open?: { page?: string; route?: string; params?: Record<string, string> };
+}
+
+/**
+ * ⌘K: jump to any page, section, viewer or collection, or start a common
+ * task. Destinations and actions come from the descriptor registry (WS1d):
+ * page descriptors (built-in and plugin) fill "Go to", command descriptors
+ * with a route or plugin action fill "Actions". Agent suggestions are not ⌘K
+ * actions.
+ */
 export function CommandSearch() {
   const navigate = useNavigate();
+  const { descriptors } = useRegistry("page", "command");
+  const live = useRef<Descriptor[]>([]);
+  live.current = descriptors;
   const search = useCallback(
     async (q: string, signal: AbortSignal): Promise<GlobalSearchResult> => {
+      const all = live.current;
+      const pages = all.filter((d) => d.kind === "page") as Descriptor<PageMeta>[];
+      const commands = all.filter((d) => d.kind === "command") as Descriptor<CommandMeta>[];
       const groups: GlobalSearchGroup[] = [];
-      const places = destinations()
+      const places = destinationsFrom(pages)
         .filter((d) => matches(q, d.title, d.page, d.keywords))
         .slice(0, 8)
         .map((d) => ({
@@ -72,12 +63,21 @@ export function CommandSearch() {
           href: d.href,
         }));
       if (places.length) groups.push({ id: "places", label: t("Go to"), hits: places });
-      const actions = ACTIONS.filter((a) => matches(q, a.title, a.keywords)).map((a) => ({
-        id: a.title,
-        type: "action",
-        title: a.title,
-        href: a.href,
-      }));
+      const actions = commands
+        .filter(
+          (c) =>
+            (c.meta?.route || c.meta?.action) &&
+            !c.meta.agentSuggestion &&
+            matches(q, textOf(c.label), searchTextOf(c.meta.keywords)),
+        )
+        .map((c) => ({
+          id: c.id,
+          type: "action",
+          title: textOf(c.label),
+          href:
+            c.meta?.route ||
+            `${ACTION_PREFIX}${encodeURIComponent(c.owner)}/${encodeURIComponent(c.meta!.action!)}`,
+        }));
       if (actions.length) groups.push({ id: "actions", label: t("Actions"), hits: actions });
       const [viewers, collections] = await Promise.all([
         loadViewers().catch(() => []),
@@ -110,12 +110,52 @@ export function CommandSearch() {
     },
     [],
   );
+  const runHit = useCallback(
+    (href: string) => {
+      if (!href.startsWith(ACTION_PREFIX)) {
+        navigate(href);
+        return;
+      }
+      const [rawOwner = "", rawAction = ""] = href.slice(ACTION_PREFIX.length).split("/", 2);
+      const owner = decodeURIComponent(rawOwner);
+      const action = decodeURIComponent(rawAction);
+      if (!owner || owner === BUILTIN || !action) return;
+      void apiFetch<PluginActionOutcome>(
+        `/plugins/${encodeURIComponent(owner)}/actions/${encodeURIComponent(action)}`,
+        { method: "POST", body: JSON.stringify({ params: {} }) },
+      )
+        .then((res) => {
+          if (res?.toast) {
+            const spec =
+              typeof res.toast === "string"
+                ? { text: res.toast, kind: "success" as const }
+                : res.toast;
+            if (spec.kind === "error") toast.error(spec.text);
+            else if (spec.kind === "info") toast.info(spec.text);
+            else toast.success(spec.text);
+          }
+          if (res?.open?.page) {
+            const q = new URLSearchParams(res.open.params ?? {});
+            const suffix = q.toString() ? `?${q}` : "";
+            navigate(`${pluginPageRoute(owner, res.open.page)}${suffix}`);
+          } else if (
+            res?.open?.route &&
+            res.open.route.startsWith("/") &&
+            !res.open.route.startsWith("//")
+          ) {
+            navigate(res.open.route);
+          }
+        })
+        .catch((e) => toast.error(errorMessage(e)));
+    },
+    [navigate],
+  );
   return (
     <GlobalSearch
       className="w-full max-w-md"
       search={search}
       minimumQueryLength={1}
-      onNavigate={(hit) => navigate(hit.href)}
+      onNavigate={(hit) => runHit(hit.href)}
       labels={{
         placeholder: t("Search or jump to…"),
         ariaLabel: t("Search Ether"),

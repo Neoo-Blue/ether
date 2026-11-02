@@ -1,11 +1,13 @@
 package adapters_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,6 +22,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/extend"
 	"github.com/braedonsaunders/ether/internal/plugins"
 	"github.com/braedonsaunders/ether/internal/plugins/adapters"
+	"github.com/braedonsaunders/ether/internal/plugins/remote"
 	"github.com/braedonsaunders/ether/internal/resolver"
 	"github.com/braedonsaunders/ether/internal/store"
 )
@@ -585,4 +588,113 @@ func TestDynamicEnableDisableAndBudgets(t *testing.T) {
 
 func bytesRepeat(s string, count int) []byte {
 	return []byte(strings.Repeat(s, count))
+}
+
+func TestRemoteFileRangePlaybackAndGrantRevocation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	env := newStreamTestEnv(t)
+	dir := t.TempDir()
+	data := bytes.Repeat([]byte("0123456789abcdef"), 4096)
+	if err := os.WriteFile(filepath.Join(dir, "movie.mkv"), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	tun := remote.NewTunnelServer(remote.TunnelOptions{Auth: remote.StaticCredentials{"credential": "example.remote"}})
+	defer tun.Close()
+	server := httptest.NewServer(tun.Handler())
+	defer server.Close()
+	client, err := remote.NewTunnelClient(remote.TunnelClientOptions{URL: server.URL, Credential: "credential", Plugin: "example.remote", StreamHandler: remote.FileHandler(dir), Handler: func(_ context.Context, req remote.Request) (remote.Response, error) {
+		body, _ := json.Marshal(map[string]any{"streams": []any{map[string]any{"ether": map[string]any{"id": "file1", "file": filepath.Join(dir, "movie.mkv"), "releaseName": "Arrival.2016.2160p.REMUX.mkv", "size": 1}}}})
+		return remote.Response{Status: 200, Body: body}, nil
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() { defer close(done); _ = client.ServeOnce(ctx) }()
+	defer func() { cancel(); tun.Close(); <-done }()
+	env.mgr.RegisterRuntime("remote", (&remote.Factory{Tunnel: tun}).RuntimeFactory())
+	manifest := []byte(`{"id":"example.remote","version":"1.0.0","name":"Sidecar","ether":{"protocol":1,"kind":"source","summary":"Provides streams for titles","capabilities":["stream_source"],"runtime":{"kind":"remote"},"permissions":{"folders":"read"},"contributes":{"source":{"class":"direct"}}}}`)
+	preview, err := env.mgr.PreviewInstall(ctx, plugins.Source{Kind: "studio", Manifest: manifest})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := env.mgr.Install(ctx, preview, plugins.InstallOptions{AcceptAddedPermissions: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = env.mgr.SetGrants(ctx, rec.ID, plugins.Grants{Folders: []string{dir}}); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.NewTimer(30 * time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for !tun.IsConnected(rec.ID) {
+		select {
+		case <-deadline.C:
+			t.Fatal("sidecar did not connect")
+		case <-ticker.C:
+		}
+	}
+	releases, err := env.sources.Search(ctx, core.SearchRequest{Title: "Arrival", Year: 2016, Type: core.TypeMovie, IDs: core.IDs{IMDB: "tt2543164"}})
+	if err != nil || len(releases) != 1 {
+		t.Fatalf("search %v %v", releases, err)
+	}
+	payload, err := env.sources.FetchNZB(ctx, releases[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := env.engine.Open(ctx, releases[0].ID, payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer source.Close()
+	if source.Size() != int64(len(data)) {
+		t.Fatalf("size %d", source.Size())
+	}
+	for _, bad := range []string{dir + "/../secret", dir + "/%2e%2e/secret", "/outside/secret"} {
+		forged := adapters.LocalPayload{PluginID: rec.ID, FilePath: bad, Remote: true}.Encode()
+		if _, err := env.engine.Open(ctx, "", forged); !errors.Is(err, plugins.ErrPermissionDenied) {
+			t.Fatalf("ungranted path %q: %v", bad, err)
+		}
+	}
+	for _, off := range []int64{30000, 0, int64(len(data) - 17)} {
+		buf := make([]byte, 50)
+		n, err := source.ReadAt(buf, off)
+		if err != nil && !errors.Is(err, io.EOF) {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(buf[:n], data[int(off):int(off)+n]) {
+			t.Fatalf("bytes at %d", off)
+		}
+	}
+	if err = env.mgr.SetGrants(ctx, rec.ID, plugins.Grants{Folders: []string{dir}, Revoked: []string{"folders"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = source.ReadAt(make([]byte, 10), 0); !errors.Is(err, plugins.ErrPermissionDenied) {
+		t.Fatalf("revoked read %v", err)
+	}
+	forged := adapters.LocalPayload{PluginID: rec.ID, FilePath: dir + "/../secret", Remote: true}.Encode()
+	if _, err = env.engine.Open(ctx, "", forged); !errors.Is(err, plugins.ErrPermissionDenied) {
+		t.Fatalf("traversal open %v", err)
+	}
+	if err := source.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := source.ReadAt(make([]byte, 1), 0); !errors.Is(err, os.ErrClosed) {
+		t.Fatalf("closed read %v", err)
+	}
+}
+
+func TestManagerRejectsStreamingOnNonStreamingRuntime(t *testing.T) {
+	env := newStreamTestEnv(t)
+	rec := env.installSourcePlugin("example.hosted", "Hosted", "direct", "read", nil, nil)
+	_, body, err := env.mgr.CallStream(context.Background(), rec.ID, plugins.Request{Path: "/ether/file/movie.mkv"})
+	if body != nil {
+		body.Close()
+	}
+	if !errors.Is(err, plugins.ErrStreamUnsupported) {
+		t.Fatalf("streaming error = %v", err)
+	}
 }

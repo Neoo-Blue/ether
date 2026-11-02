@@ -313,6 +313,9 @@ func TestUpdatePermissionDiffAndRollback(t *testing.T) {
 	rec, _ := env.m.Get(ctx, "community.example.hello")
 	rec.SourceURL = srv.URL
 	rec.SourceKind = "url"
+	rec.Verified = true
+	rec.AutoUpdate = true
+	rec.Shadow = true
 	if err := env.m.store.upsert(ctx, rec); err != nil {
 		t.Fatal(err)
 	}
@@ -322,6 +325,10 @@ func TestUpdatePermissionDiffAndRollback(t *testing.T) {
 	}
 	if len(p.AddedPermissions) == 0 {
 		t.Fatal("want added permissions on the update")
+	}
+	beforeApproval, err := env.m.Get(ctx, rec.ID)
+	if err != nil || beforeApproval.Version != "1.0.0" {
+		t.Fatalf("permission increase applied automatically: %+v %v", beforeApproval, err)
 	}
 	if _, err := env.m.ApplyUpdate(ctx, rec.ID, false); err == nil {
 		t.Fatal("update without accepting new permissions must stop")
@@ -335,7 +342,7 @@ func TestUpdatePermissionDiffAndRollback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.Version != "2.0.0" || updated.PrevVersion != "1.0.0" {
+	if updated.Version != "2.0.0" || updated.PrevVersion != "1.0.0" || !updated.AutoUpdate || !updated.Shadow {
 		t.Fatalf("updated: %+v", updated)
 	}
 	back, err := env.m.Rollback(ctx, rec.ID)

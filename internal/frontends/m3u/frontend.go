@@ -19,7 +19,7 @@ import (
 type Frontend struct{}
 
 func (Frontend) Describe() frontend.Descriptor {
-	return frontend.Descriptor{ID: "m3u", Name: "M3U and XMLTV", Version: "1.0", Clients: []string{"Channels DVR", "TiviMate"}}
+	return frontend.Descriptor{ID: "m3u", Name: "M3U and XMLTV", Version: "1.0", Clients: []string{"Channels DVR", "TiviMate"}, SettingsSchema: frontend.AccountSchema("playlist")}
 }
 func (Frontend) Mount(_ context.Context, host frontend.Host) (frontend.Instance, error) {
 	if host.Identity == nil || host.LiveTV == nil || host.Sessions == nil {

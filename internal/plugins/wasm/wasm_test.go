@@ -369,29 +369,20 @@ globalThis.cond_match = function(c, op, v) { return op === "is" ? c.group === v 
 func TestHotDeterminism1000Runs(t *testing.T) {
 	e := testEngine(t)
 	run := func(p *Plugin, prefix string) []int64 {
-		var scores []int64
-		for b := 0; b < 1000; b += 25 {
-			var got []int64
-			var out Outcome
-			var err error
-			for attempt := 0; attempt < 10; attempt++ {
-				cands := make([]Candidate, 25)
-				for i := range cands {
-					cands[i] = Candidate{ReleaseID: fmt.Sprintf("%s-%d-%d-%d", prefix, b, i, attempt), Facts: json.RawMessage(`{"resolution":2160}`)}
-				}
-				got, out, err = p.RankBatch(context.Background(), cands, json.RawMessage(`{"k":1}`))
-				if err == nil && out.SlowCandidates == 0 {
-					break
-				}
-			}
-			if err != nil || out.SlowCandidates != 0 {
-				t.Fatalf("batch did not complete: outcome=%+v err=%v", out, err)
-			}
-			scores = append(scores, got...)
+		cands := make([]Candidate, 1000)
+		for i := range cands {
+			cands[i] = Candidate{ReleaseID: fmt.Sprintf("%s-%d", prefix, i), Facts: json.RawMessage(`{"resolution":2160}`)}
+		}
+		scores, out, err := p.RankBatch(context.Background(), cands, json.RawMessage(`{"k":1}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out.SlowCandidates != 0 {
+			t.Fatalf("%d candidates went slow in a trivial batch", out.SlowCandidates)
 		}
 		return scores
 	}
-	p, err := e.LoadJS("test.hot", "2.0.0", hotJS, nil, Limits{})
+	p, err := e.LoadJS("test.hot", "2.0.0", hotJS, nil, roomyHot())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -402,7 +393,7 @@ func TestHotDeterminism1000Runs(t *testing.T) {
 			t.Fatalf("same-plugin rerun differs at %d: %d vs %d", i, got, want[i])
 		}
 	}
-	p2, err := e.LoadJS("test.hot", "2.0.0", hotJS, nil, Limits{})
+	p2, err := e.LoadJS("test.hot", "2.0.0", hotJS, nil, roomyHot())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -440,13 +431,7 @@ func TestHotMemoization(t *testing.T) {
 		t.Fatalf("third=%v out=%+v err=%v", third, out3, err)
 	}
 	// CondMatch memoizes too, keyed with operator and value.
-	var ok1 bool
-	for attempt := 0; attempt < 10; attempt++ {
-		ok1, _, err = p.CondMatch(context.Background(), Candidate{ReleaseID: "c1", Facts: json.RawMessage(`{"group":"GRP"}`)}, "is", json.RawMessage(`"GRP"`))
-		if err == nil && ok1 {
-			break
-		}
-	}
+	ok1, _, err := p.CondMatch(context.Background(), Candidate{ReleaseID: "c1", Facts: json.RawMessage(`{"group":"GRP"}`)}, "is", json.RawMessage(`"GRP"`))
 	ok2, outC, err2 := p.CondMatch(context.Background(), Candidate{ReleaseID: "c1", Facts: json.RawMessage(`{"group":"GRP"}`)}, "is", json.RawMessage(`"GRP"`))
 	if err != nil || err2 != nil || !ok1 || !ok2 || outC.MemoHits != 1 {
 		t.Fatalf("cond memo: %v %v %+v", ok1, ok2, outC)
@@ -496,21 +481,18 @@ func TestHotJSBatchWithinBudget(t *testing.T) {
 		cands[i] = Candidate{ReleaseID: fmt.Sprintf("b-%d", i),
 			Facts: json.RawMessage(fmt.Sprintf(`{"resolution":%d,"cached":%t}`, []int{1080, 2160}[i%2], i%3 == 0))}
 	}
-	var scores []int64
-	var out Outcome
-	for attempt := 0; attempt < 10; attempt++ {
-		for i := range cands {
-			cands[i].ReleaseID = fmt.Sprintf("batch-%d-%d", attempt, i)
-		}
-		scores, out, err = p.RankBatch(context.Background(), cands, nil)
-		if err == nil && out.SlowCandidates == 0 {
-			break
-		}
+	start := time.Now()
+	scores, out, err := p.RankBatch(context.Background(), cands, nil)
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err != nil || out.SlowCandidates != 0 {
-		t.Fatalf("batch did not complete: %+v %v", out, err)
+	if elapsed > 50*time.Millisecond {
+		t.Fatalf("500-candidate JS batch took %v, over the 50ms budget", elapsed)
 	}
-
+	if out.SlowCandidates != 0 {
+		t.Fatalf("slow=%d in a simple batch", out.SlowCandidates)
+	}
 	if scores[1] != 110 && scores[1] != 100 {
 		t.Fatalf("scores[1]=%d", scores[1])
 	}
@@ -522,7 +504,9 @@ func TestHotJSBatchWithinBudget(t *testing.T) {
 
 func TestConcurrentCallsAndRanking(t *testing.T) {
 	e := testEngine(t)
-	p, err := e.LoadJS("test.hello", "1.0.0", helloJS, newFakeHost(), Limits{PoolSize: 3})
+	lim := roomyHot()
+	lim.PoolSize = 3
+	p, err := e.LoadJS("test.hello", "1.0.0", helloJS, newFakeHost(), lim)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -540,11 +524,8 @@ func TestConcurrentCallsAndRanking(t *testing.T) {
 					return
 				}
 				cands := []Candidate{{ReleaseID: fmt.Sprintf("g%d-%d", g, i), Facts: json.RawMessage(`{"resolution":2160,"cached":true}`)}}
-				scores, outcome, err := p.RankBatch(context.Background(), cands, nil)
-				if (err != nil || outcome.SlowCandidates > 0) && outcome.Status == StatusTimeout {
-					continue
-				}
-				if err != nil || (scores[0] != 110 && !(scores[0] == 0 && outcome.SlowCandidates > 0)) {
+				scores, _, err := p.RankBatch(context.Background(), cands, nil)
+				if err != nil || scores[0] != 110 {
 					errs <- fmt.Errorf("rank g%d: %v %v", g, scores, err)
 					return
 				}
@@ -569,9 +550,16 @@ func TestLimitsClamp(t *testing.T) {
 	}
 }
 
+// roomyHot gives correctness tests budgets no loaded machine can miss, so
+// they check behaviour, not speed. Budget enforcement has its own tests
+// with the real limits.
+func roomyHot() Limits {
+	return Limits{RankPerCandidate: time.Second, RankBatch: time.Minute, unclamped: true}
+}
+
 func TestCondBatchExecutesRepeatedFactsWithoutMemo(t *testing.T) {
 	e := testEngine(t)
-	p, err := e.LoadJS("test.condition-batch", "1.0.0", `let toggle = false; globalThis.cond_match = function() { toggle = !toggle; return toggle; };`, nil, Limits{})
+	p, err := e.LoadJS("test.condition-batch", "1.0.0", `let toggle = false; globalThis.cond_match = function() { toggle = !toggle; return toggle; };`, nil, roomyHot())
 	if err != nil {
 		t.Fatal(err)
 	}

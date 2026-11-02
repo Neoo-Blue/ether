@@ -128,6 +128,10 @@ type Limits struct {
 	RankPerCandidate time.Duration // default (and max) 2ms
 	RankBatch        time.Duration // default (and max) 50ms
 	Costs            map[string]int64
+	// unclamped lets this package's tests raise the hot-path budgets so
+	// correctness checks do not depend on machine speed. Other packages
+	// cannot set it, so production budgets are always clamped.
+	unclamped bool
 }
 
 func (l *Limits) normalize() {
@@ -147,10 +151,10 @@ func (l *Limits) normalize() {
 	if l.PoolSize <= 0 {
 		l.PoolSize = 2
 	}
-	if l.RankPerCandidate <= 0 || l.RankPerCandidate > DefaultRankPerCandidate {
+	if l.RankPerCandidate <= 0 || (l.RankPerCandidate > DefaultRankPerCandidate && !l.unclamped) {
 		l.RankPerCandidate = DefaultRankPerCandidate
 	}
-	if l.RankBatch <= 0 || l.RankBatch > DefaultRankBatch {
+	if l.RankBatch <= 0 || (l.RankBatch > DefaultRankBatch && !l.unclamped) {
 		l.RankBatch = DefaultRankBatch
 	}
 	if l.Costs == nil {
