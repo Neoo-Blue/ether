@@ -1,0 +1,873 @@
+[
+  {
+    "kind": "rankingStep",
+    "id": "language",
+    "owner": "builtin",
+    "label": {
+      "source": "Audio language"
+    },
+    "hint": {},
+    "meta": {
+      "editor": "ordered_list",
+      "canMove": true,
+      "defaultPosition": 0,
+      "configKey": "preferredLanguages"
+    }
+  },
+  {
+    "kind": "rankingStep",
+    "id": "connection",
+    "owner": "builtin",
+    "label": {
+      "source": "Connection fit"
+    },
+    "hint": {
+      "source": "Fits the viewer's bandwidth"
+    },
+    "order": 1,
+    "meta": {
+      "editor": "none",
+      "required": true,
+      "canMove": false,
+      "defaultPosition": 1
+    }
+  },
+  {
+    "kind": "rankingStep",
+    "id": "resolution",
+    "owner": "builtin",
+    "label": {
+      "source": "Resolution"
+    },
+    "hint": {},
+    "order": 2,
+    "meta": {
+      "editor": "range",
+      "options": [
+        {
+          "value": "480",
+          "label": {}
+        },
+        {
+          "value": "720",
+          "label": {}
+        },
+        {
+          "value": "1080",
+          "label": {}
+        },
+        {
+          "value": "2160",
+          "label": {}
+        }
+      ],
+      "canMove": true,
+      "defaultPosition": 2,
+      "configKey": "heightRange"
+    }
+  },
+  {
+    "kind": "rankingStep",
+    "id": "releaseType",
+    "owner": "builtin",
+    "label": {
+      "source": "Release type"
+    },
+    "hint": {},
+    "order": 3,
+    "meta": {
+      "editor": "ordered_list",
+      "options": [
+        {
+          "value": "remux",
+          "label": {}
+        },
+        {
+          "value": "bluray",
+          "label": {}
+        },
+        {
+          "value": "webdl",
+          "label": {}
+        },
+        {
+          "value": "webrip",
+          "label": {}
+        },
+        {
+          "value": "hdtv",
+          "label": {}
+        },
+        {
+          "value": "dvd",
+          "label": {}
+        },
+        {
+          "value": "screener",
+          "label": {}
+        },
+        {
+          "value": "cam",
+          "label": {}
+        }
+      ],
+      "canMove": true,
+      "defaultPosition": 3,
+      "configKey": "preferredSources"
+    }
+  },
+  {
+    "kind": "rankingStep",
+    "id": "hdr",
+    "owner": "builtin",
+    "label": {
+      "source": "HDR"
+    },
+    "hint": {},
+    "order": 4,
+    "meta": {
+      "editor": "choice",
+      "options": [
+        {
+          "value": "dv",
+          "label": {}
+        },
+        {
+          "value": "hdr10",
+          "label": {}
+        },
+        {
+          "value": "sdr",
+          "label": {}
+        }
+      ],
+      "canMove": true,
+      "defaultPosition": 4,
+      "configKey": "hdr"
+    }
+  },
+  {
+    "kind": "rankingStep",
+    "id": "verified",
+    "owner": "builtin",
+    "label": {
+      "source": "Played fine recently"
+    },
+    "hint": {
+      "source": "Verified streams rank ahead of untested ones"
+    },
+    "order": 5,
+    "meta": {
+      "editor": "none",
+      "required": true,
+      "canMove": false,
+      "defaultPosition": 5
+    }
+  },
+  {
+    "kind": "rankingStep",
+    "id": "videoCodec",
+    "owner": "builtin",
+    "label": {
+      "source": "Video codec"
+    },
+    "hint": {},
+    "order": 6,
+    "meta": {
+      "editor": "ordered_list",
+      "options": [
+        {
+          "value": "av1",
+          "label": {}
+        },
+        {
+          "value": "hevc",
+          "label": {}
+        },
+        {
+          "value": "h264",
+          "label": {}
+        },
+        {
+          "value": "vp9",
+          "label": {}
+        },
+        {
+          "value": "mpeg2",
+          "label": {}
+        }
+      ],
+      "canMove": true,
+      "defaultPosition": 6,
+      "configKey": "preferredCodecs"
+    }
+  },
+  {
+    "kind": "rankingStep",
+    "id": "audioFormat",
+    "owner": "builtin",
+    "label": {
+      "source": "Audio format"
+    },
+    "hint": {},
+    "order": 7,
+    "meta": {
+      "editor": "ordered_list",
+      "options": [
+        {
+          "value": "truehd",
+          "label": {}
+        },
+        {
+          "value": "dtshd",
+          "label": {}
+        },
+        {
+          "value": "eac3",
+          "label": {}
+        },
+        {
+          "value": "ac3",
+          "label": {}
+        },
+        {
+          "value": "dts",
+          "label": {}
+        },
+        {
+          "value": "aac",
+          "label": {}
+        },
+        {
+          "value": "flac",
+          "label": {}
+        },
+        {
+          "value": "opus",
+          "label": {}
+        }
+      ],
+      "canMove": true,
+      "defaultPosition": 7,
+      "configKey": "preferredAudio"
+    }
+  },
+  {
+    "kind": "rankingStep",
+    "id": "size",
+    "owner": "builtin",
+    "label": {
+      "source": "Larger file"
+    },
+    "hint": {},
+    "order": 8,
+    "meta": {
+      "editor": "toggle",
+      "canMove": true,
+      "defaultPosition": 8,
+      "configKey": "preferLargest"
+    }
+  },
+  {
+    "kind": "ruleField",
+    "id": "language",
+    "owner": "builtin",
+    "label": {
+      "source": "Declared audio language"
+    },
+    "hint": {},
+    "meta": {
+      "valueClass": "language",
+      "operators": ["equals"],
+      "defaultOperator": "equals",
+      "choices": [
+        {
+          "value": "en",
+          "label": {}
+        },
+        {
+          "value": "es",
+          "label": {}
+        },
+        {
+          "value": "es-419",
+          "label": {}
+        },
+        {
+          "value": "es-ES",
+          "label": {}
+        },
+        {
+          "value": "pt",
+          "label": {}
+        },
+        {
+          "value": "pt-BR",
+          "label": {}
+        },
+        {
+          "value": "pt-PT",
+          "label": {}
+        },
+        {
+          "value": "fr",
+          "label": {}
+        },
+        {
+          "value": "de",
+          "label": {}
+        },
+        {
+          "value": "it",
+          "label": {}
+        },
+        {
+          "value": "nl",
+          "label": {}
+        },
+        {
+          "value": "sv",
+          "label": {}
+        },
+        {
+          "value": "da",
+          "label": {}
+        },
+        {
+          "value": "no",
+          "label": {}
+        },
+        {
+          "value": "nb",
+          "label": {}
+        },
+        {
+          "value": "nn",
+          "label": {}
+        },
+        {
+          "value": "fi",
+          "label": {}
+        },
+        {
+          "value": "is",
+          "label": {}
+        },
+        {
+          "value": "ja",
+          "label": {}
+        },
+        {
+          "value": "ko",
+          "label": {}
+        },
+        {
+          "value": "zh",
+          "label": {}
+        },
+        {
+          "value": "pl",
+          "label": {}
+        },
+        {
+          "value": "cs",
+          "label": {}
+        },
+        {
+          "value": "hu",
+          "label": {}
+        },
+        {
+          "value": "ro",
+          "label": {}
+        },
+        {
+          "value": "tr",
+          "label": {}
+        },
+        {
+          "value": "ru",
+          "label": {}
+        },
+        {
+          "value": "uk",
+          "label": {}
+        },
+        {
+          "value": "ar",
+          "label": {}
+        },
+        {
+          "value": "he",
+          "label": {}
+        },
+        {
+          "value": "hi",
+          "label": {}
+        },
+        {
+          "value": "th",
+          "label": {}
+        },
+        {
+          "value": "vi",
+          "label": {}
+        },
+        {
+          "value": "id",
+          "label": {}
+        }
+      ]
+    }
+  },
+  {
+    "kind": "ruleField",
+    "id": "subtitles",
+    "owner": "builtin",
+    "label": {
+      "source": "Declared subtitle language"
+    },
+    "hint": {},
+    "order": 1,
+    "meta": {
+      "valueClass": "language",
+      "operators": ["equals"],
+      "defaultOperator": "equals",
+      "choices": [
+        {
+          "value": "en",
+          "label": {}
+        },
+        {
+          "value": "es",
+          "label": {}
+        },
+        {
+          "value": "es-419",
+          "label": {}
+        },
+        {
+          "value": "es-ES",
+          "label": {}
+        },
+        {
+          "value": "pt",
+          "label": {}
+        },
+        {
+          "value": "pt-BR",
+          "label": {}
+        },
+        {
+          "value": "pt-PT",
+          "label": {}
+        },
+        {
+          "value": "fr",
+          "label": {}
+        },
+        {
+          "value": "de",
+          "label": {}
+        },
+        {
+          "value": "it",
+          "label": {}
+        },
+        {
+          "value": "nl",
+          "label": {}
+        },
+        {
+          "value": "sv",
+          "label": {}
+        },
+        {
+          "value": "da",
+          "label": {}
+        },
+        {
+          "value": "no",
+          "label": {}
+        },
+        {
+          "value": "nb",
+          "label": {}
+        },
+        {
+          "value": "nn",
+          "label": {}
+        },
+        {
+          "value": "fi",
+          "label": {}
+        },
+        {
+          "value": "is",
+          "label": {}
+        },
+        {
+          "value": "ja",
+          "label": {}
+        },
+        {
+          "value": "ko",
+          "label": {}
+        },
+        {
+          "value": "zh",
+          "label": {}
+        },
+        {
+          "value": "pl",
+          "label": {}
+        },
+        {
+          "value": "cs",
+          "label": {}
+        },
+        {
+          "value": "hu",
+          "label": {}
+        },
+        {
+          "value": "ro",
+          "label": {}
+        },
+        {
+          "value": "tr",
+          "label": {}
+        },
+        {
+          "value": "ru",
+          "label": {}
+        },
+        {
+          "value": "uk",
+          "label": {}
+        },
+        {
+          "value": "ar",
+          "label": {}
+        },
+        {
+          "value": "he",
+          "label": {}
+        },
+        {
+          "value": "hi",
+          "label": {}
+        },
+        {
+          "value": "th",
+          "label": {}
+        },
+        {
+          "value": "vi",
+          "label": {}
+        },
+        {
+          "value": "id",
+          "label": {}
+        }
+      ]
+    }
+  },
+  {
+    "kind": "ruleField",
+    "id": "audio_matches_original",
+    "owner": "builtin",
+    "label": {
+      "source": "Original-language audio"
+    },
+    "hint": {
+      "source": "Declared audio must match this title's original language. Subtitles do not count, and a filename alone cannot make the comparison."
+    },
+    "order": 2,
+    "meta": {
+      "valueClass": "none",
+      "operators": ["equals"],
+      "defaultOperator": "equals"
+    }
+  },
+  {
+    "kind": "ruleField",
+    "id": "name",
+    "owner": "builtin",
+    "label": {
+      "source": "Release name"
+    },
+    "hint": {},
+    "order": 3,
+    "meta": {
+      "valueClass": "text",
+      "operators": ["equals", "contains", "regex"],
+      "defaultOperator": "contains"
+    }
+  },
+  {
+    "kind": "ruleField",
+    "id": "group",
+    "owner": "builtin",
+    "label": {
+      "source": "Release group"
+    },
+    "hint": {},
+    "order": 4,
+    "meta": {
+      "valueClass": "text",
+      "operators": ["equals", "contains", "regex"],
+      "defaultOperator": "equals",
+      "singleValue": true
+    }
+  },
+  {
+    "kind": "ruleField",
+    "id": "source",
+    "owner": "builtin",
+    "label": {
+      "source": "Release type"
+    },
+    "hint": {},
+    "order": 5,
+    "meta": {
+      "valueClass": "choice",
+      "operators": ["equals", "contains", "regex"],
+      "defaultOperator": "equals",
+      "choices": [
+        {
+          "value": "webdl",
+          "label": {}
+        },
+        {
+          "value": "webrip",
+          "label": {}
+        },
+        {
+          "value": "bluray",
+          "label": {}
+        },
+        {
+          "value": "remux",
+          "label": {}
+        },
+        {
+          "value": "hdtv",
+          "label": {}
+        },
+        {
+          "value": "dvd",
+          "label": {}
+        },
+        {
+          "value": "cam",
+          "label": {}
+        }
+      ],
+      "singleValue": true
+    }
+  },
+  {
+    "kind": "ruleField",
+    "id": "video",
+    "owner": "builtin",
+    "label": {
+      "source": "Video codec"
+    },
+    "hint": {},
+    "order": 6,
+    "meta": {
+      "valueClass": "choice",
+      "operators": ["equals", "contains", "regex"],
+      "defaultOperator": "equals",
+      "choices": [
+        {
+          "value": "h264",
+          "label": {}
+        },
+        {
+          "value": "hevc",
+          "label": {}
+        },
+        {
+          "value": "av1",
+          "label": {}
+        },
+        {
+          "value": "mpeg2",
+          "label": {}
+        },
+        {
+          "value": "xvid",
+          "label": {}
+        }
+      ],
+      "singleValue": true
+    }
+  },
+  {
+    "kind": "ruleField",
+    "id": "audio",
+    "owner": "builtin",
+    "label": {
+      "source": "Audio codec"
+    },
+    "hint": {},
+    "order": 7,
+    "meta": {
+      "valueClass": "choice",
+      "operators": ["equals", "contains", "regex"],
+      "defaultOperator": "equals",
+      "choices": [
+        {
+          "value": "aac",
+          "label": {}
+        },
+        {
+          "value": "ac3",
+          "label": {}
+        },
+        {
+          "value": "eac3",
+          "label": {}
+        },
+        {
+          "value": "truehd",
+          "label": {}
+        },
+        {
+          "value": "dts",
+          "label": {}
+        },
+        {
+          "value": "dtshd",
+          "label": {}
+        },
+        {
+          "value": "opus",
+          "label": {}
+        }
+      ],
+      "singleValue": true
+    }
+  },
+  {
+    "kind": "ruleField",
+    "id": "height",
+    "owner": "builtin",
+    "label": {
+      "source": "Resolution"
+    },
+    "hint": {},
+    "order": 8,
+    "meta": {
+      "valueClass": "number",
+      "operators": ["range"],
+      "defaultOperator": "range",
+      "unit": "p"
+    }
+  },
+  {
+    "kind": "ruleField",
+    "id": "size_gib",
+    "owner": "builtin",
+    "label": {
+      "source": "Size (GiB)"
+    },
+    "hint": {},
+    "order": 9,
+    "meta": {
+      "valueClass": "number",
+      "operators": ["range"],
+      "defaultOperator": "range",
+      "unit": "GiB"
+    }
+  },
+  {
+    "kind": "ruleField",
+    "id": "hdr",
+    "owner": "builtin",
+    "label": {
+      "source": "HDR"
+    },
+    "hint": {},
+    "order": 10,
+    "meta": {
+      "valueClass": "choice",
+      "operators": ["equals", "contains", "regex"],
+      "defaultOperator": "equals",
+      "choices": [
+        {
+          "value": "hdr10",
+          "label": {}
+        },
+        {
+          "value": "dv",
+          "label": {}
+        }
+      ]
+    }
+  },
+  {
+    "kind": "ruleField",
+    "id": "edition",
+    "owner": "builtin",
+    "label": {
+      "source": "Edition"
+    },
+    "hint": {},
+    "order": 11,
+    "meta": {
+      "valueClass": "text",
+      "operators": ["equals", "contains", "regex"],
+      "defaultOperator": "equals",
+      "singleValue": true
+    }
+  },
+  {
+    "kind": "ruleField",
+    "id": "indexer",
+    "owner": "builtin",
+    "label": {
+      "source": "Indexer"
+    },
+    "hint": {},
+    "order": 12,
+    "meta": {
+      "valueClass": "text",
+      "operators": ["equals", "contains", "regex"],
+      "defaultOperator": "equals",
+      "singleValue": true
+    }
+  },
+  {
+    "kind": "ruleField",
+    "id": "protocol",
+    "owner": "builtin",
+    "label": {
+      "source": "Protocol"
+    },
+    "hint": {},
+    "order": 13,
+    "meta": {
+      "valueClass": "choice",
+      "operators": ["equals", "contains", "regex"],
+      "defaultOperator": "equals",
+      "choices": [
+        {
+          "value": "usenet",
+          "label": {}
+        },
+        {
+          "value": "torrent",
+          "label": {}
+        },
+        {
+          "value": "http",
+          "label": {}
+        }
+      ],
+      "singleValue": true
+    }
+  }
+]

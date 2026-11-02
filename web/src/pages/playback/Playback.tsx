@@ -2,7 +2,6 @@ import { Link } from "react-router-dom";
 import { ConfigSection } from "../../components/ConfigSection";
 import { DomainPage, useRouteTab } from "../../components/layout";
 import { localized, t, tx } from "../../i18n";
-import * as S from "../settings/schema";
 import { DeviceCapabilities } from "./Devices";
 import { StartSpeed } from "./StartSpeed";
 import { HardwareStatus } from "./Hardware";
@@ -30,7 +29,7 @@ export default function Playback() {
         hidden={tab !== "transcoding"}
         configKey="transcode"
         endpoint="transcode"
-        groups={S.TRANSCODE}
+        schemaId="transcode"
         label={t("Transcoding")}
         before={() => <HardwareStatus />}
       />
