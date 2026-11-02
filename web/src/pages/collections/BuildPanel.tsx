@@ -10,9 +10,18 @@ import {
 import { ActionMenu } from "../../components/ActionMenu";
 import { SectionHeading } from "../../components/feedback";
 import { ChipGroup, Field, NumberInput, Segmented } from "../../components/fields";
-import type { CollectionSpec, Rule, RuleField, SourceKind } from "../../lib/contract";
+import type { CollectionSpec, Rule, RuleField } from "../../lib/contract";
 import { t, tx } from "../../i18n";
-import { FIELDS, SORTS, SOURCE_KINDS, newRule, newSource } from "../../lib/rules";
+import { isPluginDescriptor, textOf, useRegistry } from "../../lib/extend";
+import {
+  FIELDS,
+  SORTS,
+  newRule,
+  newSourceFromDescriptor,
+  sourceDescriptor,
+  type CollectionSourceMeta,
+  type SourceDescriptor,
+} from "../../lib/rules";
 import { RuleRow } from "./RuleRow";
 import { SourceEditor } from "./SourceEditor";
 
@@ -41,18 +50,28 @@ export function BuildPanel({
   region: string;
 }) {
   const setRules = (key: "rules" | "exclude", rules: Rule[]) => update({ [key]: rules });
+  // Source kinds come from the descriptor registry (built-ins and plugins
+  // in one list); the console keeps no kind list of its own.
+  const registry = useRegistry<CollectionSourceMeta>("collectionSource");
+  const descriptors: SourceDescriptor[] = registry.descriptors;
   // The whole catalogue already contains every other source, so adding a
   // specific source replaces a lone "Whole catalogue".
-  const addSource = (kind: SourceKind) => {
+  const addSource = (d: SourceDescriptor) => {
     const keep =
-      spec.sources.length === 1 && spec.sources[0]?.kind === "catalog" && kind !== "catalog"
+      spec.sources.length === 1 && spec.sources[0]?.kind === "catalog" && d.id !== "catalog"
         ? []
         : spec.sources;
-    update({ sources: [...keep, newSource(kind, spec.mediaType, region)] });
+    update({ sources: [...keep, newSourceFromDescriptor(d, spec.mediaType, region)] });
   };
-  const sourceItems: ContextMenuEntry[] = SOURCE_KINDS.filter(
-    (k) => k.kind !== "catalog" || !spec.sources.some((s) => s.kind === "catalog"),
-  ).map((k) => ({ key: k.kind, label: k.label, onSelect: () => addSource(k.kind) }));
+  const sourceItems: ContextMenuEntry[] = descriptors
+    .filter((d) => d.id !== "catalog" || !spec.sources.some((s) => s.kind === "catalog"))
+    .map((d) => ({
+      key: d.id,
+      label: isPluginDescriptor(d)
+        ? t("{label} (from {owner})", { label: textOf(d.label), owner: d.owner })
+        : textOf(d.label),
+      onSelect: () => addSource(d),
+    }));
   const limitPresets = [25, 50, 100, 0];
 
   return (
@@ -152,6 +171,16 @@ export function BuildPanel({
             </ActionMenu>
           }
         />
+        {registry.error ? (
+          <p role="alert" className="mb-2 text-sm text-danger">
+            {t("Source kinds could not be loaded.")}{" "}
+            <Button type="button" variant="ghost" size="sm" onClick={registry.reload}>
+              {t("Try again")}
+            </Button>
+          </p>
+        ) : registry.loading ? (
+          <p className="mb-2 text-sm text-fg-muted">{t("Loading source kinds…")}</p>
+        ) : null}
         <div className="space-y-2">
           {spec.sources.map((s, i) => (
             <SourceEditor
@@ -160,6 +189,8 @@ export function BuildPanel({
               source={s}
               region={region}
               removable={spec.sources.length > 1}
+              descriptor={sourceDescriptor(descriptors, s.kind)}
+              descriptors={descriptors}
               onChange={(next) =>
                 update({ sources: spec.sources.map((x, j) => (j === i ? next : x)) }, `source-${i}`)
               }

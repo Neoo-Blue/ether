@@ -261,7 +261,7 @@ func (s *Service) parseDraft(ctx context.Context, content, mediaType string) (*c
 			sp.Exclude[i] = s.resolveRuleValue(rctx, sp.Exclude[i], &notes)
 		}
 	}
-	if err := Validate(&sp); err != nil {
+	if err := s.validate(&sp); err != nil {
 		return nil, "", nil, err
 	}
 	return &sp, strings.TrimSpace(explanation), notes, nil

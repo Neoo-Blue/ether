@@ -1,0 +1,857 @@
+[
+  {
+    "kind": "rowSource",
+    "id": "continue-watching",
+    "owner": "builtin",
+    "label": {
+      "source": "Continue Watching"
+    },
+    "hint": {
+      "source": "Titles the viewer is part-way through. Pin, schedule or hide this row with Home policies."
+    },
+    "group": "plex",
+    "order": 10,
+    "meta": {
+      "hubId": "continue-watching",
+      "rowKind": "continue-watching",
+      "sections": ["home", "movies", "shows"],
+      "source": "plex"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "up-next",
+    "owner": "builtin",
+    "label": {
+      "source": "Up Next"
+    },
+    "hint": {
+      "source": "The next episode of shows the viewer recently finished an episode of."
+    },
+    "group": "picks",
+    "order": 20,
+    "meta": {
+      "hubId": "up-next",
+      "rowKind": "up-next",
+      "sections": ["home", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "top-10",
+    "owner": "builtin",
+    "label": {
+      "source": "Top 10 for You"
+    },
+    "hint": {
+      "source": "The ten titles the taste model rates highest right now."
+    },
+    "group": "picks",
+    "order": 30,
+    "meta": {
+      "hubId": "top-10",
+      "rowKind": "top-10",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "top-10-today",
+    "owner": "builtin",
+    "label": {
+      "source": "Top 10 Today"
+    },
+    "hint": {
+      "source": "The server's Top 10 today: trending now, catalogue popularity and what viewers here watch, with trustworthy ratings. Leads new viewers' Homes."
+    },
+    "group": "household",
+    "order": 40,
+    "meta": {
+      "hubId": "top-10-today",
+      "rowKind": "top-10-today",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "genre-showcase",
+    "owner": "builtin",
+    "label": {
+      "source": "Acclaimed \u003cGenre\u003e"
+    },
+    "hint": {
+      "source": "Acclaimed, popular titles of one broad genre. New viewers get three from different genre families, rotating daily, to learn their taste."
+    },
+    "group": "explore",
+    "order": 50,
+    "meta": {
+      "hubId": "genre-showcase",
+      "rowKind": "genre-showcase",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "because-you-watched",
+    "owner": "builtin",
+    "label": {
+      "source": "Because You Watched…"
+    },
+    "hint": {
+      "source": "Titles similar to something the viewer recently finished. One row per recent favourite, rotating daily; at most two on Home."
+    },
+    "group": "picks",
+    "order": 60,
+    "meta": {
+      "hubId": "because-you-watched",
+      "rowKind": "because-you-watched",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "more-from-person",
+    "owner": "builtin",
+    "label": {
+      "source": "More from…"
+    },
+    "hint": {
+      "source": "More work from a director, writer or actor the viewer keeps coming back to."
+    },
+    "group": "explore",
+    "order": 70,
+    "meta": {
+      "hubId": "more-from-person",
+      "rowKind": "more-from-person",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "trending-in-your-taste",
+    "owner": "builtin",
+    "label": {
+      "source": "Trending in Your Taste"
+    },
+    "hint": {
+      "source": "This week's trending titles, filtered and ranked by the viewer's taste."
+    },
+    "group": "explore",
+    "order": 80,
+    "meta": {
+      "hubId": "trending-in-your-taste",
+      "rowKind": "trending-in-your-taste",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "hidden-gems",
+    "owner": "builtin",
+    "label": {
+      "source": "Hidden Gems for You"
+    },
+    "hint": {
+      "source": "Highly rated, little-known titles that fit the viewer's taste."
+    },
+    "group": "explore",
+    "order": 90,
+    "meta": {
+      "hubId": "hidden-gems",
+      "rowKind": "hidden-gems",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "new-this-week",
+    "owner": "builtin",
+    "label": {
+      "source": "New This Week"
+    },
+    "hint": {
+      "source": "Fresh releases in the viewer's favourite genres."
+    },
+    "group": "picks",
+    "order": 100,
+    "meta": {
+      "hubId": "new-this-week",
+      "rowKind": "new-this-week",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "comfort-rewatches",
+    "owner": "builtin",
+    "label": {
+      "source": "Comfort Rewatches"
+    },
+    "hint": {
+      "source": "Favourites the viewer has finished, rewatched or rated highly and not seen in a while."
+    },
+    "group": "picks",
+    "order": 110,
+    "meta": {
+      "hubId": "comfort-rewatches",
+      "rowKind": "comfort-rewatches",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "something-different",
+    "owner": "builtin",
+    "label": {
+      "source": "Something Different"
+    },
+    "hint": {
+      "source": "Exploration: acclaimed titles outside the viewer's usual genres."
+    },
+    "group": "explore",
+    "order": 120,
+    "meta": {
+      "hubId": "something-different",
+      "rowKind": "something-different",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "short-on-time",
+    "owner": "builtin",
+    "label": {
+      "source": "Short on Time"
+    },
+    "hint": {
+      "source": "Shorter films and episodes, fitted to how long the viewer usually watches in this context."
+    },
+    "group": "picks",
+    "order": 130,
+    "meta": {
+      "hubId": "short-on-time",
+      "rowKind": "short-on-time",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "finish-the-franchise",
+    "owner": "builtin",
+    "label": {
+      "source": "Finish the Franchise"
+    },
+    "hint": {
+      "source": "The remaining films of a franchise the viewer has started. Off by default: it is usually one or two titles. Add it to a page to use it."
+    },
+    "group": "explore",
+    "order": 140,
+    "meta": {
+      "hubId": "finish-the-franchise",
+      "rowKind": "finish-the-franchise",
+      "sections": ["home", "movies"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "llm",
+    "owner": "builtin",
+    "label": {
+      "source": "Themed Rows (AI)"
+    },
+    "hint": {
+      "source": "Natural-language themed rows from the owner's LLM, seeded by recent favourites. Off by default; add it to a page to use it."
+    },
+    "group": "picks",
+    "order": 150,
+    "meta": {
+      "hubId": "llm",
+      "rowKind": "llm",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "fans-also-loved",
+    "owner": "builtin",
+    "label": {
+      "source": "Fans of What You Watch Also Loved"
+    },
+    "hint": {
+      "source": "What people who loved the viewer's favourites also loved: TMDB's crowd recommendations aggregated over up to 20 recent favourites, strongest where several favourites agree, plus what similar viewers here watched. Films and series separately on the Movies and TV pages."
+    },
+    "group": "picks",
+    "order": 160,
+    "meta": {
+      "hubId": "fans-also-loved",
+      "rowKind": "fans-also-loved",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "trending-with-fans",
+    "owner": "builtin",
+    "label": {
+      "source": "Trending With Fans of What You Watch"
+    },
+    "hint": {
+      "source": "Titles trending right now (TMDB, and Trakt when it is set up) that fans of the viewer's favourites love: trendy, but personal."
+    },
+    "group": "picks",
+    "order": 170,
+    "meta": {
+      "hubId": "trending-with-fans",
+      "rowKind": "trending-with-fans",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "trending",
+    "owner": "builtin",
+    "label": {
+      "source": "Trending Now"
+    },
+    "hint": {
+      "source": "What is trending on TMDB this week."
+    },
+    "group": "explore",
+    "order": 180,
+    "meta": {
+      "hubId": "trending",
+      "rowKind": "trending",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "popular-on-server",
+    "owner": "builtin",
+    "label": {
+      "source": "Popular on This Server"
+    },
+    "hint": {
+      "source": "What other viewers on this server watched most in the last 30 days."
+    },
+    "group": "household",
+    "order": 190,
+    "meta": {
+      "hubId": "popular-on-server",
+      "rowKind": "popular-on-server",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "new-releases",
+    "owner": "builtin",
+    "label": {
+      "source": "New \u0026 Noteworthy"
+    },
+    "hint": {
+      "source": "The newest released titles in the catalogue."
+    },
+    "group": "explore",
+    "order": 200,
+    "meta": {
+      "hubId": "new-releases",
+      "rowKind": "new-releases",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "top-rated",
+    "owner": "builtin",
+    "label": {
+      "source": "Top Rated"
+    },
+    "hint": {
+      "source": "TMDB's top rated titles."
+    },
+    "group": "explore",
+    "order": 210,
+    "meta": {
+      "hubId": "top-rated",
+      "rowKind": "top-rated",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "popular",
+    "owner": "builtin",
+    "label": {
+      "source": "Popular"
+    },
+    "hint": {
+      "source": "TMDB's most popular titles."
+    },
+    "group": "explore",
+    "order": 220,
+    "meta": {
+      "hubId": "popular",
+      "rowKind": "popular",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "airing-today",
+    "owner": "builtin",
+    "label": {
+      "source": "Airing Today"
+    },
+    "hint": {
+      "source": "Shows with an episode airing today."
+    },
+    "group": "shows",
+    "order": 230,
+    "meta": {
+      "hubId": "airing-today",
+      "rowKind": "airing-today",
+      "sections": ["home", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "trakt-recommendations",
+    "owner": "builtin",
+    "label": {
+      "source": "Trakt Recommendations"
+    },
+    "hint": {
+      "source": "Personal recommendations from the viewer's connected Trakt account."
+    },
+    "group": "picks",
+    "order": 240,
+    "meta": {
+      "hubId": "trakt-recommendations",
+      "rowKind": "trakt-recommendations",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "trakt-watchlist",
+    "owner": "builtin",
+    "label": {
+      "source": "Your Trakt Watchlist"
+    },
+    "hint": {
+      "source": "The viewer's Trakt watchlist."
+    },
+    "group": "picks",
+    "order": 250,
+    "meta": {
+      "hubId": "trakt-watchlist",
+      "rowKind": "trakt-watchlist",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "recently-added",
+    "owner": "builtin",
+    "label": {
+      "source": "Recently Added"
+    },
+    "hint": {
+      "source": "Built by the Plex front end at the top of each library section."
+    },
+    "group": "plex",
+    "order": 260,
+    "meta": {
+      "hubId": "recently-added",
+      "rowKind": "recently-added",
+      "sections": ["movies", "shows"],
+      "source": "plex"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "playlists",
+    "owner": "builtin",
+    "label": {
+      "source": "Recent Playlists"
+    },
+    "hint": {
+      "source": "The viewer's playlists, built by the Plex front end at the end of Home."
+    },
+    "group": "plex",
+    "order": 270,
+    "meta": {
+      "hubId": "playlists",
+      "rowKind": "playlists",
+      "sections": ["home"],
+      "source": "plex"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "taste-cluster",
+    "owner": "builtin",
+    "label": {
+      "source": "Your Taste Clusters"
+    },
+    "hint": {
+      "source": "Named rows built from the viewer's strongest genre and theme combinations (\"Heist Thrillers\", \"Sci-Fi Thrillers\"). Several distinct rows, films and series separately."
+    },
+    "group": "explore",
+    "order": 280,
+    "meta": {
+      "hubId": "taste-cluster",
+      "rowKind": "taste-cluster",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "era-favourites",
+    "owner": "builtin",
+    "label": {
+      "source": "Best of the \u003cDecade\u003e for You"
+    },
+    "hint": {
+      "source": "Unseen films from the decade the viewer watches most, ranked by taste."
+    },
+    "group": "explore",
+    "order": 290,
+    "meta": {
+      "hubId": "era-favourites",
+      "rowKind": "era-favourites",
+      "sections": ["home", "movies"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "world-cinema",
+    "owner": "builtin",
+    "label": {
+      "source": "\u003cLanguage\u003e Cinema for You"
+    },
+    "hint": {
+      "source": "Films in a language the viewer's history shows they watch (or world cinema across several), ranked by taste."
+    },
+    "group": "explore",
+    "order": 300,
+    "meta": {
+      "hubId": "world-cinema",
+      "rowKind": "world-cinema",
+      "sections": ["home", "movies"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "occasion",
+    "owner": "builtin",
+    "label": {
+      "source": "Occasions"
+    },
+    "hint": {
+      "source": "Date Night and Family Night when the viewer's history supports them, and Under 100 Minutes; each favoured at the times it suits."
+    },
+    "group": "explore",
+    "order": 310,
+    "meta": {
+      "hubId": "occasion",
+      "rowKind": "occasion",
+      "sections": ["home", "movies"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "acclaimed-unseen",
+    "owner": "builtin",
+    "label": {
+      "source": "Acclaimed \u0026 Unseen"
+    },
+    "hint": {
+      "source": "Films with a trustworthy high rating the viewer hasn't seen, ranked by how well they fit."
+    },
+    "group": "explore",
+    "order": 320,
+    "meta": {
+      "hubId": "acclaimed-unseen",
+      "rowKind": "acclaimed-unseen",
+      "sections": ["home", "movies"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "top-rated-in-genre",
+    "owner": "builtin",
+    "label": {
+      "source": "Top-Rated \u003cGenre\u003e"
+    },
+    "hint": {
+      "source": "The best-rated titles in each of the viewer's favourite genres, films and series separately."
+    },
+    "group": "explore",
+    "order": 330,
+    "meta": {
+      "hubId": "top-rated-in-genre",
+      "rowKind": "top-rated-in-genre",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "taste-bridge",
+    "owner": "builtin",
+    "label": {
+      "source": "Where \u003cA\u003e Meets \u003cB\u003e"
+    },
+    "hint": {
+      "source": "Multi-seed bridge rows connecting two distinct favourites in the viewer's history."
+    },
+    "group": "explore",
+    "order": 340,
+    "meta": {
+      "hubId": "taste-bridge",
+      "rowKind": "taste-bridge",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "more-from-studio",
+    "owner": "builtin",
+    "label": {
+      "source": "More from \u003cStudio\u003e"
+    },
+    "hint": {
+      "source": "More films from a studio or boutique label (A24, Neon, Studio Ghibli...) the viewer keeps watching."
+    },
+    "group": "explore",
+    "order": 350,
+    "meta": {
+      "hubId": "more-from-studio",
+      "rowKind": "more-from-studio",
+      "sections": ["home", "movies"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "new-seasons",
+    "owner": "builtin",
+    "label": {
+      "source": "New Seasons of Your Shows"
+    },
+    "hint": {
+      "source": "Shows the viewer watched that have a new season out they haven't started."
+    },
+    "group": "shows",
+    "order": 360,
+    "meta": {
+      "hubId": "new-seasons",
+      "rowKind": "new-seasons",
+      "sections": ["home", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "finish-what-you-started",
+    "owner": "builtin",
+    "label": {
+      "source": "Finish What You Started"
+    },
+    "hint": {
+      "source": "Series the viewer started and stalled on for two weeks or more, closest to finished first."
+    },
+    "group": "shows",
+    "order": 370,
+    "meta": {
+      "hubId": "finish-what-you-started",
+      "rowKind": "finish-what-you-started",
+      "sections": ["home", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "start-something-new",
+    "owner": "builtin",
+    "label": {
+      "source": "Start Something New"
+    },
+    "hint": {
+      "source": "Series the viewer hasn't started, ranked by fit: start with the pilot."
+    },
+    "group": "shows",
+    "order": 380,
+    "meta": {
+      "hubId": "start-something-new",
+      "rowKind": "start-something-new",
+      "sections": ["home", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "complete-series",
+    "owner": "builtin",
+    "label": {
+      "source": "Complete Series to Binge"
+    },
+    "hint": {
+      "source": "Ended series with every season out, that fit the viewer's taste."
+    },
+    "group": "shows",
+    "order": 390,
+    "meta": {
+      "hubId": "complete-series",
+      "rowKind": "complete-series",
+      "sections": ["home", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "sticks-the-landing",
+    "owner": "builtin",
+    "label": {
+      "source": "Series That Stick the Landing"
+    },
+    "hint": {
+      "source": "Completed series whose finale and final season rated as high as or higher than where they began."
+    },
+    "group": "shows",
+    "order": 400,
+    "meta": {
+      "hubId": "sticks-the-landing",
+      "rowKind": "sticks-the-landing",
+      "sections": ["home", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "limited-series",
+    "owner": "builtin",
+    "label": {
+      "source": "Limited Series for You"
+    },
+    "hint": {
+      "source": "One-season stories with an ending, ranked by fit."
+    },
+    "group": "shows",
+    "order": 410,
+    "meta": {
+      "hubId": "limited-series",
+      "rowKind": "limited-series",
+      "sections": ["home", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "airing-for-you",
+    "owner": "builtin",
+    "label": {
+      "source": "Currently Airing for You"
+    },
+    "hint": {
+      "source": "Series in an active run (airing today, or returning and recently premiered) that match the viewer's taste."
+    },
+    "group": "shows",
+    "order": 420,
+    "meta": {
+      "hubId": "airing-for-you",
+      "rowKind": "airing-for-you",
+      "sections": ["home", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "more-from-network",
+    "owner": "builtin",
+    "label": {
+      "source": "More from \u003cNetwork\u003e"
+    },
+    "hint": {
+      "source": "More series from a network or studio the viewer keeps watching."
+    },
+    "group": "shows",
+    "order": 430,
+    "meta": {
+      "hubId": "more-from-network",
+      "rowKind": "more-from-network",
+      "sections": ["home", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "standalone-episodes",
+    "owner": "builtin",
+    "label": {
+      "source": "Standalone \u0026 Anthology Episodes"
+    },
+    "hint": {
+      "source": "Acclaimed standalone and anthology episodes that can be watched in one sitting with zero multi-season commitment."
+    },
+    "group": "shows",
+    "order": 440,
+    "meta": {
+      "hubId": "standalone-episodes",
+      "rowKind": "standalone-episodes",
+      "sections": ["home", "shows"],
+      "source": "engine"
+    }
+  },
+  {
+    "kind": "rowSource",
+    "id": "favorites",
+    "owner": "builtin",
+    "label": {
+      "source": "Favorites"
+    },
+    "hint": {
+      "source": "Titles this viewer marked as favorites."
+    },
+    "group": "picks",
+    "order": 450,
+    "meta": {
+      "hubId": "favorites",
+      "rowKind": "favorites",
+      "sections": ["home", "movies", "shows"],
+      "source": "engine"
+    }
+  }
+]

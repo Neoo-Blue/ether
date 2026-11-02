@@ -1,0 +1,4 @@
+data: {"candidates":[{"content":{"role":"model","parts":[{"text":"Checking. "}]}}]}
+
+data: {"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"name":"server_status","args":{"verbose":true}}}]}}],"usageMetadata":{"promptTokenCount":33,"candidatesTokenCount":8}}
+

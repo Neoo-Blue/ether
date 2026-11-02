@@ -188,6 +188,8 @@ type Options struct {
 	// Sealer protects source credentials at rest (secrets.go); nil stores
 	// them as given.
 	Sealer config.FieldSealer
+	// Kinds overrides the source-kind registry; nil uses the built-ins.
+	Kinds *KindRegistry
 }
 type SessionInfo struct {
 	ActiveSourceID string `json:"activeSourceId,omitempty"`
