@@ -26,7 +26,7 @@ type Frontend struct {
 }
 
 func (f Frontend) Describe() frontend.Descriptor {
-	return frontend.Descriptor{ID: "plex", Name: "Plex", DefaultPort: 32400}
+	return frontend.Descriptor{ID: "plex", Name: "Plex", DefaultPort: 32400, SettingsSchema: frontend.PortSchema()}
 }
 func (f Frontend) Mount(ctx context.Context, host frontend.Host) (frontend.Instance, error) {
 	if err := ctx.Err(); err != nil {

@@ -33,6 +33,23 @@ import { appLabel, appPath, appPurpose, appRank } from "./catalog";
 import { HomeStatusRow } from "./HomeStatus";
 import { awaySummary, usableAddresses } from "./reachability";
 
+/** One field of a frontend's served settings schema (WS1d). */
+export interface FrontendSettingsField {
+  key: string;
+  kind: string;
+  more?: boolean;
+  min?: number;
+  max?: number;
+  options?: string[];
+}
+
+/** A frontend's served settings schema: internal/frontend.SettingsSchema. */
+export interface FrontendSettingsSchema {
+  sections: { key: string; fields: FrontendSettingsField[] }[];
+  accountConnect?: boolean;
+  signInHelp?: boolean;
+}
+
 type FrontendInfo = {
   descriptor: {
     id: string;
@@ -40,6 +57,7 @@ type FrontendInfo = {
     version?: string;
     certifiedApps?: { name: string; steps: string[] }[];
     defaultPort?: number;
+    settingsSchema?: FrontendSettingsSchema;
   };
   enabled: boolean;
   status: {
@@ -57,30 +75,61 @@ type FrontendInfo = {
     warnings?: string[];
   };
 };
-type Settings = {
-  port?: number;
-  serverName?: string;
-  discovery?: boolean;
-  quickConnect?: boolean;
-  publicViewerPicker?: boolean;
-  viewerId?: number;
-  homeRows?: boolean;
-  homeRowCount?: number;
-  homeRowKinds?: string[];
+type Settings = Record<string, unknown>;
+
+/** Labels for the personalized row kinds a schema can offer. */
+const HOME_ROW_LABELS: Record<string, () => string> = {
+  "because-you-watched": () => t("Because you watched"),
+  trending: () => t("Trending"),
+  "top-10": () => t("Top 10 for you"),
+  "fans-also-loved": () => t("Fans also loved"),
+  "new-releases": () => t("New releases"),
+  "hidden-gems": () => t("Hidden gems"),
+  "more-from-person": () => t("People you watch"),
+  "popular-on-server": () => t("Popular on this server"),
 };
 
-const HOME_ROW_KINDS = [
-  ["because-you-watched", () => t("Because you watched")],
-  ["trending", () => t("Trending")],
-  ["top-10", () => t("Top 10 for you")],
-  ["fans-also-loved", () => t("Fans also loved")],
-  ["new-releases", () => t("New releases")],
-  ["hidden-gems", () => t("Hidden gems")],
-  ["more-from-person", () => t("People you watch")],
-  ["popular-on-server", () => t("Popular on this server")],
-] as const;
+/**
+ * Copy and defaults for the setting keys a schema can name. The schema says
+ * which settings a frontend has; the console keeps their wording.
+ */
+const FIELD_COPY: Record<
+  string,
+  () => { label: string; help?: string; fallback?: unknown }
+> = {
+  discovery: () => ({
+    label: t("Let apps find this server"),
+    help: t("Apps on your network can find this server without typing an address."),
+  }),
+  quickConnect: () => ({
+    label: t("Quick Connect"),
+    help: t("A viewer approves a short code in the Jellyfin app instead of typing a password."),
+  }),
+  publicViewerPicker: () => ({
+    label: t("Show local viewer names on the sign-in screen"),
+    help: t("Leave this off on a network you do not trust."),
+  }),
+  homeRows: () => ({
+    label: t("Personalized rows"),
+    help: t("Each viewer gets their own rows, filled from what they watch."),
+    fallback: true,
+  }),
+  homeRowCount: () => ({
+    label: t("How many rows"),
+    help: t("About four is enough for a home screen. The most relevant rows come first."),
+    fallback: 4,
+  }),
+};
+
+/** Connect-note copy by the key a schema note field carries. */
+const CONNECT_NOTES: Record<string, () => string> = {
+  addon: () =>
+    t("Stremio uses an addon address from your account page. It does not have its own port."),
+  files: () => t("Other apps open this library as files. The address is on your account page."),
+  playlist: () => t("Live TV apps use a playlist from your account page."),
+};
+
 const pathFor = appPath;
-const protocolFor = (tab: string) => (tab === "files" ? "webdav" : tab);
 const nameFor = (info: FrontendInfo) => appLabel(info.descriptor.id, info.descriptor.name);
 
 /** Vendored marks only. Files, DLNA, and M3U have none. */
@@ -200,7 +249,7 @@ function ConnectDevice({
     };
   }, [open, url]);
   if (!info.enabled) return null;
-  if (["stremio", "webdav", "m3u"].includes(info.descriptor.id)) {
+  if (info.descriptor.settingsSchema?.accountConnect) {
     return (
       <Link className="text-primary underline" to="/me">
         {t("Connect a device")}
@@ -266,8 +315,37 @@ function ConnectDevice({
   );
 }
 
-function ProtocolSettings({ id, hidden }: { id: string; hidden: boolean }) {
+function sectionCopy(
+  key: string,
+  appName: string,
+  note?: string,
+): { title: string; description: string } {
+  switch (key) {
+    case "home":
+      return {
+        title: t("Home"),
+        description: t("{app} apps show this viewer's For You rows.", { app: appName }),
+      };
+    case "tv":
+      return {
+        title: t("What the TV shows"),
+        description: t("DLNA players browse the library as one viewer."),
+      };
+    case "connect":
+      return { title: t("Connect"), description: (note && CONNECT_NOTES[note]?.()) || "" };
+    default:
+      return {
+        title: t("Find this server"),
+        description: t("How {app} apps find this server.", { app: appName }),
+      };
+  }
+}
+
+/** A frontend's settings, rendered from its served schema (WS1d). */
+function ProtocolSettings({ info, hidden }: { info: FrontendInfo; hidden: boolean }) {
   const { boot } = useApp();
+  const id = info.descriptor.id;
+  const schema = info.descriptor.settingsSchema;
   const state = useAsync(() => apiFetch<Settings>(`/frontends/${id}/settings`), [id]);
   const { draft, setDraft, dirty, reset } = useDraft(state.data);
   const [saving, setSaving] = useState(false);
@@ -289,238 +367,196 @@ function ProtocolSettings({ id, hidden }: { id: string; hidden: boolean }) {
   if (state.error)
     return hidden ? null : <ErrorPanel error={state.error} onRetry={() => void state.reload()} />;
   if (!draft) return hidden ? null : <LoadingRows />;
-  const named = ["jellyfin", "emby", "silo", "dlna"].includes(id);
-  const more: {
-    key: "discovery" | "quickConnect" | "publicViewerPicker";
-    label: string;
-    help: string;
-  }[] = [];
-  if (named) {
-    more.push({
-      key: "discovery",
-      label: t("Let apps find this server"),
-      help: t("Apps on your network can find this server without typing an address."),
-    });
+  const appName = info.descriptor.name;
+
+  function renderField(field: FrontendSettingsField): ReactNode {
+    if (!draft) return null;
+    const copy = FIELD_COPY[field.key]?.();
+    switch (field.kind) {
+      case "serverName":
+        return (
+          <SettingsRow
+            key={field.key}
+            title={t("Server name")}
+            description={
+              <>
+                <span>{boot.serverName?.trim() || "Ether"}</span>
+                {" · "}
+                <Link className="underline" to="/server">
+                  {t("General settings")}
+                </Link>
+              </>
+            }
+          />
+        );
+      case "port": {
+        if (draft.port === undefined) return null;
+        return (
+          <SettingsRow
+            key={field.key}
+            title={<label htmlFor={`${id}-port`}>{t("Port")}</label>}
+            description={portHelp(info.descriptor.defaultPort)}
+            control={
+              <Input
+                id={`${id}-port`}
+                aria-label={t("Port")}
+                type="number"
+                min={field.min ?? 1}
+                max={field.max ?? 65535}
+                value={Number(draft.port)}
+                onChange={(e) => setDraft({ ...draft, port: Number(e.currentTarget.value) })}
+              />
+            }
+          />
+        );
+      }
+      case "bool": {
+        if (!copy) return null;
+        const checked =
+          draft[field.key] === undefined ? copy.fallback === true : Boolean(draft[field.key]);
+        return (
+          <SettingsRow
+            key={field.key}
+            title={copy.label}
+            description={copy.help}
+            control={
+              <Switch
+                checked={checked}
+                aria-label={copy.label}
+                onChange={(e) => setDraft({ ...draft, [field.key]: e.currentTarget.checked })}
+              />
+            }
+          />
+        );
+      }
+      case "number": {
+        if (!copy) return null;
+        const value =
+          typeof draft[field.key] === "number" ? (draft[field.key] as number) : Number(copy.fallback ?? 0);
+        return (
+          <SettingsRow
+            key={field.key}
+            title={<label htmlFor={`${id}-${field.key}`}>{copy.label}</label>}
+            description={copy.help}
+            control={
+              <Input
+                id={`${id}-${field.key}`}
+                aria-label={copy.label}
+                type="number"
+                min={field.min}
+                max={field.max}
+                value={value}
+                onChange={(e) =>
+                  setDraft({ ...draft, [field.key]: Number(e.currentTarget.value) })
+                }
+              />
+            }
+          />
+        );
+      }
+      case "rowKinds": {
+        const options = field.options ?? [];
+        const current = draft[field.key];
+        const selected = Array.isArray(current) ? (current as string[]) : options;
+        return (
+          <FragmentRows key={field.key}>
+            <SettingsRow
+              title={t("Which rows")}
+              description={t(
+                "Leave them all on to use every personalized row. Turn one off to hide that kind.",
+              )}
+            />
+            {options.map((kind) => {
+              const label = HOME_ROW_LABELS[kind]?.() ?? kind;
+              return (
+                <SettingsRow
+                  key={kind}
+                  title={label}
+                  control={
+                    <Switch
+                      checked={selected.includes(kind)}
+                      aria-label={label}
+                      onChange={(e) => {
+                        if (!draft) return;
+                        const now = new Set(selected);
+                        if (e.currentTarget.checked) now.add(kind);
+                        else now.delete(kind);
+                        const next = options.filter((o) => now.has(o));
+                        setDraft({
+                          ...draft,
+                          [field.key]: next.length === options.length ? undefined : next,
+                        });
+                      }}
+                    />
+                  }
+                />
+              );
+            })}
+          </FragmentRows>
+        );
+      }
+      case "viewer":
+        return (
+          <DLNAViewer
+            key={field.key}
+            value={typeof draft[field.key] === "number" ? (draft[field.key] as number) : undefined}
+            onChange={(viewerId) =>
+              setDraft((old) => (old ? { ...old, [field.key]: viewerId } : old))
+            }
+          />
+        );
+      case "note":
+        return (
+          <div key={field.key} className="px-5 py-3">
+            <Link className="text-primary underline" to="/me">
+              {t("Open your account")}
+            </Link>
+          </div>
+        );
+      default:
+        return null;
+    }
   }
-  if (id === "jellyfin") {
-    more.push({
-      key: "quickConnect",
-      label: t("Quick Connect"),
-      help: t("A viewer approves a short code in the Jellyfin app instead of typing a password."),
-    });
-  }
-  if (id === "jellyfin" || id === "emby") {
-    more.push({
-      key: "publicViewerPicker",
-      label: t("Show local viewer names on the sign-in screen"),
-      help: t("Leave this off on a network you do not trust."),
-    });
-  }
-  const shared =
-    id === "stremio"
-      ? t("Stremio uses an addon address from your account page. It does not have its own port.")
-      : id === "webdav"
-        ? t("Other apps open this library as files. The address is on your account page.")
-        : id === "m3u"
-          ? t("Live TV apps use a playlist from your account page.")
-          : "";
+
   return (
     <>
       <div hidden={hidden}>
-        {shared ? (
-          <SettingsSection title={t("Connect")} description={shared}>
-            <div className="px-5 py-3">
-              <Link className="text-primary underline" to="/me">
-                {t("Open your account")}
-              </Link>
-            </div>
-          </SettingsSection>
-        ) : null}
-        {id === "jellyfin" || id === "emby" ? (
-          <SettingsSection
-            title={t("Home")}
-            description={t("{app} apps show this viewer's For You rows.", {
-              app: protocolName(id),
-            })}
-          >
-            <SettingsRow
-              title={t("Personalized rows")}
-              description={t("Each viewer gets their own rows, filled from what they watch.")}
-              control={
-                <Switch
-                  checked={draft.homeRows !== false}
-                  aria-label={t("Personalized rows")}
-                  onChange={(e) => setDraft({ ...draft, homeRows: e.currentTarget.checked })}
-                />
-              }
-            />
-            <MoreOptions label={t("More options: {title}", { title: t("Home") })}>
-              <SettingsRow
-                title={<label htmlFor={`${id}-home-rows`}>{t("How many rows")}</label>}
-                description={t(
-                  "About four is enough for a home screen. The most relevant rows come first.",
-                )}
-                control={
-                  <Input
-                    id={`${id}-home-rows`}
-                    aria-label={t("How many rows")}
-                    type="number"
-                    min={0}
-                    max={12}
-                    value={draft.homeRowCount ?? 4}
-                    onChange={(e) =>
-                      setDraft({ ...draft, homeRowCount: Number(e.currentTarget.value) })
-                    }
-                  />
-                }
-              />
-              <SettingsRow
-                title={t("Which rows")}
-                description={t(
-                  "Leave them all on to use every personalized row. Turn one off to hide that kind.",
-                )}
-              />
-              {HOME_ROW_KINDS.map(([kind, label]) => {
-                const selected = draft.homeRowKinds ?? HOME_ROW_KINDS.map(([id]) => id);
-                return (
-                  <SettingsRow
-                    key={kind}
-                    title={label()}
-                    control={
-                      <Switch
-                        checked={selected.includes(kind)}
-                        aria-label={label()}
-                        onChange={(e) => {
-                          const current = new Set(
-                            draft.homeRowKinds ?? HOME_ROW_KINDS.map(([id]) => id),
-                          );
-                          if (e.currentTarget.checked) current.add(kind);
-                          else current.delete(kind);
-                          const next = HOME_ROW_KINDS.map(([id]) => id).filter((id) =>
-                            current.has(id),
-                          );
-                          setDraft({
-                            ...draft,
-                            homeRowKinds: next.length === HOME_ROW_KINDS.length ? undefined : next,
-                          });
-                        }}
-                      />
-                    }
-                  />
-                );
-              })}
-            </MoreOptions>
-          </SettingsSection>
-        ) : null}
-        {named || draft.port !== undefined ? (
-          <SettingsSection
-            title={id === "dlna" ? t("What the TV shows") : t("Find this server")}
-            description={
-              id === "dlna"
-                ? t("DLNA players browse the library as one viewer.")
-                : t("How {app} apps find this server.", { app: protocolName(id) })
-            }
-          >
-            {named ? (
-              <SettingsRow
-                title={t("Server name")}
-                description={
-                  <>
-                    <span>{boot.serverName?.trim() || "Ether"}</span>
-                    {" · "}
-                    <Link className="underline" to="/server">
-                      {t("General settings")}
-                    </Link>
-                  </>
-                }
-              />
-            ) : null}
-            {draft.port !== undefined ? (
-              <SettingsRow
-                title={<label htmlFor={`${id}-port`}>{t("Port")}</label>}
-                description={portHelp(id)}
-                control={
-                  <Input
-                    id={`${id}-port`}
-                    aria-label={t("Port")}
-                    type="number"
-                    min={1}
-                    max={65535}
-                    value={draft.port}
-                    onChange={(e) => setDraft({ ...draft, port: Number(e.currentTarget.value) })}
-                  />
-                }
-              />
-            ) : null}
-            {id === "dlna" ? (
-              <DLNAViewer
-                value={draft.viewerId}
-                onChange={(viewerId) => setDraft((old) => (old ? { ...old, viewerId } : old))}
-              />
-            ) : null}
-            {more.length ? (
-              <MoreOptions
-                label={t("More options: {title}", {
-                  title: id === "dlna" ? t("What the TV shows") : t("Find this server"),
-                })}
-              >
-                {more.map((field) => (
-                  <SettingsRow
-                    key={field.key}
-                    title={field.label}
-                    description={field.help}
-                    control={
-                      <Switch
-                        checked={Boolean(draft[field.key])}
-                        aria-label={field.label}
-                        onChange={(e) =>
-                          setDraft({ ...draft, [field.key]: e.currentTarget.checked })
-                        }
-                      />
-                    }
-                  />
-                ))}
-              </MoreOptions>
-            ) : null}
-          </SettingsSection>
-        ) : null}
+        {(schema?.sections ?? []).map((section) => {
+          const note = section.fields.find((f) => f.kind === "note")?.key;
+          const { title, description } = sectionCopy(section.key, appName, note);
+          const main = section.fields.filter((f) => !f.more);
+          const more = section.fields.filter((f) => f.more);
+          return (
+            <SettingsSection key={section.key} title={title} description={description}>
+              {main.map(renderField)}
+              {more.length ? (
+                <MoreOptions label={t("More options: {title}", { title })}>
+                  {more.map(renderField)}
+                </MoreOptions>
+              ) : null}
+            </SettingsSection>
+          );
+        })}
       </div>
       <SaveBar dirty={dirty} saving={saving} onSave={save} onDiscard={reset} error={error} />
     </>
   );
 }
 
-function protocolName(id: string): string {
-  switch (id) {
-    case "jellyfin":
-      return "Jellyfin";
-    case "emby":
-      return "Emby";
-    case "silo":
-      return "Silo";
-    default:
-      return id;
-  }
+/** Rows with no wrapper element of their own. */
+function FragmentRows({ children }: { children: ReactNode }) {
+  return <>{children}</>;
 }
 
-function portHelp(id: string): string {
-  switch (id) {
-    case "jellyfin":
-      return t(
-        "Use the address on this page. The port is part of that address. Leave this at 8096 unless another server already uses it.",
-      );
-    case "emby":
-      return t(
-        "Use the address on this page. The port is part of that address. Leave this at 8097 unless another server already uses it.",
-      );
-    case "silo":
-      return t(
-        "Use the address on this page. The port is part of that address. Leave this at 8090 unless another server already uses it.",
-      );
-    default:
-      return t("Change this only if the usual port is already in use.");
-  }
+function portHelp(defaultPort?: number): string {
+  return defaultPort
+    ? t(
+        "Use the address on this page. The port is part of that address. Leave this at {port} unless another server already uses it.",
+        { port: defaultPort },
+      )
+    : t("Change this only if the usual port is already in use.");
 }
+
 
 function DLNAViewer({ value, onChange }: { value?: number; onChange: (id?: number) => void }) {
   const viewers = useAsync(() => api.viewers(), []);
@@ -617,7 +653,7 @@ function AppDetail({ info, startOpen = false }: { info: FrontendInfo; startOpen?
           />
         </div>
       </SettingsSection>
-      {["jellyfin", "emby", "silo"].includes(info.descriptor.id) ? (
+      {info.descriptor.settingsSchema?.signInHelp ? (
         <SettingsSection
           title={t("How people sign in")}
           description={t("Infuse needs an app password. The Emby for TV app isn't supported.")}
@@ -770,7 +806,7 @@ export default function Apps() {
           return (
             <div key={item.key}>
               {tab === item.key && info ? <AppDetail info={info} startOpen={connectOpen} /> : null}
-              <ProtocolSettings id={protocolFor(item.key)} hidden={tab !== item.key} />
+              {info ? <ProtocolSettings info={info} hidden={tab !== item.key} /> : null}
             </div>
           );
         })}

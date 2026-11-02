@@ -20,8 +20,11 @@ import { secretConfigured } from "../../components/IntegrationAccount";
 import { SimklMark, TraktMark } from "../../components/integration-brands";
 import { SaveBar } from "../../components/SaveBar";
 import { LevelBadge } from "../../components/status";
-import { localized, t, tx } from "../../i18n";
+import { t, tx } from "../../i18n";
+import { useLocale } from "../../i18n/react";
 import { api, apiFetch, ApiError, type TestFn } from "../../lib/api";
+import { textOf, useRegistry, type Descriptor } from "../../lib/extend";
+import type { IntegrationMeta } from "../../lib/console-descriptors";
 import { useAsync } from "../../lib/hooks";
 import type { EtherConfig } from "../../lib/types";
 import { MarkerCoverage } from "../playback/Markers";
@@ -96,37 +99,27 @@ interface Service {
   requiredField?: "clientId" | "model";
 }
 
-const SERVICES: Service[] = localized(() => [
-  {
-    tab: "trakt",
-    configKey: "trakt",
-    endpoint: "trakt",
-    flag: "enabled",
-    label: "Trakt",
-    groups: S.TRAKT,
-    testLabel: t("Test Trakt"),
+/**
+ * Compiled behaviour for built-in integrations, keyed by descriptor id. The
+ * registry names each integration (tab, config key, endpoint, flag, required
+ * field); functions and forms stay in the console, like page components.
+ */
+interface ServiceBehaviour {
+  groups: () => FieldGroup[];
+  testLabel?: () => string;
+  test?: (value: Obj) => ReturnType<TestFn>;
+  form?: Service["form"];
+}
+
+const SERVICE_BEHAVIOUR: Record<string, ServiceBehaviour> = {
+  trakt: {
+    groups: () => S.TRAKT,
+    testLabel: () => t("Test Trakt"),
     test: (v) => api.testTrakt(v as EtherConfig["trakt"]),
-    blockEnable: (v) => (String(v.clientId ?? "").trim() ? null : t("Needs a client ID")),
-    requiredField: "clientId",
   },
-  {
-    tab: "simkl",
-    configKey: "simkl",
-    endpoint: "simkl",
-    flag: "enabled",
-    label: "Simkl",
-    groups: [],
-    custom: true,
-    blockEnable: (v) => (String(v.clientId ?? "").trim() ? null : t("Needs a client ID")),
-    requiredField: "clientId",
-  },
-  {
-    tab: "llm",
-    configKey: "llm",
-    endpoint: "llm",
-    flag: "enabled",
-    label: t("Language model"),
-    groups: [],
+  simkl: { groups: () => [] },
+  llm: {
+    groups: () => [],
     form: ({ value, saved, onChange, errors, footer }) => (
       <LanguageModelSettings
         value={value as unknown as EtherConfig["llm"]}
@@ -136,32 +129,60 @@ const SERVICES: Service[] = localized(() => [
         footer={footer}
       />
     ),
-    testLabel: t("Test endpoint"),
+    testLabel: () => t("Test endpoint"),
     test: (v) => api.testLLM(v as EtherConfig["llm"]),
-    blockEnable: (v) => (String(v.model ?? "").trim() ? null : t("Needs a model")),
-    requiredField: "model",
   },
-  {
-    tab: "opensubtitles",
-    configKey: "openSubtitles",
-    endpoint: "opensubtitles",
-    flag: "enabled",
-    label: "OpenSubtitles",
-    groups: S.OPENSUBTITLES,
-    testLabel: t("Test OpenSubtitles"),
+  opensubtitles: {
+    groups: () => S.OPENSUBTITLES,
+    testLabel: () => t("Test OpenSubtitles"),
     test: (v) => api.testOpenSubtitles(v as EtherConfig["openSubtitles"]),
   },
-  {
-    tab: "introdb",
-    configKey: "markers",
-    endpoint: "markers",
-    flag: "theIntroDb",
-    label: "TheIntroDB",
-    groups: S.MARKERS,
-    testLabel: t("Test TheIntroDB"),
+  introdb: {
+    groups: () => S.MARKERS,
+    testLabel: () => t("Test TheIntroDB"),
     test: (v) => api.testIntroDB(String(v.apiKey ?? "")),
   },
-]);
+};
+
+/** Why enabling must wait, for the field an integration requires. */
+export function missingFieldLabel(field: string): string {
+  switch (field) {
+    case "clientId":
+      return t("Needs a client ID");
+    case "model":
+      return t("Needs a model");
+    default:
+      return t("Needs an API key");
+  }
+}
+
+/** Service records for the built-in integration descriptors. */
+function servicesFrom(descriptors: Descriptor<IntegrationMeta>[]): Service[] {
+  const out: Service[] = [];
+  for (const d of descriptors) {
+    const behaviour = SERVICE_BEHAVIOUR[d.id];
+    const meta = d.meta;
+    if (!behaviour || !meta?.tab || !meta.configKey || !meta.endpoint || !meta.flag) continue;
+    const required = meta.requiredField;
+    out.push({
+      tab: meta.tab as Service["tab"],
+      configKey: meta.configKey as Service["configKey"],
+      endpoint: meta.endpoint,
+      flag: meta.flag as Service["flag"],
+      label: textOf(d.label),
+      groups: behaviour.groups(),
+      custom: meta.form === "simkl" || undefined,
+      form: behaviour.form,
+      testLabel: behaviour.testLabel?.(),
+      test: behaviour.test,
+      blockEnable: required
+        ? (v) => (String(v[required] ?? "").trim() ? null : missingFieldLabel(required))
+        : undefined,
+      requiredField: (required as Service["requiredField"]) || undefined,
+    });
+  }
+  return out;
+}
 
 function sectionBases(stored: Record<string, Obj> | null): Record<string, string> {
   if (!stored) return {};
@@ -374,16 +395,24 @@ export function ConnectedServices({
   const { tab: requested } = useParams();
   const config = useAsync(() => api.getConfig(), []);
   const ratings = useAsync(() => apiFetch<RatingSettings>("/discovery/ratings/settings"), []);
+  const registry = useRegistry<IntegrationMeta>("integration");
+  const { locale } = useLocale();
+  // Services are copy-bearing (labels, test buttons), so locale is a dep.
+  const services = useMemo(
+    () => servicesFrom(registry.descriptors),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [registry.descriptors, locale],
+  );
   const cfg = config.data;
   // i18n: memo holds no copy — only stable config keys and stored values.
   const stored = useMemo(() => {
     if (!cfg) return null;
     const raw = cfg as unknown as Obj;
     return {
-      ...Object.fromEntries(SERVICES.map((s) => [s.configKey, asObj(raw[s.configKey])])),
+      ...Object.fromEntries(services.map((s) => [s.configKey, asObj(raw[s.configKey])])),
       catalog: { tmdbKey: cfg.catalog?.tmdbKey ?? "" },
     } as Record<string, Obj>;
-  }, [cfg]);
+  }, [cfg, services]);
   const { draft, setDraft, dirty, reset } = useSectionDrafts(stored);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<unknown>(null);
@@ -407,11 +436,13 @@ export function ConnectedServices({
     draft: null as Record<string, Obj> | null,
     stored: null as Record<string, Obj> | null,
     ratings: undefined as RatingSettings | undefined,
+    services: [] as Service[],
     tab,
   });
   model.current.draft = draft;
   model.current.stored = stored;
   model.current.ratings = ratings.data;
+  model.current.services = services;
   model.current.tab = tab;
 
   useEffect(() => {
@@ -421,14 +452,14 @@ export function ConnectedServices({
   // i18n: memo holds no copy — only stable tab keys and boolean flags.
   const enabled = useMemo(() => {
     const flags: Partial<Record<ServiceTab, boolean>> = {};
-    for (const service of SERVICES) {
+    for (const service of services) {
       flags[service.tab] = flagOf(stored?.[service.configKey], service.flag);
     }
     flags.ratings = ratings.data?.enabled === true;
     flags.tmdb = true;
     flags.introdb = true;
     return flags;
-  }, [stored, ratings.data?.enabled]);
+  }, [stored, ratings.data?.enabled, services]);
 
   const flagSig = TAB_ORDER.map((key) => (enabled[key] ? "1" : "0")).join("");
   const reported = useRef("");
@@ -453,7 +484,7 @@ export function ConnectedServices({
       openRatingsSetup(ratings.data);
       return;
     }
-    const service = SERVICES.find((item) => item.tab === key);
+    const service = model.current.services.find((item) => item.tab === key);
     if (service && service.blockEnable?.(draft[service.configKey] ?? {})) {
       openSectionSetup(service, draft[service.configKey] ?? {});
     }
@@ -514,7 +545,7 @@ export function ConnectedServices({
       const draftNow = model.current.draft;
       const storedNow = model.current.stored;
       if (!draftNow || !storedNow) return;
-      const changed = SERVICES.filter(
+      const changed = model.current.services.filter(
         (s) =>
           !s.custom &&
           JSON.stringify(draftNow[s.configKey]) !== JSON.stringify(storedNow[s.configKey]),
@@ -557,7 +588,7 @@ export function ConnectedServices({
         setError(e);
         if (e instanceof ApiError && e.fields) {
           setErrors(Object.fromEntries(e.fields.map((f) => [f.field, f.message])));
-          const failed = SERVICES.find((svc) =>
+          const failed = model.current.services.find((svc) =>
             e.fields!.some((f) => f.field.startsWith(`${svc.configKey}.`)),
           );
           if (failed) navigate(`/services/${failed.tab}`);
@@ -733,7 +764,15 @@ export function ConnectedServices({
     });
   };
 
+  if (registry.error)
+    return <ErrorPanel error={registry.error} onRetry={() => registry.reload()} />;
   if (config.error) return <ErrorPanel error={config.error} onRetry={() => void config.reload()} />;
+  if (registry.loading)
+    return (
+      <div className="py-10 text-center">
+        <Spinner size={20} label={t("Loading settings")} />
+      </div>
+    );
   if (!cfg || !draft)
     return (
       <div className="py-10 text-center">
@@ -944,6 +983,8 @@ export function ConnectedServices({
       ) : null}
       <div hidden={tab !== "overview"}>
         <ServiceOverview
+          descriptors={registry.descriptors}
+          services={services}
           draft={draft}
           stored={stored}
           ratings={ratings.data}
@@ -953,7 +994,7 @@ export function ConnectedServices({
           onToggleRatings={(next) => void toggleRatings(next)}
         />
       </div>
-      {SERVICES.filter((s) => !s.custom).map((s) => {
+      {services.filter((s) => !s.custom).map((s) => {
         if (tab !== s.tab && !visited.has(s.tab)) return null;
         const value = draft[s.configKey] ?? {};
         const set = (next: Obj) => setDraft({ ...draft, [s.configKey]: next });
@@ -1094,7 +1135,46 @@ function SchemaGroups({
   });
 }
 
+/** Card categories in display order, with their headings. */
+const INTEGRATION_CATEGORIES: { key: string; title: () => string }[] = [
+  { key: "required", title: () => t("Required") },
+  { key: "watch-tracking", title: () => t("Watch tracking") },
+  { key: "artwork-ratings", title: () => t("Artwork and ratings") },
+  { key: "playback-extras", title: () => t("Playback extras") },
+  { key: "smart-features", title: () => t("Smart features") },
+];
+
+/** Built-in brand marks by the logo name integration descriptors carry. */
+function integrationLogo(logo: string | undefined): ReactNode | undefined {
+  switch (logo) {
+    case "trakt":
+      return <TraktMark />;
+    case "simkl":
+      return <SimklMark />;
+    default:
+      if (logo && /^(https?:)?\/\//.test(logo))
+        return <img src={logo} alt="" width={40} height={40} className="rounded-md" />;
+      return undefined;
+  }
+}
+
+/** Configure-link copy that predates the generic Manage/Set up wording. */
+function configureLabelFor(id: string, name: string, on: boolean): string {
+  switch (id) {
+    case "llm":
+      return on ? t("Manage language model") : t("Set up a language model");
+    case "introdb":
+      return t("Markers");
+    case "ratings":
+      return t("Ratings");
+    default:
+      return on ? t("Manage {app}", { app: name }) : t("Set up {app}", { app: name });
+  }
+}
+
 function ServiceOverview({
+  descriptors,
+  services,
   stored,
   ratings,
   busyId,
@@ -1102,6 +1182,8 @@ function ServiceOverview({
   onToggle,
   onToggleRatings,
 }: {
+  descriptors: Descriptor<IntegrationMeta>[];
+  services: Service[];
   draft: Record<string, Obj>;
   stored: Record<string, Obj> | null;
   ratings: RatingSettings | undefined;
@@ -1111,136 +1193,134 @@ function ServiceOverview({
   onToggleRatings: (next: boolean) => void;
 }) {
   const { health } = useApp();
-  const catalogHealth = health.find((item) => item.id === "catalog");
-  const service = (tab: Service["tab"]) => SERVICES.find((s) => s.tab === tab)!;
-  const saved = (tab: Service["tab"]) => stored?.[service(tab).configKey] ?? {};
-  const on = (tab: Service["tab"]) => flagOf(saved(tab), service(tab).flag);
   const switchesHeld = locked || busyId !== null;
-  const tmdbKey = stored?.catalog?.tmdbKey;
+
+  function card(d: Descriptor<IntegrationMeta>) {
+    const meta = d.meta!;
+    const name = textOf(d.label);
+    const tab = meta.tab ?? d.id;
+    const href = meta.tab ? `/services/${meta.tab}` : undefined;
+    const logo = integrationLogo(meta.logo);
+    const description = textOf(d.hint);
+    if (meta.form === "ratings") {
+      return (
+        <IntegrationAppCard
+          key={d.id}
+          identity={{ id: tab, name }}
+          logo={logo}
+          description={description}
+          status={ratingsStatus(ratings)}
+          enabled={ratings?.enabled}
+          busy={locked || busyId === tab}
+          disabled={switchesHeld || !ratings}
+          onToggle={ratings ? onToggleRatings : undefined}
+          configureHref={href}
+          configureLabel={configureLabelFor(d.id, name, ratings?.enabled === true)}
+        />
+      );
+    }
+    const service = services.find((s) => s.tab === meta.tab);
+    if (!service) {
+      // No switch: a core service (TMDB) or a plugin integration.
+      const readyField = meta.readyField ?? meta.requiredField;
+      const ready = readyField ? secretConfigured(stored?.[meta.configKey ?? ""]?.[readyField]) : false;
+      const catalogHealth = health.find((item) => item.id === "catalog");
+      return (
+        <IntegrationAppCard
+          key={d.id}
+          identity={{ id: tab, name }}
+          logo={logo}
+          description={description}
+          status={
+            d.id === "tmdb" ? (
+              ready ? (
+                catalogHealth ? (
+                  <LevelBadge level={catalogHealth.level} />
+                ) : (
+                  <Badge variant="success">{t("Key saved")}</Badge>
+                )
+              ) : (
+                <Badge variant="warning">{t("Needs an API key")}</Badge>
+              )
+            ) : undefined
+          }
+          configureHref={href}
+          configureLabel={configureLabelFor(d.id, name, ready)}
+        />
+      );
+    }
+    const saved = stored?.[service.configKey] ?? {};
+    const on = flagOf(saved, service.flag);
+    const readyField = meta.readyField ?? meta.requiredField;
+    const ready = readyField ? secretConfigured(saved[readyField]) : true;
+    return (
+      <IntegrationAppCard
+        key={d.id}
+        identity={{ id: tab, name }}
+        logo={logo}
+        description={description}
+        status={
+          meta.publicFallback
+            ? introStatus(on, readyField ? saved[readyField] : undefined)
+            : switchStatus(
+                on,
+                ready,
+                readyField ? missingFieldLabel(readyField) : t("Needs an API key"),
+              )
+        }
+        enabled={on}
+        busy={locked || busyId === tab}
+        disabled={switchesHeld}
+        onToggle={(next) => onToggle(service, next)}
+        configureHref={href}
+        configureLabel={configureLabelFor(d.id, name, on)}
+      />
+    );
+  }
+
+  const byCategory = new Map<string, Descriptor<IntegrationMeta>[]>();
+  for (const d of descriptors) {
+    const category = d.meta?.category ?? d.group ?? "";
+    byCategory.set(category, [...(byCategory.get(category) ?? []), d]);
+  }
+  const extra = [...byCategory.keys()].filter(
+    (key) => !INTEGRATION_CATEGORIES.some((c) => c.key === key),
+  );
 
   return (
     <>
-      <IntegrationGroup title={t("Required")}>
-        <IntegrationAppCard
-          identity={{ id: "tmdb", name: "TMDB" }}
-          description={t("Names titles, fetches artwork and fills the catalogue.")}
-          status={
-            secretConfigured(tmdbKey) ? (
-              catalogHealth ? (
-                <LevelBadge level={catalogHealth.level} />
-              ) : (
-                <Badge variant="success">{t("Key saved")}</Badge>
-              )
-            ) : (
-              <Badge variant="warning">{t("Needs an API key")}</Badge>
-            )
-          }
-          configureHref="/services/tmdb"
-          configureLabel={secretConfigured(tmdbKey) ? t("Manage TMDB") : t("Set up TMDB")}
-        />
-      </IntegrationGroup>
-      <IntegrationGroup title={t("Watch tracking")}>
-        <IntegrationAppCard
-          identity={{ id: "trakt", name: "Trakt" }}
-          logo={<TraktMark />}
-          description={t("Sync watch history and lists with Trakt.")}
-          status={switchStatus(
-            on("trakt"),
-            Boolean(saved("trakt").clientId),
-            t("Needs a client ID"),
-          )}
-          enabled={on("trakt")}
-          busy={locked || busyId === "trakt"}
-          disabled={switchesHeld}
-          onToggle={(next) => onToggle(service("trakt"), next)}
-          configureHref="/services/trakt"
-          configureLabel={on("trakt") ? t("Manage Trakt") : t("Set up Trakt")}
-        />
-        <IntegrationAppCard
-          identity={{ id: "simkl", name: "Simkl" }}
-          logo={<SimklMark />}
-          description={t(
-            "Connect a viewer's Simkl account to import watched history and send completed playback.",
-          )}
-          status={switchStatus(
-            on("simkl"),
-            Boolean(saved("simkl").clientId),
-            t("Needs a client ID"),
-          )}
-          enabled={on("simkl")}
-          busy={locked || busyId === "simkl"}
-          disabled={switchesHeld}
-          onToggle={(next) => onToggle(service("simkl"), next)}
-          configureHref="/services/simkl"
-          configureLabel={on("simkl") ? t("Manage Simkl") : t("Set up Simkl")}
-        />
-      </IntegrationGroup>
-      <PosterAccounts locked={switchesHeld}>
-        {(cards) => (
-          <IntegrationGroup title={t("Artwork and ratings")}>
+      {INTEGRATION_CATEGORIES.map(({ key, title }) => {
+        const cards = (byCategory.get(key) ?? [])
+          .slice()
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+          .map(card);
+        if (key === "artwork-ratings") {
+          return (
+            <PosterAccounts key={key} locked={switchesHeld}>
+              {(posterCards) => (
+                <IntegrationGroup title={title()}>
+                  {posterCards}
+                  {cards}
+                </IntegrationGroup>
+              )}
+            </PosterAccounts>
+          );
+        }
+        return (
+          <IntegrationGroup key={key} title={title()}>
             {cards}
-            <IntegrationAppCard
-              identity={{ id: "ratings", name: t("OMDb and MDBList") }}
-              description={t("IMDb, Rotten Tomatoes and other rating badges.")}
-              status={ratingsStatus(ratings)}
-              enabled={ratings?.enabled}
-              busy={locked || busyId === "ratings"}
-              disabled={switchesHeld || !ratings}
-              onToggle={ratings ? onToggleRatings : undefined}
-              configureHref="/services/ratings"
-              configureLabel={t("Ratings")}
-            />
           </IntegrationGroup>
-        )}
-      </PosterAccounts>
-      <IntegrationGroup title={t("Playback extras")}>
-        <IntegrationAppCard
-          identity={{ id: "opensubtitles", name: "OpenSubtitles" }}
-          description={t("Fetch subtitles when a release doesn't include them.")}
-          status={switchStatus(
-            on("opensubtitles"),
-            Boolean(saved("opensubtitles").apiKey),
-            t("Needs an API key"),
-          )}
-          enabled={on("opensubtitles")}
-          busy={locked || busyId === "opensubtitles"}
-          disabled={switchesHeld}
-          onToggle={(next) => onToggle(service("opensubtitles"), next)}
-          configureHref="/services/opensubtitles"
-          configureLabel={
-            on("opensubtitles") ? t("Manage OpenSubtitles") : t("Set up OpenSubtitles")
-          }
-        />
-        <IntegrationAppCard
-          identity={{ id: "introdb", name: "TheIntroDB" }}
-          description={t("Intro and credits markers so viewers can skip them.")}
-          status={introStatus(on("introdb"), saved("introdb").apiKey)}
-          enabled={on("introdb")}
-          busy={locked || busyId === "introdb"}
-          disabled={switchesHeld}
-          onToggle={(next) => onToggle(service("introdb"), next)}
-          configureHref="/services/introdb"
-          configureLabel={t("Markers")}
-        />
-      </IntegrationGroup>
-      <IntegrationGroup title={t("Smart features")}>
-        <IntegrationAppCard
-          identity={{ id: "llm", name: t("Language model") }}
-          description={t(
-            "Describe-it collections, themed Home rows, natural-language search and recaps.",
-          )}
-          status={switchStatus(on("llm"), Boolean(saved("llm").model), t("Needs a model"))}
-          enabled={on("llm")}
-          busy={locked || busyId === "llm"}
-          disabled={switchesHeld}
-          onToggle={(next) => onToggle(service("llm"), next)}
-          configureHref="/services/llm"
-          configureLabel={on("llm") ? t("Manage language model") : t("Set up a language model")}
-        />
-      </IntegrationGroup>
+        );
+      })}
+      {extra.map((key) => (
+        <IntegrationGroup key={key} title={key}>
+          {(byCategory.get(key) ?? []).map(card)}
+        </IntegrationGroup>
+      ))}
     </>
   );
 }
+
 
 function introStatus(enabled: boolean, apiKey: unknown) {
   if (!enabled) return <Badge variant="secondary">{t("Off")}</Badge>;

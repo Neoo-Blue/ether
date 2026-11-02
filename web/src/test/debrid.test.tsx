@@ -1,6 +1,14 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { destinations } from "../lib/sitemap";
+import { destinationsFrom } from "../lib/sitemap";
+import { descriptors as consoleDescriptors } from "../mock/extend/descriptors/console";
+import type { PageMeta } from "../lib/console-descriptors";
+import type { Descriptor } from "../lib/extend";
+
+const destinations = () =>
+  destinationsFrom(
+    consoleDescriptors.filter((d) => d.kind === "page") as Descriptor<PageMeta>[],
+  );
 import { engineSummary, latencySummary } from "../pages/sources/Debrid";
 import { debridFix, sourceMonogram } from "../pages/sources/cards";
 import { debridMark } from "../pages/sources/marks";

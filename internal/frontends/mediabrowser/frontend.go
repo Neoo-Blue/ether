@@ -17,7 +17,7 @@ import (
 type Jellyfin struct{ MachineID string }
 
 func (Jellyfin) Describe() frontend.Descriptor {
-	return frontend.Descriptor{ID: "jellyfin", Name: "Jellyfin", Version: "12.4.0", DefaultPort: 8096}
+	return frontend.Descriptor{ID: "jellyfin", Name: "Jellyfin", Version: "12.4.0", DefaultPort: 8096, SettingsSchema: frontend.MediaBrowserSchema(true)}
 }
 func (Jellyfin) ValidateSettings(s frontend.Settings) error { return validatePersonalSettings(s) }
 func (f Jellyfin) Mount(ctx context.Context, host frontend.Host) (frontend.Instance, error) {
@@ -28,7 +28,7 @@ func (f Jellyfin) Mount(ctx context.Context, host frontend.Host) (frontend.Insta
 type Emby struct{ MachineID string }
 
 func (Emby) Describe() frontend.Descriptor {
-	return frontend.Descriptor{ID: "emby", Name: "Emby", Version: "4.10.2.0", DefaultPort: 8097}
+	return frontend.Descriptor{ID: "emby", Name: "Emby", Version: "4.10.2.0", DefaultPort: 8097, SettingsSchema: frontend.MediaBrowserSchema(false)}
 }
 func (Emby) ValidateSettings(s frontend.Settings) error { return validatePersonalSettings(s) }
 func (f Emby) Mount(ctx context.Context, host frontend.Host) (frontend.Instance, error) {

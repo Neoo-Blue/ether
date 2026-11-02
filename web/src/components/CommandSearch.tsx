@@ -3,48 +3,18 @@ import {
   type GlobalSearchGroup,
   type GlobalSearchResult,
 } from "@braedonsaunders/appkit-ui";
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
-import { localized, t, tn, msg, searchTerms } from "../i18n";
-import { destinations } from "../lib/sitemap";
+import { t, tn } from "../i18n";
+import { textOf, useRegistry, type Descriptor } from "../lib/extend";
+import {
+  searchTextOf,
+  type CommandMeta,
+  type PageMeta,
+} from "../lib/console-descriptors";
+import { destinationsFrom } from "../lib/sitemap";
 import { loadViewers, viewerName } from "./pickers";
-
-const ACTIONS = localized(() => [
-  {
-    title: t("Record a problem"),
-    href: "/maintenance/logs?record=1",
-    keywords: searchTerms(msg("support zip diagnostic capture")),
-  },
-  {
-    title: t("Add an indexer"),
-    href: "/sources/indexers",
-    keywords: searchTerms(msg("newznab prowlarr")),
-  },
-  {
-    title: t("Add a Usenet provider"),
-    href: "/sources/usenet",
-    keywords: searchTerms(msg("nntp")),
-  },
-  {
-    title: t("Add a debrid provider"),
-    href: "/sources/debrid",
-    keywords: searchTerms(
-      msg("real-debrid torbox alldebrid premiumize debrid-link debridlink offcloud torrent"),
-    ),
-  },
-  { title: t("New collection"), href: "/collections/new", keywords: searchTerms(msg("create")) },
-  {
-    title: t("New notification channel"),
-    href: "/notifications/channels",
-    keywords: searchTerms(msg("alert")),
-  },
-  {
-    title: t("Back up now"),
-    href: "/maintenance/backups",
-    keywords: searchTerms(msg("backup snapshot")),
-  },
-]);
 
 function matches(q: string, ...fields: (string | undefined)[]): boolean {
   const hay = fields.filter(Boolean).join(" ").toLowerCase();
@@ -55,13 +25,24 @@ function matches(q: string, ...fields: (string | undefined)[]): boolean {
     .every((w) => hay.includes(w));
 }
 
-/** ⌘K: jump to any page, section, viewer or collection, or start a common task. */
+/**
+ * ⌘K: jump to any page, section, viewer or collection, or start a common
+ * task. Destinations and actions come from the descriptor registry (WS1d):
+ * page descriptors (built-in and plugin) fill "Go to", command descriptors
+ * with a route fill "Actions". Agent suggestions are not ⌘K actions.
+ */
 export function CommandSearch() {
   const navigate = useNavigate();
+  const { descriptors } = useRegistry("page", "command");
+  const live = useRef<Descriptor[]>([]);
+  live.current = descriptors;
   const search = useCallback(
     async (q: string, signal: AbortSignal): Promise<GlobalSearchResult> => {
+      const all = live.current;
+      const pages = all.filter((d) => d.kind === "page") as Descriptor<PageMeta>[];
+      const commands = all.filter((d) => d.kind === "command") as Descriptor<CommandMeta>[];
       const groups: GlobalSearchGroup[] = [];
-      const places = destinations()
+      const places = destinationsFrom(pages)
         .filter((d) => matches(q, d.title, d.page, d.keywords))
         .slice(0, 8)
         .map((d) => ({
@@ -72,12 +53,19 @@ export function CommandSearch() {
           href: d.href,
         }));
       if (places.length) groups.push({ id: "places", label: t("Go to"), hits: places });
-      const actions = ACTIONS.filter((a) => matches(q, a.title, a.keywords)).map((a) => ({
-        id: a.title,
-        type: "action",
-        title: a.title,
-        href: a.href,
-      }));
+      const actions = commands
+        .filter(
+          (c) =>
+            c.meta?.route &&
+            !c.meta.agentSuggestion &&
+            matches(q, textOf(c.label), searchTextOf(c.meta.keywords)),
+        )
+        .map((c) => ({
+          id: c.id,
+          type: "action",
+          title: textOf(c.label),
+          href: c.meta!.route!,
+        }));
       if (actions.length) groups.push({ id: "actions", label: t("Actions"), hits: actions });
       const [viewers, collections] = await Promise.all([
         loadViewers().catch(() => []),

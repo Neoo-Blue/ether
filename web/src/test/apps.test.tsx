@@ -25,6 +25,7 @@ type AppRow = {
     id: string;
     name: string;
     certifiedApps?: { name: string; steps: string[] }[];
+    settingsSchema?: unknown;
   };
   enabled: boolean;
   status: {
@@ -42,9 +43,24 @@ type AppRow = {
   };
 };
 
+/** The settings schema the server serves for these rows (WS1d). */
+const servedSchema = {
+  signInHelp: true,
+  sections: [
+    {
+      key: "find",
+      fields: [
+        { key: "serverName", kind: "serverName" },
+        { key: "port", kind: "port", min: 1, max: 65535 },
+        { key: "discovery", kind: "bool", more: true },
+      ],
+    },
+  ],
+};
+
 function row(id: string, name: string, enabled: boolean, extra?: Partial<AppRow>): AppRow {
   return {
-    descriptor: { id, name, ...extra?.descriptor },
+    descriptor: { id, name, settingsSchema: servedSchema, ...extra?.descriptor },
     enabled,
     status: {
       addresses: enabled ? ["192.168.1.2:8090"] : [],

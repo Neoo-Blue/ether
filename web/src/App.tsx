@@ -73,6 +73,12 @@ import { SaveBarHost } from "./components/SaveBar";
 import { UpdateReady } from "./components/UpdateReady";
 import { LEVEL_LABEL, LevelBadge, StatusDot } from "./components/status";
 import { api, getToken, setToken } from "./lib/api";
+import { BUILTIN, textOf, useRegistry, type Descriptor } from "./lib/extend";
+import {
+  pageRoute,
+  type NavItemMeta,
+  type PageMeta,
+} from "./lib/console-descriptors";
 import type { Bootstrap } from "./lib/types";
 import { theme } from "./theme";
 import Home from "./pages/Home";
@@ -104,6 +110,7 @@ const Cache = lazy(() => import("./pages/cache/Cache"));
 const Playback = lazy(() => import("./pages/playback/Playback"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Plugins = lazy(() => import("./pages/plugins/Plugins"));
+const PluginPage = lazy(() => import("./viewspec/PluginPage"));
 
 /** react-router links for every AppKit navigation primitive. */
 const RouterAnchor = forwardRef<
@@ -120,64 +127,107 @@ const linkRender: LinkRender = ({ href, children, className, title, ariaCurrent,
   </Link>
 );
 
+/** Lucide icons by the name page descriptors carry. */
+const NAV_ICONS = {
+  Gauge,
+  Activity: ActivityIcon,
+  Users,
+  Library,
+  Layers,
+  LayoutTemplate,
+  Tv,
+  CalendarDays,
+  Tags,
+  Network,
+  ListFilter,
+  HardDrive,
+  MonitorPlay,
+  Server,
+  Globe,
+  Plug,
+  Puzzle,
+  Bell,
+  Boxes,
+  LifeBuoy,
+} as const;
+
+function navIcon(icon: string | undefined): ReactNode {
+  const size = 18;
+  if (icon && /^(https?:)?\/\//.test(icon)) {
+    return <img src={icon} alt="" width={size} height={size} className="rounded-sm" />;
+  }
+  const Icon = (icon && NAV_ICONS[icon as keyof typeof NAV_ICONS]) || Puzzle;
+  return <Icon size={size} />;
+}
+
+/** Sidebar groups in display order; the top group has no heading. */
+const NAV_GROUPS: { key: string; label: () => string }[] = [
+  { key: "", label: () => "" },
+  { key: "library", label: () => t("Library") },
+  { key: "streaming", label: () => t("Streaming") },
+  { key: "server", label: () => t("Server") },
+];
+
 /**
+ * The sidebar, from registry descriptors (WS1d). Built-in navItems come from
+ * Go; a plugin page with a declared nav group joins that group with the
+ * plugin's icon, after the built-ins of the same order.
  * Grouped by the owner's questions: what's happening and who watches; what
  * viewers see in their apps; how titles reach the screen; how the server runs.
  */
-function navigation(): SidebarNavGroup[] {
-  const icon = 18;
-  return [
-    {
-      label: "",
-      items: [
-        { href: "/", label: t("Overview"), icon: <Gauge size={icon} />, exact: true, mobile: true },
-        {
-          href: "/activity",
-          label: t("Activity"),
-          icon: <ActivityIcon size={icon} />,
-          mobile: true,
-        },
-        { href: "/viewers", label: t("Viewers"), icon: <Users size={icon} />, mobile: true },
-      ],
-    },
-    {
-      label: t("Library"),
-      items: [
-        { href: "/catalog", label: t("Catalog"), icon: <Library size={icon} /> },
-        {
-          href: "/collections",
-          label: t("Collections"),
-          icon: <Layers size={icon} />,
-          mobile: true,
-        },
-        { href: "/home", label: t("Home"), icon: <LayoutTemplate size={icon} /> },
-        { href: "/livetv", label: t("Live TV"), icon: <Tv size={icon} /> },
-        { href: "/calendar", label: t("Calendar"), icon: <CalendarDays size={icon} /> },
-        { href: "/metadata", label: t("Metadata"), icon: <Tags size={icon} /> },
-      ],
-    },
-    {
-      label: t("Streaming"),
-      items: [
-        { href: "/sources", label: t("Sources"), icon: <Network size={icon} /> },
-        { href: "/releases", label: t("Releases"), icon: <ListFilter size={icon} /> },
-        { href: "/cache", label: t("Cache"), icon: <HardDrive size={icon} /> },
-        { href: "/playback", label: t("Playback"), icon: <MonitorPlay size={icon} /> },
-      ],
-    },
-    {
-      label: t("Server"),
-      items: [
-        { href: "/server", label: t("General"), icon: <Server size={icon} /> },
-        { href: "/apps", label: t("Apps"), icon: <Globe size={icon} /> },
-        { href: "/services", label: t("Integrations"), icon: <Plug size={icon} /> },
-        { href: "/plugins", label: t("Plugins"), icon: <Puzzle size={icon} /> },
-        { href: "/notifications", label: t("Notifications"), icon: <Bell size={icon} /> },
-        { href: "/cluster", label: t("Cluster"), icon: <Boxes size={icon} /> },
-        { href: "/maintenance", label: t("Maintenance"), icon: <LifeBuoy size={icon} /> },
-      ],
-    },
-  ];
+export function buildNavigation(descriptors: Descriptor[]): SidebarNavGroup[] {
+  type Item = { group: string; order: number; builtin: boolean; item: SidebarNavGroup["items"][number] };
+  const items: Item[] = [];
+  const navPages = new Set<string>();
+  for (const d of descriptors) {
+    if (d.kind !== "navItem") continue;
+    const meta = d.meta as NavItemMeta | undefined;
+    if (!meta?.route) continue;
+    if (meta.page) navPages.add(meta.page);
+    navPages.add(d.id);
+    items.push({
+      group: d.group ?? "",
+      order: d.order ?? 0,
+      builtin: d.owner === BUILTIN,
+      item: {
+        href: meta.route,
+        label: textOf(d.label),
+        icon: navIcon(d.icon),
+        exact: meta.exact || undefined,
+        mobile: meta.mobile || undefined,
+      },
+    });
+  }
+  for (const d of descriptors) {
+    if (d.kind !== "page" || d.owner === BUILTIN || navPages.has(d.id)) continue;
+    const meta = d.meta as PageMeta | undefined;
+    const group = meta?.navGroup ?? d.group;
+    if (group === undefined) continue;
+    items.push({
+      group,
+      order: d.order ?? 0,
+      builtin: false,
+      item: {
+        href: pageRoute(d as Descriptor<PageMeta>),
+        label: textOf(d.label),
+        icon: navIcon(d.icon),
+        mobile: meta?.mobile || undefined,
+      },
+    });
+  }
+  items.sort(
+    (a, b) => a.order - b.order || Number(b.builtin) - Number(a.builtin),
+  );
+  const groups: SidebarNavGroup[] = NAV_GROUPS.map((g) => ({
+    label: g.label(),
+    items: items.filter((i) => i.group === g.key).map((i) => i.item),
+  }));
+  // A plugin may declare a group the console does not know; keep it visible
+  // under Server rather than dropping the page.
+  const known = new Set(NAV_GROUPS.map((g) => g.key));
+  const stray = items.filter((i) => !known.has(i.group)).map((i) => i.item);
+  if (stray.length) groups[groups.length - 1]!.items.push(...stray);
+  return groups.filter((g) => g.items.length > 0);
 }
 
 function HealthIndicator() {
@@ -324,6 +374,7 @@ function PageFallback() {
 function Shell() {
   const { boot } = useApp();
   const location = useLocation();
+  const { descriptors: navDescriptors } = useRegistry("page", "navItem");
   const remoteSession = boot.authRequired && Boolean(getToken());
   const version = versionLabel(boot.version);
   const serverName = boot.serverName?.trim() || "Ether";
@@ -334,7 +385,7 @@ function Shell() {
       }
     >
       <AppShell
-        groups={location.pathname === "/setup" ? [] : navigation()}
+        groups={location.pathname === "/setup" ? [] : buildNavigation(navDescriptors)}
         pathname={location.pathname}
         navigationMode="sidebar"
         linkRender={linkRender}
@@ -429,6 +480,9 @@ function Shell() {
       >
         <SaveBarHost>
           <Suspense fallback={<PageFallback />}>
+            {/* Built-in pages stay compiled components: this route table is
+                the client map from registry page routes to components.
+                Plugin pages route through /p/:plugin/:page below. */}
             <Routes>
               <Route
                 path="/"
@@ -463,6 +517,7 @@ function Shell() {
               <Route path="/apps/:tab?/:section?" element={<Apps />} />
               <Route path="/services/:tab?" element={<ServicesPage />} />
               <Route path="/plugins/:tab?/*" element={<Plugins />} />
+              <Route path="/p/:plugin/:page/*" element={<PluginPage />} />
               <Route path="/cluster" element={<ClusterPage />} />
               <Route path="/maintenance/:tab?/:backupTab?" element={<MaintenancePage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
