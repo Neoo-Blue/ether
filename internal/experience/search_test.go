@@ -131,3 +131,41 @@ func TestSearchResolveSourcePrecedence(t *testing.T) {
 		})
 	}
 }
+
+// Typed searches reach the catalogue as explicit searches, so titles the
+// owner hid from browsing only can still be found.
+func TestSearchMarksExplicitSearch(t *testing.T) {
+	var natural, catalog []bool
+	s := Search{
+		Natural: func(ctx context.Context, _ *core.User, _ string, _ int) ([]core.Title, bool) {
+			natural = append(natural, core.ExplicitSearch(ctx))
+			return nil, false
+		},
+		Catalog: func(ctx context.Context, _ string, _ []core.MediaType, _ int) ([]core.Title, error) {
+			catalog = append(catalog, core.ExplicitSearch(ctx))
+			return nil, nil
+		},
+		Unrestricted: func(*core.User) bool { return true },
+	}
+	ctx := context.Background()
+	if _, err := s.Find(ctx, nil, "film", []core.MediaType{core.TypeMovie}, 5); err != nil {
+		t.Fatal(err)
+	}
+	s.Unrestricted = nil
+	if _, err := s.Find(ctx, nil, "film", []core.MediaType{core.TypeMovie}, 5); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Keyword(ctx, nil, "film", []core.MediaType{core.TypeMovie}, 5); err != nil {
+		t.Fatal(err)
+	}
+	for _, got := range [][]bool{natural, catalog} {
+		for i, marked := range got {
+			if !marked {
+				t.Fatalf("call %d of %v reached the source without the search mark", i, got)
+			}
+		}
+	}
+	if len(natural) != 2 || len(catalog) != 3 {
+		t.Fatalf("natural=%v catalog=%v", natural, catalog)
+	}
+}

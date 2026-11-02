@@ -952,7 +952,13 @@ apply, and an actual enhancement failure falls back to ordinary transcoding.
 **Catalog › Settings › Visibility** controls which titles Ether exposes to Plex.
 Add named exclusion groups, choose movies, TV, or both, and combine conditions
 with **Match all** or **Match any**. Any matching group hides the title across
-browsing, search, recommendations and collections. The preview uses only the
+browsing, search, recommendations and collections. To keep titles out of
+browsing without hiding them from search, set a hide rule to **Hide from
+browsing only**: matching titles leave library browsing, Home and hub rows,
+recommendations, New Releases, Trending and catalogue collections, but anyone
+can still search for them, open them and play them. For example, **Hide ·
+Country is not United States · Browsing only** keeps discovery to US titles
+while a foreign film stays one search away. The preview uses only the
 local catalogue; it does not search indexers or fetch every title's details.
 Saving preserves metadata and watch history, and clearing the rules restores
 visibility subject to the normal release, availability and viewer restrictions.

@@ -1,4 +1,4 @@
-import { Button, Input } from "@braedonsaunders/appkit-ui";
+import { Button, Input, Select } from "@braedonsaunders/appkit-ui";
 import { ChevronDown, ChevronUp, GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Drawer } from "../../components/Drawer";
@@ -18,6 +18,8 @@ export type VisibilityRule = {
   mediaType: string;
   match: string;
   rules: Rule[];
+  /** "discovery" hides from browsing only; empty or "everywhere" hides everywhere. */
+  scope?: string;
 };
 
 type Preview = {
@@ -73,6 +75,10 @@ function actionOf(rule: VisibilityRule) {
   return rule.action === "show" ? "show" : "hide";
 }
 
+function browsingOnly(rule: VisibilityRule) {
+  return actionOf(rule) === "hide" && rule.scope === "discovery";
+}
+
 function conditionLine(rule: Rule) {
   if (rule.op === "in") return describeRule({ ...rule, op: "is" });
   return describeRule(rule);
@@ -87,7 +93,8 @@ export function ruleLabel(rule: VisibilityRule) {
       ? bits.reduce((left, right) => t("{left} or {right}", { left, right }))
       : bits.join(" · ");
   const media = rule.mediaType === "movie" ? t("Movies") : rule.mediaType === "show" ? t("TV") : "";
-  return [action, body, media].filter(Boolean).join(" · ");
+  const scope = browsingOnly(rule) ? t("Browsing only") : "";
+  return [action, body, media, scope].filter(Boolean).join(" · ");
 }
 
 export function RulesPanel({
@@ -315,7 +322,9 @@ export function RulesPanel({
               <Segmented
                 ariaLabel={t("Rule action")}
                 value={actionOf(editing)}
-                onChange={(v) => update(open, { action: v })}
+                onChange={(v) =>
+                  update(open, v === "show" ? { action: v, scope: undefined } : { action: v })
+                }
                 options={[
                   { value: "show", label: t("Show") },
                   { value: "hide", label: t("Hide") },
@@ -341,6 +350,28 @@ export function RulesPanel({
                 ]}
               />
             </div>
+            {actionOf(editing) === "hide" ? (
+              <div className="space-y-1">
+                <Select
+                  aria-label={t("Where to hide")}
+                  className="max-w-xs"
+                  value={browsingOnly(editing) ? "discovery" : "everywhere"}
+                  onChange={(e) =>
+                    update(open, {
+                      scope: e.target.value === "discovery" ? "discovery" : undefined,
+                    })
+                  }
+                >
+                  <option value="everywhere">{t("Hide everywhere")}</option>
+                  <option value="discovery">{t("Hide from browsing only")}</option>
+                </Select>
+                <p className="text-xs text-fg-muted">
+                  {t(
+                    "Browsing only keeps these titles out of Home, rows, recommendations, New Releases and Trending. Anyone can still search for them and play them.",
+                  )}
+                </p>
+              </div>
+            ) : null}
             {editing.rules.map((rule, j) => (
               <RuleRow
                 key={j}

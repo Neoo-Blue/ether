@@ -215,7 +215,8 @@ type tmdbRef struct{ client TMDB }
 
 // Catalog implements core.Catalog.
 type Catalog struct {
-	visibility     *libraryfilter.Filter
+	visibility     *libraryfilter.Filter // every rule: browsing and discovery
+	searchVis      *libraryfilter.Filter // rules scoped everywhere: explicit search
 	db             *sql.DB
 	remote         atomic.Pointer[tmdbRef]
 	configUpdateMu sync.Mutex // serializes transitions without blocking config readers
@@ -391,7 +392,7 @@ func New(db *sql.DB, client TMDB, cfg config.Catalog, log *slog.Logger, opts ...
 		log = slog.Default()
 	}
 	cfg = cloneCatalogConfig(cfg)
-	visibility, err := libraryfilter.Compile(cfg.Exclusions)
+	visibility, err := libraryfilter.CompilePolicy(cfg.Exclusions, cfg.VisibilityDefault)
 	if err != nil {
 		return nil, err
 	}
@@ -399,7 +400,7 @@ func New(db *sql.DB, client TMDB, cfg config.Catalog, log *slog.Logger, opts ...
 	if stale <= 0 {
 		stale = 24 * time.Hour
 	}
-	c := &Catalog{visibility: visibility, db: db, cfg: cfg, cfgVersion: &configVersion{}, log: log, hydrateSlots: make(chan struct{}, hydrateLimit),
+	c := &Catalog{visibility: visibility, searchVis: visibility.ForSearch(), db: db, cfg: cfg, cfgVersion: &configVersion{}, log: log, hydrateSlots: make(chan struct{}, hydrateLimit),
 		staleAfter: stale, listTTL: 15 * time.Minute, yearGap: 100 * time.Millisecond, yearAhead: make(chan core.RatingKey, 256),
 		genres: map[string]map[int]string{}, listCache: map[string]listEntry{},
 		titleCache: map[core.RatingKey]cachedStoredTitle{}, countCache: map[string]cachedCount{},
@@ -423,11 +424,12 @@ func (e *simpleError) Error() string { return e.s }
 // UpdateConfig swaps the catalogue config (wire to config.Store.Subscribe).
 func (c *Catalog) UpdateConfig(cfg config.Catalog) {
 	cfg = cloneCatalogConfig(cfg)
-	f, err := libraryfilter.Compile(cfg.Exclusions)
+	f, err := libraryfilter.CompilePolicy(cfg.Exclusions, cfg.VisibilityDefault)
 	if err != nil {
 		c.log.Error("catalog: invalid visibility rules")
 		return
 	}
+	search := f.ForSearch()
 	c.configUpdateMu.Lock()
 	defer c.configUpdateMu.Unlock()
 	previous := c.config()
@@ -442,6 +444,7 @@ func (c *Catalog) UpdateConfig(cfg config.Catalog) {
 	c.cfgMu.Lock()
 	c.cfg = cfg
 	c.visibility = f
+	c.searchVis = search
 	c.cfgVersion = &configVersion{}
 	c.writeGen.Add(1)
 	c.cfgMu.Unlock()

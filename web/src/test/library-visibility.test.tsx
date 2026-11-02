@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
@@ -187,5 +187,76 @@ describe("Library visibility", () => {
     expect(screen.getByText(/PG · TV-PG · TV-Y7/)).toBeInTheDocument();
     expect(screen.queryByText("TV-PG")).not.toBeInTheDocument();
     expect(screen.getByText(/Ratings match by age level/)).toBeInTheDocument();
+  });
+
+  it("limits a hide rule to browsing and saves its scope", async () => {
+    const { fake } = renderApp("/catalog/visibility", {}, (server) => {
+      (server.state.config.catalog as { exclusions?: unknown }).exclusions = [
+        {
+          name: "",
+          action: "hide",
+          mediaType: "mixed",
+          match: "all",
+          rules: [{ field: "country", op: "notIn", value: ["US"] }],
+        },
+      ];
+    });
+    await settleUi(() => {
+      expect(screen.getByRole("button", { name: "Edit rule 1" })).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Browsing only/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit rule 1" }));
+    const where = screen.getByRole("button", { name: "Where to hide" });
+    expect(where).toHaveTextContent("Hide everywhere");
+    expect(screen.getByText(/Anyone can still search for them and play them/)).toBeInTheDocument();
+    fireEvent.click(where);
+    await settleUi(() => {
+      expect(screen.getByRole("option", { name: "Hide from browsing only" })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("option", { name: "Hide from browsing only" }));
+    expect(screen.getByRole("button", { name: "Where to hide" })).toHaveTextContent(
+      "Hide from browsing only",
+    );
+    await settleUi(() => {
+      expect(screen.getAllByText(/· Browsing only/).length).toBeGreaterThan(0);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await settleUi(() => {
+      expect(calls(fake, "PUT", "/config/catalog")).toHaveLength(1);
+    });
+    expect(calls(fake, "PUT", "/config/catalog")[0]?.body).toMatchObject({
+      exclusions: [{ action: "hide", scope: "discovery" }],
+    });
+  });
+
+  it("offers the browsing-only choice for hide rules alone", async () => {
+    renderApp("/catalog/visibility", {}, (server) => {
+      (server.state.config.catalog as { exclusions?: unknown }).exclusions = [
+        {
+          name: "",
+          action: "hide",
+          scope: "discovery",
+          mediaType: "mixed",
+          match: "all",
+          rules: [{ field: "country", op: "notIn", value: ["US"] }],
+        },
+      ];
+    });
+    await settleUi(() => {
+      expect(screen.getByText(/· Browsing only/)).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Edit rule 1" }));
+    expect(screen.getByRole("button", { name: "Where to hide" })).toHaveTextContent(
+      "Hide from browsing only",
+    );
+    fireEvent.click(
+      within(screen.getByRole("radiogroup", { name: "Rule action" })).getByRole("radio", {
+        name: "Show",
+      }),
+    );
+    await settleUi(() => {
+      expect(screen.queryByRole("button", { name: "Where to hide" })).not.toBeInTheDocument();
+    });
+    expect(screen.queryByText(/· Browsing only/)).not.toBeInTheDocument();
   });
 });

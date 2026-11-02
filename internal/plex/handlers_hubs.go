@@ -925,7 +925,8 @@ func (s *Server) searchPeople(ctx context.Context, pr *Request, query string, se
 	if err != nil || len(candidates) == 0 {
 		return out
 	}
-	catVis, _ := s.d.Catalog.(interface{ Visible(*core.Title) bool })
+	// An explicit search: rules the owner limited to browsing do not apply.
+	catVis, _ := s.d.Catalog.(interface{ SearchVisible(*core.Title) bool })
 	now := s.now()
 	creditLimit := max(limit*6, 60)
 	var actorTitles, directorTitles []reasonedTitle
@@ -951,7 +952,7 @@ func (s *Server) searchPeople(ctx context.Context, pr *Request, query string, se
 			if !allowedSet[t.Type] {
 				continue
 			}
-			if catVis != nil && !catVis.Visible(&t) {
+			if catVis != nil && !catVis.SearchVisible(&t) {
 				continue
 			}
 			if t.Adult || !t.IsReleased(now) {

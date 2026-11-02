@@ -373,3 +373,36 @@ func TestZeroVotesIsAValue(t *testing.T) {
 		t.Fatalf("year SQL lost its unknown guard: %s", sql)
 	}
 }
+
+func TestDiscoveryScopeIsDroppedForSearch(t *testing.T) {
+	korea := textRule("country", "in", `["KR"]`)
+	rated := core.CollectionRule{Field: "contentRating", Op: "gte", Value: json.RawMessage(`"R"`)}
+	f, err := CompilePolicy([]core.LibraryExclusion{
+		{MediaType: "mixed", Match: "all", Scope: core.VisibilityDiscovery, Rules: []core.CollectionRule{korea}},
+		{MediaType: "mixed", Match: "all", Scope: core.VisibilityEverywhere, Rules: []core.CollectionRule{rated}},
+	}, "show")
+	if err != nil {
+		t.Fatal(err)
+	}
+	search := f.ForSearch()
+	film := &core.Title{Type: core.TypeMovie, Countries: []string{"South Korea"}, ContentRating: "PG-13"}
+	if !f.Hidden(film) || search.Hidden(film) {
+		t.Fatalf("browse hidden=%v search hidden=%v, want true false", f.Hidden(film), search.Hidden(film))
+	}
+	// An everywhere rule after a browsing-only one still hides from search.
+	adult := &core.Title{Type: core.TypeMovie, Countries: []string{"KR"}, ContentRating: "R"}
+	if !f.Hidden(adult) || !search.Hidden(adult) {
+		t.Fatalf("R-rated: browse hidden=%v search hidden=%v", f.Hidden(adult), search.Hidden(adult))
+	}
+	if q, _ := search.SQLHidden(); strings.Contains(q, "catalog_countries") {
+		t.Fatalf("search SQL kept the browsing-only rule: %s", q)
+	}
+	for _, bad := range []core.LibraryExclusion{
+		{Action: "show", MediaType: "mixed", Match: "all", Scope: core.VisibilityDiscovery, Rules: []core.CollectionRule{korea}},
+		{MediaType: "mixed", Match: "all", Scope: "search", Rules: []core.CollectionRule{korea}},
+	} {
+		if _, err := Compile([]core.LibraryExclusion{bad}); err == nil {
+			t.Fatalf("accepted %+v", bad)
+		}
+	}
+}

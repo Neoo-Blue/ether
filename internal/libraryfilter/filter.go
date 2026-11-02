@@ -26,6 +26,7 @@ type condition struct {
 }
 type rule struct {
 	action, typ, match string
+	discovery          bool // hide from discovery only; search ignores it
 	rules              []condition
 }
 type Filter struct {
@@ -74,6 +75,16 @@ func CompilePolicy(specs []core.LibraryExclusion, fallback string) (*Filter, err
 			return nil, fmt.Errorf("group %d needs 1–20 conditions", i+1)
 		}
 		g := rule{action: action, typ: s.MediaType, match: s.Match}
+		switch s.Scope {
+		case "", core.VisibilityEverywhere:
+		case core.VisibilityDiscovery:
+			if action != "hide" {
+				return nil, fmt.Errorf("group %d: only hide rules can be limited to browsing", i+1)
+			}
+			g.discovery = true
+		default:
+			return nil, fmt.Errorf("group %d: scope must be everywhere or discovery", i+1)
+		}
 		for _, r := range s.Rules {
 			c, err := compileCondition(r)
 			if err != nil {
@@ -259,6 +270,23 @@ func CountryAliases(v string) []string {
 		if v == code || v == name || v == alias {
 			out = append(out, code, name, alias)
 			break
+		}
+	}
+	return out
+}
+
+// ForSearch returns the filter explicit searches use: the same rules without
+// the ones scoped to discovery. Only hide rules carry that scope, so a title
+// visible while browsing is never hidden from search. Compile it once per
+// config change; it shares the compiled conditions.
+func (f *Filter) ForSearch() *Filter {
+	if f == nil {
+		return nil
+	}
+	out := &Filter{fallback: f.fallback, rules: make([]rule, 0, len(f.rules))}
+	for _, g := range f.rules {
+		if !g.discovery {
+			out.rules = append(out.rules, g)
 		}
 	}
 	return out

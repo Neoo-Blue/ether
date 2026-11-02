@@ -7,22 +7,52 @@ import (
 	"github.com/braedonsaunders/ether/internal/libraryfilter"
 )
 
+// visibilityFilter is the discovery filter: every rule applies.
 func (c *Catalog) visibilityFilter() *libraryfilter.Filter {
 	c.cfgMu.RLock()
 	defer c.cfgMu.RUnlock()
 	return c.visibility
 }
+
+// visibilityFor picks the precompiled filter for ctx. An explicit search
+// skips rules the owner limited to browsing; everything else browses.
+func (c *Catalog) visibilityFor(ctx context.Context) *libraryfilter.Filter {
+	if core.ExplicitSearch(ctx) {
+		return c.searchFilter()
+	}
+	return c.visibilityFilter()
+}
+
+func (c *Catalog) searchFilter() *libraryfilter.Filter {
+	c.cfgMu.RLock()
+	defer c.cfgMu.RUnlock()
+	return c.searchVis
+}
+
+// Visible applies every visibility rule, as browsing and recommendations do.
 func (c *Catalog) Visible(t *core.Title) bool {
-	return !c.visibilityFilter().Hidden(t) && (!c.config().GateMoviesByHomeRelease || c.homeVisible(t))
+	return c.visibleWith(c.visibilityFilter(), t)
+}
+
+// SearchVisible skips rules limited to browsing, for explicit search results.
+func (c *Catalog) SearchVisible(t *core.Title) bool {
+	return c.visibleWith(c.searchFilter(), t)
+}
+
+func (c *Catalog) visibleWith(f *libraryfilter.Filter, t *core.Title) bool {
+	return !f.Hidden(t) && (!c.config().GateMoviesByHomeRelease || c.homeVisible(t))
 }
 
 // FilterVisibility enriches remote summaries with already-known local facets;
 // there are no detail fetches or indexer calls. Unknown metadata stays unknown.
+// An explicit search context (core.WithExplicitSearch) skips rules the owner
+// limited to browsing.
 func (c *Catalog) FilterVisibility(ctx context.Context, ts []core.Title) []core.Title {
 	if err := c.admitFallbacks(ctx); err != nil {
 		return nil
 	}
-	if c.visibilityFilter().Passive() && !c.config().GateMoviesByHomeRelease {
+	f := c.visibilityFor(ctx)
+	if f.Passive() && !c.config().GateMoviesByHomeRelease {
 		return ts
 	}
 	if len(ts) == 0 {
@@ -81,7 +111,6 @@ func (c *Catalog) FilterVisibility(ctx context.Context, ts []core.Title) []core.
 		}
 	}
 	keep := out[:0]
-	f := c.visibilityFilter()
 	for i := range out {
 		if !f.Hidden(&out[i]) && (!c.config().GateMoviesByHomeRelease || homeReleaseVisible(&out[i], c.now())) {
 			keep = append(keep, out[i])

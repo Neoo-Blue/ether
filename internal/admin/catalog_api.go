@@ -177,7 +177,8 @@ func (h *Handler) handleCatalogSearch(w http.ResponseWriter, r *http.Request) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
-	items, err := h.deps.CatalogHelper.SearchTitles(r.Context(), q.Get("q"), mediaTypeParam(q.Get("type")), limit)
+	// The console search finds titles hidden from browsing only.
+	items, err := h.deps.CatalogHelper.SearchTitles(core.WithExplicitSearch(r.Context()), q.Get("q"), mediaTypeParam(q.Get("type")), limit)
 	if err != nil {
 		h.writeServiceError(w, err)
 		return
