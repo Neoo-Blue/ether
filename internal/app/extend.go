@@ -51,6 +51,7 @@ func (a *App) extensibilityHandlers(m map[string]http.Handler) {
 	a.consoleStreamHandlers(m)
 	a.pluginHandlers(m)
 	a.agentHandlers(m)
+	a.mcpHandlers(m)
 }
 
 // mountExtensibility mounts routes that do not use owner-token auth: the MCP

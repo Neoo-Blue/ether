@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/braedonsaunders/ether/internal/agent/tools"
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/identity"
 	"github.com/braedonsaunders/ether/internal/store"
@@ -22,15 +23,14 @@ import (
 // MCP pairing: the owner clicks "Connect an AI app" in the console, which
 // is already an authenticated act, so POST /pair starts a Quick Connect
 // code and approves it at once. The person then exchanges the short code
-// for a grant token at /ether/mcp/exchange (one curl), and pastes the
-// returned command into their AI app. The pending row holds the Quick
-// Connect polling secret only until the single exchange, like Quick
-// Connect's own short-lived replay token.
+// for a grant token at /ether/mcp/exchange (one curl), or uses the short
+// code directly as a Bearer token before it expires.
 func init() {
 	store.Register("mcp_pairings", 1, `
 CREATE TABLE mcp_pairings (
   code TEXT PRIMARY KEY, secret TEXT NOT NULL, scopes TEXT NOT NULL DEFAULT '',
-  name TEXT NOT NULL DEFAULT '', expires INTEGER NOT NULL);
+  name TEXT NOT NULL DEFAULT '', expires INTEGER NOT NULL,
+  token TEXT NOT NULL DEFAULT '');
 CREATE INDEX mcp_pairings_expires ON mcp_pairings(expires);`)
 }
 
@@ -100,6 +100,67 @@ func (p *Pairing) ExchangeHandler() http.Handler {
 	return http.HandlerFunc(p.handleExchange)
 }
 
+// Authenticate resolves a bearer credential on the MCP surface. It accepts
+// either a grant token (`ethg_...`) or a short pairing code directly (which
+// is redeemed into a grant on first use before its 10-minute expiry). Every
+// request resolves through Grants.ResolveScoped so revoking a paired app in
+// the console immediately invalidates both the token and the code.
+func (p *Pairing) Authenticate(ctx context.Context, credential string) (tools.Principal, error) {
+	credential = strings.TrimSpace(credential)
+	if credential == "" {
+		return tools.Principal{}, core.ErrUnauthorized
+	}
+	token := credential
+	if !identity.IsGrantCredential(credential) {
+		redeemed, err := p.redeemCode(ctx, credential)
+		if err != nil {
+			return tools.Principal{}, err
+		}
+		token = redeemed
+	}
+	viewer, scopes, err := p.opts.Grants.ResolveScoped(ctx, identity.SurfaceMCP, token)
+	if err != nil || viewer == nil || !viewer.IsOwner {
+		return tools.Principal{}, core.ErrUnauthorized
+	}
+	return tools.Principal{
+		ViewerID: viewer.ID,
+		IsOwner:  true,
+		Surface:  identity.SurfaceMCP,
+		Scopes:   scopes,
+	}, nil
+}
+
+func (p *Pairing) redeemCode(ctx context.Context, rawCode string) (string, error) {
+	code := strings.ToUpper(strings.TrimSpace(rawCode))
+	if len(code) < 4 || len(code) > 16 {
+		return "", core.ErrUnauthorized
+	}
+	var secret, scopesRaw, existingToken string
+	var expires int64
+	err := p.opts.DB.QueryRowContext(ctx, `SELECT secret,scopes,expires,token FROM mcp_pairings WHERE code=?`, code).
+		Scan(&secret, &scopesRaw, &expires, &existingToken)
+	if err != nil {
+		return "", core.ErrUnauthorized
+	}
+	if existingToken != "" {
+		return existingToken, nil
+	}
+	if expires <= p.now().UnixMilli() {
+		_, _ = p.opts.DB.ExecContext(ctx, `DELETE FROM mcp_pairings WHERE code=?`, code)
+		return "", core.ErrUnauthorized
+	}
+	token, err := p.opts.QuickConnect.PollSurface(ctx, identity.SurfaceMCP, secret)
+	if err != nil {
+		return "", core.ErrUnauthorized
+	}
+	scopes := identity.ParseScopes(scopesRaw)
+	if err := p.opts.Grants.SetScopes(ctx, identity.SurfaceMCP, token, scopes); err != nil {
+		return "", err
+	}
+	_, _ = p.opts.DB.ExecContext(ctx, `UPDATE mcp_pairings SET token=?,secret='' WHERE code=?`, token, code)
+	return token, nil
+}
+
 func (p *Pairing) owner(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	id, err := p.opts.Authorize(r.Context())
 	if err != nil || id <= 0 {
@@ -152,10 +213,10 @@ func (p *Pairing) handlePair(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	expires := p.now().Add(p.opts.CodeTTL)
-	if _, err := p.opts.DB.ExecContext(ctx, `DELETE FROM mcp_pairings WHERE expires<=?`, p.now().UnixMilli()); err != nil {
+	if _, err := p.opts.DB.ExecContext(ctx, `DELETE FROM mcp_pairings WHERE expires<=? AND token=''`, p.now().UnixMilli()); err != nil {
 		p.log.Warn("mcp pairing cleanup failed", "err", err)
 	}
-	if _, err := p.opts.DB.ExecContext(ctx, `INSERT INTO mcp_pairings(code,secret,scopes,name,expires) VALUES(?,?,?,?,?)`,
+	if _, err := p.opts.DB.ExecContext(ctx, `INSERT INTO mcp_pairings(code,secret,scopes,name,expires,token) VALUES(?,?,?,?,?,'')`,
 		code, secret, strings.Join(scopes, " "), name, expires.UnixMilli()); err != nil {
 		p.log.Warn("mcp pairing store failed", "err", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "could not start pairing"})
@@ -196,11 +257,11 @@ func (p *Pairing) handleExchange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	var secret, scopesRaw, name string
+	var secret, scopesRaw, name, existingToken string
 	var expires int64
-	err := p.opts.DB.QueryRowContext(ctx, `SELECT secret,scopes,name,expires FROM mcp_pairings WHERE code=?`, code).
-		Scan(&secret, &scopesRaw, &name, &expires)
-	if errors.Is(err, sql.ErrNoRows) {
+	err := p.opts.DB.QueryRowContext(ctx, `SELECT secret,scopes,name,expires,token FROM mcp_pairings WHERE code=?`, code).
+		Scan(&secret, &scopesRaw, &name, &expires, &existingToken)
+	if errors.Is(err, sql.ErrNoRows) || existingToken != "" {
 		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "unknown or already-used code"})
 		return
 	}

@@ -400,7 +400,7 @@ func writeTools(d Deps) []tools.Tool {
 			InputSchema: schema(map[string]any{
 				"frontendId": pString("A frontend id, for example jellyfin", 40),
 				"enabled":    pBool("True to turn it on, false to turn it off"),
-			})),
+			}),
 			Execute: func(ctx context.Context, _ tools.Principal, in map[string]any) (tools.Result, error) {
 				frontends, err := d.Frontends.Frontends(ctx)
 				if err != nil {
@@ -485,7 +485,7 @@ func writeTools(d Deps) []tools.Tool {
 			Description: "Propose restarting Ether. Prefer whenIdle so nobody's playback is interrupted. The server comes back on its own; this tool's approval happens first.",
 			InputSchema: schema(map[string]any{
 				"whenIdle": pBool("Wait until nothing is playing"),
-			})),
+			}),
 			Execute: func(_ context.Context, _ tools.Principal, in map[string]any) (tools.Result, error) {
 				whenIdle, err := boolArg(in, "whenIdle", true)
 				if err != nil {

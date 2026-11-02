@@ -373,13 +373,15 @@ func stringsArg(in map[string]any, key string, maxItems, maxLen int) ([]string, 
 
 // keyArg parses a rating key (tools address titles by their string key).
 func keyArg(in map[string]any, key string) (core.RatingKey, error) {
-	if f, ok, err := num(in, key); err != nil {
-		return 0, err
-	} else if ok {
-		if f <= 0 || f > 1<<62 {
-			return 0, tools.Userf("%s is not a valid title key", key)
+	if _, isStr := in[key].(string); !isStr {
+		if f, ok, err := num(in, key); err != nil {
+			return 0, err
+		} else if ok {
+			if f <= 0 || f > 1<<62 {
+				return 0, tools.Userf("%s is not a valid title key", key)
+			}
+			return core.RatingKey(int64(f)), nil
 		}
-		return core.RatingKey(int64(f)), nil
 	}
 	s, err := reqStr(in, key, 32)
 	if err != nil {

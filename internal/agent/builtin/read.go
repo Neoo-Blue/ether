@@ -100,8 +100,8 @@ func readTools(d Deps) []tools.Tool {
 				out := make([]any, 0, len(rows))
 				for _, e := range rows {
 					row := map[string]any{
-						"titleKey": fmt.Sprint(int64(e.Key)),
-						"viewedAt": e.ViewedAt.UTC().Format(time.RFC3339),
+						"titleKey":  fmt.Sprint(int64(e.Key)),
+						"viewedAt":  e.ViewedAt.UTC().Format(time.RFC3339),
 						"completed": e.Completed,
 					}
 					if t, err := d.Catalog.Get(ctx, e.Key); err == nil && t != nil {
@@ -252,7 +252,7 @@ func readTools(d Deps) []tools.Tool {
 				"lines": pInt("How many lines, at most 200", 1, 200),
 				"level": pEnum("Minimum level", "debug", "info", "warn", "error"),
 				"query": pString("Only lines containing this text", 80),
-			})),
+			}),
 			Execute: func(_ context.Context, _ tools.Principal, in map[string]any) (tools.Result, error) {
 				lines, err := intArg(in, "lines", 50, 1, 200)
 				if err != nil {
@@ -368,7 +368,7 @@ func readTools(d Deps) []tools.Tool {
 			Description: "The owner's collections with their keys and sizes. Use collection_preview to see what is inside one.",
 			InputSchema: schema(map[string]any{
 				"type": pEnum("Only collections of this kind", "movie", "show"),
-			})),
+			}),
 			Execute: func(ctx context.Context, _ tools.Principal, in map[string]any) (tools.Result, error) {
 				owner, err := d.OwnerUser(ctx)
 				if err != nil || owner == nil {
@@ -635,7 +635,7 @@ func readTools(d Deps) []tools.Tool {
 			Description: "Open a console page for the owner. Give a page name or route from the known list; call with no route to list the pages. In MCP the route comes back as a link instead.",
 			InputSchema: schema(map[string]any{
 				"route": pString("A console route like /releases, or a page name", 120),
-			})),
+			}),
 			Execute: func(_ context.Context, _ tools.Principal, in map[string]any) (tools.Result, error) {
 				want, err := optStr(in, "route", 120)
 				if err != nil {

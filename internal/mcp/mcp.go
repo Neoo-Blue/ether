@@ -32,6 +32,15 @@ type ApprovalStore interface {
 	CreateApproval(ctx context.Context, a agent.Approval) (agent.Approval, error)
 }
 
+// transcriptStore is optionally satisfied by *agent.Store so MCP write
+// proposals also create a console conversation card the owner can approve in
+// the Ask Ether drawer.
+type transcriptStore interface {
+	CreateThread(ctx context.Context, title string) (agent.Thread, error)
+	AppendMessage(ctx context.Context, threadID, role string, parts json.RawMessage) (agent.Message, error)
+	UpdateParts(ctx context.Context, messageID string, parts json.RawMessage) error
+}
+
 // AuditEvent is one tools/call, for the audit sink.
 type AuditEvent struct {
 	Tool      string
@@ -49,6 +58,9 @@ type Options struct {
 	// Approvals receives write proposals. Nil means write tools answer
 	// with an error result instead of a pending approval.
 	Approvals ApprovalStore
+	// OnApproval is called after a write proposal is stored, so the app
+	// can notify the console stream (admin.StreamAgentApproval).
+	OnApproval func(ctx context.Context, a agent.Approval)
 	// Authenticate resolves a bearer token to a principal (surface "mcp").
 	Authenticate func(ctx context.Context, token string) (tools.Principal, error)
 	Resources    []Resource
@@ -213,7 +225,7 @@ func (s *Server) dispatch(ctx context.Context, r *http.Request, p tools.Principa
 				"tools":     map[string]any{"listChanged": false},
 				"resources": map[string]any{"subscribe": false, "listChanged": false},
 			},
-			"serverInfo":  map[string]any{"name": "ether", "version": s.opts.Version},
+			"serverInfo":   map[string]any{"name": "ether", "version": s.opts.Version},
 			"instructions": "Ether is a media server. Read tools answer questions about playback, releases and health. Write tools never apply directly: they return a pending approval the owner decides in the Ether console. Read the ether://docs/how-ether-works resource first.",
 		}, nil
 	case "ping":
@@ -319,9 +331,10 @@ func (s *Server) callTool(ctx context.Context, r *http.Request, p tools.Principa
 	case result.Secret != nil:
 		audit.Status = "secret_request"
 		structured := map[string]any{
-			"status":  "secret_required",
-			"message": "This change needs a credential, which is never collected over MCP. Ask the owner to do it in the Ether console (Ask Ether can start it; the value goes into a secret card there).",
-			"provider": result.Secret.ProviderLabel, "credential": result.Secret.CredentialLabel,
+			"status":     "secret_required",
+			"message":    "This change needs a credential, which is never collected over MCP. Ask the owner to do it in the Ether console (Ask Ether can start it; the value goes into a secret card there).",
+			"provider":   result.Secret.ProviderLabel,
+			"credential": result.Secret.CredentialLabel,
 		}
 		return toolResult(structured, false), nil
 	default:
@@ -359,13 +372,61 @@ func (s *Server) proposalResult(ctx context.Context, r *http.Request, p tools.Pr
 	if input == nil {
 		input = map[string]any{}
 	}
+	var threadID, messageID string
+	ts, hasTranscript := s.opts.Approvals.(transcriptStore)
+	if hasTranscript {
+		title := prop.Category
+		if title == "" {
+			title = tool.Title
+		}
+		if th, err := ts.CreateThread(ctx, title); err == nil {
+			threadID = th.ID
+			if msg, err := ts.AppendMessage(ctx, threadID, "assistant", json.RawMessage(`[]`)); err == nil {
+				messageID = msg.ID
+			}
+		}
+	}
 	appr, err := s.opts.Approvals.CreateApproval(ctx, agent.Approval{
+		ThreadID: threadID, MessageID: messageID,
 		ToolName: tool.Name, Input: input,
 		Category: prop.Category, Description: prop.Description, Details: details,
 	})
 	if err != nil {
 		s.log.Warn("mcp approval store failed", "tool", tool.Name, "err", err)
 		return toolResult(map[string]any{"error": tools.SafeMessage(err)}, true)
+	}
+	if hasTranscript && messageID != "" {
+		detailParts := make([]any, 0, len(prop.Details))
+		for _, d := range prop.Details {
+			detailParts = append(detailParts, map[string]any{"label": d.Label, "value": d.Value})
+		}
+		parts := []map[string]any{
+			{
+				"type":       "tool-" + tool.Name,
+				"toolCallId": "call_" + appr.ID,
+				"state":      "output-available",
+				"input":      input,
+				"output": map[string]any{
+					"status":     "pending_approval",
+					"approvalId": appr.ID,
+					"change":     prop.Description,
+				},
+			},
+			{
+				"type":          "approval-request",
+				"approvalId":    appr.ID,
+				"categoryLabel": prop.Category,
+				"description":   prop.Description,
+				"details":       detailParts,
+				"status":        "pending",
+			},
+		}
+		if raw, err := json.Marshal(parts); err == nil {
+			_ = ts.UpdateParts(ctx, messageID, raw)
+		}
+	}
+	if s.opts.OnApproval != nil {
+		s.opts.OnApproval(ctx, appr)
 	}
 	return toolResult(map[string]any{
 		"status":      "pending_approval",

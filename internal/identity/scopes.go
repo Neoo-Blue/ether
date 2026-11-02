@@ -30,7 +30,7 @@ const (
 )
 
 func init() {
-	store.Register("identity_grants", 2, `ALTER TABLE identity_grants ADD COLUMN scopes TEXT NOT NULL DEFAULT '';`)
+	store.Register("identity_grants", 3, `ALTER TABLE identity_grants ADD COLUMN scopes TEXT NOT NULL DEFAULT '';`)
 }
 
 // NormaliseScopes validates, deduplicates and sorts scopes for storage.
