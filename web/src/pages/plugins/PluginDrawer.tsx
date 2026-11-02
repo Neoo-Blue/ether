@@ -391,20 +391,6 @@ export function PluginDrawer({
     }
   };
 
-  const toggleAutoUpdate = async (next: boolean) => {
-    if (!detail) return;
-    setDetail({ ...detail, autoUpdate: next });
-    try {
-      await apiFetch(`/plugins/${encodeURIComponent(detail.id)}/auto-update`, {
-        method: "POST",
-        body: JSON.stringify({ autoUpdate: next }),
-      });
-      onChanged();
-    } catch {
-      // Keep local toggle state if server route is not wired yet
-    }
-  };
-
   const rollbackVersion = async () => {
     if (!detail) return;
     setRollingBack(true);
@@ -1165,14 +1151,13 @@ export function PluginDrawer({
               <SettingsSection title={t("Update preferences")}>
                 <SettingsRow
                   title={<label htmlFor="plugin-auto-update">{t("Auto-update")}</label>}
-                  description={t(
-                    "Automatically install new versions when they do not ask for new permissions.",
-                  )}
+                  description={t("Changing auto-update is not available yet.")}
                   control={
                     <Switch
                       id="plugin-auto-update"
                       checked={detail.autoUpdate}
-                      onChange={(e) => void toggleAutoUpdate(e.currentTarget.checked)}
+                      disabled
+                      onChange={() => {}}
                       aria-label={t("Auto-update")}
                     />
                   }
