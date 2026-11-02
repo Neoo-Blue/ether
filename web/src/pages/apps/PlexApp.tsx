@@ -20,8 +20,12 @@ import { t, tx } from "../../i18n";
 import { ApiError, api, errorMessage } from "../../lib/api";
 import { useAsync } from "../../lib/hooks";
 import type { EtherConfig } from "../../lib/types";
-import { SchemaField, type FieldDef } from "../settings/SchemaForm";
-import * as schema from "../settings/schema";
+import {
+  SchemaField,
+  useSettingsSchema,
+  type FieldDef,
+  type FieldGroup,
+} from "../settings/SchemaForm";
 import { PlexStatus } from "../settings/sections";
 import {
   claimFailureMessage,
@@ -43,16 +47,16 @@ export function plexSection(section: string | undefined): PlexSection {
   return "account";
 }
 
-function plexGroup(id: string) {
-  const group = schema.PLEX.find((item) => item.id === id);
+function plexGroup(groups: FieldGroup[], id: string) {
+  const group = groups.find((item) => item.id === id);
   if (!group) throw new Error(`missing Plex settings group ${id}`);
   return group;
 }
 
-function networkFields(): FieldDef[] {
-  return schema.SERVER.flatMap((group) => group.fields).filter((field) =>
-    ["port", "bindAddress"].includes(field.key),
-  );
+function networkFields(groups: FieldGroup[]): FieldDef[] {
+  return groups
+    .flatMap((group) => group.fields)
+    .filter((field) => ["port", "bindAddress"].includes(field.key));
 }
 
 function FieldList({
@@ -312,6 +316,8 @@ export function PlexApp({
     };
   }, [config.data]);
   const { draft, setDraft, dirty, reset } = useDraft(saved);
+  const plexSchema = useSettingsSchema("plex");
+  const serverSchema = useSettingsSchema("server");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<unknown>();
   const [saving, setSaving] = useState(false);
@@ -389,7 +395,7 @@ export function PlexApp({
   );
   if (hidden) return saveBar;
   if (config.error) return <ErrorPanel error={config.error} onRetry={() => void config.reload()} />;
-  if (!config.data || !draft)
+  if (!config.data || !draft || !plexSchema.groups || !serverSchema.groups)
     return (
       <div className="py-10 text-center">
         <Spinner size={20} label={t("Loading settings")} />
@@ -400,9 +406,9 @@ export function PlexApp({
     setDraft((old) => (old ? { ...old, plex: { ...old.plex, [key]: value } } : old));
   const setServer = (key: string, value: unknown) =>
     setDraft((old) => (old ? { ...old, [key]: value } : old));
-  const remote = plexGroup("remote");
-  const secure = plexGroup("secure");
-  const compatibility = plexGroup("compatibility");
+  const remote = plexGroup(plexSchema.groups, "remote");
+  const secure = plexGroup(plexSchema.groups, "secure");
+  const compatibility = plexGroup(plexSchema.groups, "compatibility");
   const tabs = [
     { key: "account", label: t("Account") },
     { key: "remote", label: t("Remote access") },
@@ -447,7 +453,7 @@ export function PlexApp({
             description={t("Where Plex apps on your network connect to this server.")}
           >
             <FieldList
-              fields={networkFields()}
+              fields={networkFields(serverSchema.groups)}
               value={{ port: draft.port, bindAddress: draft.bindAddress }}
               errors={activeErrors}
               prefix="server"

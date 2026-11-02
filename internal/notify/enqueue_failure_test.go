@@ -21,7 +21,7 @@ func TestOutageAlertsRetryAfterQueueFailure(t *testing.T) {
 			defer db.Close()
 			now := time.Now()
 			s := New(db, Options{Now: func() time.Time { return now }, Providers: func() []usenet.ProviderStats { return []usenet.ProviderStats{{ID: "p", State: usenet.StateBackoff}} }})
-			if err := s.Save(ctx, Channel{ID: "hook", Kind: "webhook", Enabled: true, Endpoint: "https://fixture.example/hook", Events: []string{"*"}}); err != nil {
+			if err := s.Save(ctx, Channel{ID: "hook", Kind: "webhook", Enabled: true, Secrets: map[string]string{"endpoint": "https://fixture.example/hook"}, Events: []string{"*"}}); err != nil {
 				t.Fatal(err)
 			}
 			if store.DialectOf(db) == store.Postgres {
@@ -74,7 +74,7 @@ func TestEmitQueuesAllChannelsAtomically(t *testing.T) {
 	defer db.Close()
 	s := New(db, Options{})
 	for _, id := range []string{"a", "b"} {
-		if err := s.Save(ctx, Channel{ID: id, Kind: "webhook", Enabled: true, Endpoint: "https://fixture.example/hook", Events: []string{"*"}}); err != nil {
+		if err := s.Save(ctx, Channel{ID: id, Kind: "webhook", Enabled: true, Secrets: map[string]string{"endpoint": "https://fixture.example/hook"}, Events: []string{"*"}}); err != nil {
 			t.Fatal(err)
 		}
 	}

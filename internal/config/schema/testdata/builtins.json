@@ -1,0 +1,1881 @@
+[
+  {
+    "id": "server",
+    "configKey": "server",
+    "label": {
+      "source": "What viewers see"
+    },
+    "schema": {
+      "groups": [
+        {
+          "description": {
+            "source": "The names apps show for this server and its libraries."
+          },
+          "fields": [
+            {
+              "help": {
+                "source": "How the server appears in apps."
+              },
+              "key": "friendlyName",
+              "kind": "text",
+              "label": {
+                "source": "Server name"
+              }
+            },
+            {
+              "help": {
+                "source": "Name shown in Plex. A rename inside Plex does not stick."
+              },
+              "key": "moviesLibraryName",
+              "kind": "text",
+              "label": {
+                "source": "Movies library name"
+              }
+            },
+            {
+              "help": {
+                "source": "Name shown in Plex. A rename inside Plex does not stick."
+              },
+              "key": "tvShowsLibraryName",
+              "kind": "text",
+              "label": {
+                "source": "TV Shows library name"
+              }
+            }
+          ],
+          "id": "identity",
+          "title": {
+            "source": "What viewers see"
+          }
+        },
+        {
+          "description": {
+            "source": "The address apps use to reach this computer."
+          },
+          "fields": [
+            {
+              "help": {
+                "source": "Plex apps expect 32400. A restart is needed after changing it."
+              },
+              "key": "port",
+              "kind": "number",
+              "label": {
+                "source": "Port"
+              },
+              "max": 65535,
+              "min": 1,
+              "step": 1
+            }
+          ],
+          "id": "connect",
+          "more": [
+            {
+              "help": {
+                "source": "0.0.0.0 listens on every network interface."
+              },
+              "key": "bindAddress",
+              "kind": "text",
+              "label": {
+                "source": "Listen address"
+              }
+            },
+            {
+              "help": {
+                "source": "Generated on first run; never changes."
+              },
+              "key": "machineIdentifier",
+              "kind": "readonly",
+              "label": {
+                "source": "Machine identifier"
+              }
+            },
+            {
+              "help": {
+                "source": "Exact addresses allowed to frame the owner page. Empty means nowhere."
+              },
+              "key": "webFrameOrigins",
+              "kind": "list",
+              "label": {
+                "source": "Sites that may embed this page"
+              },
+              "placeholder": "https://home.example.com"
+            },
+            {
+              "help": {
+                "source": "Networks whose forwarding headers Ether trusts. Empty trusts none."
+              },
+              "key": "trustedProxyCIDRs",
+              "kind": "list",
+              "label": {
+                "source": "Trusted proxy networks"
+              },
+              "placeholder": "10.0.0.0/8"
+            },
+            {
+              "key": "logLevel",
+              "kind": "select",
+              "label": {
+                "source": "Log level"
+              },
+              "options": [
+                {
+                  "value": "debug",
+                  "label": {
+                    "source": "Debug"
+                  }
+                },
+                {
+                  "value": "info",
+                  "label": {
+                    "source": "Info"
+                  }
+                },
+                {
+                  "value": "warn",
+                  "label": {
+                    "source": "Warnings"
+                  }
+                },
+                {
+                  "value": "error",
+                  "label": {
+                    "source": "Errors only"
+                  }
+                }
+              ]
+            }
+          ],
+          "title": {
+            "source": "How apps connect"
+          }
+        },
+        {
+          "description": {
+            "source": "Leave these at the defaults unless too many people are watching at the same time."
+          },
+          "fields": [],
+          "id": "streams",
+          "more": [
+            {
+              "help": {
+                "source": "Default simultaneous streams for each viewer. 0 = unlimited."
+              },
+              "key": "defaultStreamLimit",
+              "kind": "number",
+              "label": {
+                "source": "Streams per viewer"
+              },
+              "min": 0,
+              "step": 1
+            },
+            {
+              "help": {
+                "source": "0 derives the limit from your Usenet connections."
+              },
+              "key": "maxStreams",
+              "kind": "number",
+              "label": {
+                "source": "Server-wide limit"
+              },
+              "min": 0,
+              "step": 1
+            }
+          ],
+          "title": {
+            "source": "Who can watch at once"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "plex",
+    "configKey": "plex",
+    "label": {
+      "source": "Remote access"
+    },
+    "schema": {
+      "groups": [
+        {
+          "description": {
+            "source": "Let Plex apps reach Ether from outside your network."
+          },
+          "fields": [
+            {
+              "help": {
+                "source": "Publishes your public address to plex.tv."
+              },
+              "key": "remoteAccess",
+              "kind": "bool",
+              "label": {
+                "source": "Allow remote access"
+              }
+            }
+          ],
+          "id": "remote",
+          "more": [
+            {
+              "help": {
+                "source": "Asks your router to forward the port."
+              },
+              "key": "useUpnp",
+              "kind": "bool",
+              "label": {
+                "source": "Map the port automatically (UPnP)"
+              }
+            },
+            {
+              "help": {
+                "source": "The port forwarded on your router. 0 uses the server port."
+              },
+              "key": "publicPort",
+              "kind": "number",
+              "label": {
+                "source": "Public port"
+              },
+              "max": 65535,
+              "min": 0,
+              "step": 1
+            },
+            {
+              "help": {
+                "source": "Optional. Leave empty to detect your public address."
+              },
+              "key": "publicHost",
+              "kind": "text",
+              "label": {
+                "source": "Public host name"
+              }
+            },
+            {
+              "help": {
+                "source": "Extra addresses Plex apps should try, comma-separated."
+              },
+              "key": "customUrls",
+              "kind": "list",
+              "label": {
+                "source": "Custom server URLs"
+              },
+              "placeholder": "https://ether.example.com:443"
+            }
+          ],
+          "title": {
+            "source": "Remote access"
+          }
+        },
+        {
+          "description": {
+            "source": "How Plex apps encrypt the connection to this server."
+          },
+          "fields": [
+            {
+              "key": "secureConnections",
+              "kind": "select",
+              "label": {
+                "source": "Secure connections"
+              },
+              "options": [
+                {
+                  "value": "required",
+                  "label": {
+                    "source": "Required"
+                  }
+                },
+                {
+                  "value": "preferred",
+                  "label": {
+                    "source": "Preferred"
+                  }
+                },
+                {
+                  "value": "disabled",
+                  "label": {
+                    "source": "Disabled"
+                  }
+                }
+              ]
+            }
+          ],
+          "id": "secure",
+          "more": [
+            {
+              "help": {
+                "source": "Leave empty to use the plex.direct certificate Ether manages."
+              },
+              "key": "certFile",
+              "kind": "text",
+              "label": {
+                "source": "Certificate file"
+              },
+              "wide": true
+            },
+            {
+              "help": {
+                "source": "The private key that matches the certificate file."
+              },
+              "key": "keyFile",
+              "kind": "text",
+              "label": {
+                "source": "Key file"
+              },
+              "wide": true
+            }
+          ],
+          "title": {
+            "source": "Secure connections"
+          }
+        },
+        {
+          "fields": [
+            {
+              "help": {
+                "source": "Off reports the version Ether is verified against. Plex enables features by server version."
+              },
+              "key": "trackLatestVersion",
+              "kind": "bool",
+              "label": {
+                "source": "Report the latest public PMS version"
+              }
+            },
+            {
+              "key": "latestCompatibilityVersion",
+              "kind": "readonly",
+              "label": {
+                "source": "Latest public PMS version"
+              }
+            }
+          ],
+          "id": "compatibility",
+          "more": [
+            {
+              "help": {
+                "source": "Leave empty to use the verified version, or the latest public version when tracking is on."
+              },
+              "key": "compatibilityVersion",
+              "kind": "text",
+              "label": {
+                "source": "Compatibility version override"
+              }
+            }
+          ],
+          "title": {
+            "source": "Compatibility"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "cache",
+    "configKey": "cache",
+    "label": {
+      "source": "Disk cache"
+    },
+    "schema": {
+      "groups": [
+        {
+          "description": {
+            "source": "Segments from Usenet are cached on disk so seeks and rewatches are instant."
+          },
+          "fields": [
+            {
+              "key": "dir",
+              "kind": "text",
+              "label": {
+                "source": "Cache folder"
+              },
+              "wide": true
+            },
+            {
+              "help": {
+                "source": "The oldest segments are evicted when the cache reaches this size."
+              },
+              "key": "budgetBytes",
+              "kind": "bytes",
+              "label": {
+                "source": "Disk budget"
+              },
+              "unit": {
+                "source": "GiB"
+              }
+            }
+          ],
+          "title": {
+            "source": "Disk cache"
+          }
+        },
+        {
+          "fields": [
+            {
+              "help": {
+                "source": "Warms the opening of the next episode so it starts instantly."
+              },
+              "key": "prefetchNextEpisode",
+              "kind": "bool",
+              "label": {
+                "source": "Prefetch the next episode"
+              }
+            },
+            {
+              "help": {
+                "source": "Fraction of the current episode watched (0–1)."
+              },
+              "key": "nextEpisodeAt",
+              "kind": "number",
+              "label": {
+                "source": "Start prefetching at"
+              },
+              "max": 1,
+              "min": 0,
+              "step": 0.05
+            },
+            {
+              "help": {
+                "source": "How much of the next episode to pull ahead."
+              },
+              "key": "prefetchBytes",
+              "kind": "bytes",
+              "label": {
+                "source": "Prefetch size"
+              },
+              "unit": {
+                "source": "MiB"
+              }
+            },
+            {
+              "help": {
+                "source": "Keeps the resume point of unfinished titles cached."
+              },
+              "key": "keepInProgressWarm",
+              "kind": "bool",
+              "label": {
+                "source": "Keep in-progress titles warm"
+              }
+            },
+            {
+              "help": {
+                "source": "An unfinished title nobody has watched for this long loses its cache pin. Empty uses 30 days."
+              },
+              "key": "inProgressPinMaxAge",
+              "kind": "duration",
+              "label": {
+                "source": "Stop keeping a title warm after"
+              },
+              "placeholder": "720h"
+            },
+            {
+              "help": {
+                "source": "Percent of the disk budget unfinished titles may keep pinned; the least recently watched lose their pin first. 0 uses 50."
+              },
+              "key": "inProgressPinPercent",
+              "kind": "number",
+              "label": {
+                "source": "Share of the cache for in-progress titles"
+              },
+              "max": 100,
+              "min": 0,
+              "step": 5
+            }
+          ],
+          "title": {
+            "source": "Prefetch"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "catalog",
+    "configKey": "catalog",
+    "label": {
+      "source": "Names and dates"
+    },
+    "schema": {
+      "groups": [
+        {
+          "description": {
+            "source": "Language and region choose title names, descriptions, release dates and which titles count as available."
+          },
+          "fields": [
+            {
+              "help": {
+                "source": "Metadata language, e.g. en-US or fr-FR."
+              },
+              "key": "language",
+              "kind": "text",
+              "label": {
+                "source": "Language"
+              }
+            },
+            {
+              "help": {
+                "source": "Two-letter region for release dates and streaming availability."
+              },
+              "key": "region",
+              "kind": "text",
+              "label": {
+                "source": "Region"
+              }
+            },
+            {
+              "key": "refreshInterval",
+              "kind": "duration",
+              "label": {
+                "source": "Refresh every"
+              }
+            }
+          ],
+          "title": {
+            "source": "Names and dates"
+          }
+        },
+        {
+          "description": {
+            "source": "Hide obscure titles from libraries. They stay searchable."
+          },
+          "fields": [
+            {
+              "key": "minPopularity",
+              "kind": "number",
+              "label": {
+                "source": "Minimum popularity"
+              },
+              "min": 0,
+              "step": 1
+            },
+            {
+              "key": "minVotes",
+              "kind": "number",
+              "label": {
+                "source": "Minimum votes"
+              },
+              "min": 0,
+              "step": 10
+            },
+            {
+              "key": "includeAdult",
+              "kind": "bool",
+              "label": {
+                "source": "Include adult titles"
+              }
+            },
+            {
+              "help": {
+                "source": "Hide automatic franchise groups, such as Zootopia."
+              },
+              "key": "hideFranchiseCollections",
+              "kind": "bool",
+              "label": {
+                "source": "Hide automatic franchise collections"
+              }
+            }
+          ],
+          "title": {
+            "source": "What's browsable"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "playVersions",
+    "configKey": "resolver",
+    "label": {
+      "source": "Versions in the app"
+    },
+    "schema": {
+      "groups": [
+        {
+          "description": {
+            "source": "Extra copies of the same picture, after Auto."
+          },
+          "fields": [
+            {
+              "help": {
+                "source": "Listed after Auto in the app's version menu."
+              },
+              "key": "sameQualityAlternatives",
+              "kind": "number",
+              "label": {
+                "source": "Same-quality versions to offer"
+              },
+              "max": 3,
+              "min": 0,
+              "step": 1
+            },
+            {
+              "help": {
+                "source": "Version menus can list releases taller than the profile. Off keeps the ceiling you set. HDR and file-size limits still apply."
+              },
+              "key": "offerHigherVersions",
+              "kind": "bool",
+              "label": {
+                "source": "Offer higher versions"
+              }
+            }
+          ],
+          "title": {
+            "source": "Versions in the app"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "releaseSearch",
+    "configKey": "resolver",
+    "label": {
+      "source": "How Ether searches"
+    },
+    "schema": {
+      "groups": [
+        {
+          "description": {
+            "source": "How many releases Ether keeps ready, and how long it remembers a search. The defaults are enough for a household."
+          },
+          "fields": [
+            {
+              "help": {
+                "source": "Fallback releases kept for instant failover."
+              },
+              "key": "maxCandidates",
+              "kind": "number",
+              "label": {
+                "source": "Releases to keep ready"
+              },
+              "min": 0,
+              "step": 1
+            },
+            {
+              "help": {
+                "source": "Articles checked before a release is trusted."
+              },
+              "key": "healthSamples",
+              "kind": "number",
+              "label": {
+                "source": "Health check samples"
+              },
+              "min": 0,
+              "step": 1
+            },
+            {
+              "key": "searchCacheTtl",
+              "kind": "duration",
+              "label": {
+                "source": "Remember searches for"
+              }
+            },
+            {
+              "key": "unavailableCooloff",
+              "kind": "duration",
+              "label": {
+                "source": "Retry unavailable titles after"
+              }
+            }
+          ],
+          "title": {
+            "source": "How Ether searches"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "releaseBlocks",
+    "configKey": "resolver",
+    "label": {
+      "source": "Words and groups"
+    },
+    "schema": {
+      "groups": [
+        {
+          "description": {
+            "source": "A release whose name contains one of these words, or whose release group matches, is never played."
+          },
+          "fields": [
+            {
+              "key": "blockedGroups",
+              "kind": "list",
+              "label": {
+                "source": "Blocked release groups"
+              },
+              "placeholder": "GROUP1, GROUP2"
+            },
+            {
+              "key": "blockedTerms",
+              "kind": "list",
+              "label": {
+                "source": "Blocked terms"
+              },
+              "placeholder": "hardcoded, korsub"
+            }
+          ],
+          "title": {
+            "source": "Words and groups"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "transcode",
+    "configKey": "transcode",
+    "label": {
+      "source": "Converting for the app"
+    },
+    "schema": {
+      "groups": [
+        {
+          "description": {
+            "source": "Ether plays the file directly when the app can. It converts the video on this computer only when it has to."
+          },
+          "fields": [
+            {
+              "help": {
+                "source": "Automatic uses this computer's graphics chip when an app can't play the file as-is. Choose Off only if converted video looks wrong."
+              },
+              "key": "hwAccel",
+              "kind": "select",
+              "label": {
+                "source": "Hardware acceleration"
+              },
+              "options": [
+                {
+                  "value": "auto",
+                  "label": {
+                    "source": "Automatic"
+                  }
+                },
+                {
+                  "value": "none",
+                  "label": {
+                    "source": "Off (software)"
+                  }
+                },
+                {
+                  "value": "videotoolbox",
+                  "label": {
+                    "source": "VideoToolbox (Apple)"
+                  }
+                },
+                {
+                  "value": "nvenc",
+                  "label": {
+                    "source": "NVENC (NVIDIA)"
+                  }
+                },
+                {
+                  "value": "qsv",
+                  "label": {
+                    "source": "Quick Sync (Intel)"
+                  }
+                },
+                {
+                  "value": "vaapi",
+                  "label": {
+                    "source": "VA-API (Linux)"
+                  }
+                }
+              ]
+            }
+          ],
+          "id": "convert",
+          "more": [
+            {
+              "help": {
+                "source": "Linux graphics device, for example /dev/dri/renderD128. Leave empty unless converted video fails to start."
+              },
+              "key": "vaapiDevice",
+              "kind": "text",
+              "label": {
+                "source": "VA-API device"
+              }
+            },
+            {
+              "help": {
+                "source": "How many videos can be converted at once. Leave the default unless several people watch together and the computer struggles."
+              },
+              "key": "maxTranscodes",
+              "kind": "number",
+              "label": {
+                "source": "Simultaneous transcodes"
+              },
+              "min": 0,
+              "step": 1
+            },
+            {
+              "help": {
+                "source": "Limits picture quality for people watching away from home, so the stream fits their connection. 0 means no limit."
+              },
+              "key": "remoteMaxBitrateKbps",
+              "kind": "number",
+              "label": {
+                "source": "Remote bitrate cap"
+              },
+              "min": 0,
+              "step": 500,
+              "unit": {
+                "source": "kbps"
+              }
+            }
+          ],
+          "title": {
+            "source": "Converting for the app"
+          }
+        },
+        {
+          "description": {
+            "source": "On a supported NVIDIA graphics card, Ether can clean up a soft video before sending it. This uses extra graphics power, and Ether installs what it needs on a supported Windows computer."
+          },
+          "fields": [
+            {
+              "fields": [
+                {
+                  "help": {
+                    "source": "Cleans up a soft picture before it is sent. The viewer's resolution and bitrate limits still apply. Unsupported videos play normally."
+                  },
+                  "key": "mode",
+                  "kind": "select",
+                  "label": {
+                    "source": "RTX Video Super Resolution"
+                  },
+                  "options": [
+                    {
+                      "value": "off",
+                      "label": {
+                        "source": "Off"
+                      }
+                    },
+                    {
+                      "value": "auto",
+                      "label": {
+                        "source": "Automatic · local streams"
+                      }
+                    },
+                    {
+                      "value": "on",
+                      "label": {
+                        "source": "On · eligible streams"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "key": "rtxVideo",
+              "kind": "group",
+              "label": {
+                "source": "RTX Video Super Resolution"
+              }
+            }
+          ],
+          "id": "enhance",
+          "more": [
+            {
+              "fields": [
+                {
+                  "help": {
+                    "source": "Videos taller than this play normally, without enhancement."
+                  },
+                  "key": "sourceMaxHeight",
+                  "kind": "number",
+                  "label": {
+                    "source": "Enhance sources up to"
+                  },
+                  "max": 2160,
+                  "min": 144,
+                  "step": 1,
+                  "unit": {
+                    "source": "p"
+                  }
+                },
+                {
+                  "help": {
+                    "source": "The tallest picture enhancement is allowed to produce."
+                  },
+                  "key": "targetMaxHeight",
+                  "kind": "number",
+                  "label": {
+                    "source": "Enhanced resolution limit"
+                  },
+                  "max": 2160,
+                  "min": 144,
+                  "step": 1,
+                  "unit": {
+                    "source": "p"
+                  }
+                },
+                {
+                  "help": {
+                    "source": "Higher quality uses more of the graphics card. Streaming choices need a recent NVIDIA card. Medium is a good start."
+                  },
+                  "key": "quality",
+                  "kind": "select",
+                  "label": {
+                    "source": "Enhancement quality"
+                  },
+                  "numeric": true,
+                  "options": [
+                    {
+                      "value": "1",
+                      "label": {
+                        "source": "Low"
+                      }
+                    },
+                    {
+                      "value": "2",
+                      "label": {
+                        "source": "Medium"
+                      }
+                    },
+                    {
+                      "value": "3",
+                      "label": {
+                        "source": "High"
+                      }
+                    },
+                    {
+                      "value": "4",
+                      "label": {
+                        "source": "Ultra"
+                      }
+                    },
+                    {
+                      "value": "21",
+                      "label": {
+                        "source": "Streaming medium"
+                      }
+                    },
+                    {
+                      "value": "23",
+                      "label": {
+                        "source": "Streaming ultra"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "help": {
+                    "source": "Additional streams play normally once this many are already being enhanced."
+                  },
+                  "key": "maxConcurrent",
+                  "kind": "number",
+                  "label": {
+                    "source": "Simultaneous enhancements"
+                  },
+                  "max": 8,
+                  "min": 1,
+                  "step": 1
+                },
+                {
+                  "help": {
+                    "source": "Leave empty and Ether sets this up itself. A path you fill in is never replaced."
+                  },
+                  "key": "executablePath",
+                  "kind": "text",
+                  "label": {
+                    "source": "NVEnc executable path"
+                  }
+                }
+              ],
+              "key": "rtxVideo",
+              "kind": "group",
+              "label": {
+                "source": "RTX Video Super Resolution"
+              }
+            }
+          ],
+          "title": {
+            "source": "Sharper picture"
+          }
+        },
+        {
+          "description": {
+            "source": "Ether includes the programs it needs. Change a path only if you installed your own copy."
+          },
+          "fields": [],
+          "id": "programs",
+          "more": [
+            {
+              "help": {
+                "source": "Leave empty to use the bundled ffmpeg."
+              },
+              "key": "ffmpegPath",
+              "kind": "text",
+              "label": {
+                "source": "ffmpeg path"
+              },
+              "wide": true
+            },
+            {
+              "help": {
+                "source": "Leave empty to use the program Ether includes."
+              },
+              "key": "ffprobePath",
+              "kind": "text",
+              "label": {
+                "source": "ffprobe path"
+              },
+              "wide": true
+            },
+            {
+              "help": {
+                "source": "Where converted video is written while it plays. Empty uses the normal temporary folder."
+              },
+              "key": "tempDir",
+              "kind": "text",
+              "label": {
+                "source": "Temporary folder"
+              },
+              "wide": true
+            }
+          ],
+          "title": {
+            "source": "Converter programs"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "trakt",
+    "configKey": "trakt",
+    "label": {
+      "source": "Trakt"
+    },
+    "schema": {
+      "groups": [
+        {
+          "description": {
+            "source": "Sync watch history and lists with Trakt."
+          },
+          "fields": [
+            {
+              "key": "enabled",
+              "kind": "bool",
+              "label": {
+                "source": "Enabled"
+              }
+            },
+            {
+              "key": "clientId",
+              "kind": "text",
+              "label": {
+                "source": "Client ID"
+              },
+              "wide": true
+            },
+            {
+              "key": "clientSecret",
+              "kind": "secret",
+              "label": {
+                "source": "Client secret"
+              }
+            }
+          ],
+          "title": {
+            "source": "Trakt"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "openSubtitles",
+    "configKey": "openSubtitles",
+    "label": {
+      "source": "OpenSubtitles"
+    },
+    "schema": {
+      "groups": [
+        {
+          "description": {
+            "source": "Fetch subtitles when a release doesn't include them."
+          },
+          "fields": [
+            {
+              "key": "enabled",
+              "kind": "bool",
+              "label": {
+                "source": "Enabled"
+              }
+            },
+            {
+              "key": "apiKey",
+              "kind": "secret",
+              "label": {
+                "source": "API key"
+              }
+            },
+            {
+              "key": "username",
+              "kind": "text",
+              "label": {
+                "source": "Username"
+              }
+            },
+            {
+              "key": "password",
+              "kind": "secret",
+              "label": {
+                "source": "Password"
+              }
+            }
+          ],
+          "title": {
+            "source": "OpenSubtitles"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "updates",
+    "configKey": "updates",
+    "label": {
+      "source": "Release channel"
+    },
+    "schema": {
+      "groups": [
+        {
+          "fields": [
+            {
+              "help": {
+                "source": "Checks the signed release feed once a day."
+              },
+              "key": "enabled",
+              "kind": "bool",
+              "label": {
+                "source": "Check for updates"
+              }
+            },
+            {
+              "key": "channel",
+              "kind": "select",
+              "label": {
+                "source": "Channel"
+              },
+              "options": [
+                {
+                  "value": "stable",
+                  "label": {
+                    "source": "Stable"
+                  }
+                },
+                {
+                  "value": "beta",
+                  "label": {
+                    "source": "Beta"
+                  }
+                }
+              ]
+            },
+            {
+              "help": {
+                "source": "Installs during the maintenance window, once nobody is watching."
+              },
+              "key": "autoUpdate",
+              "kind": "bool",
+              "label": {
+                "source": "Install updates automatically"
+              }
+            }
+          ],
+          "more": [
+            {
+              "help": {
+                "source": "24-hour local time."
+              },
+              "key": "maintenanceStart",
+              "kind": "text",
+              "label": {
+                "source": "Maintenance window starts"
+              },
+              "placeholder": "03:00"
+            },
+            {
+              "help": {
+                "source": "May wrap past midnight."
+              },
+              "key": "maintenanceEnd",
+              "kind": "text",
+              "label": {
+                "source": "Maintenance window ends"
+              },
+              "placeholder": "06:00"
+            },
+            {
+              "help": {
+                "source": "Leave empty for the official feed."
+              },
+              "key": "feedUrl",
+              "kind": "text",
+              "label": {
+                "source": "Update feed"
+              },
+              "wide": true
+            },
+            {
+              "help": {
+                "source": "How long a clustered node waits for current playback to end before installing. Leave empty to wait 30 minutes. A server on its own waits until nobody is watching."
+              },
+              "key": "maxDrain",
+              "kind": "duration",
+              "label": {
+                "source": "Wait for playback to finish"
+              }
+            }
+          ],
+          "title": {
+            "source": "Release channel"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "spike",
+    "configKey": "spike",
+    "label": {
+      "source": "Test playback with a local file"
+    },
+    "schema": {
+      "groups": [
+        {
+          "description": {
+            "source": "Play a local file in Plex to see if the problem is the app or the stream."
+          },
+          "fields": [
+            {
+              "key": "enabled",
+              "kind": "bool",
+              "label": {
+                "source": "Serve test files"
+              }
+            },
+            {
+              "help": {
+                "source": "Full paths to video files on this computer."
+              },
+              "key": "localFiles",
+              "kind": "list",
+              "label": {
+                "source": "Test files"
+              },
+              "placeholder": "/path/to/movie.mkv"
+            }
+          ],
+          "title": {
+            "source": "Test playback with a local file"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "markers",
+    "configKey": "markers",
+    "label": {
+      "source": "Chapters and skip markers"
+    },
+    "schema": {
+      "groups": [
+        {
+          "fields": [
+            {
+              "help": {
+                "source": "Use the public TheIntroDB lookup, cached per episode and runtime."
+              },
+              "key": "theIntroDb",
+              "kind": "bool",
+              "label": {
+                "source": "Look up intro and credits markers"
+              }
+            },
+            {
+              "key": "apiKey",
+              "kind": "secret",
+              "label": {
+                "source": "Optional TheIntroDB key"
+              }
+            }
+          ],
+          "title": {
+            "source": "Chapters and skip markers"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "debrid",
+    "configKey": "debrid",
+    "label": {
+      "source": "Torrent handling"
+    },
+    "schema": {
+      "groups": [
+        {
+          "fields": [
+            {
+              "help": {
+                "source": "Only use torrents your debrid service already holds. Nothing is downloaded and playback never waits. Turn off to have Ether send the best uncached release of a title to your first debrid service when someone presses Play; it plays once the download finishes (the app says so meanwhile)."
+              },
+              "key": "cachedOnly",
+              "kind": "bool",
+              "label": {
+                "source": "Cached torrents only"
+              }
+            },
+            {
+              "help": {
+                "source": "Remove torrents Ether added that turned out not to be cached. Cached torrents stay on your account so the next play starts instantly and they are reused instead of re-added."
+              },
+              "key": "removeUncached",
+              "kind": "bool",
+              "label": {
+                "source": "Remove uncached torrents"
+              }
+            }
+          ],
+          "title": {
+            "source": "Torrent handling"
+          }
+        },
+        {
+          "description": {
+            "source": "Leave at 0 for the built-in behaviour."
+          },
+          "fields": [
+            {
+              "help": {
+                "source": "Requests start at 512 KiB for a fast first byte and grow up to this size. 0 = 8 MiB; at most 64 MiB."
+              },
+              "key": "chunkBytes",
+              "kind": "bytes",
+              "label": {
+                "source": "Largest range request"
+              },
+              "unit": {
+                "source": "MiB"
+              }
+            },
+            {
+              "help": {
+                "source": "0 adapts read-ahead to the measured download speed. Set up to 32 chunks to fix the window; -1 turns read-ahead off."
+              },
+              "key": "readAheadChunks",
+              "kind": "number",
+              "label": {
+                "source": "Fixed read-ahead"
+              },
+              "max": 32,
+              "min": -1,
+              "step": 1,
+              "unit": {
+                "source": "chunks"
+              }
+            },
+            {
+              "help": {
+                "source": "Concurrent range requests per open file. 0 = 4; at most 16."
+              },
+              "key": "maxConnections",
+              "kind": "number",
+              "label": {
+                "source": "Connections per file"
+              },
+              "max": 16,
+              "min": 0,
+              "step": 1
+            }
+          ],
+          "title": {
+            "source": "Advanced"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "downloads",
+    "configKey": "downloads",
+    "label": {
+      "source": "Downloads"
+    },
+    "schema": {
+      "groups": [
+        {
+          "description": {
+            "source": "Lets Plex apps save titles for offline viewing. Ether remuxes each one on demand."
+          },
+          "fields": [
+            {
+              "key": "enabled",
+              "kind": "bool",
+              "label": {
+                "source": "Allow downloads"
+              }
+            },
+            {
+              "help": {
+                "source": "Off lets only you download. A viewer's access policy can still allow or deny it."
+              },
+              "key": "allowFriends",
+              "kind": "bool",
+              "label": {
+                "source": "Friends can download"
+              }
+            }
+          ],
+          "more": [
+            {
+              "help": {
+                "source": "Downloads are capped at this height. 0 uses 1080p."
+              },
+              "key": "maxHeight",
+              "kind": "number",
+              "label": {
+                "source": "Highest resolution"
+              },
+              "min": 0,
+              "step": 1,
+              "unit": {
+                "source": "p"
+              }
+            },
+            {
+              "help": {
+                "source": "Across the whole server. 0 uses 2."
+              },
+              "key": "maxConcurrent",
+              "kind": "number",
+              "label": {
+                "source": "Downloads at once"
+              },
+              "min": 0,
+              "step": 1
+            },
+            {
+              "help": {
+                "source": "0 uses 1."
+              },
+              "key": "maxConcurrentPerUser",
+              "kind": "number",
+              "label": {
+                "source": "Downloads at once per viewer"
+              },
+              "min": 0,
+              "step": 1
+            },
+            {
+              "help": {
+                "source": "Maximum space for prepared downloads. Set to 0 to use the default limit of 20 GiB."
+              },
+              "key": "diskBudgetBytes",
+              "kind": "bytes",
+              "label": {
+                "source": "Temporary disk space"
+              },
+              "unit": {
+                "source": "GiB"
+              }
+            },
+            {
+              "help": {
+                "source": "A finished download is deleted after this long if the app hasn't fetched it."
+              },
+              "key": "expiry",
+              "kind": "duration",
+              "label": {
+                "source": "Keep prepared files for"
+              }
+            }
+          ],
+          "title": {
+            "source": "Downloads"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "personalize",
+    "configKey": "personalize",
+    "label": {
+      "source": "Personalization"
+    },
+    "schema": {
+      "groups": [
+        {
+          "description": {
+            "source": "Extras for each viewer. Turn any off for the plain layout."
+          },
+          "fields": [
+            {
+              "help": {
+                "source": "After a movie or finale, suggest what this viewer is most likely to watch next."
+              },
+              "key": "postPlay",
+              "kind": "bool",
+              "label": {
+                "source": "Personal “up next” picks"
+              }
+            },
+            {
+              "help": {
+                "source": "Warm the first suggestion in the last minutes so it starts instantly."
+              },
+              "key": "postPlayPrebuffer",
+              "kind": "bool",
+              "label": {
+                "source": "Pre-buffer the top pick"
+              }
+            },
+            {
+              "help": {
+                "source": "Show “96% Match · Ends at 10:45 PM” on a title's detail page."
+              },
+              "key": "microReasons",
+              "kind": "bool",
+              "label": {
+                "source": "Match and finish time on details"
+              }
+            },
+            {
+              "help": {
+                "source": "Titles a viewer opened but didn't play steer the rows they see next."
+              },
+              "key": "sessionIntent",
+              "kind": "bool",
+              "label": {
+                "source": "Adapt Home to tonight's browsing"
+              }
+            }
+          ],
+          "more": [
+            {
+              "key": "clockFormat",
+              "kind": "select",
+              "label": {
+                "source": "Finish time format"
+              },
+              "options": [
+                {
+                  "value": "",
+                  "label": {
+                    "source": "From the language"
+                  }
+                },
+                {
+                  "value": "12h",
+                  "label": {
+                    "source": "12-hour"
+                  }
+                },
+                {
+                  "value": "24h",
+                  "label": {
+                    "source": "24-hour"
+                  }
+                }
+              ]
+            }
+          ],
+          "title": {
+            "source": "Personalization"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "extras",
+    "configKey": "extras",
+    "label": {
+      "source": "Trailers \u0026 extras"
+    },
+    "schema": {
+      "groups": [
+        {
+          "description": {
+            "source": "Play a trailer before a movie or episode."
+          },
+          "fields": [
+            {
+              "help": {
+                "source": "Offer trailers in apps."
+              },
+              "key": "enabled",
+              "kind": "bool",
+              "label": {
+                "source": "Trailers and Cinema Trailers"
+              }
+            }
+          ],
+          "more": [
+            {
+              "help": {
+                "source": "Command that turns a trailer page into a stream."
+              },
+              "key": "resolverCommand",
+              "kind": "text",
+              "label": {
+                "source": "Resolver command"
+              },
+              "placeholder": "yt-dlp",
+              "wide": true
+            },
+            {
+              "help": {
+                "source": "Leave empty for the yt-dlp default. {url}, {site}, {key} and {id} are filled in; no shell is used."
+              },
+              "key": "resolverArgs",
+              "kind": "list",
+              "label": {
+                "source": "Arguments"
+              },
+              "placeholder": "-g, -f, b[ext=mp4]/b, --no-playlist, {url}"
+            },
+            {
+              "key": "resolverTimeout",
+              "kind": "duration",
+              "label": {
+                "source": "Give up after"
+              }
+            },
+            {
+              "help": {
+                "source": "Buffered while the trailer plays, 32–64 MiB. 0 uses 48 MiB."
+              },
+              "key": "prewarmBytes",
+              "kind": "bytes",
+              "label": {
+                "source": "Pre-buffer the feature"
+              },
+              "unit": {
+                "source": "MiB"
+              }
+            }
+          ],
+          "title": {
+            "source": "Trailers \u0026 extras"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "serverCluster",
+    "configKey": "server",
+    "label": {
+      "source": "What viewers see"
+    },
+    "schema": {
+      "groups": [
+        {
+          "description": {
+            "source": "The names apps show for this server and its libraries."
+          },
+          "fields": [
+            {
+              "help": {
+                "source": "How the server appears in apps."
+              },
+              "key": "friendlyName",
+              "kind": "text",
+              "label": {
+                "source": "Server name"
+              }
+            },
+            {
+              "help": {
+                "source": "Name shown in Plex. A rename inside Plex does not stick."
+              },
+              "key": "moviesLibraryName",
+              "kind": "text",
+              "label": {
+                "source": "Movies library name"
+              }
+            },
+            {
+              "help": {
+                "source": "Name shown in Plex. A rename inside Plex does not stick."
+              },
+              "key": "tvShowsLibraryName",
+              "kind": "text",
+              "label": {
+                "source": "TV Shows library name"
+              }
+            }
+          ],
+          "id": "identity",
+          "title": {
+            "source": "What viewers see"
+          }
+        },
+        {
+          "description": {
+            "source": "The address apps use to reach this computer."
+          },
+          "fields": [],
+          "id": "connect",
+          "more": [
+            {
+              "help": {
+                "source": "Exact addresses allowed to frame the owner page. Empty means nowhere."
+              },
+              "key": "webFrameOrigins",
+              "kind": "list",
+              "label": {
+                "source": "Sites that may embed this page"
+              },
+              "placeholder": "https://home.example.com"
+            }
+          ],
+          "title": {
+            "source": "How apps connect"
+          }
+        },
+        {
+          "description": {
+            "source": "Leave these at the defaults unless too many people are watching at the same time."
+          },
+          "fields": [],
+          "id": "streams",
+          "more": [
+            {
+              "help": {
+                "source": "Default simultaneous streams for each viewer. 0 = unlimited."
+              },
+              "key": "defaultStreamLimit",
+              "kind": "number",
+              "label": {
+                "source": "Streams per viewer"
+              },
+              "min": 0,
+              "step": 1
+            },
+            {
+              "help": {
+                "source": "0 derives the limit from your Usenet connections."
+              },
+              "key": "maxStreams",
+              "kind": "number",
+              "label": {
+                "source": "Server-wide limit"
+              },
+              "min": 0,
+              "step": 1
+            }
+          ],
+          "title": {
+            "source": "Who can watch at once"
+          }
+        },
+        {
+          "description": {
+            "source": "These apply only to this computer. Every other setting is shared by the cluster."
+          },
+          "fields": [
+            {
+              "help": {
+                "source": "Plex apps expect 32400. A restart is needed after changing it."
+              },
+              "key": "port",
+              "kind": "number",
+              "label": {
+                "source": "Port"
+              },
+              "max": 65535,
+              "min": 1,
+              "step": 1
+            }
+          ],
+          "id": "node",
+          "more": [
+            {
+              "help": {
+                "source": "0.0.0.0 listens on every network interface."
+              },
+              "key": "bindAddress",
+              "kind": "text",
+              "label": {
+                "source": "Listen address"
+              }
+            },
+            {
+              "help": {
+                "source": "Generated on first run; never changes."
+              },
+              "key": "machineIdentifier",
+              "kind": "readonly",
+              "label": {
+                "source": "Machine identifier"
+              }
+            },
+            {
+              "help": {
+                "source": "Networks whose forwarding headers Ether trusts. Empty trusts none."
+              },
+              "key": "trustedProxyCIDRs",
+              "kind": "list",
+              "label": {
+                "source": "Trusted proxy networks"
+              },
+              "placeholder": "10.0.0.0/8"
+            },
+            {
+              "key": "logLevel",
+              "kind": "select",
+              "label": {
+                "source": "Log level"
+              },
+              "options": [
+                {
+                  "value": "debug",
+                  "label": {
+                    "source": "Debug"
+                  }
+                },
+                {
+                  "value": "info",
+                  "label": {
+                    "source": "Info"
+                  }
+                },
+                {
+                  "value": "warn",
+                  "label": {
+                    "source": "Warnings"
+                  }
+                },
+                {
+                  "value": "error",
+                  "label": {
+                    "source": "Errors only"
+                  }
+                }
+              ]
+            },
+            {
+              "help": {
+                "source": "This computer's share of each provider's connections and request limits, relative to the others. 2 gets twice the share of a computer at 1; 0 means 1."
+              },
+              "key": "clusterWeight",
+              "kind": "number",
+              "label": {
+                "source": "Node weight"
+              },
+              "max": 100,
+              "min": 0,
+              "step": 1
+            }
+          ],
+          "title": {
+            "source": "This computer"
+          }
+        }
+      ]
+    }
+  }
+]

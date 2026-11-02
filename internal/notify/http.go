@@ -70,7 +70,7 @@ func (s *Service) Handler() http.Handler {
 			fail(w, 500, "Delivery log unavailable")
 			return
 		}
-		reply(w, 200, map[string]any{"channels": cs, "events": Kinds, "deliveries": deliveries, "eventCatalog": eventCatalog(), "crashWatcher": s.monitorActive()})
+		reply(w, 200, map[string]any{"channels": cs, "deliveries": deliveries, "crashWatcher": s.monitorActive()})
 	})
 	m.HandleFunc("PUT /{id}", func(w http.ResponseWriter, r *http.Request) {
 		var c Channel

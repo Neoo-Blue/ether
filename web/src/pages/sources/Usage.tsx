@@ -9,6 +9,7 @@ import { SaveBar, useDraft } from "../../components/SaveBar";
 import { apiFetch } from "../../lib/api";
 import { fixed, formatNumber, formatPercent } from "../../lib/format";
 import { useAsync } from "../../lib/hooks";
+import { PluginSourceUsage } from "./cards";
 
 type Provider = {
   id: string;
@@ -509,6 +510,8 @@ export function SourceUsage() {
           <p className="px-5 py-4 text-sm text-fg-muted">{t("No configured indexers.")}</p>
         ) : null}
       </Section>
+
+      <PluginSourceUsage />
 
       <SaveBar
         dirty={dirty}

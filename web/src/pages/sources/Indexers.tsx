@@ -44,7 +44,7 @@ import {
   useTests,
   type Errors,
 } from "./form";
-import { SourceCard } from "./cards";
+import { PluginSourceCards, SourceCard } from "./cards";
 import { StremioMark } from "./marks";
 import {
   MissingDefinition,
@@ -558,6 +558,14 @@ export function IndexerList({
           />
         )}
       </Section>
+
+      <PluginSourceCards
+        classes={["indexer", "direct"]}
+        sectionTitle={t("Plugin sources")}
+        sectionDescription={t(
+          "Release indexers and direct or local folder sources contributed by enabled plugins.",
+        )}
+      />
 
       <SiteDefinitions
         cfg={cfg}
