@@ -4,15 +4,20 @@ import { useState } from "react";
 import { BellRing } from "lucide-react";
 import { Section } from "../../components/layout";
 import { apiFetch, errorMessage } from "../../lib/api";
-import { blankChannel, type NotificationsData } from "./types";
+import { useRegistry, type Descriptor } from "../../lib/extend";
+import { blankChannel, type Channel, type NotificationsData } from "./types";
 
 export function BrowserPush({
   data,
+  descriptors: providedDescriptors,
   onChanged,
 }: {
   data: NotificationsData;
+  descriptors?: readonly Descriptor[];
   onChanged: () => Promise<void>;
 }) {
+  const registry = useRegistry("channelKind", "eventKind");
+  const descriptors = providedDescriptors?.length ? providedDescriptors : registry.descriptors;
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const supported =
@@ -53,8 +58,8 @@ export function BrowserPush({
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("")}`;
       const previous = data.channels.find((c) => c.id === id);
-      const channel = {
-        ...(previous ?? blankChannel()),
+      const channel: Channel = {
+        ...(previous ?? blankChannel(descriptors, "webpush")),
         id,
         kind: "webpush",
         name:
@@ -63,7 +68,10 @@ export function BrowserPush({
             ? t("Browser · {platform}", { platform: navigator.platform })
             : t("Browser · this device")),
         enabled: true,
-        subscription: subscription.toJSON(),
+        secrets: {
+          ...previous?.secrets,
+          subscription: JSON.stringify(subscription.toJSON()),
+        },
       };
       await apiFetch(`/notifications/${id}`, { method: "PUT", body: JSON.stringify(channel) });
       saved = true;

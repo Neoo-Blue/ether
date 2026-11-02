@@ -12,6 +12,7 @@ import {
 import ts from "typescript";
 
 export const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+export const repoRoot = path.resolve(webRoot, "..");
 export const srcRoot = path.join(webRoot, "src");
 export const localesDir = path.join(srcRoot, "i18n", "locales");
 
@@ -29,6 +30,160 @@ export function sourceFiles(dir = srcRoot) {
     }
   }
   return out.sort();
+}
+
+/** Go sources under internal/ that may declare console copy with extend.T("…"). */
+export function goSourceFiles(dir = path.join(repoRoot, "internal")) {
+  const out = [];
+  if (!existsSync(dir)) return out;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...goSourceFiles(full));
+    else if (entry.name.endsWith(".go") && !entry.name.endsWith("_test.go")) out.push(full);
+  }
+  return out.sort();
+}
+
+function goRef(file, line) {
+  return `${path.relative(repoRoot, file)}:${line}`;
+}
+
+/** Decode a Go interpreted string literal body (without the quotes). */
+function goUnquote(body) {
+  let out = "";
+  for (let i = 0; i < body.length; i++) {
+    if (body[i] !== "\\") {
+      out += body[i];
+      continue;
+    }
+    i++;
+    const c = body[i];
+    if (c === "n") out += "\n";
+    else if (c === "t") out += "\t";
+    else if (c === "r") out += "\r";
+    else if (c === "a") out += "\x07";
+    else if (c === "b") out += "\b";
+    else if (c === "f") out += "\f";
+    else if (c === "v") out += "\v";
+    else if (c === "x") {
+      out += String.fromCodePoint(parseInt(body.slice(i + 1, i + 3), 16) || 0);
+      i += 2;
+    } else if (c === "u") {
+      out += String.fromCodePoint(parseInt(body.slice(i + 1, i + 5), 16) || 0);
+      i += 4;
+    } else if (c === "U") {
+      out += String.fromCodePoint(parseInt(body.slice(i + 1, i + 9), 16) || 0);
+      i += 8;
+    } else out += c;
+  }
+  return out;
+}
+
+/**
+ * Scan one Go file for extend.T calls (and bare T calls inside package
+ * extend). Returns { literals: [{text, line}], dynamic: [{line}] }. The scan
+ * is a single pass that skips comments, strings and rune literals, so
+ * extend.T mentions in comments or other strings never count.
+ */
+export function scanGoExtendT(text) {
+  const literals = [];
+  const dynamic = [];
+  const isExtendPkg = /^\s*package\s+extend\s*$/m.test(text.split("\n").slice(0, 40).join("\n"));
+  const extendNames = new Set(["extend"]);
+  for (const m of text.matchAll(
+    /^\s*(?:import\s+)?([A-Za-z_][A-Za-z0-9_]*)\s+"github\.com\/braedonsaunders\/ether\/internal\/extend"/gm,
+  )) {
+    if (m[1] !== "import") extendNames.add(m[1]);
+  }
+  const n = text.length;
+  let i = 0;
+  let line = 1;
+  const advance = (to) => {
+    while (i < to) {
+      if (text[i] === "\n") line++;
+      i++;
+    }
+  };
+  const identAt = (pos) => {
+    if (!/[A-Za-z_]/.test(text[pos] ?? "")) return null;
+    let j = pos;
+    while (j < n && /[A-Za-z0-9_]/.test(text[j])) j++;
+    return { word: text.slice(pos, j), end: j };
+  };
+  while (i < n) {
+    const c = text[i];
+    if (c === "/" && text[i + 1] === "/") {
+      let j = text.indexOf("\n", i);
+      advance(j === -1 ? n : j);
+      continue;
+    }
+    if (c === "/" && text[i + 1] === "*") {
+      let j = text.indexOf("*/", i + 2);
+      advance(j === -1 ? n : j + 2);
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      let j = i + 1;
+      while (j < n && text[j] !== c) {
+        if (text[j] === "\\") j++;
+        j++;
+      }
+      advance(Math.min(n, j + 1));
+      continue;
+    }
+    if (c === "`") {
+      let j = text.indexOf("`", i + 1);
+      advance(j === -1 ? n : j + 1);
+      continue;
+    }
+    if (/[A-Za-z_]/.test(c)) {
+      const id = identAt(i);
+      const callLine = line;
+      let after = null;
+      if (extendNames.has(id.word)) {
+        // extend . T (
+        if (text[id.end] === ".") {
+          const second = identAt(id.end + 1);
+          if (second && second.word === "T") after = second.end;
+        }
+      } else if (isExtendPkg && id.word === "T") {
+        const prev = text.slice(0, i).trimEnd();
+        if (!prev.endsWith(".") && !prev.endsWith("func")) after = id.end;
+      }
+      if (after !== null) {
+        let j = after;
+        while (j < n && /[ \t]/.test(text[j])) j++;
+        if (text[j] === "(") {
+          j++;
+          while (j < n && /\s/.test(text[j])) j++;
+          if (text[j] === '"') {
+            let k = j + 1;
+            while (k < n && text[k] !== '"') {
+              if (text[k] === "\\") k++;
+              k++;
+            }
+            literals.push({ text: goUnquote(text.slice(j + 1, k)), line: callLine });
+            advance(Math.min(n, k + 1));
+            continue;
+          }
+          if (text[j] === "`") {
+            let k = text.indexOf("`", j + 1);
+            if (k === -1) k = n;
+            literals.push({ text: text.slice(j + 1, k), line: callLine });
+            advance(Math.min(n, k + 1));
+            continue;
+          }
+          dynamic.push({ line: callLine });
+          advance(after);
+          continue;
+        }
+      }
+      advance(id.end);
+      continue;
+    }
+    advance(i + 1);
+  }
+  return { literals, dynamic };
 }
 
 function parse(file) {
@@ -57,7 +212,7 @@ function where(sf, node) {
  * argument; `tn(count, one, other)` is keyed by `other`.
  * Returns { messages: Map<key, {one?: string, refs: string[]}>, dynamic: string[] }.
  */
-export function extract(files = sourceFiles()) {
+export function extract(files = [...sourceFiles(), ...goSourceFiles()]) {
   const messages = new Map();
   const dynamic = [];
   const add = (key, ref, one) => {
@@ -67,6 +222,12 @@ export function extract(files = sourceFiles()) {
     messages.set(key, entry);
   };
   for (const file of files) {
+    if (file.endsWith(".go")) {
+      const { literals, dynamic: dyn } = scanGoExtendT(readFileSync(file, "utf8"));
+      for (const lit of literals) add(lit.text, goRef(file, lit.line));
+      for (const d of dyn) dynamic.push(goRef(file, d.line));
+      continue;
+    }
     const sf = parse(file);
     const visit = (node) => {
       if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
@@ -218,7 +379,8 @@ const TEXT_PROPS = new Set([
   "warning",
 ]);
 
-const WRAPPERS = new Set(["t", "tn", "tx", "msg"]);
+const WRAPPERS = new Set(["t", "tn", "tx", "msg", "textOf"]);
+const EXTEND_TEXT_PROPS = new Set(["label", "hint", "title", "description", "help", "unit"]);
 const IGNORE_CALLS = new Set([
   "cn",
   "clsx",
@@ -332,9 +494,19 @@ function inOtherAttr(node, sf) {
 }
 
 /** Likely untranslated copy: [{ ref, text }]. Heuristic; review each hit. */
-export function audit(files = sourceFiles()) {
+export function audit(files = [...sourceFiles(), ...goSourceFiles()]) {
   const hits = [];
   for (const file of files) {
+    if (file.endsWith(".go")) {
+      const { dynamic: dyn } = scanGoExtendT(readFileSync(file, "utf8"));
+      for (const d of dyn) {
+        hits.push({
+          ref: goRef(file, d.line),
+          text: "extend.T argument is not a string literal",
+        });
+      }
+      continue;
+    }
     const sf = parse(file);
     const visit = (node) => {
       let text = null;
@@ -355,6 +527,14 @@ export function audit(files = sourceFiles()) {
         if (TEXT_PROPS.has(name) && looksLikeCopy(value) && !insideWrapper(node.initializer)) {
           text = value;
         }
+      } else if (
+        ts.isPropertyAccessExpression(node) &&
+        node.name.text === "source" &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        EXTEND_TEXT_PROPS.has(node.expression.name.text) &&
+        !insideWrapper(node)
+      ) {
+        text = `${node.getText(sf)} rendered without t() or textOf()`;
       } else if (isStringish(node) && copyContext(node)) {
         const raw = ts.isTemplateExpression(node) ? node.getText(sf).slice(1, -1) : node.text;
         if (looksLikeCopy(raw) && !insideWrapper(node) && !inOtherAttr(node, sf)) text = raw;
