@@ -8,6 +8,8 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { localized, t, tn, msg, searchTerms } from "../i18n";
 import { destinations } from "../lib/sitemap";
+import { settingsIndex } from "../lib/settings-index";
+import { settingHref } from "./SettingFocus";
 import { loadViewers, viewerName } from "./pickers";
 
 const ACTIONS = localized(() => [
@@ -55,7 +57,7 @@ function matches(q: string, ...fields: (string | undefined)[]): boolean {
     .every((w) => hay.includes(w));
 }
 
-/** ⌘K: jump to any page, section, viewer or collection, or start a common task. */
+/** ⌘K: jump to any page, section, setting, viewer or collection, or start a common task. */
 export function CommandSearch() {
   const navigate = useNavigate();
   const search = useCallback(
@@ -72,6 +74,24 @@ export function CommandSearch() {
           href: d.href,
         }));
       if (places.length) groups.push({ id: "places", label: t("Go to"), hits: places });
+      const seen = new Set<string>();
+      const settings = settingsIndex()
+        .filter((s) => matches(q, s.title, s.where, s.keywords))
+        .filter((s) => {
+          const key = `${s.href}|${s.title}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .slice(0, 8)
+        .map((s) => ({
+          id: `${s.href}|${s.title}`,
+          type: "setting",
+          title: s.title,
+          subtitle: s.where,
+          href: settingHref(s.href, s.title, s.more),
+        }));
+      if (settings.length) groups.push({ id: "settings", label: t("Settings"), hits: settings });
       const actions = ACTIONS.filter((a) => matches(q, a.title, a.keywords)).map((a) => ({
         id: a.title,
         type: "action",

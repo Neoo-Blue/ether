@@ -68,6 +68,7 @@ import { CommandSearch } from "./components/CommandSearch";
 import { Drawer } from "./components/Drawer";
 import { ErrorPanel } from "./components/feedback";
 import { SaveBarHost } from "./components/SaveBar";
+import { SettingFocus } from "./components/SettingFocus";
 import { UpdateReady } from "./components/UpdateReady";
 import { LEVEL_LABEL, LevelBadge, StatusDot } from "./components/status";
 import { useOwnerViewerPath } from "./components/pickers";
@@ -424,6 +425,7 @@ function Shell() {
         mobileTabCount={4}
       >
         <SaveBarHost>
+          <SettingFocus />
           <Suspense fallback={<PageFallback />}>
             <Routes>
               <Route

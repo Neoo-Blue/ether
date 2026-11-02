@@ -117,9 +117,16 @@ export const PAGES = localized<PageDef[]>(() => [
     title: t("Catalog"),
     sections: [
       {
+        key: "visibility",
+        title: t("Visibility"),
+        keywords: searchTerms(msg("hide show rules library exclusions")),
+      },
+      {
         key: "settings",
         title: t("Catalog settings"),
-        keywords: searchTerms(msg("tmdb language region popularity new releases playable digital")),
+        keywords: searchTerms(
+          msg("tmdb language region obscure new releases playable digital watchlist monitoring"),
+        ),
       },
     ],
     keywords: searchTerms(msg("catalogue movies shows browse search library")),
@@ -181,26 +188,28 @@ export const PAGES = localized<PageDef[]>(() => [
   },
   {
     href: "/quality",
-    title: t("Releases"),
+    title: t("Quality"),
     sections: [
       {
         key: "profiles",
         title: t("Profiles"),
         keywords: searchTerms(
           msg(
-            "quality profiles resolution 4k 1080p remote cam scoring trash custom formats rules ranking",
+            "quality profiles resolution 4k 1080p remote away bitrate cam scoring trash custom formats ranking source order usenet debrid versions who gets what",
           ),
         ),
       },
       {
-        key: "devices",
-        title: t("Device rules"),
-        keywords: searchTerms(msg("device client profile")),
+        key: "rules",
+        title: t("Rules"),
+        keywords: searchTerms(msg("device client viewer profile max quality limit")),
       },
       {
         key: "searching",
         title: t("Searching"),
-        keywords: searchTerms(msg("how ether searches versions cache health samples candidates")),
+        keywords: searchTerms(
+          msg("how ether searches start speed cache health samples candidates"),
+        ),
       },
       {
         key: "blocklist",
@@ -225,8 +234,8 @@ export const PAGES = localized<PageDef[]>(() => [
     sections: [
       {
         key: "transcoding",
-        title: t("Transcoding"),
-        keywords: searchTerms(msg("ffmpeg hardware gpu bitrate startup race health")),
+        title: t("Streams & transcoding"),
+        keywords: searchTerms(msg("ffmpeg hardware gpu streams at once limit rtx")),
       },
       {
         key: "devices",
@@ -234,9 +243,11 @@ export const PAGES = localized<PageDef[]>(() => [
         keywords: searchTerms(msg("compatibility codecs")),
       },
       {
-        key: "markers",
-        title: t("Skip buttons"),
-        keywords: searchTerms(msg("intro credits skip chapters")),
+        key: "extras",
+        title: t("Extras"),
+        keywords: searchTerms(
+          msg("trailers cinema yt-dlp intro credits skip chapters up next post-play"),
+        ),
       },
       {
         key: "subtitles",
@@ -252,12 +263,7 @@ export const PAGES = localized<PageDef[]>(() => [
       {
         key: "channels",
         title: t("Channels"),
-        keywords: searchTerms(msg("email discord webhook push alerts watchlist")),
-      },
-      {
-        key: "protection",
-        title: t("Server protection"),
-        keywords: searchTerms(msg("crash watcher restart guard")),
+        keywords: searchTerms(msg("email discord webhook push alerts")),
       },
       { key: "report", title: t("Weekly report"), keywords: searchTerms(msg("newsletter digest")) },
       { key: "deliveries", title: t("Delivery history") },
@@ -266,53 +272,35 @@ export const PAGES = localized<PageDef[]>(() => [
   {
     href: "/server",
     title: t("General"),
-    sections: [
-      {
-        key: "server",
-        title: t("Server"),
-        keywords: searchTerms(msg("name port listen log level stream limit")),
-      },
-      {
-        key: "downloads",
-        title: t("Downloads"),
-        keywords: searchTerms(msg("offline sync friends remux")),
-      },
-      {
-        key: "personalize",
-        title: t("Personalization"),
-        keywords: searchTerms(msg("post-play up next match finish time clock")),
-      },
-      {
-        key: "extras",
-        title: t("Trailers & extras"),
-        keywords: searchTerms(msg("cinema trailers yt-dlp resolver")),
-      },
-    ],
-    keywords: searchTerms(msg("settings")),
+    sections: [],
+    keywords: searchTerms(msg("settings server name port listen proxy vpn setup wizard")),
   },
   {
     href: "/apps",
     title: t("Apps"),
     sections: [
       {
+        key: "overview",
+        title: t("Away from home"),
+        keywords: searchTerms(msg("public address host port custom urls certificate https")),
+      },
+      {
         key: "account",
         href: "/apps/plex/account",
         title: t("Plex account"),
-        keywords: searchTerms(msg("plex sign in claim account")),
+        keywords: searchTerms(msg("plex sign in claim account compatibility version")),
       },
       {
         key: "remote",
         href: "/apps/plex/remote",
         title: t("Remote access"),
-        keywords: searchTerms(
-          msg("upnp port forward public secure connections certificate plex.direct tls"),
-        ),
+        keywords: searchTerms(msg("upnp port forward secure connections plex.direct tls")),
       },
       {
-        key: "compatibility",
-        href: "/apps/plex/compatibility",
-        title: t("Compatibility"),
-        keywords: searchTerms(msg("plex version compatibility")),
+        key: "downloads",
+        href: "/apps/plex/downloads",
+        title: t("Downloads"),
+        keywords: searchTerms(msg("offline sync friends remux")),
       },
     ],
     keywords: searchTerms(msg("settings plex apps protocols")),
@@ -355,9 +343,8 @@ export const PAGES = localized<PageDef[]>(() => [
       },
       {
         key: "ratings",
-        href: "/services/overview#ratings",
-        title: t("Ratings"),
-        keywords: searchTerms(msg("omdb mdblist imdb rotten badges")),
+        title: t("OMDb and MDBList"),
+        keywords: searchTerms(msg("ratings omdb mdblist api key")),
       },
       {
         key: "introdb",
@@ -404,10 +391,10 @@ export const PAGES = localized<PageDef[]>(() => [
     keywords: searchTerms(msg("version channel beta maintenance window update now install")),
   },
   {
-    href: "/maintenance/troubleshooting",
-    title: t("Troubleshooting"),
+    href: "/maintenance/health",
+    title: t("Health"),
     sections: [],
-    keywords: searchTerms(msg("local file test playback")),
+    keywords: searchTerms(msg("crash watcher heartbeat uptime outage local file test playback")),
   },
   {
     href: "/maintenance/logs",
