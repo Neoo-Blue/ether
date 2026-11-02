@@ -289,7 +289,21 @@ func getJSON(ctx context.Context, client *http.Client, base *url.URL, suffix str
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", userAgent)
-	resp, err := client.Do(req)
+	// An install URL may contain credentials in its path. Go adds the
+	// previous URL as Referer on redirects, so never forward that header.
+	safeClient := *client
+	priorRedirect := safeClient.CheckRedirect
+	safeClient.CheckRedirect = func(next *http.Request, via []*http.Request) error {
+		next.Header.Del("Referer")
+		if priorRedirect != nil {
+			return priorRedirect(next, via)
+		}
+		if len(via) >= 10 {
+			return errors.New("stremio: too many redirects")
+		}
+		return nil
+	}
+	resp, err := safeClient.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
