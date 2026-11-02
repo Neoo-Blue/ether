@@ -1464,6 +1464,27 @@ func (s *Service) Owner(ctx context.Context) (*core.User, error) {
 // UpdateUser implements core.Auth. It changes only per-user settings:
 // stream limit, content rating cap, languages and allowed sections.
 // Identity fields come from plex.tv and are ignored.
+// plexShareEcho reports sections that are only the plex.tv share effective()
+// filled in for a viewer without an Ether-side library restriction.
+func (s *Service) plexShareEcho(id int64, secs []int) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	r := s.users[id]
+	if r == nil || r.IsOwner || len(r.AllowedSections) > 0 || len(r.PlexSections) == 0 || len(secs) != len(r.PlexSections) {
+		return false
+	}
+	have := map[int]bool{}
+	for _, sec := range r.PlexSections {
+		have[sec] = true
+	}
+	for _, sec := range secs {
+		if !have[sec] {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Service) UpdateUser(ctx context.Context, u core.User) error {
 	if u.StreamLimit < 0 {
 		return fmt.Errorf("auth: stream limit must be >= 0")
@@ -1484,6 +1505,13 @@ func (s *Service) UpdateUser(ctx context.Context, u core.User) error {
 	auds, _ := json.Marshal(norm(u.AudioLanguages))
 	secs := u.AllowedSections
 	if secs == nil {
+		secs = []int{}
+	}
+	if s.plexShareEcho(u.ID, secs) {
+		// The caller passed back the plex.tv share that ActiveUser and the
+		// viewer list fill in when Ether adds no restriction of its own.
+		// Storing it would freeze today's share: libraries later shared or
+		// unshared on app.plex.tv would stop applying to this viewer.
 		secs = []int{}
 	}
 	secJSON, _ := json.Marshal(secs)
