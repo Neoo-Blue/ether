@@ -537,3 +537,51 @@ func readAll(t *testing.T, resp *http.Response) string {
 	}
 	return sb.String()
 }
+
+func TestApprovalPreservesCollectionDraft(t *testing.T) {
+	ctx := context.Background()
+	model := &fakeModel{scripts: [][]llm.Event{callEv("draft", "collection_create_from_prompt", `{"prompt":"films"}`), {{Kind: llm.EventTextDelta, Text: "Approval pending."}}}}
+	fx := newFixture(t, model, Options{})
+	generated := 0
+	var applied string
+	err := fx.svc.catalogue.Register(tools.Tool{Name: "collection_create_from_prompt", Title: "Create a collection", Description: "Draft", Audience: tools.AudienceOwner, Owner: "builtin", InputSchema: json.RawMessage(`{"type":"object","properties":{"prompt":{"type":"string"},"draft":{"type":"string"}},"required":["prompt"]}`), Execute: func(ctx context.Context, p tools.Principal, in map[string]any) (tools.Result, error) {
+		draft, _ := in["draft"].(string)
+		if draft == "" {
+			generated++
+			draft = fmt.Sprintf("draft-%d", generated)
+		}
+		return tools.Result{Proposal: &tools.Proposal{Category: "Create", Description: draft, Input: map[string]any{"prompt": in["prompt"], "draft": draft}, Apply: func(context.Context) (tools.Result, error) { applied = draft; return tools.Result{}, nil }}}, nil
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	emit, _ := fx.emitCollect()
+	thread, _, err := fx.svc.RunTurn(ctx, fx.p, "", "make a collection", TurnContext{}, emit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msgs, err := fx.store.AllMessages(ctx, thread)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parts []map[string]any
+	if err := json.Unmarshal(msgs[1].Parts, &parts); err != nil {
+		t.Fatal(err)
+	}
+	var id string
+	for _, p := range parts {
+		if p["type"] == "approval-request" {
+			id, _ = p["approvalId"].(string)
+			if p["description"] != "draft-1" {
+				t.Fatalf("proposal: %v", p)
+			}
+		}
+	}
+	if id == "" {
+		t.Fatal("approval missing")
+	}
+	approval, err := fx.svc.DecideApproval(ctx, fx.p, id, "approved", "")
+	if err != nil || approval.Status != "approved" || applied != "draft-1" || generated != 1 {
+		t.Fatalf("approval=%+v err=%v applied=%q generated=%d", approval, err, applied, generated)
+	}
+}
