@@ -99,25 +99,25 @@ func (h *Handler) connectApps(w http.ResponseWriter, r *http.Request, viewer *co
 		return
 	}
 	if h.deps.ViewerPortalURL == nil {
-		writeError(w, 503, "address_unavailable", "Server address unavailable. Set Custom server URLs under Apps → Plex → Remote access.")
+		writeError(w, 503, "address_unavailable", "Server address unavailable. Ask the server owner to set a reachable server address, then try again.")
 		return
 	}
 	address := h.deps.ViewerPortalURL
 	if surface == "stremio" {
 		address = h.deps.StremioPortalURL
 		if address == nil {
-			writeError(w, 503, "stremio_https_required", "Stremio needs HTTPS. Add a certificate under Apps → Secure connections.")
+			writeError(w, 503, "stremio_https_required", "Stremio needs HTTPS. Ask the server owner to give this server a secure (HTTPS) address, then try again.")
 			return
 		}
 	}
 	portal, err := address(r.Context(), r)
 	if err != nil && surface == "stremio" {
-		writeError(w, 503, "stremio_https_required", "Stremio needs HTTPS. Add a certificate under Apps → Secure connections.")
+		writeError(w, 503, "stremio_https_required", "Stremio needs HTTPS. Ask the server owner to give this server a secure (HTTPS) address, then try again.")
 		return
 	}
 	u, parseErr := url.Parse(portal)
 	if err != nil || parseErr != nil || u == nil || (u.Scheme != "http" && u.Scheme != "https") || (surface == "stremio" && u.Scheme != "https") || u.Host == "" || !strings.HasSuffix(u.Path, "/ether/me") {
-		writeError(w, 503, "address_unavailable", "Server address unavailable. Set Custom server URLs under Apps → Plex → Remote access.")
+		writeError(w, 503, "address_unavailable", "Server address unavailable. Ask the server owner to set a reachable server address, then try again.")
 		return
 	}
 	var id [16]byte

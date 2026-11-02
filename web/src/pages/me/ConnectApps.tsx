@@ -60,7 +60,11 @@ function ConnectAppsSession({ base, token }: { base: string; token: string }) {
           error?: { code?: string; message?: string };
         };
         if (body.error?.code === "stremio_https_required") {
-          setError(t("Stremio needs HTTPS. Add a certificate under Apps → Secure connections."));
+          setError(
+            t(
+              "Stremio needs HTTPS. Ask the server owner to give this server a secure (HTTPS) address, then try again.",
+            ),
+          );
           return;
         }
         if (
@@ -69,7 +73,7 @@ function ConnectAppsSession({ base, token }: { base: string; token: string }) {
         ) {
           setError(
             t(
-              "Server address unavailable. Set Custom server URLs under Apps → Plex → Remote access.",
+              "Server address unavailable. Ask the server owner to set a reachable server address, then try again.",
             ),
           );
           return;

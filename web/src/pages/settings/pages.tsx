@@ -172,7 +172,9 @@ function ExtrasStatus() {
   if (!extras?.enabled || command) return null;
   return (
     <p role="status" className="text-sm text-fg-muted">
-      {t("Trailers are on, but no resolver command is set, so none can play.")}
+      {t(
+        "Trailers use yt-dlp. Install yt-dlp, or set your own resolver command under More options.",
+      )}
     </p>
   );
 }

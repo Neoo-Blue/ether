@@ -34,7 +34,7 @@ describe("Apps Plex placement", () => {
   });
 
   it("drops a disabled Plex route to the overview", async () => {
-    renderApp("/apps/secure", {}, (fake) => {
+    renderApp("/apps/plex/remote", {}, (fake) => {
       fake.state.config.frontends = { plex: { enabled: false } };
     });
     expect(await screen.findByRole("heading", { name: "Apps" }, WAIT)).toBeInTheDocument();
@@ -49,10 +49,10 @@ describe("Apps Plex placement", () => {
     );
   });
 
-  it("does not treat /apps/secure as the Plex page", async () => {
-    renderApp("/apps/secure");
-    expect(await screen.findByRole("heading", { name: "Apps" }, WAIT)).toBeInTheDocument();
-    expect(screen.queryByLabelText("Secure connections")).not.toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "Plex", selected: true })).not.toBeInTheDocument();
+  it("opens remote access and secure connections at /apps/plex/remote", async () => {
+    renderApp("/apps/plex/remote");
+    expect(await screen.findByLabelText("Allow remote access", {}, WAIT)).toBeInTheDocument();
+    expect(screen.getByLabelText("Secure connections")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Remote access", selected: true })).toBeInTheDocument();
   });
 });

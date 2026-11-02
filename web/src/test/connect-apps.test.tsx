@@ -49,7 +49,7 @@ it("explains how to enable HTTPS when Stremio has no secure address", async () =
   render(<ConnectApps base="/me" token="portal" />);
   fireEvent.click(await screen.findByRole("button", { name: "Create connection" }));
   expect(await screen.findByRole("alert")).toHaveTextContent(
-    "Stremio needs HTTPS. Add a certificate under Apps → Secure connections.",
+    "Stremio needs HTTPS. Ask the server owner to give this server a secure (HTTPS) address, then try again.",
   );
 });
 
@@ -62,7 +62,7 @@ it("explains what to configure when no server address is available", async () =>
   render(<ConnectApps base="/me" token="portal" />);
   fireEvent.click(await screen.findByRole("button", { name: "Create connection" }));
   expect(await screen.findByRole("alert")).toHaveTextContent(
-    "Server address unavailable. Set Custom server URLs under Apps → Plex → Remote access.",
+    "Server address unavailable. Ask the server owner to set a reachable server address, then try again.",
   );
 });
 

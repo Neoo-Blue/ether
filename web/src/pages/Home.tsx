@@ -86,7 +86,7 @@ function GettingStarted({ sessions }: { sessions: NowPlaying[] }) {
   const apps = Object.entries(cfg.frontends ?? {})
     .filter(([, row]) => row?.enabled)
     .map(([id]) => id);
-  const profile = cfg.quality?.default?.trim() || "1080p";
+  const profile = cfg.quality?.default?.trim() || "4K";
   const steps = [
     { id: "tmdb", todo: !tmdbReady, label: t("Add a TMDB key"), to: "/services/tmdb" },
     { id: "source", todo: !sourceReady(cfg), label: t("Add a source"), to: "/sources" },
@@ -111,21 +111,22 @@ function GettingStarted({ sessions }: { sessions: NowPlaying[] }) {
       label: t("Add viewers"),
       to: "/viewers",
     },
-    {
-      id: "quality",
-      todo: profile === "1080p",
-      label: t("Playback quality: {profile} at home · change", { profile }),
-      to: "/releases/profiles",
-    },
   ].filter((step) => step.todo);
   if (steps.length === 0) return <span hidden data-testid="getting-started-clear" />;
+  // The quality chip only reports the current default. It is never a todo,
+  // so a deliberate choice (say 1080p) cannot keep this bar alive.
+  const qualityChip = {
+    id: "quality",
+    label: t("Playback quality: {profile} at home · change", { profile }),
+    to: "/releases/profiles",
+  };
   return (
     <section
       aria-label={t("Next steps")}
       className="flex shrink-0 flex-wrap items-center gap-2 rounded-lg border border-border bg-surface py-1.5 pl-3 pr-1.5"
     >
       <span className="text-xs font-medium text-fg-muted">{t("Next steps")}</span>
-      {steps.map((step) => (
+      {[...steps, qualityChip].map((step) => (
         <Link
           key={step.id}
           to={step.to}

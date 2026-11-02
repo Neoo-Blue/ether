@@ -72,7 +72,7 @@ function renderApps(entry: string) {
     <MemoryRouter initialEntries={[entry]}>
       <LocationProbe />
       <Routes>
-        <Route path="/apps/:tab?" element={<Apps />} />
+        <Route path="/apps/:tab?/:section?" element={<Apps />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -260,7 +260,7 @@ describe("Apps", () => {
     expect(screen.queryByRole("link", { name: "Settings" })).not.toBeInTheDocument();
     expect(screen.getByText("Off")).toBeInTheDocument();
     unmount();
-    renderApps("/apps/secure");
+    renderApps("/apps/plex/remote");
     await waitFor(() => expect(screen.getByTestId("loc")).toHaveTextContent("/apps/overview"));
     expect(screen.queryByLabelText("Secure connections")).not.toBeInTheDocument();
   });

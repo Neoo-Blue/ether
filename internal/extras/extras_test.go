@@ -84,10 +84,10 @@ func TestListOrderingFilteringCap(t *testing.T) {
 
 func TestListHiddenWithoutSource(t *testing.T) {
 	vs := fakeVideos{[]tmdb.Video{{Site: "YouTube", Key: "trlOffEN001", Type: "Trailer", Official: true}}}
-	// Enabled but no command configured.
+	// Enabled, no command configured, and no yt-dlp on PATH either.
 	s := New(Options{Videos: vs, Config: func() config.Extras {
 		return config.Extras{Enabled: true}
-	}, LookPath: lookOK})
+	}, LookPath: func(string) (string, error) { return "", os.ErrNotExist }})
 	if s.Enabled() {
 		t.Fatal("should not be enabled without a source")
 	}
