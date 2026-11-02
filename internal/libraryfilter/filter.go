@@ -343,7 +343,10 @@ func (c condition) matches(t *core.Title) bool {
 		case "runtime":
 			v = t.Runtime.Minutes()
 		}
-		if v == 0 {
+		// 0 means unknown for year, rating, popularity and runtime. For votes
+		// it is a real value (nobody has voted), so "votes ≤ 99" and
+		// "votes is 0" match zero-vote titles (#257).
+		if v == 0 && c.field != "votes" {
 			return false
 		}
 		switch c.op {
@@ -540,7 +543,10 @@ func (c condition) sql() (string, []any) {
 		col := map[string]string{"year": "year", "rating": "rating", "votes": "vote_count", "popularity": "popularity", "runtime": "runtime_sec"}[c.field]
 		col = "t." + col
 		op := map[string]string{"gte": ">=", "lte": "<=", "is": "=", "between": ">="}[c.op]
-		q := col + ">0 AND " + col + op + "?"
+		q := col + op + "?"
+		if c.field != "votes" { // 0 is unknown except for votes (see matches)
+			q = col + ">0 AND " + q
+		}
 		v := c.nums[0]
 		if c.field == "runtime" {
 			v *= 60

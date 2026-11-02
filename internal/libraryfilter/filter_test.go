@@ -345,3 +345,31 @@ func TestUnknownAndStudioKeyword(t *testing.T) {
 		t.Fatal(sql)
 	}
 }
+
+// A title nobody has voted on has 0 votes, a real value: "votes ≤ 99" and
+// "votes is 0" match it, in memory and in SQL, while 0 stays unknown for
+// year, rating, popularity and runtime (#257).
+func TestZeroVotesIsAValue(t *testing.T) {
+	low := mustCompile(t, []core.LibraryExclusion{{Name: "Low votes", MediaType: "mixed", Match: "all", Rules: []core.CollectionRule{textRule("votes", "lte", `99`)}}})
+	if !low.Hidden(&core.Title{Type: core.TypeShow}) || !low.Hidden(&core.Title{Type: core.TypeShow, VoteCount: 40}) || low.Hidden(&core.Title{Type: core.TypeShow, VoteCount: 500}) {
+		t.Fatal("votes ≤ 99 must hide 0 and 40 votes, not 500")
+	}
+	if sql, _ := low.SQLHidden(); strings.Contains(sql, "t.vote_count>0") {
+		t.Fatalf("votes SQL still skips 0 votes: %s", sql)
+	}
+	zero := mustCompile(t, []core.LibraryExclusion{{Name: "No votes", MediaType: "mixed", Match: "all", Rules: []core.CollectionRule{textRule("votes", "is", `0`)}}})
+	if !zero.Hidden(&core.Title{Type: core.TypeMovie}) || zero.Hidden(&core.Title{Type: core.TypeMovie, VoteCount: 3}) {
+		t.Fatal("votes is 0")
+	}
+	notSet := mustCompile(t, []core.LibraryExclusion{{Name: "Unset", MediaType: "mixed", Match: "all", Rules: []core.CollectionRule{textRule("votes", "unknown", `null`)}}})
+	if !notSet.Hidden(&core.Title{Type: core.TypeMovie}) || notSet.Hidden(&core.Title{Type: core.TypeMovie, VoteCount: 3}) {
+		t.Fatal("votes is not set should still match only zero-vote titles")
+	}
+	oldYear := mustCompile(t, []core.LibraryExclusion{{Name: "Old", MediaType: "mixed", Match: "all", Rules: []core.CollectionRule{textRule("year", "lte", `1950`)}}})
+	if oldYear.Hidden(&core.Title{Type: core.TypeMovie}) {
+		t.Fatal("an unknown year must still not match year ≤ 1950")
+	}
+	if sql, _ := oldYear.SQLHidden(); !strings.Contains(sql, "t.year>0") {
+		t.Fatalf("year SQL lost its unknown guard: %s", sql)
+	}
+}

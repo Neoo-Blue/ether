@@ -941,7 +941,10 @@ visibility subject to the normal release, availability and viewer restrictions.
 Country matches TMDB's origin/production country metadata, including
 co-productions, separately from original language. For example, a country rule
 for India also matches an English-language Indian production. Unknown country,
-genre, year and language never match an exclusion. The preview reports country
+genre, year and language never match an exclusion. Votes are different: a
+title nobody has voted on has 0 votes, so a rule such as **Votes ≤ 99** also
+matches titles with no votes, and **Votes is not set** matches only those. The
+preview reports country
 coverage. Existing normal metadata refreshes fill gaps without a quota-consuming
 bulk lookup.
 
