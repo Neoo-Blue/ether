@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -466,6 +467,44 @@ func TestPayloadReleasedWriterCannotReplayIntoSharedAnchor(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := rs.releaseNZB(two); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// When the grace hold's own release fails (a database timeout under load),
+// it must be retried: dropped, the anchor stays retiring and every later
+// open of the same release is refused until restart (#262).
+func TestPayloadReplayGraceFailedReleaseIsRetried(t *testing.T) {
+	p := payloadFixture(t)
+	hash := nzbHash([]byte("grace-retry"))
+	var outage atomic.Bool
+	outage.Store(true)
+	p.afterRetireCommit = func() error {
+		if outage.Load() {
+			return errors.New("injected retire failure")
+		}
+		return nil
+	}
+	first := payloadReserve(t, p, hash)
+	if err := p.releaseLater(context.Background(), first, 10*time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	// The grace timer fires and its release fails.
+	waitFor(t, func() bool { p.mu.Lock(); defer p.mu.Unlock(); return len(p.parks) == 0 })
+	outage.Store(false)
+	var o payloadOwner
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		var err error
+		if o, err = p.reserve(context.Background(), 1, "plex", "tv", "lifetime-2", hash, "source-open"); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("release stays refused after the failed grace release was repaired: %v", err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err := p.release(context.Background(), o); err != nil {
 		t.Fatal(err)
 	}
 }

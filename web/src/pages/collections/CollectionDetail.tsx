@@ -59,9 +59,13 @@ export function CollectionDetail({
   const total = preview.data?.total;
   const refresh = REFRESH_OPTIONS.find((r) => r.value === spec.refresh)?.label ?? spec.refresh;
   const sort = SORT_PHRASE[spec.sort] ?? spec.sort;
-  const sorted = spec.sortDesc
-    ? t("Sorted by {sort} (descending)", { sort })
-    : t("Sorted by {sort} (ascending)", { sort });
+  // Source order, shuffle and personal fit have no direction to show.
+  const sorted =
+    spec.sort === "source" || spec.sort === "random" || spec.sort === "personal"
+      ? t("Sorted by {sort}", { sort })
+      : spec.sortDesc
+        ? t("Sorted by {sort} (descending)", { sort })
+        : t("Sorted by {sort} (ascending)", { sort });
   const rotation = !spec.rotate
     ? ""
     : spec.rotate.every === "weekly"

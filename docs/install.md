@@ -149,6 +149,14 @@ On a fresh install, a mounted `/cache` volume is used automatically, so
 no restart is required for that path. The budget is set in the setup wizard
 or later on the Cache page.
 
+Both volumes must be on a disk in this machine. Network shares (NFS, SMB) and
+FUSE filesystems are refused at startup, because they don't give the file
+locking Ether's database and cache need. **On Unraid, don't map `/config` or
+`/cache` from a user share (`/mnt/user/...`).** User shares are FUSE (`shfs`).
+Use the pool or disk path instead, for example
+`/mnt/cache/appdata/ether/config:/config`. If the share already lives on that
+pool, no data has to move.
+
 User and permissions: Ether runs as `PUID`:`PGID` (default 999:999, the
 image's `ether` account). Set them to the user that owns your folders, as
 for other NAS containers (e.g. `PUID=1026 PGID=100` on Synology, `PUID=99

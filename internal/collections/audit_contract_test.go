@@ -83,7 +83,8 @@ func TestOfflineSortDirectionsAndTies(t *testing.T) {
 		want []core.RatingKey
 	}{
 		{"source", false, []core.RatingKey{core.MovieKey(101), core.MovieKey(102), core.MovieKey(103)}},
-		{"source", true, []core.RatingKey{core.MovieKey(103), core.MovieKey(102), core.MovieKey(101)}},
+		// Source order has no direction: "descending" is the editor's hidden default (#264).
+		{"source", true, []core.RatingKey{core.MovieKey(101), core.MovieKey(102), core.MovieKey(103)}},
 		{"title", false, []core.RatingKey{core.MovieKey(102), core.MovieKey(101), core.MovieKey(103)}},
 		{"title", true, []core.RatingKey{core.MovieKey(103), core.MovieKey(101), core.MovieKey(102)}},
 		{"rating", false, []core.RatingKey{core.MovieKey(101), core.MovieKey(103), core.MovieKey(102)}},

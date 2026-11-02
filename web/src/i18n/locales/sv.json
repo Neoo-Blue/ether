@@ -3490,6 +3490,7 @@
   "m_15364765e67f5a": "Egen bild-URL",
   "m_153824e8dc2503": "Leveranskön är full; vissa slutföranden köades inte.",
   "m_153a49b5cbdb2d": "Importerad post använder sin källas inloggning; tillagda reserver använder ingen",
+  "m_153a60303fb806": "VA-API",
   "m_153b158679b645": {
     "one": "Strömmen stoppas. Den kan startas igen om ungefär en minut.",
     "other": "De här strömmarna stoppas. De kan startas igen om ungefär en minut."
@@ -3687,6 +3688,7 @@
   "m_1667b6eab4ed93": "Använd",
   "m_166862fb32e906": "Mallkategori",
   "m_166a5e9e166c52": "Klicka på en affisch för att fästa den för alla. Tagga affischer med de genrer eller personer de visar så att smakmatchningen kan välja en per tittare.",
+  "m_166bac23ab098e": "Intel VA-API",
   "m_166ca4aa4ef047": "Lär sig",
   "m_166dbc83ba73fc": "Lägg till debrid-konto",
   "m_16745cd45e3b9e": "Byggda kring serier och säsonger",
@@ -5201,6 +5203,7 @@
   "m_1f7d73ca4b3ad5": "Tillåtna timmar",
   "m_1f7d90899f2705": "E-post (SMTP)",
   "m_1f7da5720f1c4a": "Sök efter uppdateringar",
+  "m_1f7df306954bfe": "Sorterad efter {sort}",
   "m_1f7e57718515d2": "Saknas ({count})",
   "m_1f7e78461783a1": "Standard",
   "m_1f832d1c8e2ac4": "Inget matchar",

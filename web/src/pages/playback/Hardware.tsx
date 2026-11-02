@@ -14,6 +14,8 @@ import { codecLabel, encodeCodecs } from "./hardwareCodecs";
 
 type Hardware = {
   hwaccel?: { name: string; encoders: string[] | null; device?: string };
+  /** GPU vendor of the VA-API render node: "intel", "amd", "nvidia". */
+  vendor?: string;
   ffmpeg?: unknown;
   error?: string;
   notice?: string;
@@ -52,7 +54,10 @@ function BrandMark({ src, color }: { src: string; color: string }) {
   );
 }
 
-function vendorMark(name: string | undefined): ReactNode {
+// VA-API runs on Intel and AMD alike; the server reads the GPU's PCI vendor.
+function vendorMark(name: string | undefined, vendor?: string): ReactNode {
+  if (name === "vaapi" && vendor === "intel") return <BrandMark src={intel} color="#0071C5" />;
+  if (name === "vaapi" && vendor !== "amd") return <Cpu size={22} aria-hidden />;
   switch (name) {
     case "nvenc":
       return <BrandMark src={nvidia} color="#76B900" />;
@@ -67,7 +72,12 @@ function vendorMark(name: string | undefined): ReactNode {
   }
 }
 
-function vendorCopy(name: string | undefined): { title: string; detail: string } {
+function vendorCopy(name: string | undefined, vendor?: string): { title: string; detail: string } {
+  if (name === "vaapi" && vendor !== "amd")
+    return {
+      title: vendor === "intel" ? t("Intel VA-API") : t("VA-API"),
+      detail: t("This computer converts video through VA-API."),
+    };
   switch (name) {
     case "videotoolbox":
       return {
@@ -131,7 +141,8 @@ export function HardwareStatus() {
   const codecs = encodeCodecs(encoders);
   const toneMap = data?.toneMap ?? [];
   const colour = data?.colour ?? [];
-  const copy = vendorCopy(none ? "none" : accel?.name);
+  const vendor = typeof data?.vendor === "string" ? data.vendor : undefined;
+  const copy = vendorCopy(none ? "none" : accel?.name, vendor);
 
   return (
     <Section
@@ -152,7 +163,7 @@ export function HardwareStatus() {
         <div className="space-y-4">
           <div className="flex items-center gap-4">
             <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-bg-subtle text-fg">
-              {vendorMark(none ? undefined : accel?.name)}
+              {vendorMark(none ? undefined : accel?.name, vendor)}
             </span>
             <div className="min-w-0">
               <p className="text-base font-semibold text-fg">{copy.title}</p>

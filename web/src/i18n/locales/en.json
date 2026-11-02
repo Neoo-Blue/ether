@@ -3490,6 +3490,7 @@
   "m_15364765e67f5a": "Custom image URL",
   "m_153824e8dc2503": "The delivery queue is full; some completions were not queued.",
   "m_153a49b5cbdb2d": "Imported entry uses its source's login; added backups use none",
+  "m_153a60303fb806": "VA-API",
   "m_153b158679b645": {
     "one": "The stream stops. It can be started again in about a minute.",
     "other": "These streams stop. They can be started again in about a minute."
@@ -3687,6 +3688,7 @@
   "m_1667b6eab4ed93": "Used",
   "m_166862fb32e906": "Template category",
   "m_166a5e9e166c52": "Click a poster to pin it for everyone. Tag posters with the genres or people they feature so taste matching can pick one per viewer.",
+  "m_166bac23ab098e": "Intel VA-API",
   "m_166ca4aa4ef047": "Learning",
   "m_166dbc83ba73fc": "Add debrid account",
   "m_16745cd45e3b9e": "Built around shows and seasons",
@@ -5201,6 +5203,7 @@
   "m_1f7d73ca4b3ad5": "Allowed hours",
   "m_1f7d90899f2705": "Email (SMTP)",
   "m_1f7da5720f1c4a": "Check for updates",
+  "m_1f7df306954bfe": "Sorted by {sort}",
   "m_1f7e57718515d2": "Missing ({count})",
   "m_1f7e78461783a1": "Default",
   "m_1f832d1c8e2ac4": "Nothing matches",

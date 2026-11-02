@@ -351,6 +351,41 @@ describe("Hardware status", () => {
     expect(await screen.findByRole("alert", {}, WAIT)).toHaveTextContent("cannot tone-map");
   });
 
+  it("brands VA-API by the GPU's vendor, not always AMD", async () => {
+    for (const [vendor, title] of [
+      ["intel", "Intel VA-API"],
+      ["amd", "AMD VA-API"],
+      [undefined, "VA-API"],
+    ] as const) {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: RequestInfo | URL) => {
+          const url = String(input);
+          if (url.endsWith("/status/hwaccel"))
+            return new Response(
+              JSON.stringify({
+                value: {
+                  hwaccel: {
+                    name: "vaapi",
+                    encoders: ["h264_vaapi"],
+                    device: "/dev/dri/renderD128",
+                  },
+                  ...(vendor ? { vendor } : {}),
+                },
+              }),
+              { status: 200 },
+            );
+          if (url.endsWith("/users"))
+            return new Response(JSON.stringify({ users: [] }), { status: 200 });
+          return new Response(JSON.stringify({ value: [] }), { status: 200 });
+        }),
+      );
+      const view = renderAt("/hardware");
+      expect(await screen.findByText(title, { exact: true }, WAIT)).toBeInTheDocument();
+      view.unmount();
+    }
+  });
+
   it("reports software-only transcoding", async () => {
     backend();
     renderAt("/hardware");

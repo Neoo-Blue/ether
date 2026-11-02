@@ -150,6 +150,21 @@ func rdFiles(info *rdInfo) []File {
 	return out
 }
 
+// rdSelection lists the files to select: the chosen one and every other
+// main video of the torrent. Real-Debrid serves a torrent instantly only for
+// a file set it already holds, and Torrentio, DMM and other debrid apps
+// select every video, so a cached season pack is held as the whole pack and
+// asking for one episode of it starts a new download (#262).
+func rdSelection(files []File, chosen File) string {
+	ids := []string{chosen.ID}
+	for _, f := range files {
+		if f.ID != chosen.ID && isVideo(f.Path) && !isExtra(f.Path) && f.Size > 0 {
+			ids = append(ids, f.ID)
+		}
+	}
+	return strings.Join(ids, ",")
+}
+
 // linkFor maps a selected file to its hoster link: links[] holds one entry
 // per selected file, in file order.
 func rdLinkFor(info *rdInfo, fileID string) string {
@@ -220,7 +235,7 @@ func (p *realDebrid) Acquire(ctx context.Context, req AcquireRequest) (_ *Acquir
 			cleanup()
 			return nil, err
 		}
-		form := url.Values{"files": {chosen.ID}}
+		form := url.Values{"files": {rdSelection(rdFiles(info), chosen)}}
 		if err := p.do(ctx, apiRequest{method: http.MethodPost, path: "/torrents/selectFiles/" + url.PathEscape(id), form: form}, nil); err != nil {
 			cleanup()
 			return nil, err

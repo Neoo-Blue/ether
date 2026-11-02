@@ -3698,6 +3698,7 @@
   "m_15364765e67f5a": "Adres URL własnego obrazu",
   "m_153824e8dc2503": "Kolejka dostarczania jest pełna; niektóre zakończenia nie zostały dodane do kolejki.",
   "m_153a49b5cbdb2d": "Zaimportowany wpis używa danych logowania swojego źródła; dodane źródła zapasowe żadnych nie używają",
+  "m_153a60303fb806": "VA-API",
   "m_153b158679b645": {
     "few": "Te strumienie zostaną zatrzymane. Można je będzie uruchomić ponownie za około minutę.",
     "many": "Te strumienie zostaną zatrzymane. Można je będzie uruchomić ponownie za około minutę.",
@@ -3907,6 +3908,7 @@
   "m_1667b6eab4ed93": "Wykorzystany",
   "m_166862fb32e906": "Kategoria szablonu",
   "m_166a5e9e166c52": "Kliknij plakat, aby przypiąć go dla wszystkich. Oznacz plakaty gatunkami lub osobami, które przedstawiają, aby dopasowanie do gustu mogło wybrać jeden dla każdego widza.",
+  "m_166bac23ab098e": "Intel VA-API",
   "m_166ca4aa4ef047": "Uczenie się",
   "m_166dbc83ba73fc": "Dodaj konto debrid",
   "m_16745cd45e3b9e": "Oparte na serialach i sezonach",
@@ -5499,6 +5501,7 @@
   "m_1f7d73ca4b3ad5": "Dozwolone godziny",
   "m_1f7d90899f2705": "E-mail (SMTP)",
   "m_1f7da5720f1c4a": "Sprawdzaj aktualizacje",
+  "m_1f7df306954bfe": "Sortowanie: {sort}",
   "m_1f7e57718515d2": "Brakujące ({count})",
   "m_1f7e78461783a1": "Domyślne",
   "m_1f832d1c8e2ac4": "Nic nie pasuje",

@@ -3594,6 +3594,7 @@
   "m_15364765e67f5a": "URL de l’image personnalisée",
   "m_153824e8dc2503": "La file d’envoi est pleine ; certaines lectures terminées n’ont pas été mises en file.",
   "m_153a49b5cbdb2d": "L’entrée importée utilise l’identifiant de sa source ; les sources de secours ajoutées n’en utilisent aucun",
+  "m_153a60303fb806": "VA-API",
   "m_153b158679b645": {
     "many": "Ces flux s’arrêtent. Ils pourront être relancés dans environ une minute.",
     "one": "Le flux s’arrête. Il pourra être relancé dans environ une minute.",
@@ -3797,6 +3798,7 @@
   "m_1667b6eab4ed93": "Utilisé",
   "m_166862fb32e906": "Catégorie de modèle",
   "m_166a5e9e166c52": "Cliquez sur une affiche pour l’épingler pour tout le monde. Étiquetez les affiches avec les genres ou les personnes qu’elles mettent en avant afin que l’adaptation aux goûts en choisisse une par spectateur.",
+  "m_166bac23ab098e": "Intel VA-API",
   "m_166ca4aa4ef047": "Apprentissage",
   "m_166dbc83ba73fc": "Ajouter un compte debrid",
   "m_16745cd45e3b9e": "Construit autour des séries et des saisons",
@@ -5350,6 +5352,7 @@
   "m_1f7d73ca4b3ad5": "Heures autorisées",
   "m_1f7d90899f2705": "E-mail (SMTP)",
   "m_1f7da5720f1c4a": "Rechercher les mises à jour",
+  "m_1f7df306954bfe": "Trié par {sort}",
   "m_1f7e57718515d2": "Manquants ({count})",
   "m_1f7e78461783a1": "Par défaut",
   "m_1f832d1c8e2ac4": "Aucun résultat",
