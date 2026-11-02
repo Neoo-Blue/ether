@@ -200,15 +200,16 @@ func (s *TunnelServer) Handler() http.Handler {
 			return
 		}
 		ws.SetReadLimit(defaultReadLimit)
-		s.serve(r.Context(), ws, pluginID)
+		s.serve(r.Context(), ws, pluginID, cred)
 	})
 }
 
 // serve runs one accepted connection: hello, welcome, then the read
 // and ping loops until either side goes away.
-func (s *TunnelServer) serve(ctx context.Context, ws *websocket.Conn, pluginID string) {
+func (s *TunnelServer) serve(ctx context.Context, ws *websocket.Conn, pluginID, credential string) {
 	ctx, cancel := context.WithCancel(ctx)
 	conn := newTunnelConn(s, ws, pluginID, cancel)
+	conn.credential = credential
 	defer conn.teardown(ErrDisconnected)
 
 	helloCtx, helloCancel := context.WithTimeout(ctx, defaultHelloTimeout)
@@ -378,12 +379,18 @@ func (r *tunnelRuntime) Call(ctx context.Context, req Request) (Response, error)
 	if err != nil {
 		return Response{}, err
 	}
+	if err := conn.authorize(ctx); err != nil {
+		return Response{}, err
+	}
 	return conn.call(ctx, r.prepare(req), r.Credential)
 }
 
 func (r *tunnelRuntime) CallStream(ctx context.Context, req Request) (*StreamResponse, error) {
 	conn, err := r.server.connFor(r.pluginID)
 	if err != nil {
+		return nil, err
+	}
+	if err := conn.authorize(ctx); err != nil {
 		return nil, err
 	}
 	return conn.callStream(ctx, r.prepare(req), r.Credential)
@@ -438,11 +445,12 @@ type startInfo struct {
 }
 
 type tunnelConn struct {
-	server   *TunnelServer
-	ws       *websocket.Conn
-	pluginID string
-	id       string
-	cancel   context.CancelFunc
+	server     *TunnelServer
+	ws         *websocket.Conn
+	pluginID   string
+	credential string
+	id         string
+	cancel     context.CancelFunc
 
 	writeMu sync.Mutex
 	sem     chan struct{}
@@ -464,6 +472,16 @@ func newTunnelConn(s *TunnelServer, ws *websocket.Conn, pluginID string, cancel 
 		sem:      make(chan struct{}, s.maxInFlight),
 		pending:  map[string]*pendingCall{},
 	}
+}
+
+// Credentials can expire or be revoked while a socket stays open.
+func (c *tunnelConn) authorize(ctx context.Context) error {
+	id, err := c.server.auth.ResolvePluginCredential(ctx, c.credential)
+	if err != nil || id != c.pluginID {
+		c.teardown(ErrUnauthorized)
+		return ErrUnauthorized
+	}
+	return nil
 }
 
 func (c *tunnelConn) write(ctx context.Context, f frame) error {
