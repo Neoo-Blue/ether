@@ -7,23 +7,95 @@ import (
 	"fmt"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/braedonsaunders/ether/internal/plugins/wasm"
 )
 
 // HotRuntime is implemented by hosted runtimes whose plugin exports the
 // hot-path ABI (SPEC §5.2): ranking steps and rule conditions. The ranking
-// adapters reach it through Manager.Hot.
+// adapters reach it through Manager.Hot. Budgets are the manifest's
+// (lowered, never raised) and every call reports a classified outcome.
 type HotRuntime interface {
 	Runtime
-	// RankBatch returns one key per candidate (higher ranks first), neutral
-	// (0) for candidates that exceeded the per-candidate budget, plus the
-	// number of slow candidates for health.
-	RankBatch(ctx context.Context, cands []CandidateFacts, config json.RawMessage) (keys []int64, slow int, err error)
-	// CondMatch evaluates a rule condition; false on budget exhaustion.
-	CondMatch(ctx context.Context, cand CandidateFacts, operator string, value json.RawMessage) (bool, error)
+	// RankBatch returns one key per candidate (higher ranks first). A
+	// candidate that exceeded its budget gets the neutral key 0 and counts
+	// in HotOutcome.Slow; a batch that ran out of time returns neutral keys
+	// for the rest.
+	RankBatch(ctx context.Context, cands []CandidateFacts, config json.RawMessage) (keys []int64, out HotOutcome, err error)
+	// CondMatch evaluates a rule condition; false when the budget runs out.
+	CondMatch(ctx context.Context, cand CandidateFacts, operator string, value json.RawMessage) (match bool, out HotOutcome, err error)
 	HasRankKey() bool
 	HasCondMatch() bool
+	// Budgets reports the effective per-candidate and per-batch limits.
+	Budgets() HotBudgets
+}
+
+// HotOutcome classifies one hot-path call for health and replay.
+type HotOutcome struct {
+	// Status is ok, error, timeout, forbidden, aborted or governance.
+	Status   string        `json:"status"`
+	Duration time.Duration `json:"durationNs"`
+	Units    int64         `json:"units"`
+	// Slow counts candidates that went neutral on budget.
+	Slow     int  `json:"slow"`
+	MemoHits int  `json:"memoHits"`
+	Trap     bool `json:"trap,omitempty"`
+}
+
+// Timeout reports whether the call ran out of time or budget.
+func (o HotOutcome) Timeout() bool {
+	return o.Status == string(wasm.StatusTimeout) || o.Status == string(wasm.StatusGovernance)
+}
+
+// HotBudgets are the effective hot-path limits for one plugin.
+type HotBudgets struct {
+	PerCandidate time.Duration `json:"perCandidateNs"`
+	PerBatch     time.Duration `json:"perBatchNs"`
+}
+
+// rankingBudget is the manifest's per-step budget (SPEC §4.3: budget).
+type rankingBudget struct {
+	PerCandidateMicros int64 `json:"perCandidateMicros"`
+	PerBatchMicros     int64 `json:"perBatchMicros"`
+	PerBatchMillis     int64 `json:"perBatchMillis"`
+}
+
+// hotLimits lowers the runtime's hot-path defaults to the tightest budget a
+// manifest declares across its ranking steps. The engine clamps anything
+// above its defaults, so a manifest can lower budgets but never raise them.
+func hotLimits(m Manifest) wasm.Limits {
+	var lim wasm.Limits
+	if m.Ether == nil {
+		return lim
+	}
+	for _, step := range m.Ether.Contributes.RankingSteps {
+		if len(step.Budget) == 0 {
+			continue
+		}
+		var b rankingBudget
+		if json.Unmarshal(step.Budget, &b) != nil {
+			continue
+		}
+		if b.PerCandidateMicros > 0 {
+			d := time.Duration(b.PerCandidateMicros) * time.Microsecond
+			if lim.RankPerCandidate == 0 || d < lim.RankPerCandidate {
+				lim.RankPerCandidate = d
+			}
+		}
+		batch := time.Duration(b.PerBatchMicros) * time.Microsecond
+		if b.PerBatchMillis > 0 {
+			batch = time.Duration(b.PerBatchMillis) * time.Millisecond
+		}
+		if batch > 0 && (lim.RankBatch == 0 || batch < lim.RankBatch) {
+			lim.RankBatch = batch
+		}
+	}
+	return lim
+}
+
+func hotOutcome(o wasm.Outcome) HotOutcome {
+	return HotOutcome{Status: string(o.Status), Duration: o.Duration, Units: o.Units, Slow: o.SlowCandidates, MemoHits: o.MemoHits, Trap: o.Trap}
 }
 
 // HostedRuntimeFactory opens hosted plugins (runtime.kind "hosted") on the
@@ -36,7 +108,7 @@ func HostedRuntimeFactory(eng *wasm.Engine) RuntimeFactory {
 		}
 		decl := inst.Manifest.Ether.Runtime
 		host := hostBridge{h: inst.Host}
-		lim := wasm.Limits{}
+		lim := hotLimits(inst.Manifest)
 		switch {
 		case decl.Module != "":
 			module, ok := inst.Files(decl.Module)
@@ -47,7 +119,7 @@ func HostedRuntimeFactory(eng *wasm.Engine) RuntimeFactory {
 			if err != nil {
 				return nil, err
 			}
-			return &hostedRuntime{p: p}, nil
+			return &hostedRuntime{p: p, budgets: effectiveBudgets(lim)}, nil
 		case decl.Entry != "":
 			src, ok := inst.Files(decl.Entry)
 			if !ok {
@@ -65,7 +137,7 @@ func HostedRuntimeFactory(eng *wasm.Engine) RuntimeFactory {
 			if err != nil {
 				return nil, err
 			}
-			return &hostedRuntime{p: p}, nil
+			return &hostedRuntime{p: p, budgets: effectiveBudgets(lim)}, nil
 		default:
 			return nil, fmt.Errorf("plugin %s: hosted runtime needs an entry or a module", inst.ID)
 		}
@@ -85,7 +157,25 @@ func diagnosticsError(diags []wasm.Diagnostic) error {
 	return errors.New("compile: " + strings.Join(msgs, "; "))
 }
 
-type hostedRuntime struct{ p *wasm.Plugin }
+type hostedRuntime struct {
+	p       *wasm.Plugin
+	budgets HotBudgets
+}
+
+// effectiveBudgets mirrors the engine's clamping so callers see the limits
+// that actually apply.
+func effectiveBudgets(lim wasm.Limits) HotBudgets {
+	per, batch := lim.RankPerCandidate, lim.RankBatch
+	if per <= 0 || per > wasm.DefaultRankPerCandidate {
+		per = wasm.DefaultRankPerCandidate
+	}
+	if batch <= 0 || batch > wasm.DefaultRankBatch {
+		batch = wasm.DefaultRankBatch
+	}
+	return HotBudgets{PerCandidate: per, PerBatch: batch}
+}
+
+func (r *hostedRuntime) Budgets() HotBudgets { return r.budgets }
 
 func (r *hostedRuntime) Call(ctx context.Context, req Request) (Response, error) {
 	q := make(map[string][]string, len(req.Query))
@@ -108,26 +198,26 @@ func (r *hostedRuntime) Close() error       { return r.p.Close() }
 func (r *hostedRuntime) HasRankKey() bool   { return r.p.HasRankKey() }
 func (r *hostedRuntime) HasCondMatch() bool { return r.p.HasCondMatch() }
 
-func (r *hostedRuntime) RankBatch(ctx context.Context, cands []CandidateFacts, config json.RawMessage) ([]int64, int, error) {
+func (r *hostedRuntime) RankBatch(ctx context.Context, cands []CandidateFacts, config json.RawMessage) ([]int64, HotOutcome, error) {
 	in := make([]wasm.Candidate, len(cands))
 	for i, c := range cands {
 		facts, err := json.Marshal(c)
 		if err != nil {
-			return nil, 0, err
+			return nil, HotOutcome{Status: string(wasm.StatusError)}, err
 		}
 		in[i] = wasm.Candidate{ReleaseID: c.ReleaseID, Facts: facts}
 	}
 	keys, out, err := r.p.RankBatch(ctx, in, config)
-	return keys, out.SlowCandidates, err
+	return keys, hotOutcome(out), err
 }
 
-func (r *hostedRuntime) CondMatch(ctx context.Context, cand CandidateFacts, operator string, value json.RawMessage) (bool, error) {
+func (r *hostedRuntime) CondMatch(ctx context.Context, cand CandidateFacts, operator string, value json.RawMessage) (bool, HotOutcome, error) {
 	facts, err := json.Marshal(cand)
 	if err != nil {
-		return false, err
+		return false, HotOutcome{Status: string(wasm.StatusError)}, err
 	}
-	ok, _, err := r.p.CondMatch(ctx, wasm.Candidate{ReleaseID: cand.ReleaseID, Facts: facts}, operator, value)
-	return ok, err
+	ok, out, err := r.p.CondMatch(ctx, wasm.Candidate{ReleaseID: cand.ReleaseID, Facts: facts}, operator, value)
+	return ok, hotOutcome(out), err
 }
 
 func cloneHeaders(h map[string]string) map[string]string {
@@ -139,8 +229,8 @@ func cloneHeaders(h map[string]string) map[string]string {
 }
 
 // Hot returns the hosted runtime of an enabled plugin when it exports the
-// hot-path ABI. Callers on the play path must pass a context with the
-// resolve's deadline.
+// hot-path ABI, loading it if needed. It may block on a load, so it is for
+// background work (replay, Studio); the play path uses HotReady.
 func (m *Manager) Hot(ctx context.Context, pluginID string) (HotRuntime, bool) {
 	r, err := m.Get(ctx, pluginID)
 	if err != nil || !r.Enabled {
@@ -152,6 +242,71 @@ func (m *Manager) Hot(ctx context.Context, pluginID string) (HotRuntime, bool) {
 	}
 	hot, ok := rt.(HotRuntime)
 	return hot, ok
+}
+
+// HotReady is the play-path accessor. It never blocks: it returns the
+// plugin's hosted runtime only when it is already loaded, and otherwise
+// starts loading it in the background and reports false, so the caller
+// treats the plugin's steps and conditions as neutral for this resolve.
+// Plugins in shadow mode are never ready on the play path. Runtimes are dropped on update, disable, remove and failure (closeRuntime)
+// and warmed again when descriptors sync.
+func (m *Manager) HotReady(pluginID string) (HotRuntime, bool) {
+	m.mu.Lock()
+	rt, ok := m.runtimes[pluginID]
+	shadow := m.shadow[pluginID]
+	m.mu.Unlock()
+	if shadow {
+		// A plugin in shadow mode never changes real picks; replay and the
+		// shadow report show what it would have done.
+		return nil, false
+	}
+	if !ok {
+		m.warmAsync(pluginID)
+		return nil, false
+	}
+	hot, ok := rt.(HotRuntime)
+	return hot, ok
+}
+
+// prewarmHot loads, in the background, the runtime of an enabled plugin
+// that contributes ranking steps or rule conditions, so the first resolve
+// after start, install, update or enable finds it ready.
+func (m *Manager) prewarmHot(r Record) {
+	if !r.Enabled || r.Manifest.Ether == nil {
+		return
+	}
+	c := r.Manifest.Ether.Contributes
+	if len(c.RankingSteps) == 0 && len(c.RuleConditions) == 0 {
+		return
+	}
+	m.warmAsync(r.ID)
+}
+
+// warmAsync loads one plugin's runtime once in the background.
+func (m *Manager) warmAsync(pluginID string) {
+	m.mu.Lock()
+	if m.warming[pluginID] {
+		m.mu.Unlock()
+		return
+	}
+	m.warming[pluginID] = true
+	m.mu.Unlock()
+	go func() {
+		defer func() {
+			m.mu.Lock()
+			delete(m.warming, pluginID)
+			m.mu.Unlock()
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		r, err := m.Get(ctx, pluginID)
+		if err != nil || !r.Enabled {
+			return
+		}
+		if _, err := m.runtimeFor(ctx, r); err != nil {
+			m.log.Warn("plugins: warm hot runtime", "plugin", pluginID, "err", err)
+		}
+	}()
 }
 
 // hostBridge maps the hosted runtime's dotted host calls (positional JSON
