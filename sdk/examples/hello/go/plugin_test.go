@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -25,6 +26,13 @@ import (
 )
 
 type noopHost struct{}
+
+type parityHost struct {
+	noopHost
+	settings map[string]any
+}
+
+func (h *parityHost) Settings(context.Context) (map[string]any, error) { return h.settings, nil }
 
 func (noopHost) KVGet(context.Context, string) ([]byte, bool, error) { return nil, false, nil }
 func (noopHost) KVPut(context.Context, string, []byte) error         { return nil }
@@ -221,8 +229,12 @@ func TestTypeScriptHelloCompiledWithWasmCompileInHostedRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Call /subtitles without pick: %v", err)
 	}
-	if subDenied.Status != http.StatusForbidden {
-		t.Fatalf("expected 403 without X-Ether-Pick, got %d (%s)", subDenied.Status, subDenied.Body)
+	if subDenied.Status != http.StatusOK {
+		t.Fatalf("expected listing without X-Ether-Pick, got %d (%s)", subDenied.Status, subDenied.Body)
+	}
+	denied, err := rt.Call(ctx, plugins.Request{Method: "POST", Path: "/ether/subtitles/download", Body: json.RawMessage(`{"id":"sub","lang":"en","format":"srt"}`)})
+	if err != nil || denied.Status != http.StatusForbidden {
+		t.Fatalf("download without pick: %+v %v", denied, err)
 	}
 	subOK, err := rt.Call(ctx, plugins.Request{
 		Method:  "GET",
@@ -321,6 +333,7 @@ func TestCrossLanguageHelloParity(t *testing.T) {
 	eng := wasm.NewEngine(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	t.Cleanup(func() { _ = eng.Close() })
 
+	hostSettings := &parityHost{settings: map[string]any{}}
 	inst := plugins.Installed{
 		ID: "org.ether.examples.hello",
 		Manifest: plugins.Manifest{
@@ -334,7 +347,7 @@ func TestCrossLanguageHelloParity(t *testing.T) {
 			}
 			return nil, false
 		},
-		Host: noopHost{},
+		Host: hostSettings,
 	}
 	hostedRT, err := plugins.HostedRuntimeFactory(eng)(inst)
 	if err != nil {
@@ -400,7 +413,7 @@ func TestCrossLanguageHelloParity(t *testing.T) {
 			name:       "subtitles without pick",
 			method:     "GET",
 			path:       "/subtitles/movie/tt0133093.json",
-			wantStatus: http.StatusForbidden,
+			wantStatus: http.StatusOK,
 		},
 		{
 			name:       "subtitles with pick",
@@ -483,6 +496,9 @@ func TestCrossLanguageHelloParity(t *testing.T) {
 	}
 
 	callHosted := func(tc testCase) (int, any) {
+		if tc.path == "/ether/configure" {
+			hostSettings.settings = map[string]any{"greeting": "Welcome"}
+		}
 		var rawBody json.RawMessage
 		if tc.body != "" {
 			rawBody = json.RawMessage(tc.body)
@@ -549,7 +565,12 @@ func TestHostedTypeScriptAsyncHandler(t *testing.T) {
 	}
 	eng := wasm.NewEngine(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	defer eng.Close()
-	p, err := eng.LoadJS("hello.async", "1", string(compiled), nil, wasm.Limits{})
+	p, err := eng.LoadJS("hello.async", "1", string(compiled), wasm.HostFunc(func(_ context.Context, name string, _ json.RawMessage) (json.RawMessage, error) {
+		if name == "settings.get" {
+			return json.RawMessage(`{}`), nil
+		}
+		return nil, fmt.Errorf("unexpected host call %s", name)
+	}), wasm.Limits{})
 	if err != nil {
 		t.Fatal(err)
 	}

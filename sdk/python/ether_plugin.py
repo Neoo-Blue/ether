@@ -18,6 +18,7 @@ import base64
 import hashlib
 import http.server
 import json
+import logging
 import os
 import re
 import socket
@@ -468,6 +469,10 @@ class RemoteHostClient:
                 msg or f"Host call {method} {path} failed with HTTP {exc.code}"
             ) from exc
 
+    def settings_get(self) -> Dict[str, Any]:
+        result = self._call_json("GET", "/ether/plugin-host/settings")
+        return result.get("settings", {})
+
     def log(
         self,
         level: str,
@@ -642,6 +647,7 @@ class PluginInstance:
         self._default_settings = dict(default_settings or {})
         self._default_locale = default_locale or "en"
         self._host = host
+        self._settings_failure_logged = False
 
         inline_strings: Dict[str, Dict[str, str]] = {}
         ether_block = manifest.get("ether")
@@ -706,9 +712,24 @@ class PluginInstance:
         pick_token = _get_header(headers, "X-Ether-Pick")
         request_id = _get_header(headers, "X-Ether-Request-ID")
         host_client = self._host if self._host is not None else create_remote_host_client()
+        settings = dict(self._current_settings)
+        getter = getattr(host_client, "settings_get", None)
+        if callable(getter) and str(req.get("path", "")) != "/ether/configure" and (not isinstance(host_client, RemoteHostClient) or host_client.credential):
+            try:
+                fresh = getter()
+                for field in collect_setting_fields(self._settings_schema):
+                    key = field.get("key")
+                    if field.get("kind") == "secret" and key in self._current_settings:
+                        fresh[key] = self._current_settings[key]
+                settings, _ = decode_settings(self._settings_schema, fresh, self._default_settings)
+            except Exception:
+                if not self._settings_failure_logged:
+                    logging.getLogger(__name__).warning("plugin settings lookup failed")
+                    self._settings_failure_logged = True
+                settings = {}
         return PluginContext(
             manifest=self.manifest,
-            settings=dict(self._current_settings),
+            settings=settings,
             locale=locale,
             pick_token=pick_token,
             request_id=request_id,
@@ -767,6 +788,18 @@ class PluginInstance:
             if fn:
                 return _ok_response(fn(ctx))
             return _ok_response({"status": "ok"})
+
+        if method == "POST" and path == "/ether/subtitles/download":
+            if not ctx.pick_token or not ctx.pick_token.strip():
+                return _error_response(403, "pick_required", "Subtitle downloads require an X-Ether-Pick token.")
+            fn = self.routes.get("subtitle_download") or self.routes.get("subtitleDownload")
+            if not fn:
+                return _error_response(404, "not_found", "Subtitle download handler is not registered.")
+            try:
+                body_obj = _parse_json_body(req.get("body"))
+            except Exception:
+                return _error_response(400, "invalid_json", "Request body must be valid JSON.")
+            return _ok_response(fn(body_obj, ctx))
 
         if method == "POST" and path == "/ether/configure":
             try:
@@ -998,12 +1031,6 @@ class PluginInstance:
             if stremio:
                 resource = stremio["resource"]
                 if resource == "subtitles":
-                    if not ctx.pick_token or not ctx.pick_token.strip():
-                        return _error_response(
-                            403,
-                            "pick_required",
-                            "Subtitles requests require an X-Ether-Pick token.",
-                        )
                     fn = self.routes.get("subtitles")
                     if not fn:
                         return _error_response(

@@ -1,0 +1,17 @@
+{
+  "_id": "62b976b93279cb000772c6f9",
+  "timelines": [
+    {
+      "_id": "6b0027f6402ad21eeeaa8d66",
+      "start": "2026-11-02T00:00:00.000Z",
+      "stop": "2026-11-02T14:00:00.000Z",
+      "title": "Bloomberg TV+"
+    },
+    {
+      "_id": "6ae0e00aa815742894390c5b",
+      "start": "2026-11-02T14:00:00.000Z",
+      "stop": "2026-11-02T16:00:00.000Z",
+      "title": "Bloomberg Open Interest"
+    }
+  ]
+}

@@ -86,6 +86,8 @@ type Manager struct {
 	// healthMu serializes health read-modify-writes so concurrent calls
 	// (resolves on the hot path, scheduled jobs) never lose an update.
 	healthMu sync.Mutex
+	pickMu   sync.Mutex
+	picks    map[string]subtitlePick
 	// warming holds plugin ids whose runtime is loading in the background
 	// (guarded by mu), so the hot path never waits for a load.
 	warming map[string]bool
@@ -386,6 +388,9 @@ func (b *streamBody) Close() error { err := b.ReadCloser.Close(); b.cancel(); re
 // CallStream returns a streaming response. The call deadline remains active
 // until the body is closed; callers must close it on every path.
 func (m *Manager) CallStream(ctx context.Context, pluginID string, req Request) (Response, io.ReadCloser, error) {
+	if req.Path == "/ether/subtitles/download" {
+		return Response{Status: http.StatusForbidden}, nil, ErrPermissionDenied
+	}
 	r, err := m.store.record(ctx, pluginID)
 	if err != nil {
 		return Response{}, nil, err
@@ -453,6 +458,14 @@ func DeadlineFor(path string) time.Duration {
 // inspector ring (secrets redacted) and feeds failures into health.
 // Adapters (WS9) call plugins only through here.
 func (m *Manager) Call(ctx context.Context, pluginID string, req Request) (Response, error) {
+	if req.Path == "/ether/subtitles/download" {
+		var body struct {
+			ID string `json:"id"`
+		}
+		if req.Method != http.MethodPost || json.Unmarshal(req.Body, &body) != nil || !m.consumeSubtitlePick(req.Headers["X-Ether-Pick"], pluginID, req.Headers["X-Ether-Title"], body.ID) {
+			return Response{Status: http.StatusForbidden}, ErrPermissionDenied
+		}
+	}
 	r, err := m.store.record(ctx, pluginID)
 	if err != nil {
 		return Response{}, err
@@ -481,7 +494,7 @@ func (m *Manager) Call(ctx context.Context, pluginID string, req Request) (Respo
 	ms := m.now().Sub(start).Milliseconds()
 	rec := CallRecord{Plugin: pluginID, Route: req.Path, Method: req.Method, Status: resp.Status, MS: ms,
 		Request: redactJSON(req.Body), Response: redactJSON(resp.Body)}
-	if req.Path == "/ether/notify" || req.Path == "/ether/configure" {
+	if req.Path == "/ether/notify" || req.Path == "/ether/configure" || strings.HasPrefix(req.Path, "/subtitles/") || req.Path == "/ether/subtitles/download" {
 		rec.Request = ""
 		rec.Response = ""
 	}

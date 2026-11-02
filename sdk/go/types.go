@@ -414,7 +414,8 @@ type OpenStreamResponse struct {
 // SubtitleItem is one subtitle track returned by a Subtitles route handler.
 type SubtitleItem struct {
 	ID              string `json:"id"`
-	URL             string `json:"url"`
+	URL             string `json:"url,omitempty"`
+	Name            string `json:"name,omitempty"`
 	Lang            string `json:"lang"`
 	Label           string `json:"label,omitempty"`
 	Format          string `json:"format,omitempty"`
@@ -435,6 +436,20 @@ type SubtitlesRequest struct {
 // SubtitlesResponse is returned by a Subtitles route handler.
 type SubtitlesResponse struct {
 	Subtitles []SubtitleItem `json:"subtitles"`
+}
+
+// SubtitleDownloadRequest identifies a viewer-picked subtitle.
+type SubtitleDownloadRequest struct {
+	ID     string `json:"id"`
+	Lang   string `json:"lang"`
+	Format string `json:"format"`
+}
+
+// SubtitleDownloadResponse carries subtitle text or base64-encoded bytes.
+type SubtitleDownloadResponse struct {
+	Format   string `json:"format"`
+	Encoding string `json:"encoding"`
+	Data     string `json:"data"`
 }
 
 // MarkerItem is one intro/credits/recap/preview marker.

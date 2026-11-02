@@ -17,8 +17,14 @@ export function SubtitleProviders() {
   const [editing, setEditing] = useState<Provider | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const providers: Provider[] = config.data?.subtitles?.providers ?? [
+  const configured: Provider[] = config.data?.subtitles?.providers ?? [
     { id: "opensubtitles", kind: "opensubtitles", enabled: true },
+  ];
+  const providers: Provider[] = [
+    ...configured,
+    ...registry.descriptors
+      .filter((d) => d.owner !== "builtin" && !configured.some((p) => p.kind === d.id))
+      .map((d) => ({ id: d.id, kind: d.id, enabled: true })),
   ];
   const save = async (next: Provider[]) => {
     setBusy(true);

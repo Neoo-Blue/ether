@@ -1,0 +1,14 @@
+{
+  "summary": "Match local video files to catalogue titles.",
+  "folder": "Folder",
+  "folderHint": "Choose a folder containing movies or shows.",
+  "page": "Local folders",
+  "description": "Match folders that could not be identified automatically.",
+  "empty": "All scanned folders are matched.",
+  "search": "Search for a title",
+  "saved": "Match saved.",
+  "noFolder": "Choose a folder in plugin settings.",
+  "scan": "Scan folder",
+  "scanned": "Scan complete.",
+  "notScanned": "Scan the folder to find videos."
+}

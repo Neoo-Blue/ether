@@ -497,6 +497,8 @@ func (h *recordingHost) CallHost(ctx context.Context, name string, raw json.RawM
 			}
 		}
 		return nil, wasm.Forbidden("undeclared secret " + sec)
+	case "settings.get":
+		return json.RawMessage(`{}`), nil
 	case "http.fetch":
 		var req struct {
 			Method  string            `json:"method"`
