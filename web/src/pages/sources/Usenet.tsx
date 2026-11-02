@@ -20,7 +20,7 @@ import { api, newId } from "../../lib/api";
 import { formatBytes, isPlainObject } from "../../lib/format";
 import { useAsync } from "../../lib/hooks";
 import type { EtherConfig, UsenetProvider } from "../../lib/types";
-import { SourceCard, usenetFix } from "./cards";
+import { PluginSourceCards, SourceCard, usenetFix } from "./cards";
 import {
   BoolRow,
   NumRow,
@@ -323,6 +323,14 @@ export function UsenetProviders({
           />
         )}
       </Section>
+
+      <PluginSourceCards
+        classes={["usenet"]}
+        sectionTitle={t("Usenet plugins")}
+        sectionDescription={t(
+          "Usenet release sources contributed by enabled plugins. NZB results stream through your configured Usenet providers.",
+        )}
+      />
 
       <Section
         title={t("Repair missing pieces")}
