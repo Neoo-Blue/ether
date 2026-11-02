@@ -29,7 +29,7 @@ export function PinStatusBadge({ pin }: { pin: Pin }) {
 
 /** The Pinned page with a title's releases already searched. */
 export function searchLink(key: string, title: string) {
-  return `/releases/pinned?key=${encodeURIComponent(key)}&title=${encodeURIComponent(title)}`;
+  return `/quality/pinned?key=${encodeURIComponent(key)}&title=${encodeURIComponent(title)}`;
 }
 
 /** Find a release to pin, then the releases already pinned, newest first. */
@@ -104,7 +104,7 @@ export function PinnedTab() {
               title={t("No pinned releases")}
               description={t("Search a title and pin the release you want it to play.")}
               action={
-                <Link to="/releases/pinned" className="text-sm text-primary underline">
+                <Link to="/quality/pinned" className="text-sm text-primary underline">
                   {t("Search releases")}
                 </Link>
               }

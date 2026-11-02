@@ -14,7 +14,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../../app-context";
 import { Drawer } from "../../components/Drawer";
 import { ErrorPanel, MutationError } from "../../components/feedback";
-import { PasswordInput, TestButton, type TestState } from "../../components/fields";
+import { TestButton, type TestState } from "../../components/fields";
 import { IntegrationAppCard } from "../../components/IntegrationAppCard";
 import { secretConfigured } from "../../components/IntegrationAccount";
 import { SimklMark, TraktMark } from "../../components/integration-brands";
@@ -24,10 +24,9 @@ import { localized, t, tx } from "../../i18n";
 import { api, apiFetch, ApiError, type TestFn } from "../../lib/api";
 import { useAsync } from "../../lib/hooks";
 import type { EtherConfig } from "../../lib/types";
-import { MarkerCoverage } from "../playback/Markers";
 import { PosterAccounts } from "./PosterAccounts";
 import { RatingSources, type RatingSettings } from "../metadata/Ratings";
-import { SimklIntegration, type SimklSettings } from "./SimklIntegration";
+import { SimklSettings } from "./SimklIntegration";
 import { LanguageFeatures } from "./LanguageFeatures";
 import { LanguageModelSettings } from "./LanguageModel";
 import { asObj, GenericFields, SchemaField, type FieldGroup } from "./SchemaForm";
@@ -79,8 +78,6 @@ interface Service {
   flag: "enabled" | "theIntroDb";
   label: string;
   groups: FieldGroup[];
-  /** Simkl keeps its own account form and save. */
-  custom?: boolean;
   form?: (props: {
     value: Obj;
     saved: Obj | undefined;
@@ -116,7 +113,9 @@ const SERVICES: Service[] = localized(() => [
     flag: "enabled",
     label: "Simkl",
     groups: [],
-    custom: true,
+    form: ({ value, onChange, errors, footer }) => (
+      <SimklSettings value={value} onChange={onChange} errors={errors} footer={footer} />
+    ),
     blockEnable: (v) => (String(v.clientId ?? "").trim() ? null : t("Needs a client ID")),
     requiredField: "clientId",
   },
@@ -230,14 +229,6 @@ function useExclusive() {
     return run;
   }, []);
   return { locked, enqueue };
-}
-
-function simklSettings(value: Obj | undefined): SimklSettings {
-  return {
-    enabled: value?.enabled === true,
-    clientId: String(value?.clientId ?? ""),
-    clientSecret: String(value?.clientSecret ?? ""),
-  };
 }
 
 function textField(section: Obj, key: string, fallback: string): string {
@@ -397,10 +388,6 @@ export function ConnectedServices({
     errors: Record<string, string>;
     failure: unknown;
   } | null>(null);
-  const [ratingsSetup, setRatingsSetup] = useState<{
-    draft: RatingSettings;
-    failure: unknown;
-  } | null>(null);
   const { locked, enqueue } = useExclusive();
   const skipSetupOffer = useRef(false);
   const model = useRef({
@@ -424,11 +411,11 @@ export function ConnectedServices({
     for (const service of SERVICES) {
       flags[service.tab] = flagOf(stored?.[service.configKey], service.flag);
     }
-    flags.ratings = ratings.data?.enabled === true;
+    flags.ratings = true;
     flags.tmdb = true;
     flags.introdb = true;
     return flags;
-  }, [stored, ratings.data?.enabled]);
+  }, [stored]);
 
   const flagSig = TAB_ORDER.map((key) => (enabled[key] ? "1" : "0")).join("");
   const reported = useRef("");
@@ -444,22 +431,17 @@ export function ConnectedServices({
       skipSetupOffer.current = false;
       return;
     }
-    if (requested === "ratings" && ratings.data === undefined && !ratings.error) return;
     const key = TAB_ORDER.find((item) => item === requested);
     if (key && enabled[key]) return;
     navigate("/services/overview", { replace: true });
     if (skipSetupOffer.current) return;
-    if (key === "ratings" && ratings.data && !ratings.data.enabled && !ratings.data.apiKey.trim()) {
-      openRatingsSetup(ratings.data);
-      return;
-    }
     const service = SERVICES.find((item) => item.tab === key);
     if (service && service.blockEnable?.(draft[service.configKey] ?? {})) {
       openSectionSetup(service, draft[service.configKey] ?? {});
     }
     // Setup openers are stable setState wrappers. Re-running would reset a drawer mid-edit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft, requested, enabled, ratings.data, ratings.error, navigate]);
+  }, [draft, requested, enabled, navigate]);
 
   const runTest = useCallback((s: Service, value: Obj) => {
     if (!s.test) return;
@@ -495,7 +477,6 @@ export function ConnectedServices({
   };
 
   const openSectionSetup = (service: Service, seed: Obj) => {
-    setRatingsSetup(null);
     setSectionSetup({
       service,
       draft: { ...seed, [service.flag]: true },
@@ -504,20 +485,13 @@ export function ConnectedServices({
     });
   };
 
-  const openRatingsSetup = (seed: RatingSettings) => {
-    setSectionSetup(null);
-    setRatingsSetup({ draft: { ...seed, enabled: true }, failure: null });
-  };
-
   const save = () =>
     enqueue(async () => {
       const draftNow = model.current.draft;
       const storedNow = model.current.stored;
       if (!draftNow || !storedNow) return;
       const changed = SERVICES.filter(
-        (s) =>
-          !s.custom &&
-          JSON.stringify(draftNow[s.configKey]) !== JSON.stringify(storedNow[s.configKey]),
+        (s) => JSON.stringify(draftNow[s.configKey]) !== JSON.stringify(storedNow[s.configKey]),
       );
       const catalogChanged = JSON.stringify(draftNow.catalog) !== JSON.stringify(storedNow.catalog);
       if (!changed.length && !catalogChanged) return;
@@ -614,7 +588,6 @@ export function ConnectedServices({
             e instanceof ApiError && e.fields
               ? Object.fromEntries(e.fields.map((f) => [f.field, f.message]))
               : {};
-          setRatingsSetup(null);
           setSectionSetup({
             service,
             draft: { ...current, [service.flag]: true },
@@ -626,36 +599,6 @@ export function ConnectedServices({
             description: (e as Error).message,
           });
         }
-      } finally {
-        setBusyId(null);
-      }
-    });
-
-  const toggleRatings = (next: boolean) =>
-    enqueue(async () => {
-      const current = model.current.ratings;
-      if (!current) return;
-      if (!next) skipSetupOffer.current = true;
-      if (next && !current.apiKey.trim()) {
-        openRatingsSetup(current);
-        return;
-      }
-      setBusyId("ratings");
-      try {
-        const saved = await apiFetch<RatingSettings>("/discovery/ratings/settings", {
-          method: "PUT",
-          body: JSON.stringify({ ...current, enabled: next }),
-        });
-        model.current.ratings = saved;
-        ratings.setData(saved);
-        if (!next && model.current.tab === "ratings") navigate("/services/overview");
-      } catch (e) {
-        if (next) openRatingsSetup({ ...current, enabled: true });
-        setRatingsSetup((setup) => (setup ? { ...setup, failure: e } : setup));
-        if (!next)
-          toast.error(t("Couldn't save the change"), {
-            description: (e as Error).message,
-          });
       } finally {
         setBusyId(null);
       }
@@ -708,31 +651,6 @@ export function ConnectedServices({
     });
   };
 
-  const saveRatingsSetup = () => {
-    const setup = ratingsSetup;
-    if (!setup) return;
-    if (!setup.draft.apiKey.trim()) {
-      setRatingsSetup({ ...setup, failure: new Error(t("Needs an API key")) });
-      return;
-    }
-    void enqueue(async () => {
-      setBusyId("ratings");
-      try {
-        const saved = await apiFetch<RatingSettings>("/discovery/ratings/settings", {
-          method: "PUT",
-          body: JSON.stringify({ ...setup.draft, enabled: true }),
-        });
-        model.current.ratings = saved;
-        ratings.setData(saved);
-        setRatingsSetup(null);
-      } catch (e) {
-        setRatingsSetup((current) => (current ? { ...current, failure: e } : current));
-      } finally {
-        setBusyId(null);
-      }
-    });
-  };
-
   if (config.error) return <ErrorPanel error={config.error} onRetry={() => void config.reload()} />;
   if (!cfg || !draft)
     return (
@@ -772,48 +690,7 @@ export function ConnectedServices({
         {sectionSetup && setupService ? (
           <div className="space-y-4">
             {sectionSetup.failure ? <MutationError error={sectionSetup.failure} /> : null}
-            {setupService.custom ? (
-              <div className="space-y-3">
-                <label className="block">
-                  {t("Client ID")}{" "}
-                  <input
-                    className="w-full rounded border border-border bg-surface px-2 py-1"
-                    value={String(sectionSetup.draft.clientId ?? "")}
-                    onChange={(e) =>
-                      setSectionSetup({
-                        ...sectionSetup,
-                        draft: {
-                          ...sectionSetup.draft,
-                          clientId: e.target.value,
-                        },
-                      })
-                    }
-                  />
-                </label>
-                {sectionSetup.errors[`${setupService.configKey}.clientId`] ? (
-                  <p role="alert" className="text-sm text-danger">
-                    {sectionSetup.errors[`${setupService.configKey}.clientId`]}
-                  </p>
-                ) : null}
-                <label className="block" htmlFor="setup-client-secret">
-                  {t("Client secret")}
-                </label>
-                <PasswordInput
-                  id="setup-client-secret"
-                  autoComplete="off"
-                  value={String(sectionSetup.draft.clientSecret ?? "")}
-                  onChange={(e) =>
-                    setSectionSetup({
-                      ...sectionSetup,
-                      draft: {
-                        ...sectionSetup.draft,
-                        clientSecret: e.target.value,
-                      },
-                    })
-                  }
-                />
-              </div>
-            ) : setupService.form ? (
+            {setupService.form ? (
               <setupService.form
                 value={sectionSetup.draft}
                 saved={stored?.[setupService.configKey]}
@@ -835,50 +712,6 @@ export function ConnectedServices({
                 footer={null}
               />
             )}
-          </div>
-        ) : null}
-      </Drawer>
-      <Drawer
-        open={ratingsSetup !== null}
-        onClose={() => {
-          if (busyId) return;
-          setRatingsSetup(null);
-        }}
-        title={t("Set up {app}", { app: t("OMDb and MDBList") })}
-        description={t("Save and enable turns this on. Cancel leaves it off.")}
-        footer={
-          <div className="flex w-full flex-wrap items-center gap-2">
-            <span className="flex-1" />
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setRatingsSetup(null)}
-              disabled={busyId !== null}
-            >
-              {t("Cancel")}
-            </Button>
-            <Button size="sm" onClick={saveRatingsSetup} disabled={busyId !== null || locked}>
-              {busyId ? t("Saving…") : t("Save and enable")}
-            </Button>
-          </div>
-        }
-      >
-        {ratingsSetup ? (
-          <div className="space-y-3">
-            {ratingsSetup.failure ? <MutationError error={ratingsSetup.failure} /> : null}
-            <label className="block">
-              {t("API key")}{" "}
-              <input
-                className="w-full rounded border border-border bg-surface px-2 py-1"
-                value={ratingsSetup.draft.apiKey}
-                onChange={(e) =>
-                  setRatingsSetup({
-                    ...ratingsSetup,
-                    draft: { ...ratingsSetup.draft, apiKey: e.target.value },
-                  })
-                }
-              />
-            </label>
           </div>
         ) : null}
       </Drawer>
@@ -950,10 +783,9 @@ export function ConnectedServices({
           busyId={busyId}
           locked={locked}
           onToggle={(service, next) => void toggleService(service, next)}
-          onToggleRatings={(next) => void toggleRatings(next)}
         />
       </div>
-      {SERVICES.filter((s) => !s.custom).map((s) => {
+      {SERVICES.map((s) => {
         if (tab !== s.tab && !visited.has(s.tab)) return null;
         const value = draft[s.configKey] ?? {};
         const set = (next: Obj) => setDraft({ ...draft, [s.configKey]: next });
@@ -990,36 +822,13 @@ export function ConnectedServices({
                 speechReady={speechToTextReady(stored?.llm)}
               />
             ) : null}
-            {s.tab === "introdb" ? <MarkerCoverage /> : null}
           </div>
         );
       })}
-      {tab === "simkl" || visited.has("simkl") ? (
-        <div hidden={tab !== "simkl"}>
-          <SimklIntegration
-            settings={simklSettings(draft.simkl)}
-            onSettings={(next) => {
-              const draftNow = model.current.draft;
-              if (!draftNow) return;
-              const draftNext = { ...draftNow, simkl: next as unknown as Obj };
-              model.current.draft = draftNext;
-              setDraft(draftNext);
-            }}
-            onPersisted={(next) => {
-              const storedNow = model.current.stored;
-              const draftNow = model.current.draft;
-              if (!storedNow || !draftNow) return;
-              const section = { ...asObj(storedNow.simkl), ...(next as unknown as Obj) };
-              applySection("simkl", section, { ...draftNow, simkl: section });
-            }}
-            persist={enqueue}
-            disabled={locked}
-          />
-        </div>
-      ) : null}
       {tab === "ratings" || visited.has("ratings") ? (
         <div hidden={tab !== "ratings"}>
           <RatingSources
+            keysOnly
             saved={ratings.data ?? null}
             disabled={locked}
             persist={enqueue}
@@ -1100,7 +909,6 @@ function ServiceOverview({
   busyId,
   locked,
   onToggle,
-  onToggleRatings,
 }: {
   draft: Record<string, Obj>;
   stored: Record<string, Obj> | null;
@@ -1108,7 +916,6 @@ function ServiceOverview({
   busyId: string | null;
   locked: boolean;
   onToggle: (service: Service, next: boolean) => void;
-  onToggleRatings: (next: boolean) => void;
 }) {
   const { health } = useApp();
   const catalogHealth = health.find((item) => item.id === "catalog");
@@ -1183,12 +990,8 @@ function ServiceOverview({
               identity={{ id: "ratings", name: t("OMDb and MDBList") }}
               description={t("IMDb, Rotten Tomatoes and other rating badges.")}
               status={ratingsStatus(ratings)}
-              enabled={ratings?.enabled}
-              busy={locked || busyId === "ratings"}
-              disabled={switchesHeld || !ratings}
-              onToggle={ratings ? onToggleRatings : undefined}
               configureHref="/services/ratings"
-              configureLabel={t("Ratings")}
+              configureLabel={t("Manage")}
             />
           </IntegrationGroup>
         )}
@@ -1215,12 +1018,8 @@ function ServiceOverview({
           identity={{ id: "introdb", name: "TheIntroDB" }}
           description={t("Intro and credits markers so viewers can skip them.")}
           status={introStatus(on("introdb"), saved("introdb").apiKey)}
-          enabled={on("introdb")}
-          busy={locked || busyId === "introdb"}
-          disabled={switchesHeld}
-          onToggle={(next) => onToggle(service("introdb"), next)}
           configureHref="/services/introdb"
-          configureLabel={t("Markers")}
+          configureLabel={t("Manage")}
         />
       </IntegrationGroup>
       <IntegrationGroup title={t("Smart features")}>

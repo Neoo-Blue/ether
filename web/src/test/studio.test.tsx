@@ -39,6 +39,38 @@ describe("Collection Studio editor", () => {
       WAIT,
     );
   });
+  it("sets the collection row's full schedule under Audience, the one the Home designer edits", async () => {
+    const { fake } = renderApp("/collections/new?draft=test-schedule");
+    const name = await screen.findByLabelText("Collection name", {}, { timeout: 10000 });
+    fireEvent.change(name, { target: { value: "Christmas Evenings" } });
+    expect(screen.getByRole("tab", { name: "Refresh" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Schedule" })).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Audience" }));
+    const months = screen.getByRole("group", { name: "Months" });
+    fireEvent.click(within(months).getAllByRole("button")[11]!);
+    const parts = screen.getByRole("group", { name: "Times of day" });
+    fireEvent.click(within(parts).getAllByRole("button")[2]!);
+    fireEvent.change(screen.getByLabelText("Start date"), { target: { value: "2026-12-01" } });
+    fireEvent.change(screen.getByLabelText("End date"), { target: { value: "2026-12-31" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+    await waitFor(
+      () =>
+        expect(
+          calls(fake, "POST", "/collections").some(
+            (c) =>
+              JSON.stringify((c.body as CollectionSpec).targets.schedule) ===
+              JSON.stringify({
+                months: [12],
+                dayparts: ["evening"],
+                startDate: "2026-12-01",
+                endDate: "2026-12-31",
+              }),
+          ),
+        ).toBe(true),
+      WAIT,
+    );
+  });
+
   it("creates a collection in a drawer over the gallery", async () => {
     renderApp("/collections/new?draft=test-drawer");
     const drawer = await screen.findByRole("dialog", { name: "New collection" }, WAIT);

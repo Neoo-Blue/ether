@@ -146,15 +146,17 @@ func TestPersistenceImportsPoliciesAndAtomicFailure(t *testing.T) {
 	c.Number = "99"
 	c.Favorite = true
 	c.Rating = "PG"
-	c.AllowedUsers = []int64{4}
 	if _, e = s.SaveChannel(ctx, c); e != nil {
+		t.Fatal(e)
+	}
+	if e = s.SetChannelViewers(ctx, c.ID, ChannelViewers{Deny: []int64{5}}); e != nil {
 		t.Fatal(e)
 	}
 	if _, e = s.ImportSource(ctx, src); e != nil {
 		t.Fatal(e)
 	}
 	saved, _ := s.Channel(ctx, c.ID)
-	if saved.Number != "99" || !saved.Favorite || !containsUser(saved.AllowedUsers, 4) {
+	if saved.Number != "99" || !saved.Favorite {
 		t.Fatal("refresh lost owner mapping")
 	}
 	user := &core.User{ID: 4, MaxContentRating: "PG"}

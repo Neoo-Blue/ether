@@ -636,7 +636,7 @@ function SetupReadyInner({ initialConfig = null, tmdbAvailable }: SetupReadyProp
   const homeProfile = cfg?.quality?.default?.trim() || "1080p";
   pills.push({
     label: t("Playback quality: {profile} at home · change", { profile: homeProfile }),
-    to: "/releases/profiles",
+    to: "/quality/profiles",
   });
 
   const summaryLine =

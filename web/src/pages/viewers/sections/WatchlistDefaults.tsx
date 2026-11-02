@@ -79,7 +79,7 @@ const SOURCES = localized(
     ] as const,
 );
 
-/** Server-wide watchlist alerts, edited in place on Notifications. */
+/** Server-wide watchlist monitoring, edited in place on Catalog settings. */
 export function WatchlistAlerts() {
   const s = useDiscoverySettings();
   if (s.doc.error) return <ErrorPanel error={s.doc.error} onRetry={() => void s.doc.reload()} />;
@@ -93,7 +93,7 @@ export function WatchlistAlerts() {
   return (
     <>
       <SettingsSection
-        title={t("Watchlist alerts")}
+        title={t("Watchlists")}
         description={t(
           "A streamable watchlist title shows on their Home. A release date alone is not enough.",
         )}
@@ -177,7 +177,7 @@ export function WarmNewArrivals() {
         <SettingsRow
           title={<label htmlFor="watchlist-prewarm">{t("Warm up new arrivals")}</label>}
           description={t(
-            "Fetch the opening minutes as soon as a title becomes available, so it starts quickly. This runs only while watchlist monitoring is on.",
+            "Fetch the opening minutes as soon as a title becomes available, so it starts quickly. Needs watchlist monitoring in Catalog settings.",
           )}
           control={
             <Switch

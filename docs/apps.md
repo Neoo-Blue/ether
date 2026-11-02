@@ -165,7 +165,9 @@ See [the threat model](../design.md) for credential, proxy and cluster boundarie
 Its requirements must be checked against the final build and security receipts;
 they are not a claim that mixed-version or lifecycle acceptance is complete.
 
-The Apps overview enables protocols and reports status. Enabled protocols expose
+The Apps overview enables protocols and reports status. Its **Away from home**
+section (public host name, public port, custom server URLs and your own
+certificate) applies to every app, not only Plex. Enabled protocols expose
 configuration tabs, with changes edited in place. Drawers are for records. There
 is no generic Settings menu. The [owner guide](user-guide.md) distinguishes native
 client targets from unsupported web shells. No third-party web client is shipped.

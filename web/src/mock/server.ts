@@ -19,7 +19,14 @@ import type {
   TitleCard,
   Viewer,
 } from "../lib/contract";
-import { daypartOf, overrideCount, pageOf } from "../lib/layout";
+import {
+  collectionIdOf,
+  daypartOf,
+  overrideCount,
+  pageOf,
+  tidySchedule,
+  whenMatches,
+} from "../lib/layout";
 import { assemble } from "./assemble";
 import { normalizeSpec } from "../lib/rules";
 import type {
@@ -53,6 +60,7 @@ import { createMetadataMock } from "./metadata";
 import { createMaintenance } from "./maintenance";
 import { createOpsMock, UNREACHABLE } from "./ops";
 import { createReleaseConsoleMock } from "./releases";
+import { createQualityMock } from "./quality";
 import { createSitesMock } from "./sites";
 import { createTrashMock } from "./trash";
 import { createCacheMock } from "./cache";
@@ -523,7 +531,9 @@ export function createFakeServer(opts: FakeOptions = {}) {
   const cacheMock = createCacheMock(opts.cacheRestart);
   const liveTV = createLiveTVMock(catalog);
   const calendar = createCalendarMock();
+  const qualityMock = createQualityMock();
   const safetyPolicies = new Map<number, Record<string, unknown>>();
+  const simklAccounts = new Map<number, { connected: boolean; lastSync?: string }>();
   const state = {
     boot: {
       ok: true,
@@ -571,8 +581,6 @@ export function createFakeServer(opts: FakeOptions = {}) {
       lifecycle: v.lifecycle,
       streamLimit: 0,
       maxContentRating: v.id === 3 ? "PG" : "",
-      subtitleLanguages: [],
-      audioLanguages: [],
       allowedSections: [],
     })),
     favoritesMirror: new Map<number, boolean>(),
@@ -1186,16 +1194,16 @@ export function createFakeServer(opts: FakeOptions = {}) {
         c.targets.homeRow &&
         (c.targets.users === "all" || (userId !== null && c.targets.users.includes(userId)));
       if (!targeted && !placed.has(String(c.id))) continue;
-      const s = c.targets.schedule;
-      if (targeted && !placed.has(String(c.id))) {
-        if (s?.days?.length && !s.days.includes(day)) continue;
-        if (s?.devices?.length && !s.devices.includes(device as never)) continue;
-        if (s && (s.fromHour !== undefined || s.toHour !== undefined)) {
-          const f = s.fromHour ?? 0;
-          const to = s.toHour ?? 24;
-          if (!(f <= to ? hour >= f && hour < to : hour >= f || hour < to)) continue;
-        }
-      }
+      // The collection's schedule (a draft's edit in a preview), unless this
+      // viewer's own override sets a schedule; the layout pass applies that.
+      const id = String(c.id);
+      const own =
+        userId === null ? undefined : page(userId).find((r) => collectionIdOf(r.row) === id);
+      const s =
+        layout.collectionSchedules && id in layout.collectionSchedules
+          ? layout.collectionSchedules[id]
+          : c.targets.schedule;
+      if (!own?.when && !whenMatches(tidySchedule(s), { day, hour, device, date: at })) continue;
       const items = evaluate(c).items.slice(0, 12);
       if (!items.length) continue;
       rows.push({
@@ -1530,8 +1538,15 @@ export function createFakeServer(opts: FakeOptions = {}) {
   }
 
   function layoutDoc() {
+    const collectionSchedules = Object.fromEntries(
+      state.collections.flatMap((c) =>
+        c.targets.schedule ? [[String(c.id), c.targets.schedule] as const] : [],
+      ),
+    );
     return {
-      layout: state.layout,
+      layout: Object.keys(collectionSchedules).length
+        ? { ...state.layout, collectionSchedules }
+        : state.layout,
       availableRows: availableRows(),
       defaults: { maxRows: DEFAULT_ROWS },
     };
@@ -1566,6 +1581,15 @@ export function createFakeServer(opts: FakeOptions = {}) {
         });
       });
     pages("global", doc.global ?? []);
+    (doc.global ?? []).forEach((p, i) =>
+      p.rows.forEach((r, j) => {
+        if (r.when && collectionIdOf(r.row))
+          out.push({
+            field: `layout.global[${i}].rows[${j}].when`,
+            message: "a collection row uses its collection's schedule",
+          });
+      }),
+    );
     (doc.viewers ?? []).forEach((v, i) => pages(`viewers[${i}].pages`, v.pages));
     return out;
   }
@@ -2078,8 +2102,6 @@ export function createFakeServer(opts: FakeOptions = {}) {
         lifecycle: viewer.lifecycle,
         streamLimit: 0,
         maxContentRating: "",
-        subtitleLanguages: [],
-        audioLanguages: [],
         allowedSections: [],
       });
       return json({ id }, 201);
@@ -2117,8 +2139,6 @@ export function createFakeServer(opts: FakeOptions = {}) {
         lifecycle: viewer.lifecycle,
         streamLimit: 0,
         maxContentRating: "",
-        subtitleLanguages: [],
-        audioLanguages: [],
         allowedSections: [],
       });
       return json({ id, url: "/ether/me#invite=mock-secret" }, 201);
@@ -2202,6 +2222,9 @@ export function createFakeServer(opts: FakeOptions = {}) {
 
     const tr = trash.handle(method, seg, body, state.config);
     if (tr) return json(tr.body, tr.status);
+
+    const qm = qualityMock.handle(method, seg, body, state.config, (id) => safetyPolicies.get(id));
+    if (qm) return json(qm.body, qm.status);
 
     const rc = releaseConsole.handle(method, seg, q, body);
     if (rc)
@@ -3113,6 +3136,11 @@ export function createFakeServer(opts: FakeOptions = {}) {
           viewers: doc.viewers ?? [],
           updatedAt: new Date().toISOString(),
         };
+        // Edited collection schedules are saved on their collections.
+        for (const [id, schedule] of Object.entries(doc.collectionSchedules ?? {})) {
+          const c = state.collections.find((x) => String(x.id) === id);
+          if (c) c.targets = { ...c.targets, schedule: tidySchedule(schedule) ?? null };
+        }
         return json(layoutDoc());
       }
       case "POST /layout/preview": {
@@ -3360,8 +3388,22 @@ export function createFakeServer(opts: FakeOptions = {}) {
         }
       }
     }
-    // Per-viewer safety policy (Viewer › Limits).
+    // Per-viewer safety policy (Viewer › Limits). The preset's rating limit
+    // is for the user record; the rest is the policy.
     if (seg[0] === "safety" && seg[1] === "policies") {
+      if (seg[2] === "presets" && seg[3] === "kids" && method === "GET") {
+        const age = url.searchParams.get("age");
+        const rating = age === "preschool" ? "TV-Y" : age === "teens" ? "PG-13" : "PG";
+        return json({
+          maxContentRating: rating,
+          blockedGenres: null,
+          blockedKeywords: ["pornography", "erotic movie"],
+          remoteDisabled: false,
+          maxBitrateKbps: 0,
+          allowedHours: null,
+          timezone: "",
+        });
+      }
       const id = Number(seg[2]);
       if (Number.isFinite(id) && method === "GET") return json(safetyPolicies.get(id) ?? {});
       if (Number.isFinite(id) && method === "PUT") {
@@ -3432,6 +3474,32 @@ export function createFakeServer(opts: FakeOptions = {}) {
         return json({ removed: true });
       }
     }
+    // One viewer's Simkl account (Viewer › Limits).
+    if (seg[0] === "simkl" && seg[1] && /^\d+$/.test(seg[1])) {
+      const id = Number(seg[1]);
+      const cur = simklAccounts.get(id) ?? { connected: false };
+      if (seg[2] === "status" && method === "GET") return json(cur);
+      if (seg[2] === "start" && method === "POST")
+        return json({
+          userCode: "ABCD-EFGH",
+          verificationUri: "https://simkl.com/pin",
+          verificationUriComplete: "https://simkl.com/pin?user_code=ABCD-EFGH",
+          expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+          interval: 5,
+        });
+      if (seg[2] === "poll" && method === "POST") {
+        simklAccounts.set(id, { connected: true });
+        return json({ status: "authorized" });
+      }
+      if (seg[2] === "sync" && method === "POST") {
+        simklAccounts.set(id, { ...cur, lastSync: new Date().toISOString() });
+        return json({ imported: 3, skipped: 0 });
+      }
+      if (seg[2] === "disconnect" && method === "POST") {
+        simklAccounts.delete(id);
+        return json({ ok: true });
+      }
+    }
     if (seg[0] === "users" && seg[1] && (method === "PATCH" || method === "PUT")) {
       const id = Number(seg[1]);
       const i = state.users.findIndex((u) => u.id === id);
@@ -3448,7 +3516,17 @@ export function createFakeServer(opts: FakeOptions = {}) {
     }
     if (seg[0] === "config" && seg[1] && method === "PUT") {
       const key = seg[1] === "opensubtitles" ? "openSubtitles" : seg[1];
-      let value = body;
+      // Like the server: the body is merged onto the stored section.
+      const prev = (state.config as unknown as Record<string, unknown>)[key];
+      let value =
+        prev &&
+        typeof prev === "object" &&
+        !Array.isArray(prev) &&
+        body &&
+        typeof body === "object" &&
+        !Array.isArray(body)
+          ? { ...(prev as Record<string, unknown>), ...(body as Record<string, unknown>) }
+          : body;
       if (
         key === "plex" &&
         body !== null &&
@@ -3456,7 +3534,7 @@ export function createFakeServer(opts: FakeOptions = {}) {
         !Array.isArray(body) &&
         (body as { claimed?: boolean }).claimed === false
       ) {
-        value = { ...(body as Record<string, unknown>), token: "" };
+        value = { ...(value as Record<string, unknown>), token: "" };
       }
       (state.config as unknown as Record<string, unknown>)[key] = value;
       return json({ section: key, value });

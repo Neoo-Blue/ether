@@ -132,6 +132,7 @@ it("saves a custom override for one viewer", async () => {
   fireEvent.change(screen.getByLabelText("Subtitle languages"), { target: { value: "es" } });
   fireEvent.click(screen.getByRole("button", { name: "Show subtitles" }));
   fireEvent.click(await screen.findByRole("option", { name: "Only for foreign audio" }));
+  fireEvent.click(screen.getByRole("button", { name: "More options: Subtitle appearance" }));
   fireEvent.click(screen.getByRole("button", { name: "Size" }));
   fireEvent.click(await screen.findByRole("option", { name: "Small" }));
   fireEvent.change(screen.getByLabelText("Text colour"), { target: { value: "#ffffff" } });

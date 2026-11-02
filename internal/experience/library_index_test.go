@@ -14,7 +14,7 @@ func TestIndexedLibraryPagePushesOffsetIntoOneBrowse(t *testing.T) {
 	calls := 0
 	var got core.BrowseQuery
 	s := &Service{d: ServiceDeps{Active: func(context.Context, int64) (*core.User, error) { return viewer, nil }, Libraries: []Library{{ID: 1, Type: core.TypeMovie}}, Visibility: Visibility{SectionFor: func(core.MediaType) (int, bool) { return 1, true }}, PageExclusions: func(context.Context, *core.User) LibraryPageExclusions {
-		return LibraryPageExclusions{Keys: []core.RatingKey{core.MovieKey(2)}, ExcludeGenres: []string{"Horror"}, ExcludeKeywords: []string{"gore"}, MaxContentRating: "PG"}
+		return LibraryPageExclusions{Keys: []core.RatingKey{core.MovieKey(2)}, ExcludeGenres: []string{"Horror"}, ExcludeKeywords: []string{"gore"}}
 	}, Browse: func(_ context.Context, q core.BrowseQuery) (core.Page, error) {
 		calls++
 		got = q
@@ -42,7 +42,7 @@ func TestIndexedLibraryPagePushesOffsetIntoOneBrowse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if calls != 1 || got.Offset != 10 || got.Limit != 5 || got.Filter.Type != core.TypeMovie || got.Filter.MaxContentRating != "PG" || len(got.Filter.ExcludeGenres) != 1 || got.Filter.ExcludeGenres[0] != "Horror" || len(got.Filter.ExcludeKeywords) != 1 {
+	if calls != 1 || got.Offset != 10 || got.Limit != 5 || got.Filter.Type != core.TypeMovie || len(got.Filter.ExcludeGenres) != 1 || got.Filter.ExcludeGenres[0] != "Horror" || len(got.Filter.ExcludeKeywords) != 1 {
 		t.Fatalf("browse calls=%d query=%+v", calls, got)
 	}
 	if page.Total != n-1 || len(page.Items) != 5 || page.Items[0].Key != core.MovieKey(12) {

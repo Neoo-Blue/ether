@@ -1,3 +1,4 @@
+import { MoreOptions } from "../../components/ConfigSection";
 import { Input, Select, SettingsSection, Switch } from "@braedonsaunders/appkit-ui";
 import { useEffect, useState } from "react";
 import { SettingsRow } from "../../components/SettingsRow";
@@ -259,89 +260,89 @@ export function StreamRulesFields({
       </SettingsSection>
       <SettingsSection
         title={t("Subtitle appearance")}
-        description={t(
-          "Size, colour, background, and position follow this viewer in apps that can style subtitles. Jellyfin and Emby use the language and when subtitles turn on.",
-        )}
+        description={t("Size, colour, background and position, in apps that can style subtitles.")}
       >
-        <SettingsRow
-          title={t("Size")}
-          control={
-            <div className="w-64">
-              <Select
-                aria-label={t("Size")}
-                value={appearance.fontSize}
-                disabled={disabled}
-                onChange={(e) => setAppearance({ fontSize: e.target.value })}
-              >
-                {SUBTITLE_SIZES.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          }
-        />
-        <SettingsRow
-          title={t("Text colour")}
-          description={t("A hex colour, such as #ffffff.")}
-          control={
-            <div className="w-40">
-              <Input
-                aria-label={t("Text colour")}
-                value={appearance.fontColor}
-                disabled={disabled}
-                placeholder="#ffffff"
-                onChange={(e) => setAppearance({ fontColor: e.target.value })}
-              />
-            </div>
-          }
-        />
-        <SettingsRow
-          title={t("Background")}
-          control={
-            <div className="flex w-72 items-center gap-2">
-              <Select
-                aria-label={t("Background")}
-                value={appearance.backgroundStyle}
-                disabled={disabled}
-                onChange={(e) => setAppearance({ backgroundStyle: e.target.value })}
-              >
-                {SUBTITLE_BACKGROUNDS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </Select>
-              <Input
-                aria-label={t("Background colour")}
-                value={appearance.backgroundColor}
-                disabled={disabled}
-                placeholder="#000000"
-                onChange={(e) => setAppearance({ backgroundColor: e.target.value })}
-              />
-            </div>
-          }
-        />
-        <SettingsRow
-          title={t("Position")}
-          control={
-            <div className="w-64">
-              <Select
-                aria-label={t("Position")}
-                value={appearance.position}
-                disabled={disabled}
-                onChange={(e) => setAppearance({ position: e.target.value })}
-              >
-                {SUBTITLE_POSITIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          }
-        />
+        <MoreOptions label={t("More options: {title}", { title: t("Subtitle appearance") })}>
+          <SettingsRow
+            title={t("Size")}
+            control={
+              <div className="w-64">
+                <Select
+                  aria-label={t("Size")}
+                  value={appearance.fontSize}
+                  disabled={disabled}
+                  onChange={(e) => setAppearance({ fontSize: e.target.value })}
+                >
+                  {SUBTITLE_SIZES.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            }
+          />
+          <SettingsRow
+            title={t("Text colour")}
+            description={t("A hex colour, such as #ffffff.")}
+            control={
+              <div className="w-40">
+                <Input
+                  aria-label={t("Text colour")}
+                  value={appearance.fontColor}
+                  disabled={disabled}
+                  placeholder="#ffffff"
+                  onChange={(e) => setAppearance({ fontColor: e.target.value })}
+                />
+              </div>
+            }
+          />
+          <SettingsRow
+            title={t("Background")}
+            control={
+              <div className="flex w-72 items-center gap-2">
+                <Select
+                  aria-label={t("Background")}
+                  value={appearance.backgroundStyle}
+                  disabled={disabled}
+                  onChange={(e) => setAppearance({ backgroundStyle: e.target.value })}
+                >
+                  {SUBTITLE_BACKGROUNDS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </Select>
+                <Input
+                  aria-label={t("Background colour")}
+                  value={appearance.backgroundColor}
+                  disabled={disabled}
+                  placeholder="#000000"
+                  onChange={(e) => setAppearance({ backgroundColor: e.target.value })}
+                />
+              </div>
+            }
+          />
+          <SettingsRow
+            title={t("Position")}
+            control={
+              <div className="w-64">
+                <Select
+                  aria-label={t("Position")}
+                  value={appearance.position}
+                  disabled={disabled}
+                  onChange={(e) => setAppearance({ position: e.target.value })}
+                >
+                  {SUBTITLE_POSITIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            }
+          />
+        </MoreOptions>
       </SettingsSection>
       <SettingsSection
         title={t("Audio processing")}
@@ -349,26 +350,28 @@ export function StreamRulesFields({
           "Needs server audio transcoding. Dialogue boost applies to sources with six or more channels.",
         )}
       >
-        {(
-          [
-            ["loudness", t("Normalize loudness")],
-            ["nightMode", t("Night mode compression")],
-            ["dialogueBoost", t("Boost centre-channel dialogue")],
-          ] as const
-        ).map(([key, label]) => (
-          <SettingsRow
-            key={key}
-            title={label}
-            control={
-              <Switch
-                aria-label={label}
-                checked={value[key]}
-                disabled={disabled}
-                onChange={(e) => set(key, e.target.checked)}
-              />
-            }
-          />
-        ))}
+        <MoreOptions label={t("More options: {title}", { title: t("Audio processing") })}>
+          {(
+            [
+              ["loudness", t("Normalize loudness")],
+              ["nightMode", t("Night mode compression")],
+              ["dialogueBoost", t("Boost centre-channel dialogue")],
+            ] as const
+          ).map(([key, label]) => (
+            <SettingsRow
+              key={key}
+              title={label}
+              control={
+                <Switch
+                  aria-label={label}
+                  checked={value[key]}
+                  disabled={disabled}
+                  onChange={(e) => set(key, e.target.checked)}
+                />
+              }
+            />
+          ))}
+        </MoreOptions>
       </SettingsSection>
     </>
   );
@@ -377,24 +380,20 @@ export function StreamRulesFields({
 // ---- Safety policy (/safety/policies/:user) ----------------------------------------
 
 export type SafetyPolicy = {
-  maxContentRating: string;
   blockedGenres: string[];
   blockedKeywords: string[];
   remoteDisabled: boolean;
   maxBitrateKbps: number;
-  streamLimit: number;
   allowedHours: number[];
   timezone: string;
 };
 
 export function emptyPolicy(): SafetyPolicy {
   return {
-    maxContentRating: "",
     blockedGenres: [],
     blockedKeywords: [],
     remoteDisabled: false,
     maxBitrateKbps: 0,
-    streamLimit: 0,
     allowedHours: [],
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   };

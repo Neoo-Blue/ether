@@ -27,7 +27,15 @@ func TestViewerCapabilitiesPolicyAndMembership(t *testing.T) {
 	if err = a.users.RefreshViewers(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err = a.safety.Put(ctx, id, safety.Policy{RemoteDisabled: true, MaxContentRating: "PG", MaxBitrateKbps: 3000, StreamLimit: 2, BlockedKeywords: []string{"violence"}}); err != nil {
+	if err = a.safety.Put(ctx, id, safety.Policy{RemoteDisabled: true, MaxBitrateKbps: 3000, BlockedKeywords: []string{"violence"}}); err != nil {
+		t.Fatal(err)
+	}
+	alice, err := a.users.ActiveUser(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	alice.MaxContentRating, alice.StreamLimit = "PG", 2
+	if err = a.users.UpdateUser(ctx, *alice); err != nil {
 		t.Fatal(err)
 	}
 	experience := frontendtest.Experience{ViewsFunc: func(_ context.Context, v *core.Viewer) ([]frontend.View, error) {

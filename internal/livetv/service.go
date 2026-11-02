@@ -599,35 +599,20 @@ func (s *Service) bumpLineup() {
 }
 func (s *Service) Policy(ctx context.Context, userID int64) (Policy, error) {
 	s.policyReads.Add(1)
-	p := Policy{UserID: userID}
-	var b []byte
-	err := s.o.DB.QueryRowContext(ctx, `SELECT data FROM livetv_policies WHERE user_id=?`, userID).Scan(&b)
-	if errors.Is(err, sql.ErrNoRows) {
-		return p, nil
-	}
-	if err == nil {
-		err = json.Unmarshal(b, &p)
-	}
+	p, err := readPolicy(ctx, s.o.DB, userID)
+	p.indexChannels()
 	return p, err
 }
 func (s *Service) SavePolicy(ctx context.Context, p Policy) error {
 	if p.UserID <= 0 {
 		return fmt.Errorf("userId must be positive")
 	}
-	b, err := json.Marshal(p)
-	if err != nil {
-		return err
+	err := savePolicy(ctx, s.o.DB, p)
+	if err == nil {
+		// The viewer's channel set changed: clients refresh their lineup.
+		s.bumpLineup()
 	}
-	_, err = s.o.DB.ExecContext(ctx, `INSERT INTO livetv_policies(user_id,data) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET data=excluded.data`, p.UserID, b)
 	return err
-}
-func containsUser(ids []int64, id int64) bool {
-	for _, v := range ids {
-		if v == id {
-			return true
-		}
-	}
-	return false
 }
 func containsString(ids []string, id string) bool {
 	for _, v := range ids {
@@ -676,7 +661,7 @@ func (s *Service) allowedWithLookup(ctx context.Context, u *core.User, c Channel
 	if err != nil {
 		return false
 	}
-	if !u.IsOwner && (pol.Disabled || len(pol.Channels) > 0 && !containsString(pol.Channels, c.ID) || len(c.AllowedUsers) > 0 && !containsUser(c.AllowedUsers, u.ID)) {
+	if !u.IsOwner && !pol.Permits(c.ID, c.Private) {
 		return false
 	}
 	rating := c.Rating
@@ -1179,7 +1164,6 @@ func (s *Service) ImportSource(ctx context.Context, src Source) (Source, error) 
 			c.Number = previous.Number
 			c.Enabled = previous.Enabled
 			c.Favorite = previous.Favorite
-			c.AllowedUsers = previous.AllowedUsers
 			c.Rating = previous.Rating
 			c.GuideID = previous.GuideID
 			c.GuideSourceID = previous.GuideSourceID

@@ -247,14 +247,16 @@ func TestHomeRowsForTargetsAndSchedule(t *testing.T) {
 	if !ok || cs.HomeRow || !cs.SectionRow || cs.Hub.Type != core.TypeShow {
 		t.Fatalf("section row: %+v", cs)
 	}
-	if _, ok := rows(owner, "mobile", friday9pm)["Evening Thrills"]; ok {
-		t.Fatal("device filter ignored")
+	// The row carries its schedule; the personalization engine applies it
+	// (a viewer's Home override may replace it), so it is served outside it.
+	if sc := ev.Schedule; sc == nil || len(sc.Days) != 2 || sc.FromHour == nil || *sc.FromHour != 18 || len(sc.Devices) != 1 {
+		t.Fatalf("schedule not carried: %+v", ev.Schedule)
 	}
-	if _, ok := rows(owner, "tv", friday9pm.Add(-5*time.Hour))["Evening Thrills"]; ok {
-		t.Fatal("hour filter ignored")
+	if late, ok := rows(owner, "mobile", friday9pm.AddDate(0, 0, 3))["Evening Thrills"]; !ok || late.Schedule == nil || late.Schedule.Allows("mobile", friday9pm.AddDate(0, 0, 3)) {
+		t.Fatalf("row outside its schedule: %+v %v", late, ok)
 	}
-	if _, ok := rows(owner, "tv", friday9pm.AddDate(0, 0, 3))["Evening Thrills"]; ok {
-		t.Fatal("day filter ignored")
+	if cs.Schedule != nil {
+		t.Fatalf("unscheduled row carries a schedule: %+v", cs.Schedule)
 	}
 	if _, ok := rows(guest, "tv", friday9pm)["Comedy Shelf"]; ok {
 		t.Fatal("user targeting ignored")

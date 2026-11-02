@@ -1,4 +1,6 @@
 import { SettingsSection, Spinner, SubtabNav, toast } from "@braedonsaunders/appkit-ui";
+import { Segmented } from "../../components/fields";
+import { MoreOptions } from "../../components/ConfigSection";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useCallback, useState } from "react";
 import { useApp } from "../../app-context";
@@ -12,12 +14,9 @@ import { isRuleComplete } from "../../lib/rules";
 import { asObj, SchemaField, type FieldGroup } from "../settings/SchemaForm";
 import { CatalogPickers, isCatalogPicker } from "./CatalogPickers";
 import { CATALOG } from "../settings/schema";
-import {
-  HomeReleaseSettings,
-  HomeReleaseStatus,
-  UpcomingEpisodeSettings,
-} from "./HomeReleaseSettings";
-import { NewReleasesSettings } from "./NewReleasesSettings";
+import { HomeReleaseStatus, UpcomingEpisodeSettings } from "./HomeReleaseSettings";
+import { WatchlistAlerts } from "../viewers/sections/WatchlistDefaults";
+import { NewReleasesSettings, useAvailabilityDraft } from "./NewReleasesSettings";
 import { RulesPanel, type VisibilityRule } from "./LibraryVisibility";
 import { TrendingStatus } from "./TrendingStatus";
 import { LevelBadge } from "../../components/status";
@@ -61,6 +60,44 @@ function briefGroup(g: FieldGroup): FieldGroup {
   };
 }
 
+/** Off / Some / Most for catalog.minPopularity + catalog.minVotes. Some is the default. */
+const OBSCURE_PRESETS = {
+  off: { minPopularity: 0, minVotes: 0 },
+  some: { minPopularity: 5, minVotes: 100 },
+  most: { minPopularity: 15, minVotes: 500 },
+} as const;
+type ObscurePreset = keyof typeof OBSCURE_PRESETS;
+
+function obscurePreset(draft: Obj): ObscurePreset | "custom" {
+  const pop = Number(draft.minPopularity ?? 0);
+  const votes = Number(draft.minVotes ?? 0);
+  for (const [key, v] of Object.entries(OBSCURE_PRESETS))
+    if (v.minPopularity === pop && v.minVotes === votes) return key as ObscurePreset;
+  return "custom";
+}
+
+function ObscureTitles({ draft, onChange }: { draft: Obj; onChange: (next: Obj) => void }) {
+  const preset = obscurePreset(draft);
+  return (
+    <SettingsRow
+      title={t("Hide obscure titles")}
+      description={preset === "custom" ? t("Custom limits are set under More options.") : undefined}
+      control={
+        <Segmented
+          ariaLabel={t("Hide obscure titles")}
+          value={preset === "custom" ? "" : preset}
+          onChange={(v) => onChange({ ...draft, ...OBSCURE_PRESETS[v as ObscurePreset] })}
+          options={[
+            { value: "off", label: t("Off") },
+            { value: "some", label: t("Some") },
+            { value: "most", label: t("Most") },
+          ]}
+        />
+      }
+    />
+  );
+}
+
 export function CatalogSettings() {
   const { tab } = useParams();
   const navigate = useNavigate();
@@ -90,7 +127,8 @@ export function CatalogSettings() {
       setSaving(false);
     }
   }, [config, draft, refreshDashboard]);
-  const groups = [...CATALOG, HomeReleaseSettings, UpcomingEpisodeSettings].map(briefGroup);
+  const availability = useAvailabilityDraft();
+  const groups = [...CATALOG, UpcomingEpisodeSettings].map(briefGroup);
   return (
     <div className="catalog-scroll app-scroll">
       <div className="space-y-5 p-5 lg:p-7">
@@ -124,9 +162,19 @@ export function CatalogSettings() {
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
             <div className="space-y-5">
               <TmdbAccount apiKey={draft.tmdbKey} />
-              <NewReleasesSettings />
+              {availability.draft ? (
+                <NewReleasesSettings
+                  availability={availability.draft}
+                  onAvailability={availability.setDraft}
+                  gate={Boolean(draft.gateMoviesByHomeRelease)}
+                  onGate={(v) => setDraft({ ...draft, gateMoviesByHomeRelease: v })}
+                />
+              ) : null}
               {groups.map((g, i) => (
-                <SettingsSection key={g.title ?? i} title={g.title}>
+                <SettingsSection key={g.id ?? i} title={g.title}>
+                  {g.id === "browsable" ? (
+                    <ObscureTitles draft={draft} onChange={setDraft} />
+                  ) : null}
                   {g.fields.map((f, j) =>
                     f.kind === "group" || isCatalogPicker(f.key) ? null : (
                       <SchemaField
@@ -147,8 +195,23 @@ export function CatalogSettings() {
                       onChange={(key, value) => setDraft({ ...draft, [key]: value })}
                     />
                   ) : null}
+                  {g.more?.length ? (
+                    <MoreOptions label={t("More options: {title}", { title: g.title ?? "" })}>
+                      {g.more.map((f, j) => (
+                        <SchemaField
+                          key={`more-${f.key}-${j}`}
+                          def={f}
+                          value={draft[f.key]}
+                          path={`catalog.${f.key}`}
+                          errors={{}}
+                          onChange={(v) => setDraft({ ...draft, [f.key]: v })}
+                        />
+                      ))}
+                    </MoreOptions>
+                  ) : null}
                 </SettingsSection>
               ))}
+              <WatchlistAlerts />
             </div>
             <aside className="space-y-5">
               <HomeReleaseStatus />
@@ -180,6 +243,7 @@ export function CatalogSettings() {
             setError(null);
           }}
         />
+        {availability.saveBar}
       </div>
     </div>
   );

@@ -29,6 +29,7 @@ import { API_BASE, api, apiBlob, apiFetch } from "../../lib/api";
 import { isPlainObject } from "../../lib/format";
 import { useAsync, useInterval } from "../../lib/hooks";
 import { viewerStatus } from "../viewers/ViewerStatus";
+import { AwayFromHome } from "./AwayFromHome";
 import { PlexApp } from "./PlexApp";
 import { appLabel, appPath, appPurpose, appRank } from "./catalog";
 import { HomeStatusRow } from "./HomeStatus";
@@ -267,7 +268,15 @@ function ConnectDevice({
   );
 }
 
-function ProtocolSettings({ id, hidden }: { id: string; hidden: boolean }) {
+function ProtocolSettings({
+  id,
+  info,
+  hidden,
+}: {
+  id: string;
+  info?: FrontendInfo;
+  hidden: boolean;
+}) {
   const { boot } = useApp();
   const state = useAsync(() => apiFetch<Settings>(`/frontends/${id}/settings`), [id]);
   const { draft, setDraft, dirty, reset } = useDraft(state.data);
@@ -292,7 +301,7 @@ function ProtocolSettings({ id, hidden }: { id: string; hidden: boolean }) {
   if (!draft) return hidden ? null : <LoadingRows />;
   const named = ["jellyfin", "emby", "silo", "dlna"].includes(id);
   const more: {
-    key: "discovery" | "quickConnect" | "publicViewerPicker";
+    key: "discovery" | "publicViewerPicker";
     label: string;
     help: string;
   }[] = [];
@@ -301,13 +310,6 @@ function ProtocolSettings({ id, hidden }: { id: string; hidden: boolean }) {
       key: "discovery",
       label: t("Let apps find this server"),
       help: t("Apps on your network can find this server without typing an address."),
-    });
-  }
-  if (id === "jellyfin") {
-    more.push({
-      key: "quickConnect",
-      label: t("Quick Connect"),
-      help: t("A viewer approves a short code in the Jellyfin app instead of typing a password."),
     });
   }
   if (id === "jellyfin" || id === "emby") {
@@ -328,6 +330,19 @@ function ProtocolSettings({ id, hidden }: { id: string; hidden: boolean }) {
   return (
     <>
       <div hidden={hidden}>
+        {["jellyfin", "emby", "silo"].includes(id) ? (
+          <SignInSection
+            info={info}
+            quickConnect={
+              id === "jellyfin"
+                ? {
+                    checked: Boolean(draft.quickConnect),
+                    onChange: (next) => setDraft({ ...draft, quickConnect: next }),
+                  }
+                : undefined
+            }
+          />
+        ) : null}
         {shared ? (
           <SettingsSection title={t("Connect")} description={shared}>
             <div className="px-5 py-3">
@@ -590,13 +605,66 @@ function AppStatus({ info }: { info: FrontendInfo }) {
   );
 }
 
-function AppDetail({ info, startOpen = false }: { info: FrontendInfo; startOpen?: boolean }) {
+/** How viewers sign in to Jellyfin, Emby and Silo, with Jellyfin's Quick Connect switch. */
+function SignInSection({
+  info,
+  quickConnect,
+}: {
+  info?: FrontendInfo;
+  quickConnect?: { checked: boolean; onChange: (next: boolean) => void };
+}) {
   const ownerPath = useOwnerViewerPath();
+  const portalURL = viewerPortalAddress(info ? usableAddresses(info.status)[0] : undefined);
+  return (
+    <SettingsSection
+      title={t("How people sign in")}
+      description={t("Infuse needs an app password. The Emby for TV app isn't supported.")}
+      footer={
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="w-full text-sm text-fg-muted">
+            {tx("People sign in with their Ether viewer account. Manage them under {viewers}.", {
+              viewers: (
+                <Link className="font-medium text-primary underline" to="/viewers">
+                  {t("Viewers")}
+                </Link>
+              ),
+            })}
+          </p>
+          <Link className="text-sm font-medium text-primary underline" to={ownerPath}>
+            {t("Open my account")}
+          </Link>
+          <Link className="text-sm text-fg-muted underline" to="/me">
+            {t("Viewer portal")}
+          </Link>
+        </div>
+      }
+    >
+      <SettingsRow
+        title={t("Quick Connect")}
+        description={t("Quick Connect: approve the code at {url}", { url: portalURL })}
+        control={
+          quickConnect ? (
+            <Switch
+              checked={quickConnect.checked}
+              aria-label={t("Quick Connect")}
+              onChange={(e) => quickConnect.onChange(e.currentTarget.checked)}
+            />
+          ) : undefined
+        }
+      />
+      <SettingsRow
+        title={t("App password")}
+        description={t("App password: from Connect apps at {url}", { url: portalURL })}
+      />
+    </SettingsSection>
+  );
+}
+
+function AppDetail({ info, startOpen = false }: { info: FrontendInfo; startOpen?: boolean }) {
   const addresses = usableAddresses(info.status);
   const [selectedURL, setSelectedURL] = useState("");
   const chosen = addresses.includes(selectedURL) ? selectedURL : addresses[0];
   const away = awaySummary(info.status, { homeNetwork: true });
-  const portalURL = viewerPortalAddress(chosen);
   return (
     <div className="space-y-6 pb-6">
       <SettingsSection title={t("Status")}>
@@ -619,43 +687,6 @@ function AppDetail({ info, startOpen = false }: { info: FrontendInfo; startOpen?
           />
         </div>
       </SettingsSection>
-      {["jellyfin", "emby", "silo"].includes(info.descriptor.id) ? (
-        <SettingsSection
-          title={t("How people sign in")}
-          description={t("Infuse needs an app password. The Emby for TV app isn't supported.")}
-          footer={
-            <div className="flex flex-wrap items-center gap-3">
-              <p className="w-full text-sm text-fg-muted">
-                {tx(
-                  "People sign in with their Ether viewer account. Manage them under {viewers}.",
-                  {
-                    viewers: (
-                      <Link className="font-medium text-primary underline" to="/viewers">
-                        {t("Viewers")}
-                      </Link>
-                    ),
-                  },
-                )}
-              </p>
-              <Link className="text-sm font-medium text-primary underline" to={ownerPath}>
-                {t("Open my account")}
-              </Link>
-              <Link className="text-sm text-fg-muted underline" to="/me">
-                {t("Viewer portal")}
-              </Link>
-            </div>
-          }
-        >
-          <SettingsRow
-            title={t("Quick Connect")}
-            description={t("Quick Connect: approve the code at {url}", { url: portalURL })}
-          />
-          <SettingsRow
-            title={t("App password")}
-            description={t("App password: from Connect apps at {url}", { url: portalURL })}
-          />
-        </SettingsSection>
-      ) : null}
     </div>
   );
 }
@@ -667,7 +698,6 @@ export default function Apps() {
   const [searchParams] = useSearchParams();
   const connectOpen = searchParams.get("connect") === "1";
   const navigate = useNavigate();
-  const querySection = searchParams.get("section");
   const apps = [...(state.data ?? [])].sort(
     (a, b) => appRank(a.descriptor.id) - appRank(b.descriptor.id),
   );
@@ -696,25 +726,6 @@ export default function Apps() {
     const match = state.data.find((info) => pathFor(info.descriptor.id) === routeTab);
     if (!match?.enabled) navigate("/apps/overview", { replace: true });
   }, [state.data, routeTab, navigate]);
-  useEffect(() => {
-    if (!state.data || routeTab !== "plex") return;
-    const plexEnabled = state.data.some((info) => info.descriptor.id === "plex" && info.enabled);
-    if (!plexEnabled) return;
-    const asked = querySection || routeSection;
-    if (asked === "remote" || asked === "secure") {
-      if (routeSection !== "remote" || querySection)
-        navigate("/apps/plex/remote", { replace: true });
-      return;
-    }
-    if (asked === "compatibility") {
-      if (routeSection !== "compatibility" || querySection)
-        navigate("/apps/plex/compatibility", { replace: true });
-      return;
-    }
-    if (querySection === "account" || (routeSection && routeSection !== "account")) {
-      navigate("/apps/plex/account", { replace: true });
-    }
-  }, [state.data, routeTab, routeSection, querySection, navigate]);
   useInterval(() => void state.reload(), 10_000);
   const [error, setError] = useState<unknown>();
   const [busy, setBusy] = useState<string>();
@@ -772,6 +783,7 @@ export default function Apps() {
                 />
               ))}
             </div>
+            <AwayFromHome />
           </div>
         ))}
       {(visited.has("plex") || showPlex) && (
@@ -784,7 +796,7 @@ export default function Apps() {
           return (
             <div key={item.key}>
               {tab === item.key && info ? <AppDetail info={info} startOpen={connectOpen} /> : null}
-              <ProtocolSettings id={protocolFor(item.key)} hidden={tab !== item.key} />
+              <ProtocolSettings id={protocolFor(item.key)} info={info} hidden={tab !== item.key} />
             </div>
           );
         })}

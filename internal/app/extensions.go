@@ -38,6 +38,7 @@ func (a *App) extensionHandlers() map[string]http.Handler {
 	m["calendar"] = a.calendar.Handler()
 	m["safety/diagnostics"] = a.diagnosticsHandler()
 	m["playback"] = a.playbackPolicyHandler()
+	m["quality"] = a.qualityHandler()
 	m["indexer-sites"] = a.sites.Handler(cardigann.HandlerDeps{
 		Indexers: func() []config.Indexer { return a.cfg.Get().Indexers },
 		Unredact: func(ix config.Indexer) config.Indexer { return admin.UnredactIndexer(ix, a.cfg.Get()) },

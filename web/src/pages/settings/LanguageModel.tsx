@@ -1,4 +1,5 @@
-import { Input, SearchSelect, SettingsSection, Switch } from "@braedonsaunders/appkit-ui";
+import { Input, SearchSelect, SettingsSection } from "@braedonsaunders/appkit-ui";
+import { MoreOptions } from "../../components/ConfigSection";
 import type { ReactNode } from "react";
 import { ErrorPanel } from "../../components/feedback";
 import { SecretInput } from "../../components/fields";
@@ -55,17 +56,6 @@ export function LanguageModelSettings({
           )}
           footer={footer}
         >
-          <SettingsRow
-            title={<label htmlFor="llm-enabled">{t("Enabled")}</label>}
-            control={
-              <Switch
-                id="llm-enabled"
-                aria-label={t("Enabled")}
-                checked={value.enabled}
-                onChange={(e) => set({ enabled: e.currentTarget.checked })}
-              />
-            }
-          />
           <SettingsRow
             title={t("Provider")}
             description={<FieldError error={errors["llm.provider"]} />}
@@ -158,52 +148,57 @@ export function LanguageModelSettings({
         <SettingsSection
           title={t("Speech-to-text")}
           description={t(
-            "Writes timed subtitles from the audio when a viewer asks. A Whisper-compatible address, such as http://server:1234/v1. Saved with the language model.",
+            "Writes timed subtitles from the audio when a viewer asks. Needs a Whisper-compatible server.",
           )}
         >
-          <SettingsRow
-            stacked
-            title={<label htmlFor="speech-base-url">{t("Speech-to-text endpoint")}</label>}
-            description={t(
-              "The server Ether calls only after a viewer picks this kind of subtitle.",
-            )}
+          <MoreOptions
+            label={t("More options: {title}", { title: t("Speech-to-text") })}
+            hasError={Boolean(errors["llm.speechBaseUrl"] || errors["llm.speechModel"])}
           >
-            <Input
-              id="speech-base-url"
-              aria-label={t("Speech-to-text endpoint")}
-              value={value.speechBaseUrl ?? ""}
-              placeholder="http://192.168.68.85:1234/v1"
-              onChange={(e) => set({ speechBaseUrl: e.currentTarget.value })}
-              spellCheck={false}
-            />
-          </SettingsRow>
-          <SettingsRow
-            stacked
-            title={<label htmlFor="speech-model">{t("Speech-to-text model")}</label>}
-            description={t("The transcription model that server offers, such as whisper-1.")}
-          >
-            <Input
-              id="speech-model"
-              aria-label={t("Speech-to-text model")}
-              value={value.speechModel ?? ""}
-              placeholder="whisper-1"
-              onChange={(e) => set({ speechModel: e.currentTarget.value })}
-              spellCheck={false}
-            />
-          </SettingsRow>
-          <SettingsRow
-            stacked
-            title={<label htmlFor="speech-api-key">{t("Speech-to-text API key")}</label>}
-            description={t("Leave empty when the server does not ask for one.")}
-          >
-            <SecretInput
-              id="speech-api-key"
-              ariaLabel={t("Speech-to-text API key")}
-              value={value.speechApiKey ?? ""}
-              onChange={(speechApiKey) => set({ speechApiKey })}
-              placeholder=""
-            />
-          </SettingsRow>
+            <SettingsRow
+              stacked
+              title={<label htmlFor="speech-base-url">{t("Speech-to-text endpoint")}</label>}
+              description={t(
+                "The server Ether calls only after a viewer picks this kind of subtitle.",
+              )}
+            >
+              <Input
+                id="speech-base-url"
+                aria-label={t("Speech-to-text endpoint")}
+                value={value.speechBaseUrl ?? ""}
+                placeholder="http://192.168.68.85:1234/v1"
+                onChange={(e) => set({ speechBaseUrl: e.currentTarget.value })}
+                spellCheck={false}
+              />
+            </SettingsRow>
+            <SettingsRow
+              stacked
+              title={<label htmlFor="speech-model">{t("Speech-to-text model")}</label>}
+              description={t("The transcription model that server offers, such as whisper-1.")}
+            >
+              <Input
+                id="speech-model"
+                aria-label={t("Speech-to-text model")}
+                value={value.speechModel ?? ""}
+                placeholder="whisper-1"
+                onChange={(e) => set({ speechModel: e.currentTarget.value })}
+                spellCheck={false}
+              />
+            </SettingsRow>
+            <SettingsRow
+              stacked
+              title={<label htmlFor="speech-api-key">{t("Speech-to-text API key")}</label>}
+              description={t("Leave empty when the server does not ask for one.")}
+            >
+              <SecretInput
+                id="speech-api-key"
+                ariaLabel={t("Speech-to-text API key")}
+                value={value.speechApiKey ?? ""}
+                onChange={(speechApiKey) => set({ speechApiKey })}
+                placeholder=""
+              />
+            </SettingsRow>
+          </MoreOptions>
         </SettingsSection>
       </div>
     </>

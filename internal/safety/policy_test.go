@@ -19,8 +19,12 @@ func TestPolicyPersistsAndFailsClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	u := &core.User{ID: 1}
-	p := KidsPreset("preschool")
+	preset := KidsPreset("preschool")
+	if preset.MaxContentRating != "TV-Y" {
+		t.Fatalf("preset rating %q", preset.MaxContentRating)
+	}
+	u := &core.User{ID: 1, MaxContentRating: preset.MaxContentRating}
+	p := preset.Policy
 	p.RemoteDisabled = true
 	p.AllowedHours = []int{9}
 	if err := s.Put(ctx, 1, p); err != nil {
@@ -44,8 +48,8 @@ func TestPolicyPersistsAndFailsClosed(t *testing.T) {
 	}
 }
 
-// The restricted-viewer cap compares age levels: a TV-PG cap admits PG and
-// a German 6, a PG-13 cap admits TV-14, and unrated titles stay blocked.
+// The viewer's rating limit compares age levels: a TV-PG limit admits PG and
+// a German 6, a PG-13 limit admits TV-14, and unrated titles stay blocked.
 func TestRatingCapComparesLevels(t *testing.T) {
 	ctx := context.Background()
 	db, err := store.OpenMemory(ctx)
@@ -57,15 +61,7 @@ func TestRatingCapComparesLevels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Put(ctx, 1, Policy{MaxContentRating: "TV-PG"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.Put(ctx, 2, Policy{MaxContentRating: "gb/12A"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.Put(ctx, 3, Policy{MaxContentRating: "bogus"}); err == nil {
-		t.Fatal("a limit naming no level was stored")
-	}
+	limits := map[int64]string{1: "TV-PG", 2: "gb/12A"}
 	for _, tc := range []struct {
 		viewer int64
 		rating string
@@ -75,15 +71,8 @@ func TestRatingCapComparesLevels(t *testing.T) {
 		{1, "PG-13", false}, {1, "", false}, {1, "NR", false},
 		{2, "TV-14", true}, {2, "PG-13", true}, {2, "R", false}, {2, "gb/15", false},
 	} {
-		if got := s.Allowed(&core.User{ID: tc.viewer}, &core.Title{ContentRating: tc.rating}); got != tc.want {
+		if got := s.Allowed(&core.User{ID: tc.viewer, MaxContentRating: limits[tc.viewer]}, &core.Title{ContentRating: tc.rating}); got != tc.want {
 			t.Errorf("viewer %d, %q: got %v", tc.viewer, tc.rating, got)
 		}
-	}
-	// The stricter of the account limit and the policy wins, by level.
-	if got := s.UserPolicy(&core.User{ID: 1, MaxContentRating: "TV-14"}).MaxContentRating; got != "TV-PG" {
-		t.Fatalf("effective limit %q", got)
-	}
-	if got := s.UserPolicy(&core.User{ID: 2, MaxContentRating: "PG"}).MaxContentRating; got != "PG" {
-		t.Fatalf("effective limit %q", got)
 	}
 }

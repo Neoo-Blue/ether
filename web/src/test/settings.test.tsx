@@ -103,10 +103,18 @@ describe("Settings", () => {
       [/Set up Trakt/, "/services/trakt"],
       [/Manage language model/, "/services/llm"],
       [/Set up OpenSubtitles/, "/services/opensubtitles"],
-      [/^Ratings$/, "/services/ratings"],
-      [/^Markers$/, "/services/introdb"],
     ] as const)
       expect(screen.getByRole("link", { name })).toHaveAttribute("href", href);
+    // Ratings and TheIntroDB only hold keys here; they are turned on where they're used.
+    for (const [card, href] of [
+      ["OMDb and MDBList", "/services/ratings"],
+      ["TheIntroDB", "/services/introdb"],
+    ] as const) {
+      const item = screen.getByRole("listitem", { name: card });
+      expect(within(item).getByRole("link", { name: "Manage" })).toHaveAttribute("href", href);
+      expect(within(item).queryByRole("switch")).toBeNull();
+    }
+    expect(within(posters).queryByRole("switch")).toBeNull();
     expect(within(screen.getByRole("listitem", { name: "Language model" })).getByText("On"));
     expect(screen.queryByRole("button", { name: "Test Trakt" })).toBeNull();
     expect(screen.getByRole("listitem", { name: "TheIntroDB" })).toBeInTheDocument();
@@ -415,7 +423,7 @@ describe("Settings", () => {
     expect(screen.getAllByText("is required").length).toBeGreaterThan(0);
   });
 
-  it("does not give simkl, availability, or shared cache a General tab", async () => {
+  it("keeps General one page with no tabs for simkl, availability or shared cache", async () => {
     renderApp("/server", {}, (f) => {
       f.state.config = {
         ...f.state.config,
@@ -423,10 +431,12 @@ describe("Settings", () => {
         sharedCache: { dir: "/nas", budgetBytes: 1 },
       } as never;
     });
-    expect(await screen.findByRole("tab", { name: "Server" }, WAIT)).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "Simkl" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "Availability" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "Shared Cache" })).not.toBeInTheDocument();
+    expect(await screen.findByLabelText("Server name", {}, WAIT)).toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    for (const name of ["Server", "Simkl", "Availability", "Shared Cache", "Downloads"])
+      expect(screen.queryByRole("tab", { name })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "How Ether reaches the internet" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Setup" })).toBeVisible();
   });
 
   it("keeps unknown config off General and tucks power options under More options", async () => {
@@ -441,39 +451,72 @@ describe("Settings", () => {
     expect(screen.getByText("Living Room Ether is ready for viewers.")).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Experiments" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Listen address")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Streams per viewer")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Advanced" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "More options: How apps connect" }));
     expect(screen.getByLabelText("Listen address")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "More options: Who can watch at once" }));
-    expect(screen.getByLabelText("Streams per viewer")).toBeInTheDocument();
+    // Moved off General: logging to Maintenance › Logs, stream limits to Playback.
+    expect(screen.queryByLabelText("Log level")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "More options: Who can watch at once" }),
+    ).not.toBeInTheDocument();
   });
 
   it("does not keep a General poster alias", async () => {
     renderApp("/server/posters");
-    expect(await screen.findByRole("heading", { name: "General" }, WAIT)).toBeInTheDocument();
+    expect((await screen.findAllByRole("link", { name: "Overview" }, WAIT)).length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.queryByRole("heading", { name: "General" })).not.toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: "Ether posters" })).not.toBeInTheDocument();
   });
 
-  it("edits downloads, personalization and trailers on General tabs without losing other edits", async () => {
-    const { fake } = renderApp("/server");
-    fireEvent.change(await screen.findByLabelText("Server name", {}, WAIT), {
-      target: { value: "Den Ether" },
-    });
+  it("keeps a Plex remote edit while Downloads saves from its Plex sub-tab", async () => {
+    const { fake } = renderApp("/apps/plex/remote");
+    const remote = await screen.findByLabelText("Allow remote access", {}, WAIT);
+    const before = (remote as HTMLInputElement).checked;
+    fireEvent.click(remote);
     fireEvent.click(screen.getByRole("tab", { name: "Downloads" }));
     fireEvent.click(await screen.findByLabelText("Friends can download", {}, WAIT));
-    expect(screen.queryByLabelText("Server name")).toBeNull();
+    expect(screen.queryByLabelText("Allow remote access")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Save changes/ }));
-    await waitFor(() => expect(calls(fake, "PUT", "/config/server")).toHaveLength(1), WAIT);
+    await waitFor(() => expect(calls(fake, "PUT", "/config/plex")).toHaveLength(1), WAIT);
+    expect(calls(fake, "PUT", "/config/plex")[0]!.body).toMatchObject({ remoteAccess: !before });
     const wholeSaves = () => calls(fake, "PUT", "/config").filter((c) => c.path === "/config");
     await waitFor(() => expect(wholeSaves()).toHaveLength(1), WAIT);
     const whole = wholeSaves()[0]!.body as {
-      server: { friendlyName: string };
+      plex: { remoteAccess: boolean };
       downloads: { allowFriends: boolean };
     };
     expect(whole.downloads.allowFriends).toBe(true);
-    // The whole-config save merges into the live config, so it can't undo the server save.
-    expect(whole.server.friendlyName).toBe("Den Ether");
+    // The whole-config save merges into the live config, so it can't undo the Plex save.
+    expect(whole.plex.remoteAccess).toBe(!before);
+  });
+
+  it("saves trailers and up-next picks together on Playback › Extras", async () => {
+    const { fake } = renderApp("/playback/extras");
+    type Saved = { extras: { enabled: boolean }; personalize: { postPlay: boolean } };
+    const live = () => fake.state.config as unknown as Saved;
+    const trailers = Boolean(live().extras?.enabled);
+    const upNext = Boolean(live().personalize?.postPlay);
+    fireEvent.click(await screen.findByLabelText("Trailers and Cinema Trailers", {}, WAIT));
+    fireEvent.click(screen.getByLabelText("Personal “up next” picks"));
+    expect(screen.getByRole("switch", { name: "Skip intro" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Save changes/ }));
+    const wholeSaves = () => calls(fake, "PUT", "/config").filter((c) => c.path === "/config");
+    await waitFor(() => expect(wholeSaves()).toHaveLength(2), WAIT);
+    // Each whole-config save merges into the live config, so neither undoes the other.
+    await waitFor(() => expect(live().extras.enabled).toBe(!trailers), WAIT);
+    expect(live().personalize.postPlay).toBe(!upNext);
+  });
+
+  it("keeps personal touches on Home › Tuning for everyone, not for one viewer", async () => {
+    renderApp("/home");
+    fireEvent.click(await screen.findByRole("tab", { name: "Tuning" }, WAIT));
+    expect(
+      await screen.findByLabelText("Match and finish time on details", {}, WAIT),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Adapt Home to tonight's browsing")).toBeVisible();
+    expect(screen.queryByLabelText("Finish time format")).toBeNull();
   });
 
   it("keeps Plex account and connection settings inside its enabled app tab", async () => {
@@ -490,10 +533,9 @@ describe("Settings", () => {
   });
 
   it("rejects non-URL junk in Custom server URLs with a translated message while accepting Tailscale CGNAT URLs", async () => {
-    const { fake } = renderApp("/apps/plex");
-    fireEvent.click(await screen.findByRole("tab", { name: "Remote access" }, WAIT));
+    const { fake } = renderApp("/apps/overview");
     fireEvent.click(
-      await screen.findByRole("button", { name: "More options: Remote access" }, WAIT),
+      await screen.findByRole("button", { name: "More options: Away from home" }, WAIT),
     );
     const input = await screen.findByLabelText("Custom server URLs", {}, WAIT);
     fireEvent.change(input, {
@@ -537,6 +579,8 @@ describe("Settings", () => {
     expect(calls(fake, "PUT", "/config/plex")[0]!.body).toMatchObject({
       customUrls: ["http://100.100.1.2:32400", "https://plex.example.com:8443"],
     });
+    // Only the away-from-home keys, so a Plex tab edit is never undone.
+    expect(calls(fake, "PUT", "/config/plex")[0]!.body).not.toHaveProperty("remoteAccess");
   });
 
   it("returns disabled Plex settings to the overview without changing the saved account", async () => {
@@ -658,7 +702,7 @@ describe("Settings", () => {
     expect(await screen.findByRole("tab", { name: "Simkl" }, WAIT)).toBeInTheDocument();
   });
 
-  it("reflects Simkl and ratings enabled after each form saves", async () => {
+  it("reflects Simkl enabled after setup and keeps the ratings key on its own tab", async () => {
     const { fake } = renderApp("/services");
     fireEvent.click(await screen.findByRole("switch", { name: "Simkl enabled" }, WAIT));
     const simkl = await screen.findByRole("dialog", { name: "Set up Simkl" }, WAIT);
@@ -674,31 +718,30 @@ describe("Settings", () => {
     expect(screen.getByRole("switch", { name: "Simkl enabled" })).toBeChecked();
     expect(await screen.findByRole("tab", { name: "Simkl" }, WAIT)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("switch", { name: "OMDb and MDBList enabled" }));
-    const ratings = await screen.findByRole("dialog", { name: "Set up OMDb and MDBList" }, WAIT);
-    fireEvent.change(within(ratings).getByLabelText("API key"), {
+    expect(screen.queryByRole("switch", { name: "OMDb and MDBList enabled" })).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Ratings" }));
+    fireEvent.change(await screen.findByLabelText("API key", {}, WAIT), {
       target: { value: "omdb-key" },
     });
-    fireEvent.click(within(ratings).getByRole("button", { name: "Save and enable" }));
+    expect(screen.queryByRole("switch", { name: "External ratings" })).toBeNull();
+    expect(screen.queryByLabelText("Plex rating")).toBeNull();
+    expect(screen.getByRole("link", { name: "Choose which scores apps show" })).toHaveAttribute(
+      "href",
+      "/metadata/ratings",
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Save changes/ }));
     await waitFor(
       () => expect(calls(fake, "PUT", "/discovery/ratings/settings")).toHaveLength(1),
       WAIT,
     );
     expect(calls(fake, "PUT", "/discovery/ratings/settings")[0]!.body).toMatchObject({
-      enabled: true,
       apiKey: "omdb-key",
     });
-    fireEvent.click(screen.getByRole("tab", { name: "Overview" }));
-    expect(
-      await screen.findByRole("switch", { name: "OMDb and MDBList enabled" }, WAIT),
-    ).toBeChecked();
-    expect(await screen.findByRole("tab", { name: "Ratings" }, WAIT)).toBeInTheDocument();
-    expect(screen.getByText("Configured")).toBeInTheDocument();
     expect(screen.queryByText(/^Connected/)).toBeNull();
   });
 
-  it("keeps ratings off and removes its editor after the card is turned off", async () => {
-    let ratings = {
+  it("shows ratings status on its card and keeps score choices off Integrations", async () => {
+    const ratings = {
       enabled: true,
       provider: "omdb",
       apiKey: "secret",
@@ -706,34 +749,18 @@ describe("Settings", () => {
       audience: "imdb",
       cacheHours: 168,
     };
-    const { fake } = renderAppWith("/services/ratings", (method, path, body) => {
-      if (path !== "/discovery/ratings/settings") return undefined;
-      if (method === "PUT") ratings = { ...(body as typeof ratings) };
-      return ratings;
-    });
-    expect(await screen.findByRole("switch", { name: "External ratings" }, WAIT)).toBeChecked();
-    fireEvent.click(screen.getByRole("tab", { name: "Overview" }));
-    fireEvent.click(await screen.findByRole("switch", { name: "OMDb and MDBList enabled" }, WAIT));
-    await waitFor(
-      () => expect(calls(fake, "PUT", "/discovery/ratings/settings")).toHaveLength(1),
-      WAIT,
+    const { fake } = renderAppWith("/services/ratings", (_method, path) =>
+      path === "/discovery/ratings/settings" ? ratings : undefined,
     );
-    expect(calls(fake, "PUT", "/discovery/ratings/settings")[0]!.body).toMatchObject({
-      enabled: false,
-    });
-    await waitFor(() => expect(screen.queryByRole("tab", { name: "Ratings" })).toBeNull(), WAIT);
-    fireEvent.click(screen.getByRole("link", { name: /^Ratings$/ }));
-    await waitFor(
-      () =>
-        expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute(
-          "aria-selected",
-          "true",
-        ),
-      WAIT,
-    );
+    expect(await screen.findByLabelText("Provider", {}, WAIT)).toHaveValue("omdb");
+    expect(screen.getByLabelText("API key")).toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: "External ratings" })).toBeNull();
-    expect(screen.getByRole("switch", { name: "OMDb and MDBList enabled" })).not.toBeChecked();
-    expect(calls(fake, "PUT", "/discovery/ratings/settings")).toHaveLength(1);
+    expect(screen.queryByLabelText("Keep scores for")).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Overview" }));
+    const card = await screen.findByRole("listitem", { name: "OMDb and MDBList" }, WAIT);
+    expect(within(card).getByText("Configured")).toBeInTheDocument();
+    expect(within(card).queryByRole("switch")).toBeNull();
+    expect(calls(fake, "PUT", "/discovery/ratings/settings")).toHaveLength(0);
   });
 
   it("translates integration tabs when the locale changes and keeps the draft", async () => {
@@ -891,8 +918,9 @@ describe("Settings", () => {
     expect(fake.state.config.setupComplete).toBe(true);
   });
 
-  it("labels local file playback as a troubleshooting tool", async () => {
-    renderApp("/maintenance/troubleshooting");
+  it("keeps local file playback and crash watching on Maintenance › Health", async () => {
+    renderApp("/maintenance/health");
+    expect(await screen.findByRole("heading", { name: "Crash watcher" }, WAIT)).toBeVisible();
     expect(
       await screen.findByRole("heading", { name: "Test playback with a local file" }, WAIT),
     ).toBeInTheDocument();

@@ -1,7 +1,8 @@
 import { localized, t } from "../../i18n";
 import { ConfigSection } from "../../components/ConfigSection";
 import { DomainPage, useRouteTab } from "../../components/layout";
-import { PLAY_VERSIONS, RELEASE_SEARCH } from "../settings/schema";
+import { RELEASE_SEARCH } from "../settings/schema";
+import { StartSpeed } from "../playback/StartSpeed";
 import { BlocklistTab } from "./Blocklist";
 import { ClientRulesTab } from "./ClientRules";
 import { HistoryTab } from "./History";
@@ -12,7 +13,7 @@ const TABS = localized(
   () =>
     [
       { key: "profiles", label: t("Profiles") },
-      { key: "devices", label: t("Device rules") },
+      { key: "rules", label: t("Rules") },
       { key: "searching", label: t("Searching") },
       { key: "blocklist", label: t("Blocklist") },
       { key: "pinned", label: t("Pinned") },
@@ -24,16 +25,19 @@ const TABS = localized(
 export default function Releases() {
   const tab = useRouteTab(TABS);
   return (
-    <DomainPage title={t("Releases")} base="/releases" tabs={TABS} active={tab}>
+    <DomainPage title={t("Quality")} base="/quality" tabs={TABS} active={tab}>
       {tab === "profiles" ? <QualityTab /> : null}
-      {tab === "devices" ? <ClientRulesTab /> : null}
+      {tab === "rules" ? <ClientRulesTab /> : null}
       {tab === "searching" ? (
-        <ConfigSection
-          configKey="resolver"
-          endpoint="resolver"
-          groups={[...RELEASE_SEARCH, ...PLAY_VERSIONS]}
-          label={t("Searching")}
-        />
+        <>
+          <StartSpeed />
+          <ConfigSection
+            configKey="resolver"
+            endpoint="resolver"
+            groups={RELEASE_SEARCH}
+            label={t("Searching")}
+          />
+        </>
       ) : null}
       {tab === "blocklist" ? <BlocklistTab /> : null}
       {tab === "pinned" ? <PinnedTab /> : null}

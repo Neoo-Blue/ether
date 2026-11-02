@@ -47,6 +47,12 @@ export function MoreOptions({
   );
 }
 
+/** The draft's top-level keys rendered by `groups` (fields and More options). */
+function pickShown(draft: Obj, groups: FieldGroup[]): Obj {
+  const keys = new Set(groups.flatMap((g) => [...g.fields, ...(g.more ?? [])]).map((f) => f.key));
+  return Object.fromEntries(Object.entries(draft).filter(([key]) => keys.has(key)));
+}
+
 /**
  * One owner config section (`config.json` key) edited in place: its field
  * groups, server-validated errors beside each field, and the shared save bar
@@ -109,7 +115,9 @@ export function ConfigSection({
     setError(null);
     setErrors({});
     try {
-      if (endpoint) await api.putSection(endpoint, draft);
+      // Send only the keys this form shows: the server merges a section patch onto
+      // the stored value, so another form editing the same section is never undone.
+      if (endpoint) await api.putSection(endpoint, pickShown(draft, groups));
       else {
         // Merge into the live config: another form on the page may have just saved.
         const live = await api.getConfig();
@@ -133,7 +141,18 @@ export function ConfigSection({
     } finally {
       setSaving(false);
     }
-  }, [cfg, config, configKey, draft, endpoint, label, onFieldErrors, onSaved, refreshDashboard]);
+  }, [
+    cfg,
+    config,
+    configKey,
+    draft,
+    endpoint,
+    groups,
+    label,
+    onFieldErrors,
+    onSaved,
+    refreshDashboard,
+  ]);
 
   const saveBar = (
     <SaveBar

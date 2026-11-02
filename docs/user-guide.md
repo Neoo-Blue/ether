@@ -98,6 +98,8 @@ seek; this has not yet been verified on the physical devices.
 
 Enable an app on **Apps**, then edit its configuration in its enabled app tab.
 Use the listening address shown there rather than assuming a default port.
+Press ⌘K to jump to any page or individual setting; the console opens **More
+options** if the setting is inside one and highlights the row.
 Client names below identify intended connection methods; native-device
 certification and exact-build conformance remain pending.
 
@@ -125,11 +127,12 @@ and a Newznab URL for Usenet. Finally choose a cache folder and budget.
 Out of the box there is no server quality cap, at home or away: each device
 plays the best release it can show (phones up to 1080p, TVs and streaming boxes
 up to 4K), and the app's own quality setting still applies. To limit quality,
-open **Releases › Profiles**: mark a profile **Away** to cap people watching away
-from home (for example the 1080p profile), or add a **Device rule** for one
-device, app or viewer (**Releases › Device rules**). A device rule wins over the
-Away profile. **Remote bitrate cap** under **Playback › Transcoding** limits
-away-from-home streams in Mbps (0 means no limit).
+open **Quality › Profiles**. Under **Away from home**, choose an **Away profile**
+to cap people watching away from home (for example the 1080p profile), or set a
+**Bitrate limit** in Mbps (0 means no limit). To limit one device, app or viewer,
+add a rule under **Quality › Rules**. A rule wins over the Away profile.
+**Who gets what**, on **Quality › Profiles**, shows the quality a viewer gets in
+an app, at home or away, and which rule decided.
 Ether supplies no media, provider accounts or indexer access.
 
 ## Stream torrents through debrid
@@ -220,16 +223,20 @@ added as Torznab URLs with protocol **Torrent (Torznab)**; Ether adds `/api`.
 ### Which source plays
 
 Ether never trades quality for speed. Among releases of the same quality, it
-puts the source that starts faster first. Set this under **Releases › Playback
-start › Source for equal-quality releases**:
+puts the source that starts faster first. Set this under **Quality › Profiles ›
+Which source goes first**. It applies to every profile:
 
-- **Fastest (automatic):** once both sources have enough plays, the one with
+- **Start fastest:** once both sources have enough plays, the one with
   the lower measured start time goes first. Until then, popular titles use
   cached debrid first. The measured times are shown beside the setting.
-- **Prefer Usenet** or **Prefer debrid:** always try that source first.
+- **Usenet first** or **Debrid first:** that source goes first when releases
+  are equal in quality.
+- **Always Usenet** or **Always cached debrid:** that source goes first even
+  when the other has a better release. Ether falls back to the other source
+  when the first has nothing that plays.
 
 The best release from the other source is checked at the same time, and both
-remain available for failover. **Releases › Pinned** (when you find a title) and **History** show when
+remain available for failover. **Quality › Pinned** (when you find a title) and **History** show when
 routing moved a release, and why.
 
 ## Sites
@@ -248,7 +255,8 @@ indexer, for example two accounts or two mirror addresses.
 
 ### Install definitions
 
-Under **Sources › Indexers › Site definitions**, below the indexer list:
+Under **Sources › Indexers › Site definitions**, below the indexer list (the
+source for definitions is under **More options** there):
 
 - **Installed** counts your definitions and how many your indexers use.
   Definitions no indexer uses yet are listed under **Not added as an
@@ -295,7 +303,8 @@ streams from your Usenet providers.
 Some sites put a Cloudflare challenge in front of their pages. Ether cannot
 pass it alone and reports that the site needs FlareSolverr. If you run
 [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr), enter its
-address (for example `http://localhost:8191`) under **FlareSolverr**. Ether
+address (for example `http://localhost:8191`) under **More options** on
+**Sources › Indexers**. Ether
 asks it to solve the challenge only when a site presents one, then reuses
 the clearance it returns.
 
@@ -312,7 +321,7 @@ own history and recommendations.
 ## Libraries, catalogue and Home
 
 Ether appears as its own server in Plex, with Movies and TV Shows libraries.
-Rename those libraries under **General › Server** (Movies library name and TV
+Rename those libraries under **Server › General** (Movies library name and TV
 Shows library name); Plex's own library rename does not stick because Ether
 generates the libraries. These libraries contain the titles exposed by Ether's
 catalogue and visibility rules; they are not folders of downloaded media. A
@@ -324,8 +333,8 @@ not merge or replace them. Plex Home can show rows from multiple pinned
 libraries, so check the server name beneath a row and pin the Ether libraries
 you want to browse in your Plex app.
 
-Use **Catalog › Library visibility** to control what Ether exposes, and
-**Catalog › Catalog settings** to configure the catalogue. **Collections**
+Use **Catalog › Settings › Visibility** to control what Ether exposes, and
+**Catalog › Settings › General** to configure the catalogue. **Collections**
 groups titles within those libraries. **Home** arranges recommendation rows;
 changing a Home row does not delete a library or remove a title from the
 catalogue. Plex's own Watchlist and other Plex-provided navigation remain
@@ -379,7 +388,7 @@ cause.
 ### Put your watchlist on Home
 
 1. Add wanted titles to your Plex Watchlist.
-2. In Ether, open **Notifications › Watchlist alerts**, enable
+2. In Ether, open **Catalog › Settings › General › Watchlists**, enable
    **Watchlist monitoring** and **Plex watchlists**, then save. Opening-minute
    warm-up for a title that just became playable is **Cache › Preloading ›
    Warm up new arrivals**.
@@ -417,14 +426,14 @@ what you want to change:
 | Task | Where to look |
 | --- | --- |
 | Connect providers and indexers | **Sources** |
-| Inspect a failed source search | **Releases › History**, then open the attempt |
+| Inspect a failed source search | **Quality › History**, then open the attempt |
 | Inspect observed playback | **Activity › History** |
 | Change one viewer's track preferences | **Viewers › viewer › Audio & subtitles** |
 | Change household audio and subtitles | **Playback › Audio & subtitles** |
 | Arrange rows in Plex | **Home** |
 | Change artwork providers | **Metadata › Artwork** |
 
-A playback attempt can fail before Activity history begins. Releases history
+A playback attempt can fail before Activity history begins. Quality history
 records source-selection results, including failures; open its details for
 candidate rejection reasons and effective playback limits. Neither a
 catalogue poster nor an indexer's “cached” label guarantees a playable source.
@@ -435,7 +444,7 @@ Detail pages can list several versions of a title, such as 4K, a
 high-compatibility 1080p release or an extended cut. Right after the automatic
 choice, other releases of the same cut, resolution and HDR type are listed,
 named by quality, audio, size and release group, so you can switch if one
-fails. Releases → Release selection → **Same-quality versions to offer** sets
+fails. **Quality › Profiles › Version menu › Same-quality versions to offer** sets
 how many (0 to 3; 1 by default, 0 turns the extra versions off). Choose one with Plex's **Play Version**; otherwise Ether picks the
 best version for the device. After a restart or candidate-cache expiry, an
 admitted detail-page warm-up that reuses your remembered release also requests a
@@ -520,7 +529,7 @@ unknown, only the season-and-episode numbering is used.
 
 ## Import a quality profile from TRaSH Guides
 
-Coming from Radarr or Sonarr? Open **Releases › Quality profiles** and choose
+Coming from Radarr or Sonarr? Open **Quality › Profiles** and choose
 **Import from TRaSH Guides**. Pick **Radarr** for movies or **Sonarr** for
 shows, then choose a profile, such as *HD Bluray + WEB* or *[SQP] SQP-1
 (2160p)*. Ether shows what it will add before saving:
@@ -551,7 +560,7 @@ under **Custom scoring** and import the profile again.
 
 ## Choose and fix releases
 
-**Releases** explains and overrides which release plays for each title.
+**Quality** explains and overrides which release plays for each title.
 
 - **Pinned** starts with **Find a release**: find a movie, or a show then a
   season and episode, to list every release the indexers return. Each one
@@ -647,6 +656,15 @@ a backup within the same startup budget. Failed inputs cool down briefly before
 being retried. The channel keeps its number, favourites, sharing and programme
 guide when its input changes. A running stream stays on its selected input;
 retuning after an interruption can select a healthy backup.
+
+Who can watch each channel is one list per viewer. Edit it on the viewer's
+page (**Limits › Live TV › Allowed channels**) or on a channel's **Viewers**
+tab; both change the same setting. A viewer allowed on all channels also gets
+channels you add later. Switching them off for one channel keeps them on the
+current other channels only, so new channels stay hidden until you allow them.
+Turn on **Private** on a channel's **Viewers** tab to keep it from everyone you
+have not given it to, including people you add later; switching a viewer on
+there, or on their page, gives it to them.
 
 Programme guides can come from separate XMLTV sources, including compressed
 `.xml.gz` feeds. Map each channel to its matching guide. URL sources refresh
@@ -745,7 +763,7 @@ when Ether maps the playback timestamp.
 
 ## Cache management
 
-**Server → Cache** controls media retention, opening and resume warming, and an
+**Streaming › Cache** controls media retention, opening and resume warming, and an
 optional managed shelf of preloaded movies and TV episodes. Selecting a preset
 only updates the draft until you review and save.
 
@@ -784,7 +802,8 @@ its artwork, overview, ratings, cast, directors, and catalog identity.
 
 **Find on TMDB** retains the broader title lookup for released titles outside
 the browsable library. **Catalog settings** contains the TMDB key and connection
-test, language, region, refresh interval, popularity and vote thresholds, adult
+test, language, region, refresh interval, **Hide obscure titles** (Off, Some or
+Most; exact minimum popularity and votes are under **More options**), adult
 content option, and catalog health. Settings apply without a restart. Catalog
 is at **Catalog**; Metadata no longer keeps a catalogue alias.
 
@@ -930,7 +949,7 @@ apply, and an actual enhancement failure falls back to ordinary transcoding.
 
 ### Library visibility and discovery collections
 
-**Catalog → Library visibility** controls which titles Ether exposes to Plex.
+**Catalog › Settings › Visibility** controls which titles Ether exposes to Plex.
 Add named exclusion groups, choose movies, TV, or both, and combine conditions
 with **Match all** or **Match any**. Any matching group hides the title across
 browsing, search, recommendations and collections. The preview uses only the
@@ -1016,7 +1035,8 @@ The viewer can revoke the connection under **Devices** and create another one
 if needed.
 
 Stremio requires an HTTPS address. If the portal cannot create an install
-link, add a certificate under **Apps → Secure connections** and try again.
+link, add a certificate under **Apps › Overview › Away from home › Use your own
+certificate** and try again.
 Catalogue items and streams follow the viewer's library and safety settings.
 
 ## Read-only WebDAV

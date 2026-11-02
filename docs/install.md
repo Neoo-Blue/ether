@@ -174,7 +174,7 @@ add it yourself: `--group-add "$(stat -c %g /dev/dri/renderD128)"`. The image is
 FFmpeg needs in order to load VAAPI. It also ships Mesa (AMD) and, on
 amd64, Intel's iHD and i965 VAAPI drivers plus Debian's oneVPL Quick Sync
 runtime. That oneVPL package is not the legacy Media SDK runtime older
-Intel GPUs use for Quick Sync. The Transcoding page shows what the startup
+Intel GPUs use for Quick Sync. **Playback › Streams & transcoding** shows what the startup
 probe found.
 NVENC: use the NVIDIA container toolkit flags shown in
 `docker-compose.example.yml`.
@@ -206,14 +206,16 @@ their own listeners; use the addresses shown on the Apps page. The following
 discovery and address-publication instructions apply to the **Plex frontend**
 for remote access outside your LAN:
 
-- Easiest: enable *Remote access* in the web UI; Ether asks your router
-  for a UPnP mapping and publishes the address to plex.tv, for Plex clients.
+- Easiest: turn on *Allow remote access* under **Apps › Plex › Remote access**;
+  Ether asks your router for a UPnP mapping and publishes the address to
+  plex.tv, for Plex clients. UPnP is under *More options* there.
 - Manual: forward one external TCP port (e.g. 32400) to the Ether host's
-  32400, then set that public port in the web UI.
+  32400, then set that public port under **Apps › Overview › Away from home ›
+  More options**.
 - LAN discovery additionally uses UDP 32410–32414 (GDM); only relevant
   inside your network, never forward it.
 - Behind a reverse proxy/TLS terminator, keep the path and `X-Plex-*`
-  headers intact and point *Custom connection URLs* (or *Public host* on
+  headers intact and point *Custom server URLs* (or *Public host name* on
   port 443 with *Secure connections* set to *Required*) at your `https://`
   domain; Ether publishes that HTTPS endpoint directly to plex.tv without
   requiring a `plex.direct` certificate.
@@ -327,7 +329,7 @@ and one-time join tokens. No terminal commands are required for setup.
   deliberately for a controlled deployment.
 - **A port forward per node** for remote access: each node needs its own
   external port (for example 32400 to the first node, 32401 to the second),
-  or UPnP. Set the public port on each node's *Connectivity* page.
+  or UPnP. Set the public port on each node under **Apps › Overview › Away from home**.
 - **One public IP for providers.** Debrid services may flag one account used
   from several addresses at once. Keep every node behind the same internet
   connection. The Cluster page warns when the address nodes use for indexers,

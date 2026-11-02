@@ -9,6 +9,7 @@ import { ProwlarrImport } from "../../components/ProwlarrImport";
 import { DebridSources } from "./Debrid";
 import { HealthStrip } from "./form";
 import { IndexerList } from "./Indexers";
+import { NewReleaseBudgetSection } from "../catalog/NewReleasesSettings";
 import { UsenetProviders } from "./Usenet";
 import { SourceUsage } from "./Usage";
 import { AddSourceGallery, type GalleryChoice } from "./cards";
@@ -88,7 +89,12 @@ export default function Sources() {
       ) : null}
       {top === "debrid" ? <DebridSources addKind={debridAdd} /> : null}
       {top === "usenet" ? <UsenetProviders addNonce={usenetAdd} /> : null}
-      {top === "indexers" ? <IndexerList version={version} addRequest={indexerAdd} /> : null}
+      {top === "indexers" ? (
+        <>
+          <IndexerList version={version} addRequest={indexerAdd} />
+          <NewReleaseBudgetSection />
+        </>
+      ) : null}
       {top === "stats" ? <SourceUsage /> : null}
       <AddSourceGallery open={gallery} onClose={() => setGallery(false)} onPick={pick} />
       <Drawer

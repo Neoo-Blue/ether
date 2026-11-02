@@ -428,3 +428,10 @@
   padding-top: 1rem;
   padding-bottom: 0.25rem;
 }
+
+/* A ⌘K jump points at one setting row for a moment. */
+.setting-focus {
+  border-radius: 0.5rem;
+  box-shadow: 0 0 0 2px var(--color-primary, currentColor);
+  transition: box-shadow 0.3s ease;
+}

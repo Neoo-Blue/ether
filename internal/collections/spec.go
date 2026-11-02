@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/braedonsaunders/ether/internal/core"
 )
@@ -161,9 +162,42 @@ func Normalize(s *core.CollectionSpec) {
 		// The zero value means nobody was chosen explicitly: everyone.
 		s.Targets.Users = core.AllUsers()
 	}
-	if sc := s.Targets.Schedule; sc != nil && len(sc.Days) == 0 && sc.FromHour == nil && sc.ToHour == nil && len(sc.Devices) == 0 {
-		s.Targets.Schedule = nil
+	s.Targets.Schedule = NormalizeSchedule(s.Targets.Schedule)
+}
+
+// NormalizeSchedule trims a schedule's dates and returns nil for a schedule
+// that sets nothing.
+func NormalizeSchedule(sc *core.CollectionSchedule) *core.CollectionSchedule {
+	if sc == nil {
+		return nil
 	}
+	sc.StartDate, sc.EndDate = strings.TrimSpace(sc.StartDate), strings.TrimSpace(sc.EndDate)
+	// Midnight is both 0 and 24; an until of midnight is stored as 24 and a
+	// from of midnight as 0. A window that covers the whole day sets nothing.
+	if sc.ToHour != nil && *sc.ToHour == 0 {
+		h := 24
+		sc.ToHour = &h
+	}
+	if sc.FromHour != nil && *sc.FromHour == 24 {
+		h := 0
+		sc.FromHour = &h
+	}
+	if sc.FromHour != nil || sc.ToHour != nil {
+		from, to := 0, 24
+		if sc.FromHour != nil {
+			from = *sc.FromHour
+		}
+		if sc.ToHour != nil {
+			to = *sc.ToHour
+		}
+		if from == to || from == 0 && to == 24 {
+			sc.FromHour, sc.ToHour = nil, nil
+		}
+	}
+	if sc.IsZero() {
+		return nil
+	}
+	return sc
 }
 
 // Validate checks a normalized spec. It returns a *ValidationError.
@@ -261,27 +295,63 @@ func Validate(s *core.CollectionSpec) error {
 			ve.add("artwork.url", "use an http(s) image URL or a TMDB image path")
 		}
 	}
-	if sc := s.Targets.Schedule; sc != nil {
-		for _, d := range sc.Days {
-			if d < 0 || d > 6 {
-				ve.add("targets.schedule.days", "days are 0 (Sunday) to 6 (Saturday)")
-			}
-		}
-		for name, h := range map[string]*int{"fromHour": sc.FromHour, "toHour": sc.ToHour} {
-			if h != nil && (*h < 0 || *h > 24) {
-				ve.add("targets.schedule."+name, "hours are 0 to 24")
-			}
-		}
-		for _, d := range sc.Devices {
-			if !deviceNames[d] {
-				ve.add("targets.schedule.devices", "devices are tv, mobile, web or desktop")
-			}
-		}
-	}
+	validateSchedule(ve, "targets.schedule.", s.Targets.Schedule)
 	if len(ve.Fields) > 0 {
 		return ve
 	}
 	return nil
+}
+
+// ValidateSchedule checks a normalized collection schedule. It returns a
+// *ValidationError whose fields are relative to the schedule ("days").
+func ValidateSchedule(sc *core.CollectionSchedule) error {
+	ve := &ValidationError{}
+	validateSchedule(ve, "", sc)
+	if len(ve.Fields) > 0 {
+		return ve
+	}
+	return nil
+}
+
+func validateSchedule(ve *ValidationError, prefix string, sc *core.CollectionSchedule) {
+	if sc == nil {
+		return
+	}
+	for _, d := range sc.Days {
+		if d < 0 || d > 6 {
+			ve.add(prefix+"days", "days are 0 (Sunday) to 6 (Saturday)")
+		}
+	}
+	for name, h := range map[string]*int{"fromHour": sc.FromHour, "toHour": sc.ToHour} {
+		if h != nil && (*h < 0 || *h > 24) {
+			ve.add(prefix+name, "hours are 0 to 24")
+		}
+	}
+	for _, d := range sc.Devices {
+		if !deviceNames[d] {
+			ve.add(prefix+"devices", "devices are tv, mobile, web or desktop")
+		}
+	}
+	for _, d := range sc.Dayparts {
+		if d != core.DaypartMorning && d != core.DaypartAfternoon && d != core.DaypartEvening && d != core.DaypartLate {
+			ve.add(prefix+"dayparts", "dayparts are morning, afternoon, evening or late")
+		}
+	}
+	for _, m := range sc.Months {
+		if m < 1 || m > 12 {
+			ve.add(prefix+"months", "months are 1 (January) to 12 (December)")
+		}
+	}
+	for name, d := range map[string]string{"startDate": sc.StartDate, "endDate": sc.EndDate} {
+		if d != "" {
+			if _, err := time.Parse("2006-01-02", d); err != nil {
+				ve.add(prefix+name, "dates are YYYY-MM-DD")
+			}
+		}
+	}
+	if sc.StartDate != "" && sc.EndDate != "" && sc.StartDate > sc.EndDate {
+		ve.add(prefix+"endDate", "must not be before the start date")
+	}
 }
 
 func validCustomArt(u string) bool {

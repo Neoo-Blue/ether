@@ -11,7 +11,7 @@ import { ExternalLink } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useApp } from "../../app-context";
-import { MoreOptions } from "../../components/ConfigSection";
+import { ConfigSection, MoreOptions } from "../../components/ConfigSection";
 import { RemoteDiagnostics } from "../../components/RemoteDiagnostics";
 import { ErrorPanel } from "../../components/feedback";
 import { SaveBar, useDraft } from "../../components/SaveBar";
@@ -23,36 +23,39 @@ import type { EtherConfig } from "../../lib/types";
 import { SchemaField, type FieldDef } from "../settings/SchemaForm";
 import * as schema from "../settings/schema";
 import { PlexStatus } from "../settings/sections";
-import {
-  claimFailureMessage,
-  plexAccountClaimed,
-  translatePlexFieldError,
-  validateCustomUrls,
-} from "./plex-account";
+import { claimFailureMessage, plexAccountClaimed, translatePlexFieldError } from "./plex-account";
 import { HomeStatusRow } from "./HomeStatus";
 import { awaySummary, claimSummary, type ReachabilityStatus } from "./reachability";
 
 type Obj = Record<string, unknown>;
-type PlexDraft = { port: number; bindAddress: string; plex: Obj };
+type PlexDraft = { plex: Obj };
 type Pin = { id: string; code: string; authUrl: string };
-export type PlexSection = "account" | "remote" | "compatibility";
+export type PlexSection = "account" | "remote" | "downloads";
 
 export function plexSection(section: string | undefined): PlexSection {
-  if (section === "remote" || section === "secure") return "remote";
-  if (section === "compatibility") return "compatibility";
+  if (section === "remote" || section === "downloads") return section;
   return "account";
 }
+
+/** plex.* keys this tab edits. Away-from-home addresses live on Apps › Overview. */
+const PLEX_TAB_KEYS = [
+  "remoteAccess",
+  "latestCompatibilityVersion",
+  "useUpnp",
+  "secureConnections",
+  "trackLatestVersion",
+  "compatibilityVersion",
+];
+const COMPATIBILITY_KEYS = [
+  "plex.trackLatestVersion",
+  "plex.compatibilityVersion",
+  "plex.latestCompatibilityVersion",
+];
 
 function plexGroup(id: string) {
   const group = schema.PLEX.find((item) => item.id === id);
   if (!group) throw new Error(`missing Plex settings group ${id}`);
   return group;
-}
-
-function networkFields(): FieldDef[] {
-  return schema.SERVER.flatMap((group) => group.fields).filter((field) =>
-    ["port", "bindAddress"].includes(field.key),
-  );
 }
 
 function FieldList({
@@ -306,9 +309,9 @@ export function PlexApp({
     const cfg = config.data;
     if (!cfg) return null;
     return {
-      port: cfg.server.port,
-      bindAddress: cfg.server.bindAddress,
-      plex: { ...cfg.plex },
+      plex: Object.fromEntries(
+        PLEX_TAB_KEYS.map((key) => [key, cfg.plex[key as keyof typeof cfg.plex]]),
+      ),
     };
   }, [config.data]);
   const { draft, setDraft, dirty, reset } = useDraft(saved);
@@ -316,31 +319,14 @@ export function PlexApp({
   const [error, setError] = useState<unknown>();
   const [saving, setSaving] = useState(false);
   const active = plexSection(section);
-  const customUrlError = validateCustomUrls(draft?.plex?.customUrls);
-  const activeErrors: Record<string, string> = customUrlError
-    ? { ...errors, "plex.customUrls": customUrlError }
-    : errors;
+  const activeErrors = errors;
 
   async function save() {
     if (!draft) return;
-    const urlErr = validateCustomUrls(draft.plex.customUrls);
-    if (urlErr) {
-      const fields = [{ field: "plex.customUrls", message: urlErr }];
-      setErrors({ "plex.customUrls": urlErr });
-      setError(new ApiError(400, "validation", t("Please fix the highlighted fields"), fields));
-      navigate("/apps/plex/remote");
-      return;
-    }
     setSaving(true);
     setError(undefined);
     setErrors({});
     try {
-      const live = await api.getConfig();
-      await api.putSection("server", {
-        ...live.server,
-        port: draft.port,
-        bindAddress: draft.bindAddress,
-      });
       await api.putSection("plex", draft.plex);
       toast.success(t("Settings saved"));
       await config.reload();
@@ -356,15 +342,9 @@ export function PlexApp({
           Object.fromEntries(translatedFields.map((field) => [field.field, field.message])),
         );
         const keys = translatedFields.map((field) => field.field);
-        if (keys.some((key) => key.startsWith("server.") || key.startsWith("plex."))) {
-          const compatibility = keys.every((key) =>
-            [
-              "plex.trackLatestVersion",
-              "plex.compatibilityVersion",
-              "plex.latestCompatibilityVersion",
-            ].includes(key),
-          );
-          navigate(compatibility ? "/apps/plex/compatibility" : "/apps/plex/remote");
+        if (keys.some((key) => key.startsWith("plex."))) {
+          const compatibility = keys.every((key) => COMPATIBILITY_KEYS.includes(key));
+          navigate(compatibility ? "/apps/plex/account" : "/apps/plex/remote");
         }
       } else {
         setError(err);
@@ -387,7 +367,21 @@ export function PlexApp({
       }}
     />
   );
-  if (hidden) return saveBar;
+  const downloads = (
+    <ConfigSection
+      configKey="downloads"
+      groups={schema.DOWNLOADS}
+      label={t("Downloads")}
+      hidden={hidden || active !== "downloads"}
+    />
+  );
+  if (hidden)
+    return (
+      <>
+        {saveBar}
+        {downloads}
+      </>
+    );
   if (config.error) return <ErrorPanel error={config.error} onRetry={() => void config.reload()} />;
   if (!config.data || !draft)
     return (
@@ -398,15 +392,13 @@ export function PlexApp({
 
   const setPlex = (key: string, value: unknown) =>
     setDraft((old) => (old ? { ...old, plex: { ...old.plex, [key]: value } } : old));
-  const setServer = (key: string, value: unknown) =>
-    setDraft((old) => (old ? { ...old, [key]: value } : old));
   const remote = plexGroup("remote");
   const secure = plexGroup("secure");
   const compatibility = plexGroup("compatibility");
   const tabs = [
     { key: "account", label: t("Account") },
     { key: "remote", label: t("Remote access") },
-    { key: "compatibility", label: t("Compatibility") },
+    { key: "downloads", label: t("Downloads") },
   ];
   const plex = config.data.plex;
   const away = awaySummary(status, { remoteAccess: plex.remoteAccess !== false });
@@ -437,48 +429,46 @@ export function PlexApp({
             }}
           />
           <PlexMetadata claimed={plexAccountClaimed(plex)} />
+          <OptionGroup
+            group={compatibility}
+            value={draft.plex}
+            errors={activeErrors}
+            onChange={setPlex}
+          />
         </>
       ) : null}
       {active === "remote" ? (
         <>
           <PlexStatus remote={dashboard?.sections?.remote} />
-          <SettingsSection
-            title={t("Network")}
-            description={t("Where Plex apps on your network connect to this server.")}
-          >
-            <FieldList
-              fields={networkFields()}
-              value={{ port: draft.port, bindAddress: draft.bindAddress }}
-              errors={activeErrors}
-              prefix="server"
-              onChange={setServer}
+          <SettingsSection title={t("Network")}>
+            <SettingsRow
+              title={t("Port")}
+              description={
+                <>
+                  <span>{config.data.server.port}</span>
+                  {" · "}
+                  <Link className="underline" to="/server">
+                    {t("General settings")}
+                  </Link>
+                </>
+              }
+            />
+            <SettingsRow
+              title={t("Addresses for every app")}
+              description={
+                <Link className="underline" to="/apps/overview">
+                  {t("Away from home")}
+                </Link>
+              }
             />
           </SettingsSection>
           <OptionGroup group={remote} value={draft.plex} errors={activeErrors} onChange={setPlex} />
-          <OptionGroup
-            group={secure}
-            value={draft.plex}
-            errors={activeErrors}
-            onChange={setPlex}
-            moreLabel={t("Use your own certificate")}
-          />
+          <OptionGroup group={secure} value={draft.plex} errors={activeErrors} onChange={setPlex} />
           <RemoteDiagnostics />
         </>
       ) : null}
-      {active === "compatibility" ? (
-        <OptionGroup
-          group={{
-            ...compatibility,
-            description: t(
-              "What version Plex apps think this server is. Leave this alone unless an app refuses to connect.",
-            ),
-          }}
-          value={draft.plex}
-          errors={activeErrors}
-          onChange={setPlex}
-        />
-      ) : null}
       {saveBar}
+      {downloads}
     </>
   );
 }

@@ -1,24 +1,20 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { SimklIntegration } from "../pages/settings/SimklIntegration";
+import { ViewerSimkl } from "../pages/viewers/sections/ViewerSimkl";
 
-const { fetchMock, users, putSection } = vi.hoisted(() => ({
-  fetchMock: vi.fn(),
-  users: vi.fn(),
-  putSection: vi.fn(),
+const { fetchMock } = vi.hoisted(() => ({ fetchMock: vi.fn() }));
+vi.mock("../lib/api", () => ({
+  apiFetch: fetchMock,
+  errorMessage: (e: unknown) => String(e),
 }));
-vi.mock("../lib/api", () => ({ apiFetch: fetchMock, api: { users, putSection } }));
-describe("Simkl integration", () => {
+
+describe("Viewer Simkl account", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    users.mockResolvedValue([
-      { id: 1, title: "Alice" },
-      { id: 2, title: "Bob" },
-    ]);
+    let connected = false;
     fetchMock.mockImplementation(async (path: string) => {
-      if (path === "/config/simkl")
-        return { value: { enabled: true, clientId: "id", clientSecret: "••••" } };
-      if (path.endsWith("/status")) return { connected: false };
+      if (path.endsWith("/status")) return { connected };
       if (path.endsWith("/start"))
         return {
           userCode: "ABCD-EFGH",
@@ -27,21 +23,50 @@ describe("Simkl integration", () => {
           expiresAt: "2099-01-01T00:00:00Z",
           interval: 5,
         };
-      if (path.endsWith("/poll")) return { status: "authorized" };
+      if (path.endsWith("/poll")) {
+        connected = true;
+        return { status: "authorized" };
+      }
+      if (path.endsWith("/sync")) return { imported: 2, skipped: 0 };
       return {};
     });
   });
-  it("binds connection and polling to the selected viewer", async () => {
-    render(<SimklIntegration />);
-    await screen.findByLabelText("Viewer");
-    fireEvent.change(screen.getByLabelText("Viewer"), { target: { value: "2" } });
-    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+  it("connects, polls and syncs only this viewer", async () => {
+    render(
+      <MemoryRouter>
+        <ViewerSimkl viewerId={2} ready />
+      </MemoryRouter>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
     expect(await screen.findByText("ABCD-EFGH")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Simkl approval" })).toHaveAttribute(
+      "href",
+      "https://simkl.com/pin?user_code=ABCD-EFGH",
+    );
     fireEvent.click(screen.getByRole("button", { name: "Check connection" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Sync history" }));
     await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith("/simkl/2/poll", { method: "POST" }),
+      expect(fetchMock).toHaveBeenCalledWith("/simkl/2/sync", { method: "POST" }),
     );
     expect(fetchMock).toHaveBeenCalledWith("/simkl/2/start", { method: "POST" });
-    expect(fetchMock).not.toHaveBeenCalledWith("/simkl/1/poll", { method: "POST" });
+    expect(fetchMock).toHaveBeenCalledWith("/simkl/2/poll", { method: "POST" });
+    for (const [path] of fetchMock.mock.calls) expect(String(path)).toMatch(/^\/simkl\/2\//);
+    // There is no viewer picker: the section belongs to one viewer.
+    expect(screen.queryByLabelText("Viewer")).toBeNull();
+  });
+
+  it("points to Integrations when Simkl is not set up", () => {
+    render(
+      <MemoryRouter>
+        <ViewerSimkl viewerId={2} ready={false} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("link", { name: "Integrations" })).toHaveAttribute(
+      "href",
+      "/services/simkl",
+    );
+    expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

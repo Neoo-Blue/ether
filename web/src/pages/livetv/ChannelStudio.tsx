@@ -61,8 +61,10 @@ import {
   tv,
   upNext,
   type Block,
+  policyPermits,
   type Channel,
   type Coverage,
+  type LiveTVPolicy,
   type Programme,
   type Source,
   type SourceStatus,
@@ -71,7 +73,13 @@ import {
 import { useLocale } from "../../i18n/react";
 
 export type Mode = "movies" | "collection" | "genre" | "mix";
-export type StudioDraft = { channel: Channel; mode: Mode; genre: string };
+export type StudioDraft = {
+  channel: Channel;
+  mode: Mode;
+  genre: string;
+  /** Unsaved Viewers-tab switches by viewer id; saved into those viewers' policies. */
+  viewers?: Record<string, boolean>;
+};
 export type CollectionChoice = CollectionSpec & { ratingKey?: string };
 
 export function studioDraft(c: Channel): StudioDraft {
@@ -159,6 +167,7 @@ export function ChannelStudio({
   coverage,
   sources,
   users,
+  policies,
   collections,
   now,
   onDelete,
@@ -173,6 +182,7 @@ export function ChannelStudio({
   coverage?: Coverage;
   sources: Source[];
   users: EtherUser[];
+  policies: Map<number, LiveTVPolicy>;
   collections: CollectionChoice[];
   now: number;
   onDelete: () => void;
@@ -470,9 +480,17 @@ export function ChannelStudio({
         ) : null}
         {tab === "viewers" ? (
           <ViewerAccess
-            allowed={c.allowedUsers ?? []}
+            channelId={c.id}
             users={users}
-            onChange={(allowedUsers) => set({ allowedUsers })}
+            policies={policies}
+            isPrivate={Boolean(c.private)}
+            onPrivate={(next) =>
+              onChange({ ...draft, channel: { ...draft.channel, private: next || undefined } })
+            }
+            pending={draft.viewers ?? {}}
+            onChange={(viewers) =>
+              onChange({ ...draft, viewers: Object.keys(viewers).length ? viewers : undefined })
+            }
           />
         ) : null}
         {tab === "details" ? (
@@ -1557,17 +1575,52 @@ function GuideTab({
 }
 
 function ViewerAccess({
-  allowed,
+  channelId,
   users,
+  policies,
+  isPrivate,
+  onPrivate,
+  pending,
   onChange,
 }: {
-  allowed: number[];
+  channelId: string;
   users: EtherUser[];
-  onChange: (ids: number[]) => void;
+  policies: Map<number, LiveTVPolicy>;
+  isPrivate: boolean;
+  onPrivate: (next: boolean) => void;
+  pending: Record<string, boolean>;
+  onChange: (pending: Record<string, boolean>) => void;
 }) {
-  const everyone = allowed.length === 0;
+  // Owners always see every channel; the switches edit each viewer's own
+  // allowed channels, the same list as their Live TV limits. A private
+  // channel shows only to viewers given it, so the baseline follows the
+  // Private switch as drafted.
+  const viewers = users.filter((u) => !u.isOwner);
+  const saved = (id: number) => policyPermits(policies.get(id), channelId, isPrivate);
+  const isOn = (id: number) => pending[id] ?? saved(id);
+  const off = (id: number) => policies.get(id)?.disabled ?? false;
+  const toggle = (next: Record<string, boolean>, id: number, on: boolean) => {
+    if (on === saved(id)) delete next[id];
+    else next[id] = on;
+  };
+  const eligible = viewers.filter((u) => !off(u.id));
+  const allowed = eligible.filter((u) => isOn(u.id)).length;
+  const everyone = allowed === eligible.length;
   return (
     <section className="max-w-3xl space-y-3">
+      <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-surface p-3">
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium text-fg">{t("Private")}</span>
+          <span className="block text-xs text-fg-muted">
+            {t("Only viewers you give it to can watch, including people you add later.")}
+          </span>
+        </span>
+        <Switch
+          aria-label={t("Private")}
+          checked={isPrivate}
+          onChange={(e) => onPrivate(e.currentTarget.checked)}
+        />
+      </label>
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface p-3">
         <span className="grid size-9 place-items-center rounded-full bg-primary-subtle text-primary">
           <Users size={16} />
@@ -1576,46 +1629,58 @@ function ViewerAccess({
           <p className="text-sm font-medium text-fg">
             {everyone
               ? t("Everyone with Live TV access")
-              : tn(allowed.length, "Only {count} viewer", "Only {count} viewers")}
+              : tn(allowed, "Only {count} viewer", "Only {count} viewers")}
           </p>
           <p className="text-xs text-fg-muted">
-            {t(
-              "Pick viewers to restrict this channel. Their parental limits still apply; per-viewer Live TV settings live on each viewer's profile.",
-            )}
+            {t("Changes each viewer's allowed channels. Their parental limits still apply.")}
           </p>
         </div>
         {!everyone ? (
-          <Button variant="ghost" size="sm" onClick={() => onChange([])}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              const next = { ...pending };
+              for (const u of eligible) toggle(next, u.id, true);
+              onChange(next);
+            }}
+          >
             {t("Allow everyone")}
           </Button>
         ) : null}
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
-        {users.map((user) => {
-          const on = allowed.includes(user.id);
+        {viewers.map((user) => {
+          const disabled = off(user.id);
+          const on = !disabled && isOn(user.id);
           const name = user.title || user.username;
           return (
             <label
               key={user.id}
               className={cn(
-                "flex cursor-pointer items-center gap-3 rounded-xl border p-2.5 transition-colors",
+                "flex items-center gap-3 rounded-xl border p-2.5 transition-colors",
+                disabled ? "cursor-default" : "cursor-pointer",
                 on
                   ? "border-primary/40 bg-primary-subtle"
                   : "border-border bg-surface hover:border-border-strong",
               )}
             >
-              <Avatar src={(user as { thumb?: string }).thumb} name={name} size={30} />
-              <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg">{name}</span>
+              <Avatar src={user.thumb} name={name} size={30} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-fg">{name}</span>
+                {disabled ? (
+                  <span className="block text-xs text-fg-muted">{t("Live TV is off")}</span>
+                ) : null}
+              </span>
               <Switch
                 aria-label={name}
                 checked={on}
-                onChange={(e) =>
-                  onChange(
-                    e.currentTarget.checked
-                      ? [...allowed, user.id]
-                      : allowed.filter((id) => id !== user.id),
-                  )
-                }
+                disabled={disabled}
+                onChange={(e) => {
+                  const next = { ...pending };
+                  toggle(next, user.id, e.currentTarget.checked);
+                  onChange(next);
+                }}
               />
             </label>
           );

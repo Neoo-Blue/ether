@@ -1,3 +1,5 @@
+import { ConfigSection } from "../../components/ConfigSection";
+import { PERSONAL_TOUCHES } from "../settings/schema";
 import { Badge, Button, Switch, cn } from "@braedonsaunders/appkit-ui";
 import { Brain, Compass, Copy, Layers3, RotateCcw, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -209,6 +211,14 @@ export function TuningPanel({
             </button>
           ) : null}
         </section>
+      ) : null}
+
+      {layer === "global" ? (
+        <ConfigSection
+          configKey="personalize"
+          groups={PERSONAL_TOUCHES}
+          label={t("Personal touches")}
+        />
       ) : null}
 
       <LearningCard />

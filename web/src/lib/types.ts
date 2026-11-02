@@ -506,10 +506,10 @@ export interface EtherUser {
   thumb?: string;
   isOwner: boolean;
   lifecycle?: ViewerLifecycle;
+  /** Streams at once; 0 uses server.defaultStreamLimit. */
   streamLimit: number;
+  /** Content rating limit; "" is unrestricted. */
   maxContentRating: string;
-  subtitleLanguages: string[] | null;
-  audioLanguages: string[] | null;
   allowedSections: number[] | null;
 }
 
@@ -815,4 +815,69 @@ export interface ReleasePreferenceResult {
   fallback: number;
   preferences: number[];
   explanations: { id: string; name: string; action: string; state: string; outcome: string }[];
+}
+
+// ---- Quality: "Who gets what" ------------------------------------------------
+
+/** A known app the Quality page can check (GET /quality/clients). */
+export interface QualityClient {
+  id: string;
+  name: string;
+  product: string;
+  platform: string;
+  device?: string;
+}
+
+/** One viewer on one app, at home or away (POST /quality/explain). */
+export interface QualityQuestion {
+  userId: number;
+  clientId?: string;
+  client?: { product: string; platform?: string; device?: string };
+  remote: boolean;
+}
+
+export type QualityLayerKind =
+  | "profile"
+  | "device"
+  | "rule-height"
+  | "android-lift"
+  | "remote-cap"
+  | "viewer-cap"
+  | "remote-blocked";
+
+/** One layer that took part in a quality answer, in the order playback applies them. */
+export interface QualityLayer {
+  kind: QualityLayerKind;
+  /** Plain English from the server; the console renders its own translated copy. */
+  reason: string;
+  profile?: string;
+  source?: "rule" | "remote" | "default" | "first" | "builtin";
+  /** 1-based quality rule number. */
+  rule?: number;
+  ruleUserId?: number;
+  /** A rule won over the Away profile. */
+  beatsRemote?: boolean;
+  /** Ceiling this layer sets; absent or 0 = none. */
+  maxHeight?: number;
+  hdr?: boolean;
+  dolbyVision?: boolean;
+  bitrateKbps?: number;
+  /** An App compatibility edit changed this device. */
+  edited?: boolean;
+  /** The layer had a setting that did not apply. */
+  ignored?: boolean;
+  /** Set the final resolution ceiling, the final bitrate cap, or blocked playback. */
+  decisive: boolean;
+}
+
+export interface QualityAnswer {
+  profile: string;
+  /** 0 = no ceiling. */
+  maxHeight: number;
+  hdr: boolean;
+  dolbyVision: boolean;
+  /** 0 = no cap. */
+  bitrateKbps: number;
+  blocked: boolean;
+  layers: QualityLayer[];
 }

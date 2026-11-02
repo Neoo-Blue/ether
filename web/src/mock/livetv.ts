@@ -28,6 +28,17 @@ type Channel = Record<string, unknown> & {
 };
 type Source = Record<string, unknown> & { id: string; name: string };
 type Programme = { id: string; channelId: string; start: string; end: string; item: Item };
+/** A viewer's Live TV access: the only channel allow-list (see livetv.Policy). */
+type Policy = {
+  userId: number;
+  disabled: boolean;
+  restricted: boolean;
+  channels?: string[];
+  /** Private channels given to an unrestricted viewer. */
+  granted?: string[];
+  favorites?: string[];
+  maxRating?: string;
+};
 
 const NEWS = ["Morning Brief", "World Report", "Market Watch", "Evening News", "Late Edition"];
 const SHOWS = [
@@ -238,6 +249,19 @@ export function createLiveTVMock(titles: FakeTitle[]) {
     };
   }
 
+  const policies = new Map<number, Policy>();
+  const policy = (userId: number): Policy =>
+    policies.get(userId) ?? { userId, disabled: false, restricted: false };
+  const savePolicy = (p: Policy) => {
+    const saved = {
+      ...p,
+      channels: p.restricted ? [...new Set(p.channels ?? [])] : undefined,
+      granted: p.restricted ? undefined : [...new Set(p.granted ?? [])],
+    };
+    policies.set(p.userId, saved);
+    return saved;
+  };
+
   function handle(method: string, seg: string[], q: URLSearchParams, body: unknown) {
     if (seg[0] !== "livetv") return null;
     const route = `${method} /${seg.slice(1).join("/")}`;
@@ -340,6 +364,38 @@ export function createLiveTVMock(titles: FakeTitle[]) {
       const c = body as Channel;
       return { body: schedule({ ...c, id: c.id || "draft" }, now, now + 6 * 3600e3) };
     }
+    if (method === "PUT" && seg[1] === "channels" && seg[2] && seg[3] === "viewers") {
+      const id = seg[2];
+      if (!channels.some((c) => c.id === id))
+        return { body: { error: { code: "livetv", message: "not found" } }, status: 404 };
+      const b = (body ?? {}) as { allow?: number[]; deny?: number[] };
+      const isPrivate = (cid: string) =>
+        Boolean((channels.find((c) => c.id === cid) as { private?: boolean } | undefined)?.private);
+      const sees = (p: Policy, cid: string) =>
+        p.restricted
+          ? (p.channels ?? []).includes(cid)
+          : !isPrivate(cid) || (p.granted ?? []).includes(cid);
+      for (const user of b.allow ?? []) {
+        const p = policy(user);
+        if (sees(p, id)) continue;
+        if (p.restricted) savePolicy({ ...p, channels: [...(p.channels ?? []), id] });
+        else savePolicy({ ...p, granted: [...(p.granted ?? []), id] });
+      }
+      for (const user of b.deny ?? []) {
+        const p = policy(user);
+        if (p.restricted)
+          savePolicy({ ...p, channels: (p.channels ?? []).filter((c) => c !== id) });
+        else if (isPrivate(id))
+          savePolicy({ ...p, granted: (p.granted ?? []).filter((c) => c !== id) });
+        else
+          savePolicy({
+            ...p,
+            restricted: true,
+            channels: channels.map((c) => c.id).filter((c) => c !== id && sees(p, c)),
+          });
+      }
+      return { body: { ok: true } };
+    }
     if (
       (method === "POST" && route === "POST /channels") ||
       (method === "PUT" && seg[1] === "channels" && seg[2])
@@ -401,16 +457,12 @@ export function createLiveTVMock(titles: FakeTitle[]) {
       if (i >= 0) sources.splice(i, 1);
       return { body: { ok: true } };
     }
-    if (seg[1] === "policies")
-      return {
-        body: {
-          userId: Number(seg[2]),
-          disabled: false,
-          channels: [],
-          favorites: [],
-          maxRating: "",
-        },
-      };
+    if (route === "GET /policies") return { body: [...policies.values()] };
+    if (seg[1] === "policies" && seg[2]) {
+      const userId = Number(seg[2]);
+      if (method === "PUT") return { body: savePolicy({ ...(body as Policy), userId }) };
+      return { body: policy(userId) };
+    }
     return null;
   }
   return { handle };

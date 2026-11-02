@@ -3,18 +3,15 @@ import { ErrorPanel, LoadingRows } from "../../components/feedback";
 import { DomainPage, useRouteTab } from "../../components/layout";
 import { apiFetch } from "../../lib/api";
 import { useAsync, useInterval } from "../../lib/hooks";
-import { WatchlistAlerts } from "../viewers/sections/WatchlistDefaults";
 import { Channels } from "./Channels";
 import { Deliveries } from "./Deliveries";
 import type { NotificationsData } from "./types";
-import { Protection } from "./Protection";
 import { WeeklyReport } from "./WeeklyReport";
 
 const TABS = localized(
   () =>
     [
       { key: "channels", label: t("Channels") },
-      { key: "protection", label: t("Server protection") },
       { key: "report", label: t("Weekly report") },
       { key: "deliveries", label: t("Delivery history") },
     ] as const,
@@ -35,19 +32,14 @@ export default function Notifications() {
 
   const data = notices.data;
   const body =
-    tab === "protection" ? (
-      <Protection active={data?.crashWatcher} />
-    ) : tab === "report" ? (
+    tab === "report" ? (
       <WeeklyReport notifications={data} />
     ) : notices.error && !data ? (
       <ErrorPanel error={notices.error} onRetry={() => void notices.reload()} />
     ) : !data ? (
       <LoadingRows rows={3} />
     ) : tab === "channels" ? (
-      <>
-        <WatchlistAlerts />
-        <Channels data={data} onChanged={notices.reload} />
-      </>
+      <Channels data={data} onChanged={notices.reload} />
     ) : (
       <Deliveries data={data} />
     );

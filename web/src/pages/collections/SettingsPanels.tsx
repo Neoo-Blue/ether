@@ -24,15 +24,23 @@ import { useMemo, type ReactNode } from "react";
 import { Artwork } from "../../components/Artwork";
 import { ChipGroup, Field, NumberInput, Segmented } from "../../components/fields";
 import { TitleSearch, useViewers, viewerName } from "../../components/pickers";
-import type { ArtworkMode, CollectionSpec, DeviceClass, TitleCard } from "../../lib/contract";
-import { localized, t } from "../../i18n";
+import type {
+  ArtworkMode,
+  CollectionSpec,
+  Daypart,
+  DeviceClass,
+  TargetSchedule,
+  TitleCard,
+} from "../../lib/contract";
+import { localized, t, tx } from "../../i18n";
 import { searchSelectLabels } from "../../i18n/appkit-labels";
 import { WEEKDAYS, formatDateTime, formatHour, relativeTime } from "../../lib/format";
 import { REFRESH_OPTIONS } from "../../lib/rules";
+import { DAYPARTS, MONTHS, tidySchedule } from "../../lib/layout";
 import type { SpecUpdate } from "./BuildPanel";
 import { artworkPreviewURL, artworkSource } from "./artwork";
 
-// ---- Schedule ---------------------------------------------------------------------
+// ---- Refresh ----------------------------------------------------------------------
 
 export function SchedulePanel({
   spec,
@@ -576,19 +584,19 @@ export function AudiencePanel({ spec, update }: { spec: CollectionSpec; update: 
   const schedule = tg.schedule ?? {};
   const setTargets = (patch: Partial<CollectionSpec["targets"]>) =>
     update({ targets: { ...tg, ...patch } });
-  const setSchedule = (patch: NonNullable<CollectionSpec["targets"]["schedule"]>) => {
-    const next = { ...schedule, ...patch };
-    const empty =
-      !next.days?.length &&
-      next.fromHour === undefined &&
-      next.toHour === undefined &&
-      !next.devices?.length;
-    setTargets({ schedule: empty ? null : next });
-  };
+  const setSchedule = (patch: TargetSchedule) =>
+    setTargets({ schedule: tidySchedule({ ...schedule, ...patch }) ?? null });
   const hourOptions = [
     { value: "", label: t("Any time") },
     ...Array.from({ length: 24 }, (_, h) => ({ value: String(h), label: formatHour(h) })),
   ];
+  // Until midnight is 24 (the Home designer's "Midnight"); 0 means the same.
+  const untilOptions = [
+    ...hourOptions.slice(0, 1),
+    ...hourOptions.slice(2),
+    { value: "24", label: t("Midnight") },
+  ];
+  const until = schedule.toHour === 0 ? 24 : schedule.toHour;
   const nowhere = !tg.collectionsTab && !tg.homeRow && !tg.sectionRow;
   return (
     <div className="space-y-7">
@@ -691,9 +699,7 @@ export function AudiencePanel({ spec, update }: { spec: CollectionSpec; update: 
             {t("When")}
           </h3>
           <p className="text-xs text-fg-muted">
-            {t(
-              "Limit Home and library rows to certain days, hours or devices. The Collections tab always lists it.",
-            )}
+            {t("Limits its Home and library rows. The Home designer edits this same schedule.")}
           </p>
         </div>
         <Field label={t("Days")}>
@@ -748,14 +754,56 @@ export function AudiencePanel({ spec, update }: { spec: CollectionSpec; update: 
           </Field>
           <Field label={t("Until")}>
             <SearchSelect
-              value={schedule.toHour === undefined ? "" : String(schedule.toHour)}
+              value={until === undefined ? "" : String(until)}
               onChange={(v) => setSchedule({ toHour: v === "" ? undefined : Number(v) })}
-              options={hourOptions}
+              options={untilOptions}
               ariaLabel={t("Until hour")}
               {...searchSelectLabels()}
             />
           </Field>
         </div>
+        <Field label={t("Times of day")}>
+          <ChipGroup
+            ariaLabel={t("Times of day")}
+            size="sm"
+            value={schedule.dayparts ?? []}
+            onChange={(d) => setSchedule({ dayparts: d as Daypart[] })}
+            options={DAYPARTS}
+          />
+        </Field>
+        <Field label={t("Months")}>
+          <ChipGroup
+            ariaLabel={t("Months")}
+            size="sm"
+            value={schedule.months ?? []}
+            onChange={(m) => setSchedule({ months: [...m].sort((a, b) => a - b) })}
+            options={MONTHS.map((m, i) => ({ value: i + 1, label: m }))}
+          />
+        </Field>
+        <Field label={t("Dates")}>
+          <div className="flex flex-wrap items-center gap-2 text-sm text-fg-muted">
+            {tx("Between {start} and {end}", {
+              start: (
+                <Input
+                  type="date"
+                  aria-label={t("Start date")}
+                  className="h-8 w-40"
+                  value={schedule.startDate ?? ""}
+                  onChange={(e) => setSchedule({ startDate: e.currentTarget.value || undefined })}
+                />
+              ),
+              end: (
+                <Input
+                  type="date"
+                  aria-label={t("End date")}
+                  className="h-8 w-40"
+                  value={schedule.endDate ?? ""}
+                  onChange={(e) => setSchedule({ endDate: e.currentTarget.value || undefined })}
+                />
+              ),
+            })}
+          </div>
+        </Field>
         <Field label={t("Devices")}>
           <ChipGroup
             ariaLabel={t("Devices")}
@@ -782,14 +830,21 @@ export function describeSchedule(spec: CollectionSpec): string {
     parts.push(
       t("{from}–{until}", {
         from: s.fromHour !== undefined ? formatHour(s.fromHour) : t("midnight"),
-        until: s.toHour !== undefined ? formatHour(s.toHour) : t("midnight"),
+        until: s.toHour !== undefined && s.toHour !== 24 ? formatHour(s.toHour) : t("midnight"),
       }),
     );
   else parts.push(t("any time"));
+  if (s.dayparts?.length)
+    parts.push(s.dayparts.map((d) => DAYPARTS.find((x) => x.value === d)?.label ?? d).join(", "));
   parts.push(
     s.devices?.length
       ? s.devices.map((d) => DEVICES.find((x) => x.value === d)?.label ?? d).join(", ")
       : t("every device"),
   );
+  if (s.months?.length) parts.push(s.months.map((m) => MONTHS[m - 1]).join(", "));
+  if (s.startDate && s.endDate)
+    parts.push(t("{start} to {end}", { start: s.startDate, end: s.endDate }));
+  else if (s.startDate) parts.push(t("from {date}", { date: s.startDate }));
+  else if (s.endDate) parts.push(t("until {date}", { date: s.endDate }));
   return parts.join(" · ");
 }

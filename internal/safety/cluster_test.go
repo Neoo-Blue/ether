@@ -26,11 +26,11 @@ func TestPolicyChangeReachesOtherNode(t *testing.T) {
 	b.SetBus(hub.Node("b"))
 	defer a.Close()
 	defer b.Close()
-	if err := a.Put(ctx, 7, Policy{StreamLimit: 2, RemoteDisabled: true}); err != nil {
+	if err := a.Put(ctx, 7, Policy{MaxBitrateKbps: 2000, RemoteDisabled: true}); err != nil {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(5 * time.Second)
-	for b.Get(7).StreamLimit != 2 {
+	for b.Get(7).MaxBitrateKbps != 2000 {
 		if time.Now().After(deadline) {
 			t.Fatal("node B never saw the policy")
 		}

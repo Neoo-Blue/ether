@@ -7,7 +7,7 @@ import { releaseRuleConflict } from "../pages/releases/ReleasePreferences";
 const WAIT = { timeout: 4000 };
 
 async function openProfile() {
-  const { fake } = renderApp("/releases/profiles");
+  const { fake } = renderApp("/quality/profiles");
   fireEvent.click(await screen.findByRole("button", { name: "Edit 1080p" }, WAIT));
   const drawer = await screen.findByRole("dialog", { name: "1080p" }, WAIT);
   return { fake, drawer };

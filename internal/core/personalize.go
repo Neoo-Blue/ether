@@ -67,6 +67,9 @@ type CollectionRow struct {
 	CollectionID string `json:"collectionId"`
 	HomeRow      bool   `json:"homeRow"`
 	SectionRow   bool   `json:"sectionRow"`
+	// Schedule is the collection's schedule. The personalization engine
+	// applies it (a viewer's Home override may replace it).
+	Schedule *CollectionSchedule `json:"schedule,omitempty"`
 }
 
 // CollectionRows is implemented by the collection engine for the

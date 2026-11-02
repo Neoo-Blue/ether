@@ -281,8 +281,8 @@ func labelClausePasses(t *core.Title, c shareClause) bool {
 	return match
 }
 
-func ownerSetsRating(u *core.User, p Policy) bool {
-	return (u != nil && strings.TrimSpace(u.MaxContentRating) != "") || strings.TrimSpace(p.MaxContentRating) != ""
+func ownerSetsRating(u *core.User) bool {
+	return u != nil && strings.TrimSpace(u.MaxContentRating) != ""
 }
 
 // AllowDownloads implements core.DownloadAccessPolicy. An owner-set Ether

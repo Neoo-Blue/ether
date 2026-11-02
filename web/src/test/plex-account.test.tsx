@@ -90,17 +90,24 @@ describe("plex claim actions", () => {
     expect(screen.queryByRole("switch", { name: "Claimed" })).toBeNull();
   });
 
-  it("keeps an unsaved network setting while switching Plex sections", async () => {
+  it("keeps an unsaved remote setting while switching Plex sections", async () => {
     renderApp("/apps/plex/remote");
-    const port = await screen.findByRole("spinbutton", { name: "Port" }, WAIT);
-    fireEvent.change(port, { target: { value: "32450" } });
+    const remote = await screen.findByLabelText("Allow remote access", {}, WAIT);
+    const before = (remote as HTMLInputElement).checked;
+    fireEvent.click(remote);
+    expect(screen.queryByRole("spinbutton", { name: "Port" })).toBeNull();
+    expect(screen.getByRole("link", { name: "General settings" })).toHaveAttribute(
+      "href",
+      "/server",
+    );
     fireEvent.click(screen.getByRole("tab", { name: "Account" }));
     expect(
       await screen.findByRole("button", { name: "Sign out of Plex" }, WAIT),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("spinbutton", { name: "Port" })).toBeNull();
     fireEvent.click(screen.getByRole("tab", { name: "Remote access" }));
-    expect(await screen.findByRole("spinbutton", { name: "Port" }, WAIT)).toHaveValue(32450);
+    expect(
+      ((await screen.findByLabelText("Allow remote access", {}, WAIT)) as HTMLInputElement).checked,
+    ).toBe(!before);
     expect(screen.getByRole("region", { name: "Unsaved changes" })).toBeVisible();
   });
 });

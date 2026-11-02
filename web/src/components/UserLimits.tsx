@@ -18,84 +18,82 @@ export const CONTENT_RATINGS = localized(() => [
   })),
 ]);
 
-/** The user-record fields a viewer's limits edit. */
-export type UserLimits = Pick<
-  EtherUser,
-  "streamLimit" | "maxContentRating" | "subtitleLanguages" | "audioLanguages"
->;
+/** The user-record limits a viewer's Limits tab edits. */
+export type UserLimits = Pick<EtherUser, "streamLimit" | "maxContentRating">;
 
 export function userLimits(u: EtherUser): UserLimits {
-  return {
-    streamLimit: u.streamLimit,
-    maxContentRating: u.maxContentRating,
-    subtitleLanguages: u.subtitleLanguages,
-    audioLanguages: u.audioLanguages,
-  };
+  return { streamLimit: u.streamLimit, maxContentRating: u.maxContentRating };
 }
 
-/** Controlled stream-limit and rating-cap rows, for a form saved elsewhere. */
-export function UserLimitRows({
+/** "Streams at once" for one viewer, for a form saved elsewhere. */
+export function StreamLimitRow({
+  value,
+  onChange,
+  defaultStreamLimit,
+  hint,
+}: {
+  value: number;
+  onChange: (next: number) => void;
+  defaultStreamLimit?: number;
+  /** Extra copy after the description (e.g. a settings link). */
+  hint?: ReactNode;
+}) {
+  return (
+    <SettingsRow
+      title={t("Streams at once")}
+      description={
+        <>
+          {defaultStreamLimit !== undefined
+            ? t("0 uses the server default ({limit}).", { limit: defaultStreamLimit })
+            : t("0 uses the server default.")}
+          {hint ? <> {hint}</> : null}
+        </>
+      }
+      control={
+        <NumberInput
+          aria-label={t("Streams at once")}
+          className="w-24"
+          value={value}
+          min={0}
+          onChange={(n) => onChange(Math.max(0, Math.round(n)))}
+        />
+      }
+    />
+  );
+}
+
+/** One viewer's content rating limit, for a form saved elsewhere. */
+export function RatingLimitRow({
   value,
   onChange,
   isOwner,
-  defaultStreamLimit,
-  streamLimitHint,
 }: {
-  value: UserLimits;
-  onChange: (next: UserLimits) => void;
+  value: string;
+  onChange: (next: string) => void;
   isOwner?: boolean;
-  defaultStreamLimit?: number;
-  /** Extra copy after the stream-limit description (e.g. a settings link). */
-  streamLimitHint?: ReactNode;
 }) {
   return (
-    <>
-      <SettingsRow
-        title={t("Stream limit")}
-        description={
-          <>
-            {defaultStreamLimit !== undefined
-              ? t("Simultaneous streams. 0 uses the server default ({limit}).", {
-                  limit: defaultStreamLimit,
-                })
-              : t("Simultaneous streams. 0 uses the server default.")}
-            {streamLimitHint ? <> {streamLimitHint}</> : null}
-          </>
-        }
-        control={
-          <NumberInput
-            aria-label={t("Stream limit")}
-            className="w-24"
-            value={value.streamLimit}
-            min={0}
-            onChange={(n) => onChange({ ...value, streamLimit: Math.max(0, Math.round(n)) })}
+    <SettingsRow
+      title={t("Content rating limit")}
+      description={
+        isOwner
+          ? t("The owner is never limited by content rating.")
+          : t("Hides titles above this age level, and unrated titles.")
+      }
+      control={
+        <div className="w-56">
+          <SearchSelect
+            value={canonicalRating(value)}
+            onChange={onChange}
+            options={CONTENT_RATINGS}
+            ariaLabel={t("Content rating limit")}
+            searchable={false}
+            placeholder={t("Select…")}
+            selectLabel={t("Select")}
+            closeLabel={t("Close")}
           />
-        }
-      />
-      <SettingsRow
-        title={t("Content rating cap")}
-        description={
-          isOwner
-            ? t("The owner is never limited by content rating.")
-            : t(
-                "Titles above this level, and unrated titles, are hidden from this viewer. TV and other countries' ratings count at their equivalent level.",
-              )
-        }
-        control={
-          <div className="w-56">
-            <SearchSelect
-              value={canonicalRating(value.maxContentRating)}
-              onChange={(v) => onChange({ ...value, maxContentRating: v })}
-              options={CONTENT_RATINGS}
-              ariaLabel={t("Content rating cap")}
-              searchable={false}
-              placeholder={t("Select…")}
-              selectLabel={t("Select")}
-              closeLabel={t("Close")}
-            />
-          </div>
-        }
-      />
-    </>
+        </div>
+      }
+    />
   );
 }

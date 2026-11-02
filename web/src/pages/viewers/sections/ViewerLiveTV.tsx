@@ -8,6 +8,7 @@ import {
 } from "@braedonsaunders/appkit-ui";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { MoreOptions } from "../../../components/ConfigSection";
 import { ErrorPanel } from "../../../components/feedback";
 import { SaveBar, useDraft } from "../../../components/SaveBar";
 import { SettingsRow } from "../../../components/SettingsRow";
@@ -20,11 +21,21 @@ import { useAsync } from "../../../lib/hooks";
 type Policy = {
   userId: number;
   disabled: boolean;
-  channels: string[];
+  /** Only `channels` (none when empty); otherwise every channel, new ones too. */
+  restricted: boolean;
+  channels?: string[];
+  /** Private channels given to an unrestricted viewer. */
+  granted?: string[];
   favorites: string[];
   maxRating: string;
 };
-type ChannelSummary = { id: string; number: string; name: string; enabled: boolean };
+type ChannelSummary = {
+  id: string;
+  number: string;
+  name: string;
+  enabled: boolean;
+  private?: boolean;
+};
 
 /** One viewer's Live TV access: channels and extra parental limits (viewer profile › Access). */
 export function ViewerLiveTVAccess({ viewerId }: { viewerId: number }) {
@@ -55,7 +66,36 @@ export function ViewerLiveTVAccess({ viewerId }: { viewerId: number }) {
       </div>
     );
 
+  // The same allow-list each channel's Viewers tab edits.
   const allowed = draft.channels ?? [];
+  const granted = draft.granted ?? [];
+  const permits = (c: ChannelSummary) =>
+    draft.restricted ? allowed.includes(c.id) : !c.private || granted.includes(c.id);
+  const anyPrivate = sorted.some((c) => c.private);
+  const toggle = (c: ChannelSummary, on: boolean) => {
+    if (draft.restricted) {
+      setDraft({
+        ...draft,
+        channels: on ? [...allowed, c.id] : allowed.filter((id) => id !== c.id),
+      });
+    } else if (c.private) {
+      setDraft({
+        ...draft,
+        granted: on ? [...granted, c.id] : granted.filter((id) => id !== c.id),
+      });
+    } else if (!on) {
+      // Turning a public channel off limits them to what they see now.
+      setDraft({
+        ...draft,
+        restricted: true,
+        channels: sorted.filter((x) => x.id !== c.id && permits(x)).map((x) => x.id),
+        granted: [],
+      });
+    }
+  };
+  const allowedCount = channels.data
+    ? sorted.filter((c) => allowed.includes(c.id)).length
+    : allowed.length;
   const save = async () => {
     setSaving(true);
     setError(null);
@@ -95,38 +135,49 @@ export function ViewerLiveTVAccess({ viewerId }: { viewerId: number }) {
             />
           }
         />
-        <SettingsRow
-          title={<label htmlFor={`livetv-rating-${viewerId}`}>{t("Live TV maximum rating")}</label>}
-          description={t(
-            "An extra limit for Live TV only, by age level. Their usual limit still applies.",
-          )}
-          control={
-            <Select
-              id={`livetv-rating-${viewerId}`}
-              className="sm:w-56"
-              value={canonicalRating(draft.maxRating || "")}
-              disabled={draft.disabled}
-              onChange={(e) => setDraft({ ...draft, maxRating: e.currentTarget.value })}
-            >
-              {CONTENT_RATINGS.map((r) => (
-                <option key={r.value} value={r.value}>
-                  {r.value ? r.label : t("No extra limit")}
-                </option>
-              ))}
-            </Select>
-          }
-        />
+        <MoreOptions
+          label={t("More options: {title}", { title: t("Live TV") })}
+          hasError={Boolean(draft.maxRating)}
+        >
+          <SettingsRow
+            title={
+              <label htmlFor={`livetv-rating-${viewerId}`}>
+                {t("Different limit for Live TV")}
+              </label>
+            }
+            description={t("A stricter rating limit for Live TV only.")}
+            control={
+              <Select
+                id={`livetv-rating-${viewerId}`}
+                className="sm:w-56"
+                value={canonicalRating(draft.maxRating || "")}
+                disabled={draft.disabled}
+                onChange={(e) => setDraft({ ...draft, maxRating: e.currentTarget.value })}
+              >
+                {CONTENT_RATINGS.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.value ? r.label : t("Same as the content rating limit")}
+                  </option>
+                ))}
+              </Select>
+            }
+          />
+        </MoreOptions>
       </SettingsSection>
       <SettingsSection
         title={t("Allowed channels")}
         description={
-          allowed.length
-            ? tn(
-                allowed.length,
-                "Only the channel selected below.",
-                "Only the {count} channels selected below.",
-              )
-            : t("All channels. Select channels to allow only those.")
+          !draft.restricted
+            ? anyPrivate
+              ? t("All channels, including new ones. Private channels only when turned on.")
+              : t("All channels, including new ones.")
+            : allowedCount
+              ? tn(
+                  allowedCount,
+                  "Only the channel selected below.",
+                  "Only the {count} channels selected below.",
+                )
+              : t("No channels.")
         }
       >
         {channels.error ? (
@@ -151,32 +202,38 @@ export function ViewerLiveTVAccess({ viewerId }: { viewerId: number }) {
                   <Switch
                     id={`livetv-${viewerId}-channel-${c.id}`}
                     aria-label={t("Allow {name}", { name: c.name })}
-                    checked={allowed.includes(c.id)}
+                    checked={permits(c)}
                     disabled={draft.disabled}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        channels: e.currentTarget.checked
-                          ? [...allowed, c.id]
-                          : allowed.filter((id) => id !== c.id),
-                      })
-                    }
+                    onChange={(e) => toggle(c, e.currentTarget.checked)}
                   />
                   <label
                     htmlFor={`livetv-${viewerId}-channel-${c.id}`}
                     className="min-w-0 truncate"
                   >
                     <span className="tabular-nums text-fg-muted">{c.number}</span> {c.name}
+                    {c.private ? (
+                      <span className="ml-1.5 text-xs text-fg-muted">{t("Private")}</span>
+                    ) : null}
                   </label>
                 </div>
               ))}
             </div>
-            {allowed.length ? (
+            {draft.restricted ? (
               <Button
                 variant="ghost"
                 size="sm"
                 disabled={draft.disabled}
-                onClick={() => setDraft({ ...draft, channels: [] })}
+                onClick={() =>
+                  setDraft({
+                    ...draft,
+                    restricted: false,
+                    channels: [],
+                    // Private channels they had stay theirs.
+                    granted: sorted
+                      .filter((c) => c.private && allowed.includes(c.id))
+                      .map((c) => c.id),
+                  })
+                }
               >
                 {t("Allow all channels")}
               </Button>

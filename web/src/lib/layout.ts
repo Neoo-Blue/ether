@@ -8,6 +8,7 @@ import type {
   LayoutWhen,
   RowPolicy,
   RowStatus,
+  TargetSchedule,
   TuningDial,
 } from "./contract";
 import { getLocale, localized, t, tn } from "../i18n";
@@ -434,10 +435,71 @@ export function prune(doc: HomeLayout): HomeLayout {
   };
 }
 
+// ---- collection row schedules --------------------------------------------------------
+
+/** The collection an exact layout row names ("collection:<id>" or "collection.<id>"); patterns and other rows have none. */
+export function collectionIdOf(row: string): string | undefined {
+  const m = /^collection[:.](.+)$/.exec(row);
+  return m && !/[*?[]/.test(m[1]!) ? m[1] : undefined;
+}
+
+/** A schedule without empty fields; nothing set means no schedule. */
+export function tidySchedule(s: TargetSchedule | null | undefined): TargetSchedule | undefined {
+  if (!s) return undefined;
+  const out: TargetSchedule = {};
+  for (const [k, v] of Object.entries(s) as [keyof TargetSchedule, unknown][]) {
+    if (v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0)) continue;
+    (out as Record<string, unknown>)[k] = v;
+  }
+  return hasWhen(out) ? out : undefined;
+}
+
+/** A collection's schedule in the document (the collection owns it; the layout carries it). */
+export function collectionSchedule(doc: HomeLayout, id: string): TargetSchedule | undefined {
+  return tidySchedule(doc.collectionSchedules?.[id]);
+}
+
+/** Set a collection's schedule in the document (undefined clears it). */
+export function setCollectionSchedule(
+  doc: HomeLayout,
+  id: string,
+  schedule: TargetSchedule | undefined,
+): HomeLayout {
+  return {
+    ...doc,
+    collectionSchedules: {
+      ...(doc.collectionSchedules ?? {}),
+      [id]: tidySchedule(schedule) ?? null,
+    },
+  };
+}
+
+function scheduleMap(doc: HomeLayout): Record<string, TargetSchedule> {
+  const out: Record<string, TargetSchedule> = {};
+  for (const id of Object.keys(doc.collectionSchedules ?? {}).sort()) {
+    const s = collectionSchedule(doc, id);
+    if (s) out[id] = s;
+  }
+  return out;
+}
+
+/** The collection schedules a draft changes against the saved document (null clears one), for saving. */
+export function collectionScheduleChanges(
+  draft: HomeLayout,
+  saved: HomeLayout,
+): Record<string, TargetSchedule | null> {
+  const a = scheduleMap(draft);
+  const b = scheduleMap(saved);
+  const out: Record<string, TargetSchedule | null> = {};
+  for (const id of new Set([...Object.keys(a), ...Object.keys(b)]))
+    if (JSON.stringify(a[id]) !== JSON.stringify(b[id])) out[id] = a[id] ?? null;
+  return out;
+}
+
 /** The document without server stamps, for change detection. */
 function comparable(doc: HomeLayout): unknown {
   const p = prune(doc);
-  return { global: p.global, viewers: p.viewers };
+  return { global: p.global, viewers: p.viewers, schedules: scheduleMap(doc) };
 }
 
 export function sameLayout(a: HomeLayout, b: HomeLayout): boolean {

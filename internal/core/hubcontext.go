@@ -46,7 +46,7 @@ func ClassifyDevice(product, platform, device string) string {
 		return DeviceTV
 	}
 	// Amazon Fire TV model numbers ("AFTMM", "AFTKA") and Android TV boxes.
-	if strings.HasPrefix(d, "aft") && len(d) <= 8 {
+	if IsFireTV("", device) {
 		return DeviceTV
 	}
 	if has(p, "plex web") || has(pl, "chrome", "safari", "firefox", "edge", "opera", "web") {
@@ -116,4 +116,16 @@ func (hc HubContext) Bucket() string {
 		sec = "s" + strconv.Itoa(hc.SectionID)
 	}
 	return sec + "/" + hc.Device + "/" + hc.Daypart + "/" + wk
+}
+
+// IsFireTV reports an Amazon Fire TV. The Plex app there calls itself
+// "Plex for Android (TV)"; the device header carries the model number
+// ("AFTKRT", "AFTMM"), or a name that says Fire TV.
+func IsFireTV(product, device string) bool {
+	d := strings.ToLower(strings.TrimSpace(device))
+	if strings.HasPrefix(d, "aft") && len(d) <= 8 {
+		return true
+	}
+	all := strings.ToLower(product + " " + device)
+	return strings.Contains(all, "fire tv") || strings.Contains(all, "firetv")
 }

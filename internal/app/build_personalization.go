@@ -144,6 +144,13 @@ func (a *App) buildPersonalization(ctx context.Context, cfg config.Config) error
 	}); err != nil {
 		return fmt.Errorf("personalization: %w", err)
 	}
+	// One-time: Home layout schedules for collection rows move onto their
+	// collections, which own them now.
+	if a.collections != nil {
+		if err := a.collections.AdoptLayoutSchedules(ctx, a.personalize); err != nil {
+			a.log.Warn("collections: could not move Home layout schedules onto collections; retrying next start", "err", err)
+		}
+	}
 	if err := parityWarmPersonalization(ctx, a); err != nil {
 		a.personalize.Close()
 		return err

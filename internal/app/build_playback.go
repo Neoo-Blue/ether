@@ -74,7 +74,7 @@ func (a *App) buildPlayback(ctx context.Context, cfg config.Config) error {
 			}
 			return ""
 		},
-		SyncSubtitleLanguages: a.syncSubtitleLanguages,
+		SyncLanguages: a.syncLanguages,
 		ServerLanguage: func() string {
 			if a.cfg == nil {
 				return ""

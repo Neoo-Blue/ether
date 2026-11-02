@@ -523,7 +523,7 @@ func (f *fakeUsers) UpdateUser(_ context.Context, u core.User) error {
 
 func TestUsersEndpoints(t *testing.T) {
 	store := newStore(t, nil)
-	us := &fakeUsers{users: []core.User{{ID: 7, Username: "kid", Title: "Kid"}}}
+	us := &fakeUsers{users: []core.User{{ID: 7, Username: "kid", Title: "Kid", SubtitleLanguages: []string{"fr"}}}}
 	h := admin.New(admin.Deps{Config: store, IsOwnerToken: storedOwner(store), Users: us})
 
 	rec := serve(h, req(http.MethodPatch, "/ether/api/users/7", `{"streamLimit":1,"maxContentRating":"PG","subtitleLanguages":["en"]}`))
@@ -533,6 +533,13 @@ func TestUsersEndpoints(t *testing.T) {
 	got := us.users[0]
 	if got.StreamLimit != 1 || got.MaxContentRating != "PG" || got.Username != "kid" {
 		t.Fatalf("user not merged/updated: %+v", got)
+	}
+	// Languages are owned by the Audio & subtitles rules, not this endpoint.
+	if len(got.SubtitleLanguages) != 1 || got.SubtitleLanguages[0] != "fr" {
+		t.Fatalf("user languages written through the limits endpoint: %+v", got.SubtitleLanguages)
+	}
+	if rec := serve(h, req(http.MethodPatch, "/ether/api/users/7", `{"maxContentRating":"bogus"}`)); rec.Code != 400 {
+		t.Fatalf("unknown rating: got %d want 400", rec.Code)
 	}
 	if rec := serve(h, req(http.MethodPatch, "/ether/api/users/99", `{"streamLimit":1}`)); rec.Code != 404 {
 		t.Fatalf("missing user: got %d want 404", rec.Code)

@@ -977,11 +977,11 @@ export function DeviceCapabilities() {
             onChange={(video) => setDraft({ ...draft, video })}
           />
           <SettingsRow
-            title={t("Maximum resolution")}
+            title={t("Highest resolution it can show")}
             control={
               <div className="w-full sm:w-80">
                 <Select
-                  aria-label={t("Maximum resolution")}
+                  aria-label={t("Highest resolution it can show")}
                   value={draft.height}
                   placeholder={heightPlaceholder}
                   onChange={(e) => setDraft({ ...draft, height: e.target.value })}

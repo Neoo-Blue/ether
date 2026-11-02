@@ -561,7 +561,7 @@ export default function CollectionEditor() {
                 onSelect={(k) => setTab(k as Tab)}
                 tabs={[
                   { key: "build", label: t("Build") },
-                  { key: "schedule", label: t("Schedule") },
+                  { key: "schedule", label: t("Refresh") },
                   { key: "artwork", label: t("Artwork") },
                   { key: "audience", label: t("Audience") },
                 ]}

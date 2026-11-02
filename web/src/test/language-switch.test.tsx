@@ -26,7 +26,8 @@ afterEach(async () => {
 describe("switching language", () => {
   it("keeps unsaved edits and re-renders the page in the new language", async () => {
     const { fake } = renderApp("/catalog/settings");
-    const popularity = await screen.findByLabelText("Minimum popularity");
+    fireEvent.click(await screen.findByRole("button", { name: "More options: What's browsable" }));
+    const popularity = screen.getByLabelText("Minimum popularity");
     fireEvent.change(popularity, { target: { value: "42" } });
     const gate = screen.getByLabelText("Wait for digital or physical release");
     fireEvent.click(gate);
