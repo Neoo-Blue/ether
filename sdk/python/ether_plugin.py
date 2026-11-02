@@ -18,6 +18,7 @@ import base64
 import hashlib
 import http.server
 import json
+import logging
 import os
 import re
 import socket
@@ -646,6 +647,7 @@ class PluginInstance:
         self._default_settings = dict(default_settings or {})
         self._default_locale = default_locale or "en"
         self._host = host
+        self._settings_failure_logged = False
 
         inline_strings: Dict[str, Dict[str, str]] = {}
         ether_block = manifest.get("ether")
@@ -713,12 +715,18 @@ class PluginInstance:
         settings = dict(self._current_settings)
         getter = getattr(host_client, "settings_get", None)
         if callable(getter) and str(req.get("path", "")) != "/ether/configure" and (not isinstance(host_client, RemoteHostClient) or host_client.credential):
-            fresh = getter()
-            for field in collect_setting_fields(self._settings_schema):
-                key = field.get("key")
-                if field.get("kind") == "secret" and key in self._current_settings:
-                    fresh[key] = self._current_settings[key]
-            settings, _ = decode_settings(self._settings_schema, fresh, self._default_settings)
+            try:
+                fresh = getter()
+                for field in collect_setting_fields(self._settings_schema):
+                    key = field.get("key")
+                    if field.get("kind") == "secret" and key in self._current_settings:
+                        fresh[key] = self._current_settings[key]
+                settings, _ = decode_settings(self._settings_schema, fresh, self._default_settings)
+            except Exception:
+                if not self._settings_failure_logged:
+                    logging.getLogger(__name__).warning("plugin settings lookup failed")
+                    self._settings_failure_logged = True
+                settings = {}
         return PluginContext(
             manifest=self.manifest,
             settings=settings,

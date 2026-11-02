@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -84,8 +85,9 @@ type Plugin struct {
 	remoteOpts      RemoteHostOptions
 	pageRoutes      map[string]string
 
-	mu       sync.RWMutex
-	settings map[string]any
+	mu              sync.RWMutex
+	settings        map[string]any
+	settingsFailure sync.Once
 }
 
 // New constructs a Plugin from a Definition.
@@ -402,20 +404,22 @@ func (p *Plugin) Dispatch(ctx context.Context, req RawRequest) RawResponse {
 		if !isRemote || remote.credential != "" {
 			settings, err := getter.SettingsGet(ctx)
 			if err != nil {
-				return toRouteErrorResponse(err)
-			}
-			var schema *SettingsSchema
-			if p.manifest.Ether != nil {
-				schema = p.manifest.Ether.Settings
-			}
-			for _, field := range CollectSettingFields(schema) {
-				if field.Kind == "secret" {
-					if v, ok := pctx.Settings[field.Key]; ok {
-						settings[field.Key] = v
+				p.settingsFailure.Do(func() { log.Print("plugin settings lookup failed") })
+				pctx.Settings = map[string]any{}
+			} else {
+				var schema *SettingsSchema
+				if p.manifest.Ether != nil {
+					schema = p.manifest.Ether.Settings
+				}
+				for _, field := range CollectSettingFields(schema) {
+					if field.Kind == "secret" {
+						if v, ok := pctx.Settings[field.Key]; ok {
+							settings[field.Key] = v
+						}
 					}
 				}
+				pctx.Settings, _ = DecodeSettings(schema, settings, p.defaultSettings)
 			}
-			pctx.Settings, _ = DecodeSettings(schema, settings, p.defaultSettings)
 		}
 	}
 	method := strings.ToUpper(req.Method)
