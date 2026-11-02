@@ -12,8 +12,9 @@ import (
 
 // Plex for Android builds pre-play selectors from the selected Media's
 // streams and the in-player menu from the decision. Before a probe the 4K
-// version has no streams. After Stop the probe must stay on that version,
-// a PUT must stick, and a remux decision must still list the other audio.
+// version lists only its estimate. After Stop the probe must stay on that
+// version, a PUT must stick, and a remux decision must still list the other
+// audio.
 func TestAndroidTrackChoiceSurvivesStop(t *testing.T) {
 	f, pb := newVariantPlaybackFixture(t)
 	pb.info = probedInfo
@@ -21,8 +22,8 @@ func TestAndroidTrackChoiceSurvivesStop(t *testing.T) {
 	key := fightClub.Key.String()
 
 	before := f.get(t, "/library/metadata/"+key, android...).Body.String()
-	if block := mediaBlock(before, "4K Dolby Vision Remux"); block == "" || strings.Contains(block, "<Stream ") {
-		t.Fatalf("pre-probe 4K version should expose no streams yet:\n%s", block)
+	if block := mediaBlock(before, "4K Dolby Vision Remux"); block == "" || len(audioTags(block)) != 1 || strings.Contains(block, `languageCode="fre"`) || len(streamTagsOfType(block, "3")) != 0 {
+		t.Fatalf("pre-probe 4K version should list only its estimate:\n%s", block)
 	}
 
 	decision := f.get(t, "/video/:/transcode/universal/decision?path=/library/metadata/"+key+"&mediaIndex=1&directPlay=0&directStream=1&protocol=hls&session=and1", android...)
@@ -44,14 +45,14 @@ func TestAndroidTrackChoiceSurvivesStop(t *testing.T) {
 	if len(audios) < 2 || !strings.Contains(block, `selected="1"`) {
 		t.Fatalf("4K version lost its probed tracks after stop: %q\n%s", audios, block)
 	}
-	if compat := mediaBlock(after.Body.String(), "720p Blu-ray (High Compatibility)"); strings.Contains(compat, `languageCode="fre"`) || strings.Contains(compat, "<Stream ") {
+	if compat := mediaBlock(after.Body.String(), "720p Blu-ray (High Compatibility)"); strings.Contains(compat, `languageCode="fre"`) || len(audioTags(compat)) != 1 {
 		t.Fatalf("another version inherited the resumed tracks:\n%s", compat)
 	}
 	friend := friendMetadata(t, f, "/library/metadata/"+key)
 	if strings.Contains(friend, `languageCode="fre"`) {
 		t.Fatal("another viewer received the owner's audio tracks")
 	}
-	if other := mediaBlock(friend, "4K Dolby Vision Remux"); strings.Contains(other, "<Stream ") {
+	if other := mediaBlock(friend, "4K Dolby Vision Remux"); len(audioTags(other)) != 1 || len(streamTagsOfType(other, "3")) != 0 {
 		t.Fatalf("another viewer received the owner's 4K probe:\n%s", other)
 	}
 	french := streamID(audioByLang(audios, "fre"))

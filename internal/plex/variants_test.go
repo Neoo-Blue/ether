@@ -240,9 +240,10 @@ func TestDetailRendersPlayVersionMedia(t *testing.T) {
 	if vid < 8_000_000_000_000_000 || vid >= 1<<53 {
 		t.Errorf("variant id %d out of safe range", vid)
 	}
-	// Only the Auto version carries the stream list (2 estimated streams).
-	if n := strings.Count(body, "<Stream "); n != 2 {
-		t.Errorf("stream count %d, want 2 (Auto only)", n)
+	// Every version carries its estimated video and audio stream, as PMS
+	// lists streams on every Media (#267).
+	if n := strings.Count(body, "<Stream "); n != 6 {
+		t.Errorf("stream count %d, want 6 (2 per version)", n)
 	}
 	// No edition on this item.
 	if strings.Contains(body, "editionTitle") {
@@ -803,5 +804,99 @@ func TestDetailPageRefreshesWhenVersionsArrive(t *testing.T) {
 	}
 	if n := strings.Count(f.get(t, "/library/metadata/"+fightClub.Key.String()).Body.String(), "<Media "); n != 3 {
 		t.Fatalf("media count %d after the refresh, want 3", n)
+	}
+}
+
+// Issue #267: Plex Web chooses the version itself (highest playable
+// quality, not Media@selected), keeps that Media index for the whole
+// session, and reads Media[index].Part[0].Stream when its player settings
+// panel opens. It adds a "None" subtitle track only to a Part with a video
+// stream; without one the panel reads the id of an undefined subtitle and
+// the player ends with "unexpected error during playback". A re-fetch
+// during the session (subtitle download, timeline refresh) must not shrink
+// the Media list under that index.
+func TestPlexWebVersionKeepsTracksAndIndexDuringPlayback(t *testing.T) {
+	f, pb := newVariantPlaybackFixture(t)
+	path := "/library/metadata/" + fightClub.Key.String()
+	web := []string{"X-Plex-Product", "Plex Web", "X-Plex-Platform", "Chrome", "Accept", "application/json"}
+	type part struct {
+		ID     int64 `json:"id"`
+		Stream []struct {
+			StreamType int  `json:"streamType"`
+			Selected   bool `json:"selected"`
+		} `json:"Stream"`
+	}
+	type media struct {
+		ID       int64  `json:"id"`
+		Selected bool   `json:"selected"`
+		Part     []part `json:"Part"`
+	}
+	fetch := func(stage string) []media {
+		t.Helper()
+		rec := f.get(t, path, web...)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: status %d", stage, rec.Code)
+		}
+		var body struct {
+			MediaContainer struct {
+				Metadata []struct {
+					Media []media `json:"Media"`
+				} `json:"Metadata"`
+			} `json:"MediaContainer"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || len(body.MediaContainer.Metadata) != 1 {
+			t.Fatalf("%s: %v %s", stage, err, rec.Body.String())
+		}
+		ms := body.MediaContainer.Metadata[0].Media
+		for i, m := range ms {
+			video, selectedAudio := 0, 0
+			for _, st := range m.Part[0].Stream {
+				if st.StreamType == 1 {
+					video++
+				}
+				if st.StreamType == 2 && st.Selected {
+					selectedAudio++
+				}
+			}
+			if video != 1 || selectedAudio != 1 {
+				t.Errorf("%s: Media[%d] video=%d selectedAudio=%d, want 1/1 (Plex Web reads the playing Part's tracks)", stage, i, video, selectedAudio)
+			}
+		}
+		return ms
+	}
+	before := fetch("before playback")
+	if len(before) != 3 {
+		t.Fatalf("before playback: %d media, want 3", len(before))
+	}
+
+	// Plex Web plays the 4K version by its Media index.
+	rec := f.get(t, "/video/:/transcode/universal/decision?path="+urlEsc(path)+"&mediaIndex=1&partIndex=0&session=web267&directPlay=0&directStream=1&protocol=dash", web[:4]...)
+	if rec.Code != http.StatusOK || len(pb.variantCalls) != 1 || pb.variantCalls[0] != "rel-4k" {
+		t.Fatalf("decision: %d variants=%v %s", rec.Code, pb.variantCalls, rec.Body.String())
+	}
+
+	during := fetch("during playback")
+	if len(during) != len(before) {
+		t.Fatalf("during playback: %d media, want the %d Plex Web indexed", len(during), len(before))
+	}
+	for i := range before {
+		if during[i].ID != before[i].ID {
+			t.Errorf("Media[%d] id %d -> %d during playback", i, before[i].ID, during[i].ID)
+		}
+	}
+	if !during[1].Selected || during[0].Selected || during[2].Selected {
+		t.Errorf("playing version not the selected Media: %+v", during)
+	}
+	audio, subs := 0, 0
+	for _, st := range during[1].Part[0].Stream {
+		switch st.StreamType {
+		case 2:
+			audio++
+		case 3:
+			subs++
+		}
+	}
+	if audio != 2 || subs != 2 {
+		t.Errorf("playing version tracks audio=%d subs=%d, want the session probe's 2/2", audio, subs)
 	}
 }

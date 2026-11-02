@@ -94,9 +94,12 @@ func TestMetadataWithVariantsListsWarmProbedTracks(t *testing.T) {
 	if audio != 2 || subs != 2 || selAudio != 1 {
 		t.Fatalf("Auto variant warm streams: audio=%d subs=%d selAudio=%d, want 2/2/1", audio, subs, selAudio)
 	}
+	// Other versions list their own estimate (one video, one audio), never
+	// the warm probe of the Auto release.
 	for i := 1; i < len(md.Media); i++ {
-		if len(md.Media[i].Part[0].Stream) != 0 {
-			t.Errorf("non-Auto variant %d should not carry warm streams before playback: %+v", i, md.Media[i].Part[0].Stream)
+		audio, subs, selAudio := countTracks(md.Media[i].Part[0].Stream)
+		if audio != 1 || subs != 0 || selAudio != 1 || md.Media[i].Part[0].Stream[0].StreamType != 1 {
+			t.Errorf("non-Auto variant %d streams: audio=%d subs=%d selAudio=%d, want its 1/0/1 estimate: %+v", i, audio, subs, selAudio, md.Media[i].Part[0].Stream)
 		}
 	}
 }
