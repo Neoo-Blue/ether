@@ -3,6 +3,7 @@ package diagnostics
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -174,6 +175,11 @@ type exportLog struct {
 	Kind    string    `json:"kind,omitempty"`
 	// Method, Route and Dur describe a request line: which endpoint the
 	// device asked for and how long it took, with identifying segments masked.
+	// Msg is the log line's message, a fixed string in Ether's code. Err
+	// is its error or reason, secrets and URL queries removed; it often
+	// names a release, so it is kept only when titles are included.
+	Msg       string `json:"msg,omitempty"`
+	Err       string `json:"err,omitempty"`
 	Method    string `json:"method,omitempty"`
 	Route     string `json:"route,omitempty"`
 	Dur       string `json:"dur,omitempty"`
@@ -196,7 +202,7 @@ func projectLogs(records []LogRecord, q LogQuery, flags [3]bool, uses []secretUs
 	gaps = append(gaps, Gap{
 		Collector: "logs",
 		Status:    "omitted",
-		Detail:    "Free-text log messages, file paths, and unrecognized fields were omitted. Request routes are kept with identifying parts masked. Usernames, addresses, and titles are included only when the summary lists them.",
+		Detail:    "Debug lines are included. Free-text log messages are kept only as fixed phrases; file paths and unrecognized fields were omitted. Request routes are kept with identifying parts masked, and error text only when titles are included. Usernames, addresses, and titles are included only when the summary lists them.",
 	})
 	limit := q.MaxLines
 	if limit <= 0 || limit > maxLogLines {
@@ -224,6 +230,12 @@ func projectLogs(records []LogRecord, q LogQuery, flags [3]bool, uses []secretUs
 		}
 		row.Status = boundToken(attrFold(rec.Attrs, "status"))
 		row.Kind = boundToken(attrFold(rec.Attrs, "kind"))
+		row.Msg = plainMessage(redactString(rec.Message, uses))
+		if flags[0] {
+			if e := firstPresent(rec.Attrs, "err", "error", "reason"); e != "" {
+				row.Err = boundText(stripURLQueries(redactString(e, uses)), 400)
+			}
+		}
 		if rec.Message == "request" || rec.Message == "hls request" {
 			row.Method = boundToken(attrFold(rec.Attrs, "method"))
 			row.Route = requestRoute(attrFold(rec.Attrs, "path"))
@@ -269,6 +281,28 @@ func projectLogs(records []LogRecord, q LogQuery, flags [3]bool, uses []secretUs
 		gaps = append(gaps, Gap{Collector: "logs", Status: "truncated", Detail: "The log extract was shortened to the line limit. No line was cut in the middle."})
 	}
 	return []byte(b.String()), ident, truncated, gaps
+}
+
+// plainMessage keeps a log message that reads as a fixed phrase: no paths,
+// addresses, key=value pairs or long runs.
+func plainMessage(m string) string {
+	if m == "" || len(m) > 120 || strings.ContainsAny(m, "/\\@=?&\n") {
+		return ""
+	}
+	return m
+}
+
+var urlQuery = regexp.MustCompile(`(https?://[^\s"'?#]+)[?#][^\s"']*`)
+
+// stripURLQueries drops query strings and fragments from URLs, where
+// addon and debrid links carry their keys.
+func stripURLQueries(s string) string { return urlQuery.ReplaceAllString(s, "$1") }
+
+func boundText(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }
 
 // requestRoute keeps the shape of an HTTP request path, such as
