@@ -1,5 +1,5 @@
 import { Badge, Button, Input, Label, cn } from "@braedonsaunders/appkit-ui";
-import { CheckCircle2, Eye, EyeOff, PlugZap, XCircle } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, PlugZap, Plus, Trash2, XCircle } from "lucide-react";
 import { forwardRef, useEffect, useId, useState, type ComponentProps, type ReactNode } from "react";
 import { t } from "../i18n";
 import { REDACTED } from "../lib/types";
@@ -362,5 +362,98 @@ export function ListInput({
         onChange(parsed);
       }}
     />
+  );
+}
+
+/**
+ * Name/value rows for a map of short strings whose values are secrets.
+ * Values arrive redacted; renaming a row clears its stored value, because a
+ * renamed secret is a new secret.
+ */
+export function MapInput({
+  value,
+  onChange,
+  ariaLabel,
+  namePlaceholder,
+  valuePlaceholder,
+  id,
+  invalid,
+}: {
+  value: Record<string, string>;
+  onChange: (v: Record<string, string>) => void;
+  ariaLabel: string;
+  namePlaceholder?: string;
+  valuePlaceholder?: string;
+  id?: string;
+  invalid?: boolean;
+}) {
+  const [rows, setRows] = useState<[string, string][]>(() => Object.entries(value));
+  // A row without a name is a placeholder the owner is still filling in.
+  const toObject = (list: [string, string][]) =>
+    Object.fromEntries(list.filter(([name]) => name !== ""));
+  const key = JSON.stringify(value);
+  useEffect(() => {
+    if (JSON.stringify(toObject(rows)) !== key) {
+      setRows(Object.entries(value));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  const commit = (next: [string, string][]) => {
+    setRows(next);
+    onChange(toObject(next));
+  };
+  return (
+    <div className="space-y-2" role="group" aria-label={ariaLabel}>
+      {rows.map(([name, secret], i) => (
+        <div key={i} className="flex items-start gap-2">
+          <Input
+            id={i === 0 ? id : undefined}
+            aria-label={t("Header name")}
+            aria-invalid={invalid || undefined}
+            value={name}
+            placeholder={namePlaceholder}
+            spellCheck={false}
+            onChange={(e) => {
+              const renamed = e.currentTarget.value;
+              // A map cannot hold one name twice, so a duplicate would drop
+              // the first row's value on save; refuse the keystroke instead.
+              const taken = rows.some(
+                (r, j) => j !== i && r[0] !== "" && r[0].toLowerCase() === renamed.toLowerCase(),
+              );
+              if (taken) return;
+              commit(
+                rows.map((r, j) => (j === i ? [renamed, secret === REDACTED ? "" : secret] : r)),
+              );
+            }}
+          />
+          <div className="flex-1">
+            <SecretInput
+              ariaLabel={t("Value")}
+              value={secret}
+              placeholder={valuePlaceholder}
+              onChange={(v) => commit(rows.map((r, j) => (j === i ? [name, v] : r)))}
+            />
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label={t("Remove header")}
+            onClick={() => commit(rows.filter((_, j) => j !== i))}
+          >
+            <Trash2 size={14} />
+          </Button>
+        </div>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        aria-label={t("Add header")}
+        onClick={() => commit([...rows, ["", ""]])}
+      >
+        <Plus size={14} /> {t("Add header")}
+      </Button>
+    </div>
   );
 }

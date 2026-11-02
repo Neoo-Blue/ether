@@ -529,6 +529,7 @@ func (a *App) applyConfig(c config.Config) {
 	a.catalog.UpdateConfig(c.Catalog)
 	a.configureCache(c.Cache)
 	c.Cache = a.runningCacheConfig()
+	a.engine.UpdatePlaybackReadAhead(c.Cache.PlaybackReadAhead())
 	if a.cachefill != nil {
 		a.cachefill.Wake()
 	}
@@ -693,6 +694,7 @@ func (a *App) Run(ctx context.Context) error {
 	}
 	front.setTLS(a.certs.TLSConfig)
 	front.setProxies(a.cfg.TrustedProxyCIDRs)
+	front.setRemote(a.cfg.AllowRemoteConsole)
 	// A restore applied at this start counts from here: the server is
 	// about to serve on it. If it cannot be recorded, nothing is served
 	// and Serve puts the original data back.

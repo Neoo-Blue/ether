@@ -30,6 +30,7 @@ func (s *Service) NaturalSearch(ctx context.Context, u *core.User, query string,
 	}
 	key := fmt.Sprintf("search:%d:%x:%d", userID(u), sha256.Sum256([]byte(query)), limit)
 	compute := func(ctx context.Context) ([]core.Hub, []core.Title, error) {
+		ctx = core.WithExplicitSearch(ctx) // runs detached from the search request
 		content, e := s.client.Chat(ctx, []Message{{Role: "system", Content: systemPrompt}, {Role: "user", Content: fmt.Sprintf(`Find real titles matching this request: %q. Suggest at most %d. Reply JSON {"titles":[{"title":"...","year":2000,"type":"movie"}]}.`, query, limit)}}, true)
 		if e != nil {
 			return nil, nil, e

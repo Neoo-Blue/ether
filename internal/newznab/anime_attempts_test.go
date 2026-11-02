@@ -21,7 +21,7 @@ func TestAnimeEpisodesAlsoSearchAbsoluteNumbers(t *testing.T) {
 	c := New(config.Indexer{Name: "ix", URL: "https://ix.example", Enabled: true, Protocol: "torrent"}, nil, Options{})
 	req := core.SearchRequest{Type: core.TypeEpisode, Title: "One Piece", Season: 21, Episode: 180, AbsoluteEpisode: 1071, Anime: true}
 	var got []map[string][]string
-	for _, a := range c.searchAttempts(req, nil) {
+	for _, a := range c.searchAttempts(req, nil, config.Identity{}) {
 		got = append(got, a)
 	}
 	found := false
@@ -34,7 +34,7 @@ func TestAnimeEpisodesAlsoSearchAbsoluteNumbers(t *testing.T) {
 	// The same episode without the anime flag searches exactly as before.
 	plain := req
 	plain.Anime = false
-	for _, a := range c.searchAttempts(plain, nil) {
+	for _, a := range c.searchAttempts(plain, nil, config.Identity{}) {
 		if q := a.Get("q"); q == "One Piece 1071" {
 			t.Fatal("non-anime request searched an absolute number")
 		}
@@ -49,7 +49,7 @@ func TestAnimeEpisodesAlsoSearchAbsoluteNumbers(t *testing.T) {
 	// Later seasons without a catalogue count are not guessed.
 	unknown := req
 	unknown.AbsoluteEpisode = 0
-	for _, a := range c.searchAttempts(unknown, nil) {
+	for _, a := range c.searchAttempts(unknown, nil, config.Identity{}) {
 		if q := a.Get("q"); q == "One Piece 180" {
 			t.Fatal("season episode searched as an absolute number")
 		}

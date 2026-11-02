@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/braedonsaunders/ether/internal/core"
@@ -27,6 +28,10 @@ type cursor struct {
 	used         time.Time
 	verifying    bool // one archive-layout verification per cursor
 	blocked      bool // failed verification waits for a new foreground read
+
+	// Playback read-ahead (playahead.go).
+	consumed int64 // sequential bytes this reader has read
+	playNext int64 // playback read-ahead covered up to here
 }
 
 // source implements core.MediaSource.
@@ -52,6 +57,10 @@ type source struct {
 	raWG      sync.WaitGroup
 	raPumping bool // protected by mu; one source-local scheduling pump
 	raPending bool // coalesced foreground/completion wakeup
+
+	playRate    atomic.Int64  // playback bytes per second; 0 = unknown
+	playWake    chan struct{} // coalesced wakeups of the playback read-ahead loop
+	playRunning bool          // protected by mu
 }
 
 func newSource(e *Engine, rel *release, p *plan, releaseID string) *source {
@@ -64,6 +73,8 @@ func newSource(e *Engine, rel *release, p *plan, releaseID string) *source {
 		ctx:    ctx,
 		cancel: cancel,
 		raSem:  make(chan struct{}, e.opts.ReadAheadParallel),
+
+		playWake: make(chan struct{}, 1),
 	}
 	s.fo.repairProgress = s.reportRepair
 	s.bulk.fo = s.fo
@@ -265,7 +276,7 @@ func (s *source) readAhead(off, n int64) {
 		if s.e.repairOptions().Enabled {
 			initial = max(initial, 32<<20)
 		}
-		c = &cursor{next: end, window: min(initial, windowCap), frontier: end}
+		c = &cursor{next: end, window: min(initial, windowCap), frontier: end, consumed: n}
 		if len(s.cursors) < maxCursors {
 			s.cursors = append(s.cursors, c)
 		} else {
@@ -281,6 +292,7 @@ func (s *source) readAhead(off, n int64) {
 		if off >= c.next-backSlack && end > c.next {
 			// Sequential progress: grow the window with the bytes consumed.
 			c.window = min(windowCap, c.window+2*(end-c.next))
+			c.consumed += end - c.next
 		}
 		c.next = max(c.next, end)
 	}
@@ -290,6 +302,7 @@ func (s *source) readAhead(off, n int64) {
 	c.blocked = false // a new demand read permits retrying a failed layout check
 	s.mu.Unlock()
 	s.kickReadAhead()
+	s.kickPlayAhead()
 }
 
 // kickReadAhead coalesces wakeups into one source-local scheduler. Workers add
@@ -502,6 +515,11 @@ func (s *source) startRA(fn func() bool) bool {
 
 // prefetchRange warms a byte range of the video into the segment cache.
 func (e *Engine) prefetchRange(ctx context.Context, rel *release, p *plan, releaseID string, offset, length int64) error {
+	return e.prefetchRangeN(ctx, rel, p, releaseID, offset, length, e.opts.PrefetchParallel)
+}
+
+// prefetchRangeN is prefetchRange with up to parallel concurrent fetches.
+func (e *Engine) prefetchRangeN(ctx context.Context, rel *release, p *plan, releaseID string, offset, length int64, parallel int) error {
 	if offset < 0 {
 		offset = 0
 	}
@@ -533,7 +551,7 @@ func (e *Engine) prefetchRange(ctx context.Context, rel *release, p *plan, relea
 			jobs = append(jobs, job{pf, i})
 		}
 	}
-	sem := make(chan struct{}, e.opts.PrefetchParallel)
+	sem := make(chan struct{}, max(parallel, 1))
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var first error

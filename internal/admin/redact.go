@@ -42,6 +42,7 @@ func RedactConfig(cfg config.Config) config.Config {
 	out.LLM = redactLLM(out.LLM)
 	out.Outbound.Password = redact(out.Outbound.Password)
 	out.Prowlarr.APIKey = redact(out.Prowlarr.APIKey)
+	out.ClientIdentity.Headers = redactMap(cfg.ClientIdentity.Headers)
 	out.Database = out.Database.Redacted()
 	if cfg.Usenet.Providers != nil {
 		out.Usenet.Providers = make([]config.UsenetProvider, len(cfg.Usenet.Providers))
@@ -222,6 +223,7 @@ func UnredactConfig(next, prev config.Config) (config.Config, []FieldError) {
 	out.LLM = errs.unredactLLM(next.LLM, prev.LLM)
 	out.Outbound.Password = errs.restore("outbound.password", next.Outbound.Password, prev.Outbound.Password, strings.TrimSpace(next.Outbound.URL) == strings.TrimSpace(prev.Outbound.URL))
 	out.Prowlarr.APIKey = errs.restore("prowlarr.apiKey", next.Prowlarr.APIKey, prev.Prowlarr.APIKey, sameProwlarrURL(next.Prowlarr.URL, prev.Prowlarr.URL))
+	out.ClientIdentity.Headers = errs.restoreMap("clientIdentity.headers", next.ClientIdentity.Headers, prev.ClientIdentity.Headers, true)
 	if next.Usenet.Providers != nil {
 		out.Usenet.Providers = make([]config.UsenetProvider, len(next.Usenet.Providers))
 		for i, p := range next.Usenet.Providers {

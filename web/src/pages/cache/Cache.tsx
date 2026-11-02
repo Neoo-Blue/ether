@@ -817,6 +817,33 @@ export default function Cache() {
                 disabled={!speculate}
                 onChange={(v) => patch({ keepInProgressWarm: v })}
               />
+              <Field
+                label={t("Read ahead while playing")}
+                hint={t(
+                  "Keeps the next minutes of whatever is playing downloaded to this cache, so a slow Usenet provider does not make viewers buffer. Uses spare connections; playback always comes first.",
+                )}
+                htmlFor="cache-playback-read-ahead"
+              >
+                <select
+                  id="cache-playback-read-ahead"
+                  className="w-full rounded border border-border bg-surface p-2 text-sm"
+                  disabled={!enabled}
+                  value={draft.playbackReadAheadMinutes ?? 5}
+                  onChange={(e) => patch({ playbackReadAheadMinutes: Number(e.target.value) })}
+                >
+                  {[...new Set([0, 2, 5, 10, draft.playbackReadAheadMinutes ?? 5])]
+                    .sort((a, b) => a - b)
+                    .map((minutes) => (
+                      <option key={minutes} value={minutes}>
+                        {minutes === 0
+                          ? t("Off")
+                          : minutes === 5
+                            ? t("5 minutes (recommended)")
+                            : tn(minutes, "{count} minute", "{count} minutes")}
+                      </option>
+                    ))}
+                </select>
+              </Field>
             </div>
             <div className="border-t border-border pt-5">
               <p className="text-[10px] font-semibold uppercase tracking-[.2em] text-fg-subtle">

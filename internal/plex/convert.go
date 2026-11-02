@@ -588,9 +588,9 @@ func (s *Server) resumedTracks(ctx context.Context, pr *Request, t *core.Title) 
 // mediaFor renders the virtual Media/Part of a playable title: one per
 // release variant on detail pages (withVariants, driving the "Play
 // Version" picker), otherwise the single Media. The second return value
-// is the item's editionTitle, or "". A live session keeps describing the
-// version actually playing (its probed info), so variants are only
-// offered before playback starts for this client.
+// is the item's editionTitle, or "". During a live session Plex Web keeps
+// the same version list, with the version actually playing selected and
+// carrying the session's probed info; other apps see that version alone.
 func (s *Server) mediaFor(ctx context.Context, pr *Request, t *core.Title, withStreams bool, withVariants bool) ([]model.Media, string) {
 	info, ps, probedSource := s.mediaInfoWithSource(ctx, pr, t)
 	stamp := unixOrZero(t.UpdatedAt)
@@ -603,9 +603,26 @@ func (s *Server) mediaFor(ctx context.Context, pr *Request, t *core.Title, withS
 	// VIDAA caches playback settings for the item and can fail if a later
 	// response introduces a version picker. Keep its Auto choice stable;
 	// playback quality controls remain independent of the version picker.
-	if withVariants && withStreams && ps == nil && !strings.EqualFold(strings.TrimSpace(pr.Product), "Plex for VIDAA") {
+	// Only Plex Web keeps the version list during a live session (it reads
+	// Media[index] again after a subtitle download, #267); other apps keep
+	// the single playing version they have always seen.
+	if withVariants && withStreams && (ps == nil || browserClient(pr)) && !strings.EqualFold(strings.TrimSpace(pr.Product), "Plex for VIDAA") {
 		probed, probedRelease := core.MediaInfo{Estimated: true}, ""
-		if facts, rel, ok := s.resumedTracks(ctx, pr, t); ok {
+		if ps != nil {
+			// A client keeps the Media index it chose before playback
+			// and reads Media[index] when the item is re-fetched during
+			// the session (Plex Web after a subtitle download or a
+			// timeline refresh). Collapsing the list to one Media leaves
+			// that index pointing past the end, and Plex Web's player
+			// settings throw on it. Keep the same version list and draw
+			// the session's probe on the version actually playing.
+			if ps.Resolution != nil {
+				probedRelease = ps.Resolution.Release.ID
+			}
+			if !info.Estimated && len(info.Streams) > 0 && info.Video() != nil {
+				probed = info
+			}
+		} else if facts, rel, ok := s.resumedTracks(ctx, pr, t); ok {
 			probed, probedRelease, info = facts, rel, facts
 		} else if !info.Estimated && len(info.Streams) > 0 && info.Video() != nil {
 			probed = info

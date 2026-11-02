@@ -296,15 +296,15 @@ func (s *Server) mediaForVariants(ctx context.Context, pr *Request, t *core.Titl
 			break
 		}
 	}
+	stored := s.selections.get(pr.User.ID, int64(t.Key))
 	out := make([]model.Media, 0, len(vs))
 	for _, v := range vs {
-		// Until this viewer has a resumed release, only Auto carries the
-		// stream list (the completed detail warm-up probe when available,
-		// otherwise the estimate). A resumed probe is drawn on the matching
-		// version only, never on a different explicit pick, and that version
-		// is selected; when the resumed release is not one of the explicit
-		// non-Auto picks (e.g. Auto resolved past an uncached top candidate),
-		// it belongs to Auto.
+		// Auto carries the completed detail warm-up probe when available,
+		// otherwise its estimate. A resumed or playing probe is drawn on
+		// the matching version only, never on a different explicit pick,
+		// and that version is selected; when the probed release is not one
+		// of the explicit non-Auto picks (e.g. Auto resolved past an
+		// uncached top candidate), it belongs to Auto.
 		played := probedRelease != "" && probedReady && ((v.Auto && !matchedNonAuto) || (!v.Auto && matchedNonAuto && v.Release.ID == probedRelease))
 		warmAuto := probedRelease == "" && probedReady && v.Auto
 		variant := v
@@ -318,16 +318,19 @@ func (s *Server) mediaForVariants(ctx context.Context, pr *Request, t *core.Titl
 		if s.d.Trickplay != nil && s.d.Trickplay.TrickplayAvailable(v.Release.ID) {
 			m.Part[0].Indexes = "sd"
 		}
-		if v.Auto || played {
-			info := s.withCachedSidecars(ctx, pr.User, t, variant.Info)
-			stored := s.selections.get(pr.User.ID, int64(t.Key))
-			if stored.subtitleSet {
-				info = infoWithSelectedSidecar(info, stored.subtitleStream)
-			}
-			sel := resolveSelection(stored, info)
-			sel = s.preferredSelection(ctx, pr.User, t.Key, info, t.Language, sel)
-			m.Part[0].Stream = s.buildStreams(t.Key, info, sel, pr.User)
+		// Every version carries a stream list, as on PMS; versions not yet
+		// played show their estimate. Plex Web picks the version itself
+		// (highest playable quality, ignoring selected) and reads the
+		// playing Part's streams: without a video stream it adds no "None"
+		// subtitle track, and its player settings panel then reads the id
+		// of an undefined selected subtitle and ends playback (#267).
+		info := s.withCachedSidecars(ctx, pr.User, t, variant.Info)
+		if stored.subtitleSet {
+			info = infoWithSelectedSidecar(info, stored.subtitleStream)
 		}
+		sel := resolveSelection(stored, info)
+		sel = s.preferredSelection(ctx, pr.User, t.Key, info, t.Language, sel)
+		m.Part[0].Stream = s.buildStreams(t.Key, info, sel, pr.User)
 		if played {
 			m.Selected = model.Ptr(true)
 			m.Part[0].Selected = model.Ptr(true)

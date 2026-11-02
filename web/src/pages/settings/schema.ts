@@ -41,6 +41,14 @@ export const SERVER: FieldGroup[] = localized(() => [
         step: 1,
         help: t("Plex apps expect 32400. A restart is needed after changing it."),
       },
+      {
+        key: "allowRemoteConsole",
+        label: t("Open this console from outside your network"),
+        kind: "bool",
+        help: t(
+          "For reaching this console through your own domain or reverse proxy when you're away. Only the Plex account that owns this server can sign in. Off keeps it to your home network and VPN.",
+        ),
+      },
     ],
     more: [
       {
@@ -933,6 +941,85 @@ export const EXTRAS: FieldGroup[] = localized(() => [
         kind: "bytes",
         unit: "MiB",
         help: t("Buffered while the trailer plays, 32–64 MiB. 0 uses 48 MiB."),
+      },
+    ],
+  },
+]);
+
+/** Preset keys as the server names them; proper nouns are not translated. */
+function identityOptions(includeCustom: boolean, includeEther = true) {
+  const options = [
+    ...(includeEther ? [{ value: "ether", label: "Ether" }] : []),
+    { value: "sonarr", label: "Sonarr" },
+    { value: "radarr", label: "Radarr" },
+    { value: "prowlarr", label: "Prowlarr" },
+    { value: "nzbhydra2", label: "NZBHydra2" },
+    { value: "sabnzbd", label: "SABnzbd" },
+    { value: "nzbget", label: "NZBGet" },
+  ];
+  return includeCustom ? [...options, { value: "custom", label: t("Custom") }] : options;
+}
+
+/**
+ * Search-side presets: SABnzbd and NZBGet never send a Newznab query, so a
+ * search presented as one is a client that cannot exist. They stay available
+ * for grabs only; the per-indexer override excludes them as well.
+ */
+export function searchIdentityOptions(includeCustom: boolean, includeEther = true) {
+  return identityOptions(includeCustom, includeEther).filter(
+    (o) => o.value !== "sabnzbd" && o.value !== "nzbget",
+  );
+}
+
+export const CLIENT_IDENTITY: FieldGroup[] = localized(() => [
+  {
+    id: "identity",
+    title: t("Client identity"),
+    description: t(
+      "What Newznab and Torznab indexers see when Ether searches or downloads. Defaults to Ether; choose a real client for sites that treat unknown clients badly.",
+    ),
+    fields: [
+      {
+        // Empty is the Ether identity; showing it makes the untouched form
+        // read as what it actually sends.
+        key: "tvSearch",
+        label: t("TV searches"),
+        kind: "select",
+        options: [{ value: "", label: "Ether" }, ...searchIdentityOptions(true, false)],
+      },
+      {
+        key: "movieSearch",
+        label: t("Movie searches"),
+        kind: "select",
+        options: [{ value: "", label: "Ether" }, ...searchIdentityOptions(true, false)],
+      },
+      {
+        key: "tvGrab",
+        label: t("TV downloads"),
+        kind: "select",
+        options: [{ value: "", label: "Ether" }, ...identityOptions(true, false)],
+      },
+      {
+        key: "movieGrab",
+        label: t("Movie downloads"),
+        kind: "select",
+        options: [{ value: "", label: "Ether" }, ...identityOptions(true, false)],
+      },
+    ],
+    more: [
+      {
+        key: "userAgent",
+        label: t("Custom user agent"),
+        kind: "text",
+        help: t("Sent when an identity above is Custom."),
+      },
+      {
+        key: "headers",
+        label: t("Custom headers"),
+        kind: "map",
+        help: t(
+          "Sent to every indexer whose identity is Custom, so don't put one site's login here. Values are sealed at rest and shown as •••• after saving.",
+        ),
       },
     ],
   },

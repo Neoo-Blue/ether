@@ -19,10 +19,13 @@ type Search struct {
 	Unrestricted func(*core.User) bool
 }
 
+// Find is an explicit search: catalogue rules the owner limited to browsing
+// do not apply, so those titles can still be found.
 func (s Search) Find(ctx context.Context, viewer *core.User, query string, types []core.MediaType, limit int) ([]core.Title, error) {
 	if strings.TrimSpace(query) == "" || len(types) == 0 {
 		return nil, nil
 	}
+	ctx = core.WithExplicitSearch(ctx)
 	allowed := make(map[core.MediaType]bool, len(types))
 	for _, typ := range types {
 		allowed[typ] = true
@@ -105,7 +108,7 @@ func (s Search) Keyword(ctx context.Context, viewer *core.User, query string, ty
 	if strings.TrimSpace(query) == "" {
 		return nil, nil
 	}
-	items, err := s.Catalog(ctx, query, types, limit)
+	items, err := s.Catalog(core.WithExplicitSearch(ctx), query, types, limit)
 	if err != nil {
 		return nil, err
 	}

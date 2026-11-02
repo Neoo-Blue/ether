@@ -106,6 +106,11 @@ type PlaybackAccessPolicy interface {
 	CanPlay(*User, bool, time.Time) bool
 }
 
+// PlaybackDurationSetter exposes the optional SetPlaybackDuration capability:
+// playback reports a probed title's running time so the source can read ahead
+// of the viewer by time (minutes of media) rather than by bytes.
+type PlaybackDurationSetter interface{ SetPlaybackDuration(time.Duration) }
+
 // PlaybackPosition exposes the optional RequestedPosition capability.
 type PlaybackPosition interface{ RequestedPosition() time.Duration }
 
@@ -142,6 +147,11 @@ type RescueIndexer interface {
 type SectionCandidateSource interface {
 	SectionCandidatesFor(context.Context, *User, MediaType, HubContext, int) ([]Hub, error)
 }
+
+// SegmentCacheLimit exposes the optional UsageLimit capability: the most the
+// segment cache may hold right now, the budget or the free-space floor's cap
+// when lower. -1 means unbounded and 0 means media bytes are not retained.
+type SegmentCacheLimit interface{ UsageLimit() int64 }
 
 // SegmentPresence exposes the optional Has capability.
 type SegmentPresence interface{ Has(string, int) bool }

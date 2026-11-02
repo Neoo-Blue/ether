@@ -187,9 +187,16 @@ func ValidateConfig(cfg config.Config) []FieldError {
 	}
 
 	seenIx := map[string]bool{}
+	for _, e := range cfg.ClientIdentity.Validate() {
+		v.add("clientIdentity."+e.Field, "%s", e.Message)
+	}
+
 	for i, ix := range cfg.Indexers {
 		f := fmt.Sprintf("indexers[%d]", i)
 		v.httpURL(f+".url", ix.URL, true)
+		if ix.ClientIdentity != "" && !config.ValidSearchIdentity(ix.ClientIdentity) {
+			v.add(f+".clientIdentity", "must be a client that searches or empty to inherit")
+		}
 		if ix.Kind != "" {
 			v.oneOf(f+".kind", ix.Kind, config.IndexerKindNewznab, config.IndexerKindCardigann, config.IndexerKindStremio)
 		}
@@ -263,6 +270,9 @@ func ValidateConfig(cfg config.Config) []FieldError {
 	}
 	if w := cfg.Cache.PreloadHouseholdWeight; w != nil && (*w < 0 || *w > 100) {
 		v.add("cache.preloadHouseholdWeight", "must be between 0 and 100")
+	}
+	if m := cfg.Cache.PlaybackReadAheadMinutes; m != nil && (*m < 0 || *m > config.MaxPlaybackReadAheadMinutes) {
+		v.add("cache.playbackReadAheadMinutes", "must be between 0 and %d minutes", config.MaxPlaybackReadAheadMinutes)
 	}
 	if s := cfg.Cache.PreloadHouseholdScope; s != "" && s != "home" && s != "all" {
 		v.add("cache.preloadHouseholdScope", "must be home or all")

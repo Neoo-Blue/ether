@@ -193,6 +193,9 @@ func applyProwlarrSync(c *config.Config, cfg config.Prowlarr, found []config.Ind
 	for _, x := range found {
 		kept[x.ID] = true
 		if i, ok := byID[x.ID]; ok {
+			// Prowlarr does not know the owner's per-indexer identity, so the
+			// sync must not drop it.
+			x.ClientIdentity = c.Indexers[i].ClientIdentity
 			c.Indexers[i] = x
 		} else {
 			byID[x.ID] = len(c.Indexers)

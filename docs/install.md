@@ -225,8 +225,12 @@ for remote access outside your LAN:
   Never pass client-supplied forwarding headers unchanged.
   Ether considers forwarded addresses only from loopback peers and treats
   any public hop in the trusted suffix as remote for playback restrictions.
-  Keep the owner UI path `/ether/` private at the proxy; complete initial
-  setup before exposing the server.
+  The owner console at `/ether/` answers only your home network and VPN
+  (including Tailscale) by default, wherever the proxy runs. To reach it
+  through your domain, turn on **Server › General › How apps connect ›
+  Open this console from outside your network**; only the Plex account
+  that owns the server can sign in. Complete initial setup before exposing
+  the server.
 
 ### HTTPS for Stremio addons
 

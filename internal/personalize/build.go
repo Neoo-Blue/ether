@@ -723,10 +723,14 @@ func (e *Engine) computeStats(ctx context.Context) (*statsSnapshot, error) {
 // ---- owner collection rows ---------------------------------------------------------
 
 type ownerEntry struct {
-	rows    []core.CollectionRow
-	at      time.Time
-	loading bool
-	done    chan struct{}
+	rows []core.CollectionRow
+	// layoutOnly marks rows fetched only because the layout places them
+	// (LayoutRow); they are served only while the placement's When and
+	// days-per-week select them.
+	layoutOnly map[string]bool
+	at         time.Time
+	loading    bool
+	done       chan struct{}
 }
 
 // ownerRowsTTL is how long owner collection rows are reused per context.
@@ -755,9 +759,14 @@ func (e *Engine) clearOwnerRows() {
 	e.memoMu.Unlock()
 }
 
-// ownerRows returns owner collection rows for the viewer and context from a
-// per-context cache. Misses fetch in the background; the request waits at
-// most OwnerRowsWait for a context it has never fetched.
+// ownerRows returns owner collection rows for the viewer and page from a
+// cache. The fetched rows do not depend on the hour, daypart, weekend or
+// device (schedules and layout placement windows are applied here, per
+// request), so the cache is keyed by viewer, page, layout and local day only:
+// a new hour or daypart reuses the stored rows. A new day serves the previous
+// day's rows while it refreshes in the background, and a page that has never
+// been fetched (first load after a restart or a collection change) waits at
+// most OwnerRowsWait (SourceTimeout for previews) for its first fetch.
 func (e *Engine) ownerRows(ctx context.Context, user *core.User, hc core.HubContext, section core.MediaType, d core.HomeLayout, wait bool) ([]*candRow, int64) {
 	if e.opts.Collections == nil {
 		return nil, 0
@@ -765,7 +774,9 @@ func (e *Engine) ownerRows(ctx context.Context, user *core.User, hc core.HubCont
 	raw, _ := json.Marshal(d)
 	hash := fnv.New64a()
 	_, _ = hash.Write(raw)
-	key := strconv.FormatInt(user.ID, 10) + "|" + hc.Bucket() + "|" + hc.Now.Format("2006-01-02-15") + "|" + string(section) + "|" + fmt.Sprint(hash.Sum64(), user.MaxContentRating, user.AllowedSections, user.IsOwner)
+	scope := "|" + string(section) + "|" + fmt.Sprint(hash.Sum64(), user.MaxContentRating, user.AllowedSections, user.IsOwner)
+	prefix := strconv.FormatInt(user.ID, 10) + "|"
+	key := prefix + hc.Now.Format("2006-01-02") + scope
 	e.mu.Lock()
 	ent := e.owner[key]
 	now := e.now()
@@ -778,14 +789,21 @@ func (e *Engine) ownerRows(ctx context.Context, user *core.User, hc core.HubCont
 		ent.loading = true
 		ent.done = make(chan struct{})
 		u := *user
-		go e.fetchOwnerRows(key, &u, hc, ent, selectedCollections(d, user.ID, sectionName(section), hc))
+		go e.fetchOwnerRows(key, &u, hc, ent, placedCollections(d, user.ID, sectionName(section)))
 	}
 	done, have := ent.done, !ent.at.IsZero()
+	if !have {
+		// The previous day's rows stand in while today's first fetch runs.
+		if prev := e.owner[prefix+hc.Now.AddDate(0, 0, -1).Format("2006-01-02")+scope]; prev != nil && !prev.at.IsZero() {
+			ent, have = prev, true
+		}
+	}
 	e.mu.Unlock()
-	// Home does not block on the first owner-row fetch. The preview path
-	// still waits, and the next home uses the rows once they are stored.
-	if !have && done != nil && wait {
-		delay := e.opts.SourceTimeout
+	if !have && done != nil {
+		delay := e.opts.OwnerRowsWait
+		if wait {
+			delay = e.opts.SourceTimeout
+		}
 		t := time.NewTimer(delay)
 		select {
 		case <-done:
@@ -795,10 +813,20 @@ func (e *Engine) ownerRows(ctx context.Context, user *core.User, hc core.HubCont
 		t.Stop()
 	}
 	e.mu.Lock()
-	rows, at := ent.rows, ent.at
+	rows, at, layoutOnly := ent.rows, ent.at, ent.layoutOnly
 	e.mu.Unlock()
+	var selected map[string]bool
+	if len(layoutOnly) > 0 {
+		selected = map[string]bool{}
+		for _, id := range selectedCollections(d, user.ID, sectionName(section), hc) {
+			selected[id] = true
+		}
+	}
 	var out []*candRow
 	for _, cr := range rows {
+		if layoutOnly[cr.CollectionID] && !selected[cr.CollectionID] {
+			continue
+		}
 		if !collectionScheduleAllows(d, user.ID, section, hc, cr) {
 			continue
 		}
@@ -809,7 +837,7 @@ func (e *Engine) ownerRows(ctx context.Context, user *core.User, hc core.HubCont
 	return out, at.UnixNano()
 }
 
-func (e *Engine) fetchOwnerRows(key string, user *core.User, hc core.HubContext, ent *ownerEntry, selected []string) {
+func (e *Engine) fetchOwnerRows(key string, user *core.User, hc core.HubContext, ent *ownerEntry, placed []string) {
 	defer func() {
 		if v := recover(); v != nil {
 			e.log.Error("personalize: owner rows panicked", "panic", v)
@@ -829,12 +857,13 @@ func (e *Engine) fetchOwnerRows(key string, user *core.User, hc core.HubContext,
 		e.log.Debug("personalize: owner rows failed", "err", err)
 		rows = nil
 	}
+	layoutOnly := map[string]bool{}
 	if source, ok := e.opts.Collections.(core.CollectionLayoutSource); ok {
 		seen := map[string]bool{}
 		for _, row := range rows {
 			seen[row.CollectionID] = true
 		}
-		for _, id := range selected {
+		for _, id := range placed {
 			if seen[id] {
 				continue
 			}
@@ -846,12 +875,13 @@ func (e *Engine) fetchOwnerRows(key string, user *core.User, hc core.HubContext,
 			if row != nil {
 				rows = append(rows, *row)
 				seen[row.CollectionID] = true
+				layoutOnly[row.CollectionID] = true
 			}
 		}
 	}
 	e.mu.Lock()
 	if err == nil || len(rows) > 0 || ent.rows == nil {
-		ent.rows = rows
+		ent.rows, ent.layoutOnly = rows, layoutOnly
 	}
 	ent.at = e.now()
 	if len(e.owner) > 5000 {

@@ -610,11 +610,27 @@ func TestSiloPortraitRejectsStaleMovieThumbBeforeEpochCapture(t *testing.T) {
 	if err != nil || len(old) != 1 {
 		t.Fatalf("old portrait %+v %v", old, err)
 	}
-	if _, err := a.db.ExecContext(ctx, `UPDATE catalog_credits SET thumb='/new.jpg' WHERE key=? AND person_tmdb=30`, int64(key)); err != nil {
-		t.Fatal(err)
-	}
-	if cached, err := a.catalog.StoredTitle(ctx, key); err != nil || len(cached.Cast) != 1 || cached.Cast[0].ThumbPath != "/old.jpg" {
-		t.Fatalf("fixture lost stale StoredTitle %+v %v", cached, err)
+	// The stored title must still be the cached, stale one. Background work
+	// in the full app can drop the title cache at any moment, after which
+	// StoredTitle reads the new thumb from the database; that says nothing
+	// about the code under test, so re-warm and retry the fixture.
+	for attempt := 1; ; attempt++ {
+		if _, err := a.db.ExecContext(ctx, `UPDATE catalog_credits SET thumb='/new.jpg' WHERE key=? AND person_tmdb=30`, int64(key)); err != nil {
+			t.Fatal(err)
+		}
+		cached, err := a.catalog.StoredTitle(ctx, key)
+		if err == nil && len(cached.Cast) == 1 && cached.Cast[0].ThumbPath == "/old.jpg" {
+			break
+		}
+		if attempt == 5 {
+			t.Fatalf("fixture lost stale StoredTitle %+v %v", cached, err)
+		}
+		if _, err := a.db.ExecContext(ctx, `UPDATE catalog_credits SET thumb='/old.jpg' WHERE key=? AND person_tmdb=30`, int64(key)); err != nil {
+			t.Fatal(err)
+		}
+		if warm, err := a.catalog.CachedGet(ctx, key); err != nil || len(warm.Cast) != 1 || warm.Cast[0].ThumbPath != "/old.jpg" {
+			t.Fatalf("re-warm movie cache %+v %v", warm, err)
+		}
 	}
 	reader := exp.(frontend.PeopleImageReader)
 	if err := reader.AuthorizePersonImage(ctx, viewer, device, key, old[0], nil); !errors.Is(err, core.ErrUnauthorized) {

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/braedonsaunders/ether/internal/config"
 	"github.com/braedonsaunders/ether/internal/core"
 )
 
@@ -52,15 +53,15 @@ func (c *Client) SearchWith(ctx context.Context, req core.SearchRequest, arrived
 	return results, err
 }
 
-func (c *Client) getSearchStream(ctx context.Context, rawURL string, emit func([]core.Release)) ([]core.Release, error) {
+func (c *Client) getSearchStream(ctx context.Context, rawURL string, emit func([]core.Release), id config.Identity) ([]core.Release, error) {
 	// Same SSRF guard as Client.get: the streamed search goes to the
 	// owner-configured indexer, but redirects away from it must be public.
 	req, err := http.NewRequestWithContext(c.trustedCtx(ctx, rawURL), http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, redactURLError(err)
 	}
-	req.Header.Set("User-Agent", "Ether/1.0")
-	resp, err := c.guarded.Do(req)
+	c.applyIdentity(req, id)
+	resp, err := c.send(req, id)
 	if err != nil {
 		return nil, redactURLError(err)
 	}

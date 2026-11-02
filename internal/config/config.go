@@ -34,6 +34,9 @@ type Config struct {
 	Plex        Plex      `json:"plex"`
 	Usenet      Usenet    `json:"usenet"`
 	Indexers    []Indexer `json:"indexers"`
+	// ClientIdentity is the client Ether presents to Newznab/Torznab
+	// indexers. Zero value keeps the Ether identity.
+	ClientIdentity ClientIdentity `json:"clientIdentity"`
 	// Prowlarr is the saved connection for indexer sync. Empty means the
 	// owner has not saved one. The API key is a secret, redacted like indexer keys.
 	Prowlarr      Prowlarr      `json:"prowlarr,omitempty"`
@@ -72,6 +75,10 @@ type Frontend struct {
 type Server struct {
 	// TrustedProxyCIDRs are proxy peer networks whose forwarding headers are trusted.
 	TrustedProxyCIDRs []string `json:"trustedProxyCIDRs,omitempty"`
+	// AllowRemoteConsole lets the owner console (/ether/) answer clients
+	// outside the home network (through a domain or reverse proxy). Off by
+	// default; sign-in still admits only the owner's Plex account.
+	AllowRemoteConsole bool `json:"allowRemoteConsole,omitempty"`
 	// Port for the Plex API and web UI. PMS uses 32400.
 	Port         int    `json:"port"`
 	BindAddress  string `json:"bindAddress"`
@@ -205,6 +212,9 @@ type Indexer struct {
 	// SecretSettings are the definition's password-type settings. They are
 	// sealed at rest and redacted in API responses like API keys.
 	SecretSettings map[string]string `json:"secretSettings,omitempty"`
+	// ClientIdentity overrides the global client identity for this indexer's
+	// searches and grabs. Empty inherits the policy.
+	ClientIdentity string `json:"clientIdentity,omitempty"`
 }
 
 // Indexer kinds (Indexer.Kind).
@@ -252,6 +262,10 @@ type Cache struct {
 	DisableSpeculation bool   `json:"disableSpeculation,omitempty"`
 	DetailWarmup       string `json:"detailWarmup,omitempty"` // empty/on or off
 	DetailBytes        int64  `json:"detailBytes,omitempty"`  // zero warms 40s of source media, capped at 256 MiB
+	// PlaybackReadAheadMinutes is how many minutes of the title being played
+	// Usenet streaming keeps downloaded to the cache ahead of the viewer:
+	// 0 is off, nil is DefaultPlaybackReadAheadMinutes.
+	PlaybackReadAheadMinutes *int `json:"playbackReadAheadMinutes,omitempty"`
 
 	Dir         string `json:"dir"`
 	BudgetBytes int64  `json:"budgetBytes"`
@@ -780,6 +794,14 @@ func (s *Store) Get() Config {
 	return clone(s.cfg)
 }
 
+// AllowRemoteConsole reports the owner's opt-in to reach the console from
+// outside the home network.
+func (s *Store) AllowRemoteConsole() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.Server.AllowRemoteConsole
+}
+
 // TrustedProxyCIDRs is the live trusted-proxy list. The returned slice is a
 // copy, so a caller cannot change the stored configuration.
 func (s *Store) TrustedProxyCIDRs() []string {
@@ -864,6 +886,23 @@ func (s *Store) save() error {
 		syncDir = syncDirAfterRename
 	}
 	return writeFileAtomicWithDirSync(s.path, b, 0o600, syncDir)
+}
+
+// DefaultPlaybackReadAheadMinutes rides out a provider stall several times
+// longer than a stream read's 90 s timeout while costing about 3 GiB of
+// cache for an 80 Mbit/s 4K remux.
+const DefaultPlaybackReadAheadMinutes = 5
+
+// MaxPlaybackReadAheadMinutes bounds PlaybackReadAheadMinutes.
+const MaxPlaybackReadAheadMinutes = 30
+
+// PlaybackReadAhead is the media time kept downloaded ahead of a viewer.
+func (c Cache) PlaybackReadAhead() time.Duration {
+	m := DefaultPlaybackReadAheadMinutes
+	if c.PlaybackReadAheadMinutes != nil {
+		m = min(max(*c.PlaybackReadAheadMinutes, 0), MaxPlaybackReadAheadMinutes)
+	}
+	return time.Duration(m) * time.Minute
 }
 
 // EffectiveCache combines the shared pool policy with this node's mount path.

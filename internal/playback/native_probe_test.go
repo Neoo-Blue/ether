@@ -117,3 +117,17 @@ func TestNativeTrailerFillsOnlyUnknownFacts(t *testing.T) {
 		t.Fatalf("streams = %+v", info.Streams)
 	}
 }
+
+func TestProbedDurationSizesSourceReadAhead(t *testing.T) {
+	h := newHarness(t, []*fakeRelease{mkv("rel", 10000, time.Minute)}, []string{"rel"}, withNativeProbe(
+		func(ctx context.Context, src core.MediaSource) (*core.MediaInfo, error) { return nativeInfo(src), nil }, nil))
+	h.prepare(owner, movieKey, "readahead")
+	h.engine.mu.Lock()
+	defer h.engine.mu.Unlock()
+	if len(h.engine.sources) == 0 {
+		t.Fatal("no source opened")
+	}
+	if got := time.Duration(h.engine.sources[0].playDuration.Load()); got != time.Minute {
+		t.Fatalf("source read-ahead duration = %v, want the probed minute", got)
+	}
+}
