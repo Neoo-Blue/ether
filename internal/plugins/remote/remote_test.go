@@ -1345,3 +1345,17 @@ func TestTunnelRejectsCallsAfterCredentialRevocation(t *testing.T) {
 		t.Fatalf("revoked tunnel call: %v", err)
 	}
 }
+
+func TestFileHandlerRejectsTraversalEvenIfTargetExistsInRoot(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "video"), []byte("video"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	stream, err := FileHandler(root)(context.Background(), Request{Path: "/ether/file/../video"})
+	if stream != nil {
+		stream.Body.Close()
+	}
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("traversal accepted: %v", err)
+	}
+}

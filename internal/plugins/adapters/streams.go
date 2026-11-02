@@ -726,13 +726,79 @@ func (s *StreamSources) validateLocalFile(ctx context.Context, pluginID, rawPath
 		if !strings.HasPrefix(evalTarget, prefix) {
 			continue
 		}
-		fi, err := os.Stat(evalTarget)
+		rootFS, err := os.OpenRoot(root)
+		if err != nil {
+			continue
+		}
+		rel, err := filepath.Rel(filepath.Clean(root), evalTarget)
+		if err != nil || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			// An owner-picked root may itself be a symlink.
+			rel, err = filepath.Rel(evalRoot, evalTarget)
+		}
+		if err != nil {
+			_ = rootFS.Close()
+			continue
+		}
+		f, err := rootFS.Open(rel)
+		_ = rootFS.Close()
+		if err != nil {
+			continue
+		}
+		fi, err := f.Stat()
+		_ = f.Close()
 		if err != nil || !fi.Mode().IsRegular() {
 			continue
 		}
 		return evalTarget, fi, nil
 	}
 	return "", nil, fmt.Errorf("%w: file is outside the folders granted to %s", plugins.ErrPermissionDenied, pluginID)
+}
+
+// openGrantedLocalFile opens through the granted directory descriptor rather
+// than trusting a path checked earlier. Symlink changes cannot escape it.
+func (s *StreamSources) openGrantedLocalFile(ctx context.Context, pluginID, resolved string) (*os.File, error) {
+	s.mu.RLock()
+	mgr := s.mgr
+	s.mu.RUnlock()
+	if mgr == nil {
+		return nil, plugins.ErrUnavailable
+	}
+	rec, err := mgr.Get(ctx, pluginID)
+	if err != nil {
+		return nil, err
+	}
+	if !rec.Enabled || rec.Manifest.Ether == nil || rec.Manifest.RuntimeKind() != "hosted" || rec.Manifest.Ether.Permissions.Folders != "read" {
+		return nil, plugins.ErrPermissionDenied
+	}
+	grants, err := mgr.GrantsOf(ctx, pluginID)
+	if err != nil {
+		return nil, err
+	}
+	for _, revoked := range grants.Revoked {
+		if revoked == "folders" {
+			return nil, plugins.ErrPermissionDenied
+		}
+	}
+	for _, root := range grants.Folders {
+		realRoot, err := filepath.EvalSymlinks(filepath.Clean(root))
+		if err != nil {
+			continue
+		}
+		rel, err := filepath.Rel(realRoot, resolved)
+		if err != nil || rel == "." || rel == ".." || filepath.IsAbs(rel) || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			continue
+		}
+		fs, err := os.OpenRoot(root)
+		if err != nil {
+			continue
+		}
+		f, err := fs.Open(rel)
+		_ = fs.Close()
+		if err == nil {
+			return f, nil
+		}
+	}
+	return nil, plugins.ErrPermissionDenied
 }
 
 func (s *StreamSources) enabledPlugins(ctx context.Context) []plugins.Record {
@@ -1438,9 +1504,14 @@ func (e *Engine) Open(ctx context.Context, releaseID string, payload []byte) (co
 		if err != nil {
 			return nil, err
 		}
-		f, err := os.Open(resolved)
+		f, err := e.sources.openGrantedLocalFile(ctx, lp.PluginID, resolved)
 		if err != nil {
 			return nil, err
+		}
+		fi, err = f.Stat()
+		if err != nil || !fi.Mode().IsRegular() {
+			_ = f.Close()
+			return nil, plugins.ErrPermissionDenied
 		}
 		relID := releaseID
 		if relID == "" {
