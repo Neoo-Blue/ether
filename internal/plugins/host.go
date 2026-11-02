@@ -175,6 +175,9 @@ func fetchError(host string, err error) error {
 		reason = "timed out"
 	case errors.Is(err, context.Canceled):
 		reason = "canceled"
+	case errors.Is(err, ErrPermissionDenied):
+		// A redirect left the plugin's network grant.
+		return fmt.Errorf("%w: a redirect from %s left the granted hosts", ErrPermissionDenied, host)
 	case errors.Is(err, safefetch.ErrBlocked):
 		return fmt.Errorf("%w: %s is not allowed (%w)", ErrFetchFailed, host, safefetch.ErrBlocked)
 	}
