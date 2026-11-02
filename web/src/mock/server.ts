@@ -53,6 +53,7 @@ import { createMetadataMock } from "./metadata";
 import { createMaintenance } from "./maintenance";
 import { createOpsMock, UNREACHABLE } from "./ops";
 import { createReleaseConsoleMock } from "./releases";
+import { createQualityMock } from "./quality";
 import { createSitesMock } from "./sites";
 import { createTrashMock } from "./trash";
 import { createCacheMock } from "./cache";
@@ -523,6 +524,7 @@ export function createFakeServer(opts: FakeOptions = {}) {
   const cacheMock = createCacheMock(opts.cacheRestart);
   const liveTV = createLiveTVMock(catalog);
   const calendar = createCalendarMock();
+  const qualityMock = createQualityMock();
   const safetyPolicies = new Map<number, Record<string, unknown>>();
   const state = {
     boot: {
@@ -2202,6 +2204,9 @@ export function createFakeServer(opts: FakeOptions = {}) {
 
     const tr = trash.handle(method, seg, body, state.config);
     if (tr) return json(tr.body, tr.status);
+
+    const qm = qualityMock.handle(method, seg, body, state.config, (id) => safetyPolicies.get(id));
+    if (qm) return json(qm.body, qm.status);
 
     const rc = releaseConsole.handle(method, seg, q, body);
     if (rc)
