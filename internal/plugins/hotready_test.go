@@ -57,6 +57,19 @@ func TestHotReadyNeverBlocksAndWarmsInBackground(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
+	if err := env.m.SetShadow(context.Background(), rec.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := env.m.HotReady(rec.ID); ok {
+		t.Fatal("a plugin in shadow mode must not change real picks")
+	}
+	if err := env.m.SetShadow(context.Background(), rec.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := env.m.HotReady(rec.ID); !ok {
+		t.Fatal("leaving shadow mode restores the plugin")
+	}
+
 	if err := env.m.SetEnabled(context.Background(), rec.ID, false); err != nil {
 		t.Fatal(err)
 	}
