@@ -2,6 +2,7 @@ package catalogue
 
 import (
 	"context"
+	"crypto/ed25519"
 	"database/sql"
 	"encoding/json"
 	"time"
@@ -77,17 +78,17 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	return tx.Commit()
 }
 
-func (s *cacheStore) load(ctx context.Context) (Index, time.Time, bool) {
+func (s *cacheStore) load(ctx context.Context, key ed25519.PublicKey) (Index, time.Time, bool) {
 	if s.db == nil {
 		return Index{}, time.Time{}, false
 	}
-	var raw string
+	var raw, signature string
 	var fetched int64
-	err := s.db.QueryRowContext(ctx, `SELECT raw_json, fetched_at FROM plugins_catalogue_index WHERE id = 1`).Scan(&raw, &fetched)
+	err := s.db.QueryRowContext(ctx, `SELECT raw_json, signature, fetched_at FROM plugins_catalogue_index WHERE id = 1`).Scan(&raw, &signature, &fetched)
 	if err != nil || raw == "" {
 		return Index{}, time.Time{}, false
 	}
-	idx, err := ParseIndex([]byte(raw))
+	idx, err := ParseAndVerify([]byte(raw), []byte(signature), key)
 	if err != nil {
 		return Index{}, time.Time{}, false
 	}

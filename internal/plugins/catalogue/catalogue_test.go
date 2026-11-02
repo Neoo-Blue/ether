@@ -485,3 +485,32 @@ func TestCatalogueInstallRevokeAndAutoUpdate(t *testing.T) {
 		t.Fatalf("expected ErrRevoked when re-enabling revoked plugin, got %v", err)
 	}
 }
+
+func TestCacheRequiresCurrentSigningKey(t *testing.T) {
+	db := store.OpenTest(t)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := []byte(`{"schema":1,"entries":[]}`)
+	cache := cacheStore{db: db}
+	if err := cache.save(context.Background(), Index{Schema: 1}, raw, SignDetached(raw, priv), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, ok := cache.load(context.Background(), pub); !ok {
+		t.Fatal("valid cached index rejected")
+	}
+	other, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, ok := cache.load(context.Background(), other); ok {
+		t.Fatal("cached index trusted under a different key")
+	}
+	if _, err := db.Exec(`UPDATE plugins_catalogue_index SET raw_json = '{"schema":1,"entries":[] }'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, ok := cache.load(context.Background(), pub); ok {
+		t.Fatal("tampered cached index trusted")
+	}
+}

@@ -121,13 +121,7 @@ func (m *Manager) resolveCatalogueSource(ctx context.Context, src Source) (Sourc
 		src.Verified = true
 		return src, nil
 	}
-	if !src.Verified && src.SHA256 == "" {
-		return src, fmt.Errorf("plugins: no signed catalogue is configured")
-	}
-	if src.SHA256 != "" {
-		src.Verified = true
-	}
-	return src, nil
+	return src, fmt.Errorf("plugins: no signed catalogue is configured")
 }
 
 // FetchManifest resolves a source to a manifest and its package files.
@@ -159,7 +153,7 @@ func (m *Manager) loadSource(ctx context.Context, src Source) (raw json.RawMessa
 			}
 			return readPkg(src.Pkg)
 		}
-		if strings.HasSuffix(src.URL, ".etherpkg") {
+		if src.Kind == "catalogue" || strings.HasSuffix(src.URL, ".etherpkg") {
 			b, err := m.fetch(ctx, src.URL, src.LAN, 64<<20)
 			if err != nil {
 				return nil, nil, err
@@ -382,7 +376,7 @@ func (p *Preview) resolve() error {
 		if entry == "" {
 			entry = man.Ether.Runtime.Module
 		}
-		if p.source.Kind == "pkg" || (p.source.Kind == "catalogue" && strings.HasSuffix(p.source.URL, ".etherpkg")) {
+		if p.source.Kind == "pkg" || p.source.Kind == "catalogue" {
 			if _, ok := p.files[entry]; !ok {
 				return &ValidationError{[]FieldError{{"ether.runtime", "the entry file is missing from the package"}}}
 			}

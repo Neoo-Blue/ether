@@ -94,8 +94,6 @@ func cmdIndex(args []string) error {
 		}
 	}
 
-	// If no key is provided and -dir was used, allow unsigned compilation when -key is omitted?
-	// Wait: `ether-release-sign index` signs when a key is present, or requires a key unless -unsigned is set.
 	priv, err := loadCataloguePrivateKey(*keySpec)
 	if err != nil {
 		return err

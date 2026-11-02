@@ -79,7 +79,7 @@ func New(opts Options) (*Service, error) {
 		log:      opts.Log,
 		now:      opts.Now,
 	}
-	if idx, t, ok := s.cache.load(context.Background()); ok {
+	if idx, t, ok := s.cache.load(context.Background(), pub); ok {
 		s.idx = idx
 		s.fetchedAt = t
 	}

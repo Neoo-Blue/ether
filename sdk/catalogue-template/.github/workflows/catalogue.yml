@@ -26,15 +26,13 @@ jobs:
         with:
           go-version: "1.24.x"
 
-      - name: Check plugin packages when present
+      - name: Check plugin packages
         run: |
-          if command -v ether >/dev/null 2>&1; then
-            for dir in plugins/*/; do
-              if [ -f "${dir}manifest.json" ]; then
-                ether plugin check "${dir}"
-              fi
-            done
-          fi
+          command -v ether
+          for dir in plugins/*/; do
+            [ -f "${dir}manifest.json" ] || continue
+            ether plugin check "${dir}"
+          done
 
       - name: Build and sign index.json
         env:
@@ -42,6 +40,6 @@ jobs:
           ETHER_CATALOGUE_PUBLIC_KEY: ${{ secrets.ETHER_CATALOGUE_PUBLIC_KEY }}
         run: |
           if [ -n "${ETHER_CATALOGUE_PRIVATE_KEY}" ]; then
-            ether-release-sign index -dir plugins -out index.json -key "${ETHER_CATALOGUE_PRIVATE_KEY}"
-            ether-release-sign index -verify -in index.json -pub "${ETHER_CATALOGUE_PUBLIC_KEY}"
+            ether-release-sign index -dir plugins -out index.json
+            ether-release-sign index -verify -in index.json
           fi
