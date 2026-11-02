@@ -409,11 +409,22 @@ func traceConfiguredMaxHeight(p core.QualityProfile) *int {
 	}
 }
 
+// productMatches is a case-insensitive substring match on X-Plex-Product.
+// "Fire TV" is matched by device instead: the app there reports itself as
+// "Plex for Android (TV)", so the console's Fire TV preset never matched.
+func productMatches(want string, caps core.ClientCaps) bool {
+	w := strings.ToLower(strings.TrimSpace(want))
+	if strings.Contains(strings.ToLower(caps.Product), w) {
+		return true
+	}
+	return (w == "fire tv" || w == "firetv") && core.IsFireTV(caps.Product, caps.Device)
+}
+
 func ruleMatches(rule config.QualityRule, caps core.ClientCaps, user *core.User) bool {
 	if rule.Protocol != "" && !strings.EqualFold(string(rule.Protocol), string(caps.Protocol)) {
 		return false
 	}
-	if rule.Product != "" && !strings.Contains(strings.ToLower(caps.Product), strings.ToLower(rule.Product)) {
+	if rule.Product != "" && !productMatches(rule.Product, caps) {
 		return false
 	}
 	if rule.Platform != "" && !strings.Contains(strings.ToLower(caps.Platform), strings.ToLower(rule.Platform)) {
