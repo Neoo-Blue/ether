@@ -3,8 +3,13 @@ package plugins
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/braedonsaunders/ether/internal/safefetch"
 )
 
 type fakeHot struct{ *fakeRuntime }
@@ -90,5 +95,25 @@ func TestPlainStremioManifestUsesTheRemoteRuntime(t *testing.T) {
 	}
 	if env.fake.inst.ID != plain.ID {
 		t.Fatalf("remote factory opened %q", env.fake.inst.ID)
+	}
+}
+
+func TestFetchErrorsNeverExposeTheRequestURL(t *testing.T) {
+	secretURL := "https://api.example.test/search?api_key=sk-SECRET-123&q=x"
+	for _, inner := range []error{
+		&url.Error{Op: "Get", URL: secretURL, Err: errors.New("dial tcp 203.0.113.1:443: connect: connection refused " + secretURL)},
+		&url.Error{Op: "Get", URL: secretURL, Err: context.DeadlineExceeded},
+		&url.Error{Op: "Get", URL: secretURL, Err: safefetch.ErrBlocked},
+	} {
+		err := fetchError("api.example.test", inner)
+		if strings.Contains(err.Error(), "sk-SECRET-123") || strings.Contains(err.Error(), "api_key") {
+			t.Fatalf("fetch error leaks the URL: %v", err)
+		}
+		if !errors.Is(err, ErrFetchFailed) {
+			t.Fatalf("fetch error must wrap ErrFetchFailed: %v", err)
+		}
+	}
+	if err := fetchError("h", &url.Error{Op: "Get", URL: secretURL, Err: safefetch.ErrBlocked}); !errors.Is(err, safefetch.ErrBlocked) {
+		t.Fatalf("blocked fetches keep the ErrBlocked classification: %v", err)
 	}
 }
