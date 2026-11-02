@@ -290,19 +290,6 @@ export function useSettingsSchemas(ids: readonly string[]): {
   return { groups, loading, error };
 }
 
-/** Option values of one served field, for pickers that need only the list. */
-export function useSchemaOptions(id: string, fieldKey: string): string[] {
-  const { groups } = useSettingsSchema(id);
-  return useMemo(() => {
-    for (const g of groups ?? []) {
-      for (const f of [...g.fields, ...(g.more ?? [])]) {
-        if (f.key === fieldKey && "options" in f) return f.options.map((o) => o.value);
-      }
-    }
-    return [];
-  }, [groups, fieldKey]);
-}
-
 /**
  * A whole served schema as one form. This is the entry point other surfaces
  * (plugin settings, channel kinds, integration cards) render with.

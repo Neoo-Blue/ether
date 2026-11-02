@@ -37,7 +37,7 @@ func RegisterTools(cat *tools.Catalogue, deps ToolDeps) error {
 // plugin_check, plugin_replay, plugin_shadow_report, and plugin_install.
 func Tools(deps ToolDeps) []tools.Tool {
 	if deps.Runner == nil {
-		deps.Runner = NewRunner(Deps{
+		deps.Runner = NewRunner(ReplayDeps{
 			Manager: deps.Manager,
 			Engine:  deps.Engine,
 		})
@@ -659,8 +659,8 @@ type CheckRequest struct {
 	Files    map[string]string `json:"files,omitempty"`
 }
 
-// CheckReport is the output of Check.
-type CheckReport struct {
+// ToolCheckReport is the output of Check.
+type ToolCheckReport struct {
 	OK      bool                 `json:"ok"`
 	Issues  []plugins.FieldError `json:"issues"`
 	Exports map[string]bool      `json:"exports,omitempty"`
@@ -668,8 +668,8 @@ type CheckReport struct {
 
 // Check validates a plugin's manifest, copy rules, settings schema, ViewSpec
 // files, and hosted TypeScript or JavaScript entry code.
-func Check(_ context.Context, eng *wasm.Engine, req CheckRequest) (CheckReport, error) {
-	report := CheckReport{
+func Check(_ context.Context, eng *wasm.Engine, req CheckRequest) (ToolCheckReport, error) {
+	report := ToolCheckReport{
 		Issues:  []plugins.FieldError{},
 		Exports: map[string]bool{},
 	}
