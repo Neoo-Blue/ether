@@ -76,6 +76,8 @@ func (s *Server) routes() chi.Router {
 	get("/library/metadata/{key}/person/{kind}/{identity}", s.handlePersonImage)
 	get("/library/metadata/{key}/{element}", s.handleImage)
 	get("/library/metadata/{key}/{element}/{ts}", s.handleImage)
+	get("/library/people/{id}", s.handleLibraryPerson)
+	get("/library/people/{id}/media", s.handleLibraryPersonMedia)
 	get("/library/collections", s.handleCollections)
 	get("/library/collections/{key}", s.handleCollection)
 	get("/library/collections/{key}/children", s.handleCollectionItems)

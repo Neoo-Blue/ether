@@ -340,6 +340,64 @@ func (c *fakeCatalog) PersonCreditKeys(_ context.Context, person int64, types []
 	return out, nil
 }
 
+func (c *fakeCatalog) PersonByTMDB(_ context.Context, person int64) (core.Person, []string, core.RatingKey, error) {
+	if person <= 0 {
+		return core.Person{}, nil, 0, core.ErrNotFound
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var out core.Person
+	var thumbKey core.RatingKey
+	kindSet := map[string]bool{}
+	thumbByKind := map[string]core.Person{}
+	keyByKind := map[string]core.RatingKey{}
+	scan := func(t core.Title, ps []core.Person, kind string) {
+		for _, p := range ps {
+			if p.TMDB != person {
+				continue
+			}
+			kindSet[kind] = true
+			if out.Name == "" {
+				out = core.Person{TMDB: p.TMDB, Name: p.Name}
+			}
+			if p.ThumbPath != "" {
+				if _, ok := thumbByKind[kind]; !ok {
+					thumbByKind[kind] = p
+					keyByKind[kind] = t.Key
+				}
+			}
+		}
+	}
+	keys := make([]core.RatingKey, 0, len(c.titles))
+	for k := range c.titles {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	for _, k := range keys {
+		t := c.titles[k]
+		scan(t, t.Cast, "cast")
+		scan(t, t.Directors, "director")
+		scan(t, t.Writers, "writer")
+		scan(t, t.Crew, "crew")
+	}
+	if len(kindSet) == 0 {
+		return core.Person{}, nil, 0, core.ErrNotFound
+	}
+	kinds := make([]string, 0, len(kindSet))
+	for _, k := range []string{"cast", "director", "writer", "crew"} {
+		if kindSet[k] {
+			kinds = append(kinds, k)
+		}
+	}
+	if kinds[0] != "crew" {
+		if p, ok := thumbByKind[kinds[0]]; ok {
+			out.ThumbPath = p.ThumbPath
+			thumbKey = keyByKind[kinds[0]]
+		}
+	}
+	return out, kinds, thumbKey, nil
+}
+
 func (c *fakeCatalog) List(context.Context, string, core.MediaType, int) ([]core.Title, error) {
 	return nil, nil
 }
