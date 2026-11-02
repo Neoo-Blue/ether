@@ -414,7 +414,8 @@ type OpenStreamResponse struct {
 // SubtitleItem is one subtitle track returned by a Subtitles route handler.
 type SubtitleItem struct {
 	ID              string `json:"id"`
-	URL             string `json:"url"`
+	URL             string `json:"url,omitempty"`
+	Name            string `json:"name,omitempty"`
 	Lang            string `json:"lang"`
 	Label           string `json:"label,omitempty"`
 	Format          string `json:"format,omitempty"`

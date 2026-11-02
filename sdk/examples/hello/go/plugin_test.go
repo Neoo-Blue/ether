@@ -400,7 +400,7 @@ func TestCrossLanguageHelloParity(t *testing.T) {
 			name:       "subtitles without pick",
 			method:     "GET",
 			path:       "/subtitles/movie/tt0133093.json",
-			wantStatus: http.StatusForbidden,
+			wantStatus: http.StatusOK,
 		},
 		{
 			name:       "subtitles with pick",

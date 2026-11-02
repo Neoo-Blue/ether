@@ -39,3 +39,30 @@ func TestSubtitlePickEnforcedAndSingleUse(t *testing.T) {
 		t.Fatal("mismatched token reused")
 	}
 }
+
+func TestSubtitlePickManagerCall(t *testing.T) {
+	e := newTestEnv(t)
+	rec := e.installHello(t, "1.0.0")
+	ctx := context.Background()
+	e.fake.routes["/ether/subtitles/download"] = func(req Request) (Response, error) {
+		if req.Headers["X-Ether-Pick"] == "" {
+			t.Fatal("missing pick header")
+		}
+		return Response{Status: 200, Body: json.RawMessage(`{"format":"srt","encoding":"utf8","data":"x"}`)}, nil
+	}
+	token, err := e.m.MintSubtitlePick(rec.ID, "title", "sub")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := Request{Method: "POST", Path: "/ether/subtitles/download", Headers: map[string]string{"X-Ether-Pick": token, "X-Ether-Title": "title"}, Body: json.RawMessage(`{"id":"sub"}`)}
+	resp, err := e.m.Call(ctx, rec.ID, req)
+	if err != nil || resp.Status != 200 {
+		t.Fatalf("picked call: %+v %v", resp, err)
+	}
+	if _, err = e.m.Call(ctx, rec.ID, req); !errors.Is(err, ErrPermissionDenied) {
+		t.Fatalf("reuse: %v", err)
+	}
+	if _, _, err = e.m.CallStream(ctx, rec.ID, req); !errors.Is(err, ErrPermissionDenied) {
+		t.Fatalf("stream bypass: %v", err)
+	}
+}

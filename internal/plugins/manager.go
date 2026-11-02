@@ -355,6 +355,9 @@ func (b *streamBody) Close() error { err := b.ReadCloser.Close(); b.cancel(); re
 // CallStream returns a streaming response. The call deadline remains active
 // until the body is closed; callers must close it on every path.
 func (m *Manager) CallStream(ctx context.Context, pluginID string, req Request) (Response, io.ReadCloser, error) {
+	if req.Path == "/ether/subtitles/download" {
+		return Response{Status: http.StatusForbidden}, nil, ErrPermissionDenied
+	}
 	r, err := m.store.record(ctx, pluginID)
 	if err != nil {
 		return Response{}, nil, err
