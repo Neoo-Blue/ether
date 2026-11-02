@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -169,4 +170,58 @@ func TestOAuthFlow(t *testing.T) {
 		t.Fatalf("registration rate limit: %d", w.Code)
 	}
 
+}
+
+func TestOAuthRegistrationLimitAndRedirectPolicy(t *testing.T) {
+	db := store.OpenTest(t)
+	grants, err := identity.NewGrants(db, testMembers{db}, time.Hour, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pairing, err := mcp.NewPairing(mcp.PairingOptions{DB: db, Grants: grants, Authorize: func(context.Context) (int64, error) { return 1, nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := func(remote, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest("POST", "http://127.0.0.1/ether/oauth/register", strings.NewReader(body))
+		req.RemoteAddr = remote
+		rec := httptest.NewRecorder()
+		pairing.OAuthHandler().ServeHTTP(rec, req)
+		return rec
+	}
+	for _, tc := range []struct {
+		uri  string
+		want int
+	}{
+		{"http://127.0.0.1:5678/callback", 201}, {"http://localhost:5678/callback", 201}, {"https://example.org/callback", 201},
+		{"http://192.168.1.2/callback", 400}, {"http://localhost.evil.example/callback", 400}, {"http://user@localhost/callback", 400}, {"https://example.org/callback#fragment", 400},
+	} {
+		body, _ := json.Marshal(map[string]any{"redirect_uris": []string{tc.uri}})
+		if got := request("127.0.0.1:1234", string(body)).Code; got != tc.want {
+			t.Errorf("redirect %q: got %d, want %d", tc.uri, got, tc.want)
+		}
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stmt, err := tx.Prepare(`INSERT INTO mcp_oauth_clients(id,name,redirects,created) VALUES(?,?,?,?)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 4093; i++ {
+		if _, err := stmt.Exec(fmt.Sprintf("client-%d", i), "test", `["http://localhost/cb"]`, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := stmt.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if r := request("127.0.0.2:1234", `{"redirect_uris":["http://localhost/cb"]}`); r.Code != 429 {
+		t.Fatalf("registration cap: %d %s", r.Code, r.Body)
+	}
 }
