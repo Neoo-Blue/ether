@@ -1,4 +1,5 @@
-import { Badge, Button, Input, Spinner, SubtabNav, cn, toast } from "@braedonsaunders/appkit-ui";
+import { SubtabNav } from "../../components/layout";
+import { Badge, Button, Input, Spinner, cn, toast } from "@braedonsaunders/appkit-ui";
 import { ArrowLeft, ArrowUpRight, HardDrive, Network, Settings2, Sparkles } from "lucide-react";
 import { CACHE_PRESETS, CachePresetCards, cachePresetKey } from "./presets";
 import { useEffect, useState } from "react";

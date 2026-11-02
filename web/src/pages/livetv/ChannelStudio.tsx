@@ -1,3 +1,4 @@
+import { SubtabNav } from "../../components/layout";
 import {
   Avatar,
   Badge,
@@ -5,7 +6,6 @@ import {
   Input,
   SearchSelect,
   Select,
-  SubtabNav,
   Switch,
   cn,
 } from "@braedonsaunders/appkit-ui";

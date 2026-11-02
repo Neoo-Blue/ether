@@ -1,4 +1,5 @@
-import { Badge, Button, EmptyState, SubtabNav, Spinner, toast } from "@braedonsaunders/appkit-ui";
+import { SubtabNav } from "../../components/layout";
+import { Badge, Button, EmptyState, Spinner, toast } from "@braedonsaunders/appkit-ui";
 import { RefreshCw, Save, Undo2, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ErrorPanel } from "../../components/feedback";

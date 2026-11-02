@@ -1,8 +1,8 @@
+import { SubtabNav } from "../../components/layout";
 import {
   Button,
   SettingsSection,
   Spinner,
-  SubtabNav,
   Switch,
   confirmDialog,
   toast,
@@ -24,6 +24,7 @@ import { SchemaField, type FieldDef } from "../settings/SchemaForm";
 import * as schema from "../settings/schema";
 import { PlexStatus } from "../settings/sections";
 import { claimFailureMessage, plexAccountClaimed, translatePlexFieldError } from "./plex-account";
+import { StatusRow } from "../../components/AppStatusList";
 import { HomeStatusRow } from "./HomeStatus";
 import { awaySummary, claimSummary, type ReachabilityStatus } from "./reachability";
 
@@ -197,8 +198,9 @@ function PlexAccount({
   const owner = plex.ownerUsername;
   return (
     <>
-      <SettingsSection title={t("Plex account")}>
-        <SettingsRow
+      <>
+        <StatusRow
+          state={claimed ? "reachable" : "unknown"}
           title={claimed ? t("Signed in") : t("Not signed in")}
           description={
             claimed
@@ -255,29 +257,7 @@ function PlexAccount({
             </Button>
           </div>
         ) : null}
-      </SettingsSection>
-      <SettingsSection
-        title={t("Server identity")}
-        description={t("These identify the server. Ether sets them; they are not edited here.")}
-      >
-        {owner ? <SettingsRow title={t("Owner")} description={owner} /> : null}
-        <SettingsRow
-          title={t("Server name")}
-          description={
-            <>
-              <span>{config.server.friendlyName || "—"}</span>
-              {" · "}
-              <Link className="underline" to="/server">
-                {t("General settings")}
-              </Link>
-            </>
-          }
-        />
-        <SettingsRow
-          title={t("Machine identifier")}
-          description={config.server.machineIdentifier || "—"}
-        />
-      </SettingsSection>
+      </>
     </>
   );
 }
@@ -407,10 +387,13 @@ export function PlexApp({
     <>
       <SettingsSection title={t("Status")}>
         <HomeStatusRow status={status} />
-        <SettingsRow title={away.title} description={away.detail} />
-        <SettingsRow
-          title={t("Plex account")}
-          description={claimSummary(plexAccountClaimed(plex), plex.ownerUsername)}
+        <StatusRow state={status?.wan} title={away.title} description={away.detail} />
+        <PlexAccount
+          config={config.data}
+          onChanged={async () => {
+            await config.reload();
+            void refreshDashboard();
+          }}
         />
       </SettingsSection>
       <SubtabNav
@@ -421,13 +404,6 @@ export function PlexApp({
       />
       {active === "account" ? (
         <>
-          <PlexAccount
-            config={config.data}
-            onChanged={async () => {
-              await config.reload();
-              void refreshDashboard();
-            }}
-          />
           <PlexMetadata claimed={plexAccountClaimed(plex)} />
           <OptionGroup
             group={compatibility}
@@ -441,18 +417,6 @@ export function PlexApp({
         <>
           <PlexStatus remote={dashboard?.sections?.remote} />
           <SettingsSection title={t("Network")}>
-            <SettingsRow
-              title={t("Port")}
-              description={
-                <>
-                  <span>{config.data.server.port}</span>
-                  {" · "}
-                  <Link className="underline" to="/server">
-                    {t("General settings")}
-                  </Link>
-                </>
-              }
-            />
             <SettingsRow
               title={t("Addresses for every app")}
               description={

@@ -1,15 +1,7 @@
+import { SubtabNav } from "../../components/layout";
 import { Drawer } from "../../components/Drawer";
 import { DashboardPanel } from "@braedonsaunders/appkit-dashboard/primitives";
-import {
-  Avatar,
-  Badge,
-  Button,
-  EmptyState,
-  Slider,
-  SubtabNav,
-  toast,
-  cn,
-} from "@braedonsaunders/appkit-ui";
+import { Avatar, Badge, Button, EmptyState, Slider, toast, cn } from "@braedonsaunders/appkit-ui";
 import {
   Brain,
   CalendarRange,

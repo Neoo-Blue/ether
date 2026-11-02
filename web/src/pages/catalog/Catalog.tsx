@@ -1,4 +1,5 @@
-import { Badge, Button, EmptyState, Input, SubtabNav } from "@braedonsaunders/appkit-ui";
+import { SubtabNav } from "../../components/layout";
+import { Badge, Button, EmptyState, Input } from "@braedonsaunders/appkit-ui";
 import {
   ArrowLeft,
   ArrowRight,

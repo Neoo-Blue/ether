@@ -1,3 +1,4 @@
+import { SubtabNav } from "../../components/layout";
 import {
   Alert,
   AlertDescription,
@@ -7,7 +8,6 @@ import {
   EmptyState,
   Input,
   Spinner,
-  SubtabNav,
   confirmDialog,
   toast,
   cn,

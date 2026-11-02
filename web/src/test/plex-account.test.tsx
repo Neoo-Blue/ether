@@ -96,10 +96,7 @@ describe("plex claim actions", () => {
     const before = (remote as HTMLInputElement).checked;
     fireEvent.click(remote);
     expect(screen.queryByRole("spinbutton", { name: "Port" })).toBeNull();
-    expect(screen.getByRole("link", { name: "General settings" })).toHaveAttribute(
-      "href",
-      "/server",
-    );
+    expect(screen.queryByText("Server identity")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Account" }));
     expect(
       await screen.findByRole("button", { name: "Sign out of Plex" }, WAIT),

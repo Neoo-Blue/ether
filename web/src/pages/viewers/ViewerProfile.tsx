@@ -1,3 +1,4 @@
+import { SubtabNav } from "../../components/layout";
 import {
   Alert,
   AlertDescription,
@@ -8,7 +9,6 @@ import {
   EmptyState,
   SettingsSection,
   Spinner,
-  SubtabNav,
   toast,
 } from "@braedonsaunders/appkit-ui";
 import { ArrowLeft, CheckCircle2, History } from "lucide-react";

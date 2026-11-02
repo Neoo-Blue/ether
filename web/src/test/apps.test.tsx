@@ -119,11 +119,9 @@ describe("Apps", () => {
     expect(screen.queryByText(/LAN:/)).not.toBeInTheDocument();
     expect(screen.getByText(/Outside access is not checked/)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "How people sign in" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy address" })).toBeInTheDocument();
     expect(
-      screen.getByText(/Quick Connect: approve the code at .*\/ether\/me/),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/App password: from Connect apps at .*\/ether\/me/),
+      screen.getByText("Create an app password under Connect apps in your account."),
     ).toBeInTheDocument();
     expect(
       screen.getByText("Infuse needs an app password. The Emby for TV app isn't supported."),
@@ -132,9 +130,7 @@ describe("Apps", () => {
       "href",
       "/viewers",
     );
-    expect(
-      screen.getByText(/People sign in with their Ether viewer account\. Manage them under/),
-    ).toBeInTheDocument();
+    expect(screen.getByText("People sign in with their Ether viewer account.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Viewers" })).toHaveAttribute("href", "/viewers");
     fireEvent.click(screen.getByRole("button", { name: "Connect a device" }));
     expect(screen.getByText("Certified player")).toBeInTheDocument();
@@ -174,12 +170,10 @@ describe("Apps", () => {
     expect(await screen.findByRole("tab", { name: "Jellyfin" })).toBeInTheDocument();
     expect(screen.queryByRole("spinbutton", { name: "Port" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Jellyfin" }));
-    expect(await screen.findByRole("spinbutton", { name: "Port" })).toBeInTheDocument();
-    expect(screen.getByText("Living Room Ether")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "General settings" })).toHaveAttribute(
-      "href",
-      "/server",
-    );
+    expect(await screen.findByText("Quick Connect")).toBeInTheDocument();
+    expect(screen.queryByRole("spinbutton", { name: "Port" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Server name")).not.toBeInTheDocument();
+    expect(screen.queryByText("Server identity")).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Server name" })).not.toBeInTheDocument();
   });
 

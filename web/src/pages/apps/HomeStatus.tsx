@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { SettingsRow } from "../../components/SettingsRow";
+import { StatusRow } from "../../components/AppStatusList";
 import { t } from "../../i18n";
 import {
   chosenAddress,
@@ -21,7 +21,8 @@ export function HomeStatusRow({
   const others = usableAddresses(status).filter((item) => item !== chosen);
   const home = homeSummary(status, chosen);
   return (
-    <SettingsRow
+    <StatusRow
+      state={status?.lan}
       title={home.title}
       description={
         <>
