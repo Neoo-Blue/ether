@@ -70,10 +70,12 @@ func (m *Manager) Publish(ctx context.Context, ev Event) {
 		}
 		dropped, err := m.store.enqueue(ctx, r.ID, out)
 		if err == nil && dropped > 0 {
+			m.healthMu.Lock()
 			if h, err := m.store.health(ctx, r.ID); err == nil {
 				h.Drops += int64(dropped)
 				_ = m.store.putHealth(ctx, r.ID, h)
 			}
+			m.healthMu.Unlock()
 		}
 	}
 }
