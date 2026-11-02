@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -45,6 +47,9 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 		Bus:      clusterbus.FromCluster(a.cluster),
 		Backends: plugins.Backends{
 			CatalogSearch: func(ctx context.Context, query string, limit, offset int) (json.RawMessage, error) {
+				if offset < 0 || offset > 2000 {
+					return nil, errors.New("catalog search offset out of range")
+				}
 				if offset > 0 {
 					limit += offset
 				}
@@ -60,16 +65,84 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 					}
 				}
 				type titleSummary struct {
-					ID    int64  `json:"id"`
-					Title string `json:"title"`
-					Type  string `json:"type"`
-					Year  int    `json:"year,omitempty"`
+					ID     int64  `json:"id"`
+					Title  string `json:"title"`
+					Type   string `json:"type"`
+					Year   int    `json:"year,omitempty"`
+					TMDBID int64  `json:"tmdbId,omitempty"`
+					IMDBID string `json:"imdbId,omitempty"`
 				}
 				out := make([]titleSummary, 0, len(titles))
 				for _, t := range titles {
-					out = append(out, titleSummary{ID: int64(t.Key), Title: t.Title, Type: string(t.Type), Year: t.Year})
+					out = append(out, titleSummary{ID: int64(t.Key), Title: t.Title, Type: string(t.Type), Year: t.Year, TMDBID: t.IDs.TMDB, IMDBID: t.IDs.IMDB})
 				}
 				return json.Marshal(map[string]any{"titles": out})
+			},
+			CatalogGet: func(ctx context.Context, id string) (json.RawMessage, error) {
+				var title *core.Title
+				var err error
+				switch {
+				case strings.HasPrefix(id, "imdb:"):
+					title, err = a.catalog.ByExternalID(ctx, "imdb", strings.TrimPrefix(id, "imdb:"))
+				case strings.HasPrefix(id, "tmdb:"):
+					var n int64
+					n, err = strconv.ParseInt(strings.TrimPrefix(id, "tmdb:"), 10, 64)
+					if err == nil && n > 0 {
+						title, err = a.catalog.Get(ctx, core.MovieKey(n))
+						if errors.Is(err, core.ErrNotFound) {
+							title, err = a.catalog.Get(ctx, core.ShowKey(n))
+						}
+					} else if err == nil {
+						err = errors.New("invalid TMDB id")
+					}
+				default:
+					var key core.RatingKey
+					key, err = core.ParseRatingKey(id)
+					if err == nil {
+						title, err = a.catalog.Get(ctx, key)
+					}
+				}
+				if err != nil {
+					return nil, err
+				}
+				if title == nil {
+					return nil, core.ErrNotFound
+				}
+				return json.Marshal(map[string]any{"id": title.Key.String(), "title": title.Title, "type": title.Type, "year": title.Year, "tmdbId": title.IDs.TMDB, "imdbId": title.IDs.IMDB, "genres": title.Genres, "posterPath": title.PosterPath, "summary": title.Summary})
+			},
+			ViewerHistory: func(ctx context.Context, viewerID int64, limit, offset int) (json.RawMessage, error) {
+				if viewerID <= 0 || limit <= 0 || limit > 200 || offset < 0 || offset > 2000 {
+					return nil, errors.New("invalid history page")
+				}
+				rows, err := a.db.QueryContext(ctx, `SELECT h.rating_key, h.viewed_at, h.completed, COALESCE(w.view_offset_ns,0), COALESCE(w.duration_ns,0) FROM state_history h LEFT JOIN state_watch w ON w.user_id=h.user_id AND w.rating_key=h.rating_key WHERE h.user_id=? ORDER BY h.viewed_at DESC, h.id DESC LIMIT ? OFFSET ?`, viewerID, limit, offset)
+				if err != nil {
+					return nil, err
+				}
+				defer rows.Close()
+				out := make([]map[string]any, 0, limit)
+				for rows.Next() {
+					var key, at, offsetNS, durationNS int64
+					var completed bool
+					if err := rows.Scan(&key, &at, &completed, &offsetNS, &durationNS); err != nil {
+						return nil, err
+					}
+					k := core.RatingKey(key)
+					kind := "movie"
+					if k.Kind() == core.KindEpisode {
+						kind = "episode"
+					} else if k.Kind() == core.KindShow {
+						kind = "show"
+					}
+					progress := float64(0)
+					if durationNS > 0 {
+						progress = float64(offsetNS) / float64(durationNS)
+					}
+					out = append(out, map[string]any{"titleId": k.String(), "type": kind, "watchedAt": time.Unix(0, at).UTC(), "progress": progress, "completed": completed})
+				}
+				if err := rows.Err(); err != nil {
+					return nil, err
+				}
+				return json.Marshal(out)
 			},
 			Notice: func(text string) {
 				a.log.Warn("plugin notice", "text", text)
