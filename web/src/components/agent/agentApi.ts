@@ -23,12 +23,6 @@ export interface AgentThreadSummary {
   messageCount?: number;
 }
 
-export interface McpPairing {
-  code: string;
-  expiresAt: string;
-  endpoint: string;
-}
-
 export interface McpClient {
   id: string;
   name: string;
@@ -124,17 +118,6 @@ export async function submitAgentSecret(requestId: string, value: string): Promi
     method: "POST",
     body: JSON.stringify({ value }),
   });
-}
-
-export async function createMcpPairing(): Promise<McpPairing> {
-  const body = record(
-    await apiFetch<unknown>("/agent/mcp/pair", { method: "POST", body: JSON.stringify({}) }),
-  );
-  return {
-    code: String(body.code ?? ""),
-    expiresAt: String(body.expiresAt ?? ""),
-    endpoint: String(body.endpoint ?? "/ether/mcp"),
-  };
 }
 
 export function parseMcpClients(value: unknown): McpClient[] {

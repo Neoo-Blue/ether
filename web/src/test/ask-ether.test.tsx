@@ -172,15 +172,11 @@ describe("Ask Ether", () => {
     await user.click(await screen.findByText("Connect an AI app"));
 
     const pairing = await screen.findByRole("dialog", { name: "Connect an AI app" });
-    expect(await within(pairing).findByText("482913")).toBeInTheDocument();
-    expect(within(pairing).getByText("http://localhost:3000/ether/mcp")).toBeInTheDocument();
-    expect(within(pairing).getByText(/curl -sS -X POST/)).toHaveTextContent("/ether/mcp/exchange");
-    expect(within(pairing).getByText(/claude mcp add --transport http/)).toHaveTextContent(
-      "Authorization: Bearer <token>",
-    );
-    expect(within(pairing).getByText(/mcp-remote/)).toHaveTextContent("--allow-http");
-    await user.click(within(pairing).getByRole("button", { name: "Copy pairing code" }));
-    expect(writeText).toHaveBeenCalledWith("482913");
+    const command = "claude mcp add --transport http ether http://localhost:3000/ether/mcp";
+    expect(within(pairing).getByText(command)).toBeInTheDocument();
+    expect(within(pairing).queryByText(/Bearer/)).toBeNull();
+    await user.click(within(pairing).getByRole("button", { name: "Copy Claude Code command" }));
+    expect(writeText).toHaveBeenCalledWith(command);
 
     expect(await within(pairing).findByText("Sample AI app")).toBeInTheDocument();
     await user.click(within(pairing).getByRole("button", { name: "Revoke" }));
@@ -243,5 +239,25 @@ describe("Ask Ether", () => {
       expect(calls(fake, "DELETE", "/agent/threads/")).toHaveLength(1);
     });
     expect(within(dialog).getByPlaceholderText("Ask Ether…")).toBeInTheDocument();
+  });
+});
+
+describe("MCP authorization", () => {
+  it.each([
+    ["Approve", true],
+    ["Deny", false],
+  ] as const)("shows the app and sends %s", async (label, approve) => {
+    const { fake } = renderApp("/mcp/authorize?request=example");
+    expect(await screen.findByText("Claude wants to connect to Ether.")).toBeInTheDocument();
+    expect(screen.getByText("Access: read")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Deny" })).toBeEnabled();
+    expect(calls(fake, "GET", "/agent/mcp/authorization")).toHaveLength(1);
+    await userEvent.setup().click(screen.getByRole("button", { name: label }));
+    await settleUi(() => expect(calls(fake, "POST", "/agent/mcp/authorization")).toHaveLength(1));
+    expect(calls(fake, "POST", "/agent/mcp/authorization")[0]?.body).toEqual({
+      request: "example",
+      approve,
+    });
   });
 });

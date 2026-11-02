@@ -1,3 +1,4 @@
+import { McpAuthorize } from "./components/agent/McpAuthorize";
 import {
   AppShell,
   Button,
@@ -546,6 +547,7 @@ function Shell() {
           <Suspense fallback={<PageFallback />}>
             <Routes>
               <Route path="/setup" element={<Setup />} />
+              <Route path="/mcp/authorize" element={<McpAuthorize />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/plugins/:tab?/*" element={<Plugins />} />
               <Route path="/p/:plugin/:page/*" element={<PluginPage />} />

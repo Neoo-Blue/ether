@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,7 +17,6 @@ import (
 	"github.com/braedonsaunders/ether/internal/agent/tools"
 	_ "github.com/braedonsaunders/ether/internal/auth"
 	"github.com/braedonsaunders/ether/internal/core"
-	"github.com/braedonsaunders/ether/internal/identity"
 	"github.com/braedonsaunders/ether/internal/livetv"
 	"github.com/braedonsaunders/ether/internal/mcp"
 	"github.com/braedonsaunders/ether/internal/resolver"
@@ -259,7 +257,7 @@ func TestMCPBoundaryAuthResourcesAndScopes(t *testing.T) {
 	if unauthRec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401 without token, got %d", unauthRec.Code)
 	}
-	if !strings.Contains(unauthRec.Header().Get("WWW-Authenticate"), "Bearer") {
+	if !strings.Contains(unauthRec.Header().Get("WWW-Authenticate"), `resource_metadata="http://127.0.0.1:32400/.well-known/oauth-protected-resource/ether/mcp"`) {
 		t.Fatalf("expected WWW-Authenticate header, got %q", unauthRec.Header().Get("WWW-Authenticate"))
 	}
 	if unauthRec.Header().Get("Cache-Control") != "no-store" || unauthRec.Header().Get("X-Request-ID") == "" {
@@ -353,217 +351,5 @@ func TestMCPBoundaryAuthResourcesAndScopes(t *testing.T) {
 
 	if len(audits) == 0 {
 		t.Fatal("expected audit events to be recorded")
-	}
-}
-
-func TestMCPPairingExchangeAndRevocation(t *testing.T) {
-	ctx := context.Background()
-	db := store.OpenTest(t)
-	if _, err := db.ExecContext(ctx, `INSERT INTO auth_users(id,plex_id,is_owner,active,created_at,updated_at) VALUES(1,100,1,1,0,0)`); err != nil {
-		t.Fatal(err)
-	}
-	now := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
-	members := testMembers{db}
-	grants, err := identity.NewGrants(db, members, 24*time.Hour, func() time.Time { return now })
-	if err != nil {
-		t.Fatal(err)
-	}
-	qc, err := identity.NewQuickConnect(db, 10*time.Minute, 24*time.Hour, func() time.Time { return now })
-	if err != nil {
-		t.Fatal(err)
-	}
-	pairing, err := mcp.NewPairing(mcp.PairingOptions{
-		DB:           db,
-		Grants:       grants,
-		QuickConnect: qc,
-		Authorize: func(ctx context.Context) (int64, error) {
-			return 1, nil
-		},
-		Now: func() time.Time { return now },
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	consoleHandler := pairing.Handler()
-	exchangeHandler := pairing.ExchangeHandler()
-
-	// 1. Pair a client with full scope and exchange the code for a grant token.
-	pairReq := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:32400/pair", strings.NewReader(`{"name":"Claude Code","scope":"full"}`))
-	pairRec := httptest.NewRecorder()
-	consoleHandler.ServeHTTP(pairRec, pairReq)
-	if pairRec.Code != http.StatusCreated {
-		t.Fatalf("POST /pair status = %d: %s", pairRec.Code, pairRec.Body.String())
-	}
-	var pairData map[string]any
-	_ = json.Unmarshal(pairRec.Body.Bytes(), &pairData)
-	code, _ := pairData["code"].(string)
-	if code == "" {
-		t.Fatalf("expected pairing code, got %v", pairData)
-	}
-
-	exReq := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:32400/ether/mcp/exchange",
-		strings.NewReader(fmt.Sprintf(`{"code":%q}`, code)))
-	exReq.Header.Set("Content-Type", "application/json")
-	exReq.RemoteAddr = "192.168.1.50:54321"
-	exRec := httptest.NewRecorder()
-	exchangeHandler.ServeHTTP(exRec, exReq)
-	if exRec.Code != http.StatusOK {
-		t.Fatalf("POST /ether/mcp/exchange status = %d: %s", exRec.Code, exRec.Body.String())
-	}
-	var exData map[string]any
-	_ = json.Unmarshal(exRec.Body.Bytes(), &exData)
-	token, _ := exData["token"].(string)
-	if !identity.IsGrantCredential(token) {
-		t.Fatalf("expected ethg_ grant credential, got %q", token)
-	}
-
-	// Single-use: exchanging the same code a second time fails with 401.
-	exReq2 := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:32400/ether/mcp/exchange",
-		strings.NewReader(fmt.Sprintf(`{"code":%q}`, code)))
-	exReq2.Header.Set("Content-Type", "application/json")
-	exReq2.RemoteAddr = "192.168.1.50:54321"
-	exRec2 := httptest.NewRecorder()
-	exchangeHandler.ServeHTTP(exRec2, exReq2)
-	if exRec2.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401 on second exchange of same code, got %d", exRec2.Code)
-	}
-
-	// Authenticate with the exchanged grant token.
-	principal, err := pairing.Authenticate(ctx, token)
-	if err != nil || !principal.IsOwner || !principal.HasScope("full") {
-		t.Fatalf("Authenticate(token) = %+v, err=%v", principal, err)
-	}
-
-	// Pairing codes never authenticate, before or after exchange.
-	if _, err := pairing.Authenticate(ctx, code); err == nil {
-		t.Fatal("redeemed code authenticated")
-	}
-	pairReq2 := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:32400/pair", strings.NewReader(`{"name":"Cursor","scope":"read"}`))
-	pairRec2 := httptest.NewRecorder()
-	consoleHandler.ServeHTTP(pairRec2, pairReq2)
-	var pairData2 map[string]any
-	_ = json.Unmarshal(pairRec2.Body.Bytes(), &pairData2)
-	code2 := pairData2["code"].(string)
-	if _, err := pairing.Authenticate(ctx, code2); err == nil {
-		t.Fatal("unredeemed code authenticated")
-	}
-	req2 := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:32400/ether/mcp/exchange", strings.NewReader(fmt.Sprintf(`{"code":%q}`, code2)))
-	req2.Header.Set("Content-Type", "application/json")
-	req2.RemoteAddr = "192.168.1.51:1234"
-	rec2 := httptest.NewRecorder()
-	exchangeHandler.ServeHTTP(rec2, req2)
-	if rec2.Code != http.StatusOK {
-		t.Fatalf("read exchange: %d %s", rec2.Code, rec2.Body.String())
-	}
-	var data2 map[string]any
-	_ = json.Unmarshal(rec2.Body.Bytes(), &data2)
-	token2 := data2["token"].(string)
-	principal2, err := pairing.Authenticate(ctx, token2)
-	if err != nil || principal2.HasScope("full") || !principal2.HasScope("read") {
-		t.Fatalf("read principal: %+v %v", principal2, err)
-	}
-
-	// 3. List paired clients via GET /clients and revoke both via DELETE /clients/{id}.
-	listReq := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:32400/clients", nil)
-	listRec := httptest.NewRecorder()
-	consoleHandler.ServeHTTP(listRec, listReq)
-	if listRec.Code != http.StatusOK {
-		t.Fatalf("GET /clients status = %d", listRec.Code)
-	}
-	var listData map[string]any
-	_ = json.Unmarshal(listRec.Body.Bytes(), &listData)
-	clients := listData["clients"].([]any)
-	if len(clients) != 2 {
-		t.Fatalf("expected 2 paired clients, got %d", len(clients))
-	}
-	for _, item := range clients {
-		cid := item.(map[string]any)["id"].(string)
-		delReq := httptest.NewRequest(http.MethodDelete, "http://127.0.0.1:32400/clients/"+cid, nil)
-		delRec := httptest.NewRecorder()
-		consoleHandler.ServeHTTP(delRec, delReq)
-		if delRec.Code != http.StatusNoContent {
-			t.Fatalf("DELETE /clients/%s status = %d", cid, delRec.Code)
-		}
-	}
-
-	// Both credentials must fail after revocation.
-	if _, err := pairing.Authenticate(ctx, token); err == nil {
-		t.Fatal("expected revoked token to fail Authenticate")
-	}
-	if _, err := pairing.Authenticate(ctx, token2); err == nil {
-		t.Fatal("expected revoked read grant to fail Authenticate")
-	}
-
-	// Concurrent exchange attempts can issue only one grant.
-	concurrentPair := httptest.NewRecorder()
-	consoleHandler.ServeHTTP(concurrentPair, httptest.NewRequest(http.MethodPost, "http://127.0.0.1:32400/pair", strings.NewReader(`{}`)))
-	var concurrentData map[string]any
-	_ = json.Unmarshal(concurrentPair.Body.Bytes(), &concurrentData)
-	concurrentCode := concurrentData["code"].(string)
-	start := make(chan struct{})
-	statuses := make(chan int, 2)
-	for i := 0; i < 2; i++ {
-		go func() {
-			req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:32400/ether/mcp/exchange", strings.NewReader(fmt.Sprintf(`{"code":%q}`, concurrentCode)))
-			req.Header.Set("Content-Type", "application/json")
-			req.RemoteAddr = "10.0.0.44:1234"
-			rec := httptest.NewRecorder()
-			<-start
-			exchangeHandler.ServeHTTP(rec, req)
-			statuses <- rec.Code
-		}()
-	}
-	close(start)
-	success := 0
-	for i := 0; i < 2; i++ {
-		if <-statuses == http.StatusOK {
-			success++
-		}
-	}
-	if success != 1 {
-		t.Fatalf("concurrent successful exchanges = %d", success)
-	}
-
-	// Expired codes cannot be exchanged or used as bearer credentials.
-	expiredPair := httptest.NewRecorder()
-	consoleHandler.ServeHTTP(expiredPair, httptest.NewRequest(http.MethodPost, "http://127.0.0.1:32400/pair", strings.NewReader(`{}`)))
-	var expiredData map[string]any
-	_ = json.Unmarshal(expiredPair.Body.Bytes(), &expiredData)
-	expiredCode := expiredData["code"].(string)
-	now = now.Add(11 * time.Minute)
-	expiredReq := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:32400/ether/mcp/exchange", strings.NewReader(fmt.Sprintf(`{"code":%q}`, expiredCode)))
-	expiredReq.Header.Set("Content-Type", "application/json")
-	expiredRec := httptest.NewRecorder()
-	exchangeHandler.ServeHTTP(expiredRec, expiredReq)
-	if expiredRec.Code != http.StatusUnauthorized {
-		t.Fatalf("expired exchange = %d", expiredRec.Code)
-	}
-	if _, err := pairing.Authenticate(ctx, expiredCode); err == nil {
-		t.Fatal("expired code authenticated")
-	}
-	hostile := httptest.NewRequest(http.MethodPost, "http://evil.example/ether/mcp/exchange", strings.NewReader(`{"code":"BADCODE"}`))
-	hostile.Header.Set("Content-Type", "application/json")
-	hostileRec := httptest.NewRecorder()
-	exchangeHandler.ServeHTTP(hostileRec, hostile)
-	if hostileRec.Code != http.StatusMisdirectedRequest {
-		t.Fatalf("hostile host = %d", hostileRec.Code)
-	}
-
-	// 4. Rate limit on /ether/mcp/exchange: >10 attempts per minute from one IP -> 429.
-	for i := 0; i < 10; i++ {
-		r := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:32400/ether/mcp/exchange", strings.NewReader(`{"code":"BADCODE"}`))
-		r.Header.Set("Content-Type", "application/json")
-		r.RemoteAddr = "10.0.0.99:12345"
-		w := httptest.NewRecorder()
-		exchangeHandler.ServeHTTP(w, r)
-	}
-	r11 := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:32400/ether/mcp/exchange", strings.NewReader(`{"code":"BADCODE"}`))
-	r11.Header.Set("Content-Type", "application/json")
-	r11.RemoteAddr = "10.0.0.99:12345"
-	w11 := httptest.NewRecorder()
-	exchangeHandler.ServeHTTP(w11, r11)
-	if w11.Code != http.StatusTooManyRequests {
-		t.Fatalf("expected 429 on 11th exchange attempt, got %d", w11.Code)
 	}
 }
