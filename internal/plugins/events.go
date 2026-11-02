@@ -296,10 +296,7 @@ func (m *Manager) runOnce(ctx context.Context, lastHealth map[string]time.Time) 
 func (m *Manager) factoryFor(r Record) (RuntimeFactory, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if r.Manifest.Ether == nil {
-		return nil, false
-	}
-	f, ok := m.fatories[r.Manifest.Ether.Runtime.Kind]
+	f, ok := m.fatories[r.Manifest.RuntimeKind()]
 	return f, ok
 }
 

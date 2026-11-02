@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/braedonsaunders/ether/internal/plugins/wasm"
 )
@@ -114,9 +115,12 @@ func TestHostedRuntimeFactoryRunsTypeScriptThroughHost(t *testing.T) {
 	if !ok || !hot.HasRankKey() {
 		t.Fatal("hosted runtime should expose rank_key")
 	}
-	keys, _, err := hot.RankBatch(ctx, []CandidateFacts{{ReleaseID: "a", Name: "Movie.DUB.1080p"}, {ReleaseID: "b", Name: "Movie.1080p"}}, nil)
+	keys, out, err := hot.RankBatch(ctx, []CandidateFacts{{ReleaseID: "a", Name: "Movie.DUB.1080p"}, {ReleaseID: "b", Name: "Movie.1080p"}}, nil)
 	if err != nil || len(keys) != 2 || keys[0] != 10 || keys[1] != 0 {
 		t.Fatalf("rank keys = %v, %v", keys, err)
+	}
+	if out.Status != "ok" || out.Timeout() {
+		t.Fatalf("rank outcome = %+v", out)
 	}
 
 	host.denied = true
@@ -141,5 +145,21 @@ func TestHostedRuntimeFactoryReportsCompileErrors(t *testing.T) {
 	}
 	if _, err := HostedRuntimeFactory(eng)(inst); err == nil || !strings.Contains(err.Error(), "compile") {
 		t.Fatalf("compile error = %v", err)
+	}
+}
+
+func TestHotLimitsLowerButNeverRaiseBudgets(t *testing.T) {
+	m := Manifest{Ether: &EtherBlock{Contributes: Contributes{RankingSteps: []RankingStepMeta{
+		{Key: "a", Budget: json.RawMessage(`{"perCandidateMicros":500,"perBatchMillis":20}`)},
+		{Key: "b", Budget: json.RawMessage(`{"perCandidateMicros":1500}`)},
+	}}}}
+	got := EffectiveBudgets(HotLimits(m))
+	if got.PerCandidate != 500*time.Microsecond || got.PerBatch != 20*time.Millisecond {
+		t.Fatalf("lowered budgets = %+v", got)
+	}
+	m.Ether.Contributes.RankingSteps = []RankingStepMeta{{Key: "c", Budget: json.RawMessage(`{"perCandidateMicros":9000,"perBatchMillis":900}`)}}
+	got = EffectiveBudgets(HotLimits(m))
+	if got.PerCandidate != wasm.DefaultRankPerCandidate || got.PerBatch != wasm.DefaultRankBatch {
+		t.Fatalf("budgets must never exceed the defaults: %+v", got)
 	}
 }
