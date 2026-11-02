@@ -34,7 +34,6 @@ import { ViewerWatchlist } from "./sections/ViewerWatchlist";
 import { TasteView } from "./TasteView";
 import { ViewerAccess } from "./ViewerAccess";
 import { ViewerPlayback } from "./ViewerPlayback";
-import { Membership } from "./ManageViewers";
 import { PlexAccessNote, ViewerStatus, viewerStatus } from "./ViewerStatus";
 
 const TABS = [
@@ -218,13 +217,6 @@ export default function ViewerProfile() {
         </div>
       ) : view === "sign-in" ? (
         <div className="space-y-6">
-          {!v.isOwner ? (
-            <Membership
-              id={id}
-              active={viewerStatus(v) === "active"}
-              onChange={() => void viewer.reload()}
-            />
-          ) : null}
           <SignInMethods base={`/users/${id}`} token={getToken()} owner />
           {serverAccess ? <ConnectApps base={`/viewers/${id}`} token={getToken()} /> : null}
         </div>
