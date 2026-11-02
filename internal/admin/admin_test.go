@@ -230,6 +230,17 @@ func TestCSRFAllowsLiveTVFileUpload(t *testing.T) {
 	if code := post(guide, same, "application/octet-stream", false); code != http.StatusForbidden {
 		t.Fatalf("upload without csrf header: got %d want 403", code)
 	}
+	for _, path := range []string{"/ether/api/plugins/install", "/ether/api/plugins/install/preview"} {
+		if code := post(path, same, "application/octet-stream", true); code != http.StatusNotFound {
+			t.Fatalf("plugin upload csrf: got %d", code)
+		}
+		if code := post(path, "http://evil.example", "application/octet-stream", true); code != http.StatusForbidden {
+			t.Fatalf("cross-origin plugin upload: got %d", code)
+		}
+		if code := post(path, same, "application/octet-stream", false); code != http.StatusForbidden {
+			t.Fatalf("plugin upload without header: got %d", code)
+		}
+	}
 	refresh := "/ether/api/livetv/sources/abc/refresh"
 	if code := post(refresh, same, "application/octet-stream", true); code != http.StatusForbidden {
 		t.Fatalf("octet-stream refresh: got %d want 403", code)

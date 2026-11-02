@@ -227,3 +227,65 @@ func (p *Plugin) CondMatch(ctx context.Context, cand Candidate, operator string,
 	p.memo.put(key, v)
 	return got, out, nil
 }
+
+// CondBatch checks a batch without memoization, suitable for conformance
+// testing. It applies the same per-candidate and batch limits as ranking.
+func (p *Plugin) CondBatch(ctx context.Context, cands []Candidate, operator string, value json.RawMessage) ([]bool, Outcome, error) {
+	out := Outcome{Status: StatusOK}
+	results := make([]bool, len(cands))
+	if !p.caps.CondMatch {
+		return results, out, &Error{Status: StatusError, Message: "plugin does not export cond_match"}
+	}
+	if len(value) == 0 {
+		value = json.RawMessage("null")
+	}
+	start := time.Now()
+	batchCtx, cancel := context.WithTimeout(ctx, p.lim.RankBatch)
+	defer cancel()
+	cs := p.hotCallState(batchCtx, start)
+	in, err := p.hot.get(batchCtx)
+	if err != nil {
+		out.SlowCandidates = len(cands)
+		return results, out, err
+	}
+	healthy := true
+	if br, ok := in.(interface {
+		condBatch(context.Context, *callState, [][]byte, string, []byte, time.Duration) ([]*bool, *Error)
+	}); ok {
+		facts := make([][]byte, len(cands))
+		for i := range cands {
+			facts[i] = cands[i].Facts
+		}
+		got, callErr := br.condBatch(batchCtx, cs, facts, operator, value, p.lim.RankPerCandidate)
+		if callErr != nil {
+			healthy = !callErr.Trap && callErr.Status != StatusTimeout
+			out.Status = callErr.Status
+			out.SlowCandidates = len(cands)
+			err = callErr
+		} else {
+			for i, v := range got {
+				if v == nil {
+					out.SlowCandidates++
+				} else {
+					results[i] = *v
+				}
+			}
+		}
+	} else {
+		for i, c := range cands {
+			callCtx, cancel := context.WithTimeout(batchCtx, p.lim.RankPerCandidate)
+			v, callErr := in.condOne(callCtx, cs, c.Facts, operator, value)
+			cancel()
+			if callErr != nil {
+				out.SlowCandidates += len(cands) - i
+				healthy = !callErr.Trap && callErr.Status != StatusTimeout
+				err = callErr
+				break
+			}
+			results[i] = v
+		}
+	}
+	p.hot.put(in, healthy)
+	out.Units = cs.finishUnits()
+	return results, out, err
+}

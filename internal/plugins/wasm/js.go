@@ -118,6 +118,14 @@ globalThis.ether = (() => {
     }
     return JSON.stringify(out);
   };
+  globalThis.__ether_cond_batch = (candsJson, op, valueJson, perMs) => {
+    state = 0x2545F491;
+    const cands = JSON.parse(candsJson), value = JSON.parse(valueJson);
+    return JSON.stringify(cands.map(c => {
+      const t0 = now(), result = cond_match(JSON.parse(c), op, value);
+      return now() - t0 > perMs ? null : !!result;
+    }));
+  };
   return {
     log: (...a) => { try { __ether_host("log", JSON.stringify(a.map(String))); } catch (e) {} },
     abort: (msg) => { throw new Error("__ETHER_FAULT__" + JSON.stringify({ code: "aborted", message: String(msg == null ? "aborted" : msg) })); },
@@ -340,6 +348,25 @@ func (in *jsInstance) rankBatch(ctx context.Context, cs *callState, cands [][]by
 	}
 	if len(out) != len(cands) {
 		return nil, &Error{Status: StatusError, Message: "rank batch returned the wrong number of scores"}
+	}
+	return out, nil
+}
+
+func (in *jsInstance) condBatch(ctx context.Context, cs *callState, cands [][]byte, op string, val []byte, per time.Duration) ([]*bool, *Error) {
+	strs := make([]string, len(cands))
+	for i, c := range cands {
+		strs[i] = string(c)
+	}
+	encoded, _ := json.Marshal(strs)
+	v, err := in.jsCall(ctx, cs, func() (*qjs.Value, error) {
+		return in.qc.Invoke(in.globalFn("__ether_cond_batch"), in.qc.Global(), in.qc.NewString(string(encoded)), in.qc.NewString(op), in.qc.NewString(string(val)), in.qc.NewFloat64(float64(per)/float64(time.Millisecond)))
+	})
+	if err != nil {
+		return nil, err
+	}
+	var out []*bool
+	if err := json.Unmarshal([]byte(v.String()), &out); err != nil || len(out) != len(cands) {
+		return nil, &Error{Status: StatusError, Message: "invalid condition batch result"}
 	}
 	return out, nil
 }

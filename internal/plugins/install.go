@@ -199,6 +199,9 @@ func (m *Manager) fetchSiblings(ctx context.Context, manURL string, manRaw []byt
 	}
 	base := strings.TrimSuffix(manURL, "manifest.json")
 	var paths []string
+	if icon := man.Ether.Icon; icon != "" && !strings.HasPrefix(icon, "http://") && !strings.HasPrefix(icon, "https://") {
+		paths = append(paths, icon)
+	}
 	if man.Ether.Runtime.Entry != "" {
 		paths = append(paths, man.Ether.Runtime.Entry)
 	}
@@ -425,6 +428,11 @@ func (m *Manager) PreviewInstall(ctx context.Context, src Source) (*Preview, err
 	p.PermissionLines, p.NeedsViewers, p.NeedsFolders = PermissionSheet(man)
 	if err := p.resolve(); err != nil {
 		return nil, err
+	}
+	if m.deps.CheckPackage != nil {
+		if err := m.deps.CheckPackage(ctx, raw, files); err != nil {
+			return nil, err
+		}
 	}
 	if cur, err := m.store.record(ctx, man.ID); err == nil {
 		p.AlreadyInstalled = true

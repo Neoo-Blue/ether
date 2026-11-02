@@ -5,6 +5,7 @@
 //	ether --spike movie.mp4 ...   run the spike: serve local files as a library
 //	ether service install|uninstall|start|stop|restart|status [--data-dir DIR]
 //	ether cluster init|token|join ...  (see cluster.go)
+//	ether plugin new|check|test|pack|dev|publish ...  (see plugin.go)
 //	ether version
 package main
 
@@ -49,6 +50,9 @@ func main() {
 	_ = fs.Parse(os.Args[1:])
 	if fs.Arg(0) == "cluster" {
 		os.Exit(runCluster(fs.Args()[1:], *dataDir, os.Stdout, os.Stderr))
+	}
+	if fs.Arg(0) == "plugin" {
+		os.Exit(runPlugin(fs.Args()[1:], os.Stdout, os.Stderr))
 	}
 	if fs.Arg(0) == "service" {
 		// `ether [flags] service <cmd> [flags]`: flags may follow the

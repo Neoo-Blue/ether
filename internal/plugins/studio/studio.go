@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/braedonsaunders/ether/internal/plugins"
+	"github.com/braedonsaunders/ether/internal/plugins/kit"
 	"github.com/braedonsaunders/ether/internal/plugins/wasm"
 	"github.com/braedonsaunders/ether/internal/viewspec"
 )
@@ -539,189 +540,24 @@ func (s *Studio) CheckProject(ctx context.Context, id string) (CheckReport, erro
 
 // CheckFiles runs the conformance and copy checks on a file set.
 func (s *Studio) CheckFiles(ctx context.Context, projectID string, files map[string]string) CheckReport {
-	comp := s.CompileFiles(files, "")
-	checks := []CheckItem{}
-
-	manRaw := files["manifest.json"]
-	man, manErr := plugins.ParseManifest([]byte(manRaw))
-	valErr := error(nil)
-	if manErr == nil {
-		valErr = man.Validate()
+	_ = projectID
+	data := make(map[string][]byte, len(files))
+	for name, contents := range files {
+		data[name] = []byte(contents)
 	}
-	if manErr != nil || valErr != nil {
-		msg := "Manifest has validation errors."
-		if manErr != nil {
-			msg = manErr.Error()
-		} else if valErr != nil {
-			msg = valErr.Error()
-		}
-		checks = append(checks, CheckItem{
-			ID:       "manifest",
-			Category: "manifest",
-			Label:    "Manifest and capability rules",
-			Status:   "fail",
-			Message:  msg,
-			Fix:      "Fix the highlighted fields in manifest.json.",
-		})
-	} else {
-		checks = append(checks, CheckItem{
-			ID:       "manifest",
-			Category: "manifest",
-			Label:    "Manifest and capability rules",
-			Status:   "pass",
-			Message:  fmt.Sprintf("Valid %s manifest (%s v%s).", man.Ether.Kind, man.ID, man.Version),
-		})
+	pkg := &kit.Package{ManifestRaw: data["manifest.json"], Files: data}
+	rep := kit.Check(ctx, pkg)
+	checks := make([]CheckItem, 0, len(rep.Errors)+len(rep.Warnings)+1)
+	for _, issue := range rep.Errors {
+		checks = append(checks, CheckItem{ID: issue.Rule, Category: issue.Rule, Label: issue.Field, Status: "fail", Message: issue.Message})
 	}
-
-	// Copy lint check.
-	copyWarnings := 0
-	var firstCopyMsg string
-	for _, d := range comp.Diagnostics {
-		if strings.Contains(d.Text, "sentence case") ||
-			strings.Contains(d.Text, "dashes") ||
-			strings.Contains(d.Text, "exclamation") ||
-			strings.Contains(d.Text, "simply") {
-			copyWarnings++
-			if firstCopyMsg == "" {
-				firstCopyMsg = d.Text
-			}
-		}
+	for _, issue := range rep.Warnings {
+		checks = append(checks, CheckItem{ID: issue.Rule, Category: issue.Rule, Label: issue.Field, Status: "warn", Message: issue.Message})
 	}
-	if copyWarnings > 0 {
-		checks = append(checks, CheckItem{
-			ID:       "copy",
-			Category: "copy",
-			Label:    "Copy and translation rules",
-			Status:   "fail",
-			Message:  firstCopyMsg,
-			Fix:      "Use plain sentence case without em dashes, exclamation marks, or marketing words.",
-		})
-	} else {
-		checks = append(checks, CheckItem{
-			ID:       "copy",
-			Category: "copy",
-			Label:    "Copy and translation rules",
-			Status:   "pass",
-			Message:  "All labels, summaries and English strings follow Ether copy rules.",
-		})
+	if rep.OK {
+		checks = append(checks, CheckItem{ID: "conformance", Category: "conformance", Label: "Conformance", Status: "pass", Message: "Plugin passed conformance checks."})
 	}
-
-	// Compile check.
-	if len(comp.compiledJS) > 0 {
-		checks = append(checks, CheckItem{
-			ID:       "compile",
-			Category: "compile",
-			Label:    "TypeScript bundle compilation",
-			Status:   "pass",
-			Message:  fmt.Sprintf("Compiled %d bytes of JavaScript with source map.", comp.JSSize),
-		})
-	} else if man.Ether != nil && man.Ether.Runtime.Kind == "hosted" {
-		checks = append(checks, CheckItem{
-			ID:       "compile",
-			Category: "compile",
-			Label:    "TypeScript bundle compilation",
-			Status:   "fail",
-			Message:  "TypeScript entry failed to compile.",
-			Fix:      "Resolve syntax or import errors in your entry file.",
-		})
-	}
-
-	// Runtime & route probe check.
-	if comp.OK && len(comp.compiledJS) > 0 {
-		host := &devHost{s: s, projectID: projectID}
-		plug, lerr := s.eng.LoadJS(man.ID, man.Version, string(comp.compiledJS), host, wasm.Limits{})
-		if lerr != nil {
-			checks = append(checks, CheckItem{
-				ID:       "runtime",
-				Category: "runtime",
-				Label:    "Sandboxed WASM runtime probe",
-				Status:   "fail",
-				Message:  lerr.Error(),
-				Fix:      "Export handle(req) or rank_key(candidate, config) from your entry file.",
-			})
-		} else {
-			defer plug.Close()
-			if man.HasCapability(plugins.CapRankingStep) && !plug.HasRankKey() {
-				checks = append(checks, CheckItem{
-					ID:       "runtime",
-					Category: "runtime",
-					Label:    "Hot-path ranking ABI",
-					Status:   "fail",
-					Message:  "Manifest declares ranking_step, but rank_key is not exported.",
-					Fix:      "Export function rank_key(candidate, config): number.",
-				})
-			} else {
-				checks = append(checks, CheckItem{
-					ID:       "runtime",
-					Category: "runtime",
-					Label:    "Sandboxed WASM runtime probe",
-					Status:   "pass",
-					Message:  "Loaded cleanly into QuickJS sandbox within memory and unit limits.",
-				})
-			}
-
-			// Probe ViewSpec pages if declared.
-			if man.Ether != nil && len(man.Ether.Contributes.Pages) > 0 && plug.HasHandle() {
-				pg := man.Ether.Contributes.Pages[0]
-				resp, _, cerr := plug.CallDetailed(ctx, wasm.Request{Method: "GET", Path: pg.Route})
-				if cerr != nil || resp.Status >= 400 {
-					checks = append(checks, CheckItem{
-						ID:       "viewspec",
-						Category: "viewspec",
-						Label:    "ViewSpec page validation",
-						Status:   "fail",
-						Message:  fmt.Sprintf("Page route %s did not return a valid document.", pg.Route),
-						Fix:      "Return { status: 200, body: { spec: {...}, data: {...} } } from " + pg.Route + ".",
-					})
-				} else {
-					body := unwrapBody(resp.Body)
-					var doc struct {
-						Spec json.RawMessage `json:"spec"`
-					}
-					if json.Unmarshal(body, &doc) != nil || len(doc.Spec) == 0 {
-						checks = append(checks, CheckItem{
-							ID:       "viewspec",
-							Category: "viewspec",
-							Label:    "ViewSpec page validation",
-							Status:   "fail",
-							Message:  "Page response is missing a spec object.",
-							Fix:      "Include a ViewSpec v1 spec object in the response body.",
-						})
-					} else if vres := viewspec.ValidatePlugin(doc.Spec); !vres.OK && len(vres.Errors) > 0 {
-						checks = append(checks, CheckItem{
-							ID:       "viewspec",
-							Category: "viewspec",
-							Label:    "ViewSpec page validation",
-							Status:   "fail",
-							Message:  vres.Errors[0],
-							Fix:      "Remove disallowed className fields and use only closed ViewSpec blocks and Ether widgets.",
-						})
-					} else {
-						checks = append(checks, CheckItem{
-							ID:       "viewspec",
-							Category: "viewspec",
-							Label:    "ViewSpec page validation",
-							Status:   "pass",
-							Message:  fmt.Sprintf("Route %s returned a valid ViewSpec v1 document.", pg.Route),
-						})
-					}
-				}
-			}
-		}
-	}
-
-	allOK := comp.OK
-	for _, c := range checks {
-		if c.Status == "fail" {
-			allOK = false
-			break
-		}
-	}
-	return CheckReport{
-		OK:          allOK,
-		Checks:      checks,
-		Diagnostics: comp.Diagnostics,
-	}
+	return CheckReport{OK: rep.OK, Checks: checks, Diagnostics: []wasm.Diagnostic{}}
 }
 
 // RunProject executes a request or hot-path call against a project's sandboxed dev instance.
