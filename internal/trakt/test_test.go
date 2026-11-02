@@ -32,7 +32,9 @@ func TestCredentialsCheck(t *testing.T) {
 	if err := test(ctx, srv.Client(), srv.URL, config.Trakt{ClientSecret: "s"}); err == nil {
 		t.Fatal("missing client ID accepted")
 	}
-	if err := test(ctx, srv.Client(), srv.URL, config.Trakt{ClientID: "good"}); err == nil {
-		t.Fatal("missing client secret accepted")
+	// Trakt stopped issuing client secrets to new apps on 2026-10-01: a
+	// client ID alone is valid.
+	if err := test(ctx, srv.Client(), srv.URL, config.Trakt{ClientID: "good"}); err != nil {
+		t.Fatalf("client ID without secret: %v", err)
 	}
 }
