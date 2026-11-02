@@ -60,11 +60,12 @@ func (r Result) PreferRule(id string) int {
 // is not part of the profile selection hash or the search cache key.
 type Context struct {
 	OriginalLanguage string
+	ExternalMatch    func(core.Release, core.ReleaseCondition) (bool, bool)
 }
 type condition struct {
 	core.ReleaseCondition
 	re *regexp.Regexp
-	// external conditions (plugin fields) evaluate Unknown until WS9h.
+	// External fields evaluate through the caller-supplied hot-path hook.
 	external bool
 }
 type rule struct {
@@ -423,9 +424,17 @@ func group(cs []condition, mode string, r core.Release, ctx Context) State {
 }
 func (c condition) evaluate(r core.Release, ctx Context) State {
 	if c.external {
-		// Plugin conditions run on the plugin hot path (WS9h); until then
-		// they are undecided, never a guessed match.
-		return Unknown
+		if ctx.ExternalMatch == nil {
+			return Unknown
+		}
+		matched, available := ctx.ExternalMatch(r, c.ReleaseCondition)
+		if !available {
+			return Unknown
+		}
+		if matched {
+			return Match
+		}
+		return Miss
 	}
 	if c.Field == "audio_matches_original" {
 		return c.originalAudioState(r, ctx)

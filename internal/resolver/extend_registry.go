@@ -18,6 +18,7 @@ import (
 type extendState struct {
 	mu       sync.Mutex
 	registry *extend.Registry
+	hot      RankingHooks
 	version  uint64
 	fields   map[string]releasepolicy.FieldSpec
 }

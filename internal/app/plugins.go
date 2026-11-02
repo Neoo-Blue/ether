@@ -12,6 +12,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/extend"
 	"github.com/braedonsaunders/ether/internal/playback"
 	"github.com/braedonsaunders/ether/internal/plugins"
+	"github.com/braedonsaunders/ether/internal/plugins/adapters"
 	"github.com/braedonsaunders/ether/internal/plugins/studio"
 	"github.com/braedonsaunders/ether/internal/plugins/wasm"
 	"github.com/braedonsaunders/ether/internal/state"
@@ -74,6 +75,9 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 		return nil, err
 	}
 	a.bindStreamSources(mgr)
+	if a.resolver != nil {
+		a.resolver.SetRankingHooks(adapters.Ranking{Manager: mgr})
+	}
 	unsubscribe := mgr.SubscribeInvalidations()
 
 	studioSvc := studio.New(studio.Deps{

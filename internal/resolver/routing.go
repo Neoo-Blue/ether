@@ -185,7 +185,7 @@ func (s *Service) routeSources(cands []candidate, t *core.Title, trace *Trace) [
 	var group []candidate
 	var indexes []int
 	for i, c := range cands {
-		eligible := c.bandwidth >= lead.bandwidth && (!c.verified || explicit) && sameQuality(c, lead) && c.rel.Score >= lead.rel.Score-margin
+		eligible := pluginKeysEqual(c, lead) && c.bandwidth >= lead.bandwidth && (!c.verified || explicit) && sameQuality(c, lead) && c.rel.Score >= lead.rel.Score-margin
 		if !eligible {
 			if !explicit {
 				break

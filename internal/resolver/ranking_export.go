@@ -10,6 +10,7 @@ import (
 // RankingCandidate holds the evidence already computed for a candidate. Keys
 // are indexed by the complete plugin step ID and higher keys rank first.
 type RankingCandidate struct {
+	Index                                         int
 	Release                                       core.Release
 	Policy                                        releasepolicy.Result
 	Verified, LanguageOK, LanguageWanted, Starved bool
