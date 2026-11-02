@@ -427,7 +427,7 @@ func (p *payloadStore) releaseOwnedLater(ctx context.Context, o payloadOwner, de
 		return p.releaseOwned(ctx, o, forSource, onGone)
 	}
 	if err := p.releaseOwned(ctx, o, forSource, onGone); err != nil {
-		_ = p.release(context.Background(), hold)
+		p.releaseOrQueue(hold)
 		return err
 	}
 	park := &payloadPark{owner: hold}
@@ -446,10 +446,19 @@ func (p *payloadStore) releaseOwnedLater(ctx context.Context, o payloadOwner, de
 		}
 		delete(p.parks, hold.state.id)
 		p.mu.Unlock()
-		_ = p.release(context.Background(), hold)
+		p.releaseOrQueue(hold)
 	})
 	p.mu.Unlock()
 	return nil
+}
+
+// releaseOrQueue drops a grace hold. A failed release (a database timeout
+// under load) goes to the retry queue: dropped, it would leave the payload
+// retiring and refuse every later open of that release until restart (#262).
+func (p *payloadStore) releaseOrQueue(hold payloadOwner) {
+	if err := p.release(context.Background(), hold); err != nil {
+		p.queueRelease(hold)
+	}
 }
 func dropPayloadOwner(ctx context.Context, db *sql.DB, tx *sql.Tx, o payloadOwner) (string, error) {
 	if err := capability.LockHeaderScopeInTx(ctx, db, tx, o.header.HeaderScope); err != nil {
