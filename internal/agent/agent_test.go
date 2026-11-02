@@ -615,3 +615,33 @@ func TestApprovalCannotBeRejectedWhileBeingApplied(t *testing.T) {
 		t.Fatal("rejected an approval already being applied")
 	}
 }
+
+func TestSecretRequestCannotBeSubmittedTwiceConcurrently(t *testing.T) {
+	fx := newFixture(t, &fakeModel{}, Options{})
+	req, err := fx.store.CreateSecret(context.Background(), SecretReq{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	entered, release := make(chan struct{}), make(chan struct{})
+	fx.svc.secrets[req.ID] = func(context.Context, string) error {
+		select {
+		case <-entered:
+			return nil
+		default:
+			close(entered)
+			<-release
+			return nil
+		}
+	}
+	done := make(chan error, 1)
+	go func() { done <- fx.svc.SubmitSecret(context.Background(), req.ID, "first") }()
+	<-entered
+	err = fx.svc.SubmitSecret(context.Background(), req.ID, "second")
+	close(release)
+	if firstErr := <-done; firstErr != nil {
+		t.Fatal(firstErr)
+	}
+	if err == nil {
+		t.Fatal("accepted concurrent secret submission")
+	}
+}

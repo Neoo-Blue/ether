@@ -288,6 +288,15 @@ func (s *Store) UpdateApproval(ctx context.Context, a Approval) error {
 	return err
 }
 
+func (s *Store) claimSecret(ctx context.Context, id string) (bool, error) {
+	result, err := s.db.ExecContext(ctx, `UPDATE agent_secret_requests SET status='storing' WHERE id=? AND status='pending'`, id)
+	if err != nil {
+		return false, err
+	}
+	n, err := result.RowsAffected()
+	return n == 1, err
+}
+
 func (s *Store) CreateSecret(ctx context.Context, r SecretReq) (SecretReq, error) {
 	r.ID = newID("sec_")
 	r.Status = "pending"

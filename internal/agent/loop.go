@@ -424,14 +424,26 @@ func (s *Service) SubmitSecret(ctx context.Context, id, value string) error {
 		s.patchPart(ctx, req.ThreadID, req.MessageID, "secret-request", "requestId", id, map[string]any{"status": "expired"})
 		return fmt.Errorf("secret request has expired")
 	}
+	claimed, err := s.store.claimSecret(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !claimed {
+		return fmt.Errorf("secret request is already being stored")
+	}
 	if err := storeFn(ctx, value); err != nil {
+		finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		_ = s.store.UpdateSecretStatus(finishCtx, id, "pending")
+		cancel()
 		s.log.Warn("agent secret store failed", "request", id, "err", tools.SafeMessage(err))
 		return fmt.Errorf("could not store the secret")
 	}
 	s.mu.Lock()
 	delete(s.secrets, id)
 	s.mu.Unlock()
-	if err := s.store.UpdateSecretStatus(ctx, id, "stored"); err != nil {
+	finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := s.store.UpdateSecretStatus(finishCtx, id, "stored"); err != nil {
 		return err
 	}
 	s.patchPart(ctx, req.ThreadID, req.MessageID, "secret-request", "requestId", id, map[string]any{"status": "stored"})
