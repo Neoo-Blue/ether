@@ -26,6 +26,8 @@ import (
 
 type noopHost struct{}
 
+func (noopHost) Settings(context.Context) (map[string]any, error) { return map[string]any{}, nil }
+
 func (noopHost) KVGet(context.Context, string) ([]byte, bool, error) { return nil, false, nil }
 func (noopHost) KVPut(context.Context, string, []byte) error         { return nil }
 func (noopHost) KVDelete(context.Context, string) error              { return nil }

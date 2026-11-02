@@ -286,7 +286,7 @@ func (s *Service) rawMarkers(ctx context.Context, key core.RatingKey, info core.
 	}
 	remote, refDuration, err := s.fetch(ctx, key, info.Duration, apiKey)
 	if err != nil {
-		return out, err
+		return s.mergeSources(ctx, key, info.Duration, out, nil), err
 	}
 	remote = s.shiftToPlayed(ctx, key, remote, refDuration, info.Duration)
 	if s.o.DB != nil {

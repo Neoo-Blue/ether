@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 )
@@ -64,5 +67,43 @@ func TestSubtitlePickManagerCall(t *testing.T) {
 	}
 	if _, _, err = e.m.CallStream(ctx, rec.ID, req); !errors.Is(err, ErrPermissionDenied) {
 		t.Fatalf("stream bypass: %v", err)
+	}
+}
+
+func TestDirectSubtitlePickAndDeclaredHosts(t *testing.T) {
+	ctx := context.Background()
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls++; _, _ = w.Write([]byte("subtitle")) }))
+	defer server.Close()
+	u, _ := url.Parse(server.URL)
+	e := newTestEnv(t)
+	e.m.client = server.Client()
+	var man map[string]any
+	_ = json.Unmarshal(helloManifest("1.0.0"), &man)
+	eth := man["ether"].(map[string]any)
+	eth["permissions"].(map[string]any)["network"] = []string{u.Hostname()}
+	raw, _ := json.Marshal(man)
+	preview, err := e.m.PreviewInstall(ctx, Source{Kind: "studio", Manifest: raw, Files: helloFiles()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := e.m.Install(ctx, preview, InstallOptions{AcceptAddedPermissions: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = e.m.FetchPickedSubtitle(ctx, rec.ID, "title", "sub", "", server.URL); !errors.Is(err, ErrPermissionDenied) {
+		t.Fatalf("missing token: %v", err)
+	}
+	token, _ := e.m.MintSubtitlePick(rec.ID, "title", "sub")
+	data, err := e.m.FetchPickedSubtitle(ctx, rec.ID, "title", "sub", token, server.URL)
+	if err != nil || string(data) != "subtitle" || calls != 1 {
+		t.Fatalf("picked fetch %q %d %v", data, calls, err)
+	}
+	if _, err = e.m.FetchPickedSubtitle(ctx, rec.ID, "title", "sub", token, server.URL); !errors.Is(err, ErrPermissionDenied) {
+		t.Fatalf("reused token: %v", err)
+	}
+	token, _ = e.m.MintSubtitlePick(rec.ID, "title", "sub")
+	if _, err = e.m.FetchPickedSubtitle(ctx, rec.ID, "title", "sub", token, "https://unlisted.example/sub.srt"); !errors.Is(err, ErrPermissionDenied) {
+		t.Fatalf("unlisted host: %v", err)
 	}
 }
