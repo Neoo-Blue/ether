@@ -38,7 +38,7 @@ func DescriptorsFor(man Manifest) []extend.Descriptor {
 	}
 	for _, p := range c.Pages {
 		add(extend.KindPage, p.Key, textOf(id, p.Label), map[string]any{
-			"route": p.Route, "pluginRoute": "/api/plugins/" + id + "/view/" + p.Key, "group": p.Group, "icon": p.Icon})
+			"route": p.Route, "pluginRoute": "/api/plugins/" + id + "/views/" + p.Key, "group": p.Group, "icon": p.Icon})
 		add(extend.KindNavItem, "page-"+p.Key, textOf(id, p.Label), map[string]any{
 			"route": "/plugins/" + id + "/" + p.Key, "pageKey": p.Key})
 	}
