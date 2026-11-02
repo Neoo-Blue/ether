@@ -111,7 +111,7 @@ func Normalize(s *core.CollectionSpec) {
 	if s.MediaType == "" {
 		s.MediaType = MediaMovie
 	}
-	if s.MediaType == "tv" {
+	if s.MediaType == "tv" || s.MediaType == "series" {
 		s.MediaType = MediaShow
 	}
 	if len(s.Sources) == 0 {
@@ -120,9 +120,10 @@ func Normalize(s *core.CollectionSpec) {
 	for i := range s.Sources {
 		src := &s.Sources[i]
 		src.URL = strings.TrimSpace(src.URL)
+		src.List = strings.TrimSpace(src.List)
 		src.Label = strings.TrimSpace(src.Label)
 		src.Region = strings.ToUpper(strings.TrimSpace(src.Region))
-		if src.MediaType == "tv" {
+		if src.MediaType == "tv" || src.MediaType == "series" {
 			src.MediaType = MediaShow
 		}
 	}
@@ -238,6 +239,9 @@ func validateWith(reg *KindRegistry, s *core.CollectionSpec) error {
 	case RefreshLive, RefreshHourly, RefreshDaily, RefreshWeekly:
 	default:
 		ve.add("refresh", `must be "live", "hourly", "daily" or "weekly"`)
+	}
+	if s.Refresh == RefreshLive && hasStremioCatalog(*s) {
+		ve.add("refresh", "Stremio catalog sources refresh in the background (hourly, daily or weekly)")
 	}
 	if s.Rotate != nil {
 		if s.Rotate.Size > 500 {

@@ -211,6 +211,8 @@ func sourceName(src core.CollectionSource) string {
 		return "the AniList list"
 	case "stevenlu":
 		return "the StevenLu list"
+	case "stremioCatalog":
+		return "the Stremio catalog"
 	case "tmdbDiscover":
 		return "TMDB discover"
 	case "watchProvider":

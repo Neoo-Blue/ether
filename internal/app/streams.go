@@ -101,8 +101,12 @@ func (p plexSubtitles) SearchSubtitles(ctx context.Context, t *core.Title, _ *co
 		if title == "" {
 			title = strings.TrimSuffix(c.FileName, ".srt")
 		}
+		provider := c.Provider
+		if provider == "" {
+			provider = "OpenSubtitles"
+		}
 		out = append(out, plex.SubtitleOffer{
-			ID: c.FileID, Language: lang, Title: title, Provider: "OpenSubtitles",
+			ID: c.FileID, Language: lang, Title: title, Provider: provider,
 			Score: int(math.Round(c.Score)), HearingImpaired: c.HearingImp, Forced: c.Forced,
 			PerfectMatch: c.HashMatch || (release != "" && strings.EqualFold(c.Release, release)),
 		})

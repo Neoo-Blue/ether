@@ -153,9 +153,13 @@ func (s subtitleSurface) Search(ctx context.Context, viewer *core.Viewer, device
 		if lang == "" {
 			lang = language
 		}
+		provider := candidate.Provider
+		if provider == "" {
+			provider = "OpenSubtitles"
+		}
 		out = append(out, frontend.SubtitleOffer{
 			ID: strconv.FormatInt(candidate.FileID, 10), Language: lang, Name: name,
-			Provider: "OpenSubtitles", Format: "srt", Author: candidate.Uploader, Downloads: candidate.DownloadCount,
+			Provider: provider, Format: "srt", Author: candidate.Uploader, Downloads: candidate.DownloadCount,
 			Rating: candidate.Ratings, HearingImpaired: candidate.HearingImp, Forced: candidate.Forced,
 			HashMatch: candidate.HashMatch, AITranslated: candidate.AITranslated,
 		})

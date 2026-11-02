@@ -151,6 +151,7 @@ func (a *App) buildPersonalization(ctx context.Context, cfg config.Config) error
 	a.closers = append(a.closers, a.personalize.Close)
 	a.subtitles = subtitles.New(subtitles.Options{
 		Config:    cfg.OpenSubtitles,
+		Providers: cfg.Subtitles.Providers,
 		CacheDir:  filepath.Join(dataDir, "subtitles"),
 		Logger:    log.With("component", "subtitles"),
 		UserAgent: "Ether v" + a.opts.Version,

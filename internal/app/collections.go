@@ -29,6 +29,7 @@ func (a *App) collectionOptions(cfg config.Config) []collections.Option {
 		collections.WithArtwork(renderer, a.images),
 		collections.WithCatalogConfig(func() config.Catalog { return a.cfg.Read().Catalog }),
 		collections.WithTraktConfig(func() config.Trakt { return a.cfg.Read().Trakt }),
+		collections.WithSealer(a.cfg),
 		collections.WithLLM(chat),
 		collections.WithUserAgent("Ether/" + a.opts.Version + " (+https://github.com/braedonsaunders/ether)"),
 	}, parityCollectionOptions()...)

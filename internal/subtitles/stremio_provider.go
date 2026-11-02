@@ -26,19 +26,66 @@ import (
 	"github.com/braedonsaunders/ether/internal/stremio"
 )
 
+type videoHashEntry struct {
+	release   string
+	movieHash string
+	videoSize int64
+}
+
+// RememberVideoHash records an already-computed moviehash and byte size
+// (for example from local file enrichment) so a later viewer-driven
+// subtitle search can pass videoHash and videoSize without fetching the
+// release on the search path.
+func (s *Service) RememberVideoHash(key core.RatingKey, releaseName, movieHash string, videoSize int64) {
+	if key == 0 || len(movieHash) != 16 {
+		return
+	}
+	s.mu.Lock()
+	if s.videoHashes == nil {
+		s.videoHashes = map[core.RatingKey]videoHashEntry{}
+	}
+	s.videoHashes[key] = videoHashEntry{
+		release:   releaseName,
+		movieHash: strings.ToLower(movieHash),
+		videoSize: videoSize,
+	}
+	s.mu.Unlock()
+}
+
+func (s *Service) lookupVideoHash(title *core.Title, releaseName string) (string, int64) {
+	if title == nil || title.Key == 0 {
+		return "", 0
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e, ok := s.videoHashes[title.Key]
+	if !ok {
+		return "", 0
+	}
+	if releaseName != "" && e.release != "" && !strings.EqualFold(releaseName, e.release) {
+		return "", 0
+	}
+	return e.movieHash, e.videoSize
+}
+
 // providerList is the effective provider order: the owner's configured
-// order, or OpenSubtitles alone when none is configured.
+// order, with OpenSubtitles included when enabled and not explicitly
+// listed in s.providers.
 func (s *Service) providerList() []config.SubtitleProvider {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var out []config.SubtitleProvider
+	hasOpenSubtitles := false
 	for _, p := range s.providers {
+		if p.Kind == config.SubtitleProviderOpenSubtitles {
+			hasOpenSubtitles = true
+		}
 		if p.Enabled {
 			out = append(out, p)
 		}
 	}
-	if len(out) == 0 && len(s.providers) == 0 && s.cfg.Enabled {
-		return []config.SubtitleProvider{{ID: "opensubtitles", Kind: config.SubtitleProviderOpenSubtitles, Enabled: true}}
+	if !hasOpenSubtitles && s.cfg.Enabled && s.cfg.APIKey != "" {
+		out = append([]config.SubtitleProvider{{ID: "opensubtitles", Kind: config.SubtitleProviderOpenSubtitles, Enabled: true}}, out...)
 	}
 	return out
 }
@@ -51,7 +98,7 @@ func (s *Service) searchEnabled() bool {
 	for _, p := range s.providerList() {
 		switch p.Kind {
 		case config.SubtitleProviderOpenSubtitles:
-			if s.Enabled() {
+			if s.openSubtitlesEnabled() {
 				return true
 			}
 		case config.SubtitleProviderStremio:
@@ -136,18 +183,44 @@ func (s *Service) searchStremio(ctx context.Context, p config.SubtitleProvider, 
 		if langtag.MatchTier(lang, subLang) == 0 {
 			continue
 		}
-		file := path.Base(sub.URL)
+		file := sub.Filename
+		if file == "" {
+			file = sub.SubFileName
+		}
+		if file == "" {
+			file = path.Base(sub.URL)
+		}
+		rel := strings.TrimSuffix(file, path.Ext(file))
+		if sub.ID != "" && (rel == "" || rel == "subtitle" || rel == "sub") {
+			rel = sub.ID
+		}
+		hashMatch := sub.HashMatch || (movieHash != "" && strings.Contains(strings.ToLower(sub.ID+" "+sub.URL+" "+file), strings.ToLower(movieHash)))
 		out = append(out, Candidate{
 			FileID:      stremioFileID(p.ID, sub.ID, sub.URL),
 			FileName:    file,
 			Language:    subLang,
-			Release:     strings.TrimSuffix(file, path.Ext(file)),
+			Release:     rel,
+			HashMatch:   hashMatch,
 			Provider:    name,
 			ProviderID:  p.ID,
 			DownloadURL: sub.URL,
 		})
 	}
 	return out, nil
+}
+
+// downloadStremio fetches a picked Stremio subtitle file and runs it
+// through the same zip/size check as OpenSubtitles downloads.
+func (s *Service) downloadStremio(ctx context.Context, c Candidate) ([]byte, error) {
+	client, err := stremio.NewClient(c.DownloadURL, s.stremioHTTP)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := client.FetchBytes(ctx, c.DownloadURL, maxSubtitleBytes)
+	if err != nil {
+		return nil, err
+	}
+	return unzipSubtitleCandidate(raw, c)
 }
 
 // searchProviders runs every enabled provider in owner order and merges
@@ -158,13 +231,12 @@ func (s *Service) searchStremio(ctx context.Context, p config.SubtitleProvider, 
 func (s *Service) searchProviders(ctx context.Context, title *core.Title, lang, releaseName, movieHash string, videoSize int64) ([]Candidate, error) {
 	var all []Candidate
 	var firstErr error
-	ran := 0
 	for i, p := range s.providerList() {
 		var cands []Candidate
 		var err error
 		switch p.Kind {
 		case config.SubtitleProviderOpenSubtitles:
-			if !s.Enabled() {
+			if !s.openSubtitlesEnabled() {
 				continue
 			}
 			cands, err = s.SearchWithHash(ctx, title, lang, releaseName, movieHash)
@@ -182,7 +254,6 @@ func (s *Service) searchProviders(ctx context.Context, title *core.Title, lang, 
 		default:
 			continue
 		}
-		ran++
 		if err != nil {
 			if firstErr == nil {
 				firstErr = err
@@ -200,10 +271,23 @@ func (s *Service) searchProviders(ctx context.Context, title *core.Title, lang, 
 	}
 	Rank(all, releaseName)
 	sort.SliceStable(all, func(i, j int) bool {
+		if all[i].HashMatch != all[j].HashMatch {
+			return all[i].HashMatch
+		}
+		if lang != "" {
+			ti := langtag.MatchTier(lang, all[i].Language)
+			tj := langtag.MatchTier(lang, all[j].Language)
+			if ti != tj {
+				return ti > tj
+			}
+		}
 		if all[i].Score != all[j].Score {
 			return all[i].Score > all[j].Score
 		}
-		return all[i].providerOrder < all[j].providerOrder
+		if all[i].providerOrder != all[j].providerOrder {
+			return all[i].providerOrder < all[j].providerOrder
+		}
+		return all[i].FileID < all[j].FileID
 	})
 	return all, nil
 }

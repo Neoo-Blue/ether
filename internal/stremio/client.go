@@ -93,15 +93,15 @@ func extraSuffix(extra map[string]string) string {
 
 // MetaPreview is one catalog entry.
 type MetaPreview struct {
-	ID          string   `json:"id"`
-	Type        string   `json:"type"`
-	Name        string   `json:"name"`
-	Poster      string   `json:"poster,omitempty"`
-	Logo        string   `json:"logo,omitempty"`
-	Description string   `json:"description,omitempty"`
-	Genres      []string `json:"genres,omitempty"`
-	ReleaseInfo string   `json:"releaseInfo,omitempty"`
-	IMDBRating  string   `json:"imdbRating,omitempty"`
+	ID            string   `json:"id"`
+	Type          string   `json:"type"`
+	Name          string   `json:"name"`
+	Poster        string   `json:"poster,omitempty"`
+	Logo          string   `json:"logo,omitempty"`
+	Description   string   `json:"description,omitempty"`
+	Genres        []string `json:"genres,omitempty"`
+	ReleaseInfo   string   `json:"releaseInfo,omitempty"`
+	IMDBRating    string   `json:"imdbRating,omitempty"`
 	BehaviorHints struct {
 		DefaultVideoID     string `json:"defaultVideoId,omitempty"`
 		HasScheduledVideos bool   `json:"hasScheduledVideos,omitempty"`
@@ -180,7 +180,7 @@ type StreamItem struct {
 	Description   string `json:"description,omitempty"`
 	URL           string `json:"url,omitempty"`
 	BehaviorHints struct {
-		NotWebReady  bool `json:"notWebReady,omitempty"`
+		NotWebReady  bool   `json:"notWebReady,omitempty"`
 		BingeGroup   string `json:"bingeGroup,omitempty"`
 		ProxyHeaders struct {
 			Request map[string]string `json:"request,omitempty"`
@@ -203,11 +203,11 @@ func (c *Client) Streams(ctx context.Context, typ, id string) ([]StreamItem, err
 // Video is one entry of a meta's videos list. TV add-ons publish their
 // schedule as videos with Released timestamps.
 type Video struct {
-	ID       string    `json:"id"`
-	Title    string    `json:"title"`
-	Overview string    `json:"overview,omitempty"`
-	Released time.Time `json:"released,omitempty"`
-	Thumbnail string   `json:"thumbnail,omitempty"`
+	ID        string    `json:"id"`
+	Title     string    `json:"title"`
+	Overview  string    `json:"overview,omitempty"`
+	Released  time.Time `json:"released,omitempty"`
+	Thumbnail string    `json:"thumbnail,omitempty"`
 }
 
 // Meta is the part of a meta document Ether reads.
@@ -230,9 +230,12 @@ func (c *Client) Meta(ctx context.Context, typ, id string) (Meta, error) {
 
 // Subtitle is one subtitle an add-on offers.
 type Subtitle struct {
-	ID   string `json:"id,omitempty"`
-	URL  string `json:"url"`
-	Lang string `json:"lang"`
+	ID          string `json:"id,omitempty"`
+	URL         string `json:"url"`
+	Lang        string `json:"lang"`
+	Filename    string `json:"filename,omitempty"`
+	SubFileName string `json:"SubFileName,omitempty"`
+	HashMatch   bool   `json:"hashMatch,omitempty"`
 }
 
 // Subtitles reads subtitles/{type}/{id}[/extra].json. Listing only:

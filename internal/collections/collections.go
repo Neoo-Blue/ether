@@ -79,6 +79,7 @@ type Service struct {
 	catCfg      func() config.Catalog
 	kinds       *KindRegistry
 	traktCfg    func() config.Trakt
+	sealer      config.FieldSealer
 
 	liveTTL     time.Duration
 	tick        time.Duration
@@ -101,12 +102,13 @@ type Service struct {
 type scorerBox struct{ s core.PersonalScorer }
 
 type options struct {
-	tmdb       TMDB
-	httpClient *http.Client
-	userAgent  string
-	indexTTL   time.Duration
-	bases      *ExternalBases
-	noSeed     bool
+	tmdb        TMDB
+	httpClient  *http.Client
+	stremioHTTP *http.Client
+	userAgent   string
+	indexTTL    time.Duration
+	bases       *ExternalBases
+	noSeed      bool
 }
 
 // Option customises a Service.
@@ -379,6 +381,11 @@ func (s *Service) membersFor(ctx context.Context, row *specRow, wait bool) (*mem
 		}
 		return nil, errNotBuilt
 	}
+	if hasStremioCatalog(row.spec) {
+		// SPEC D11: Stremio catalog sources refresh in the background only and
+		// never block viewer request paths.
+		wait = false
+	}
 	if !wait {
 		go func() {
 			bctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -471,8 +478,10 @@ func (s *Service) buildNow(ctx context.Context, row *specRow) (*memberSet, error
 	}
 	resolved := row.rawSpec
 	if !row.builtin && resolvedChanged(row.spec, res.resolved) {
-		if js, err := specJSON(res.resolved); err == nil {
-			resolved = js
+		if sealed, err := s.sealSpec(res.resolved); err == nil {
+			if js, err := specJSON(sealed); err == nil {
+				resolved = js
+			}
 		}
 	}
 	at := s.now().UTC().Truncate(time.Second)
