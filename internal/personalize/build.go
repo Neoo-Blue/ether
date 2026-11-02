@@ -799,6 +799,9 @@ func (e *Engine) ownerRows(ctx context.Context, user *core.User, hc core.HubCont
 	e.mu.Unlock()
 	var out []*candRow
 	for _, cr := range rows {
+		if !collectionScheduleAllows(d, user.ID, section, hc, cr) {
+			continue
+		}
 		if c := e.ownerCandidate(cr, section, user); c != nil {
 			out = append(out, c)
 		}
@@ -859,6 +862,33 @@ func (e *Engine) fetchOwnerRows(key string, user *core.User, hc core.HubContext,
 		}
 	}
 	e.mu.Unlock()
+}
+
+// collectionScheduleAllows applies a collection row's schedule: the draft's
+// edited schedule in a designer preview, else the collection's own. A
+// viewer override for the row that sets its own When replaces it; the
+// layout pass applies that When.
+func collectionScheduleAllows(d core.HomeLayout, user int64, section core.MediaType, hc core.HubContext, cr core.CollectionRow) bool {
+	row := core.HomeRow{HubID: "collection." + cr.CollectionID, Kind: KindCollectionPrefix + cr.CollectionID}
+	if p, layer := effectiveHomePolicy(d, user, sectionName(section), row); layer == "override" && p != nil && p.When != nil && collectionRowID(p.Row) == cr.CollectionID {
+		return true
+	}
+	sc := cr.Schedule
+	if draft, ok := d.CollectionSchedules[cr.CollectionID]; ok {
+		sc = draft
+	}
+	return sc.Allows(hc.Device, hc.Now)
+}
+
+// collectionRowID returns the collection a layout row names exactly
+// ("collection:<id>" or "collection.<id>"); patterns and other rows give "".
+func collectionRowID(row string) string {
+	for _, p := range []string{KindCollectionPrefix, "collection."} {
+		if id, ok := strings.CutPrefix(row, p); ok && id != "" && !strings.ContainsAny(id, "*?[") {
+			return id
+		}
+	}
+	return ""
 }
 
 // ownerCandidate adapts an owner collection row for this screen.

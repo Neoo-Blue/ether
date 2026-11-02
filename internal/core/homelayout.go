@@ -8,6 +8,13 @@ type HomeLayout struct {
 	Global    []LayoutPage   `json:"global"`
 	Viewers   []ViewerLayout `json:"viewers"`
 	UpdatedAt time.Time      `json:"updatedAt,omitempty"`
+	// CollectionSchedules carries collection schedules (by collection id)
+	// for the Home designer: the owner API fills it on read and saves
+	// entries to their collections on write (null clears), and a draft
+	// preview applies it. It is never stored with the layout; the
+	// collection owns its schedule, so Everyone policies for a collection
+	// row carry no When.
+	CollectionSchedules map[string]*CollectionSchedule `json:"collectionSchedules,omitempty"`
 }
 type ViewerLayout struct {
 	UserID int64        `json:"userId"`

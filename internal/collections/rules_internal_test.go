@@ -201,33 +201,6 @@ func TestRotationIsDeterministicAndCoversEveryMember(t *testing.T) {
 	}
 }
 
-func TestScheduleAllows(t *testing.T) {
-	fri21 := time.Date(2026, 10, 16, 21, 30, 0, 0, time.UTC)
-	h := func(n int) *int { return &n }
-	cases := []struct {
-		sc     *core.CollectionSchedule
-		device string
-		at     time.Time
-		want   bool
-	}{
-		{nil, "tv", fri21, true},
-		{&core.CollectionSchedule{Days: []int{5}}, "", fri21, true},
-		{&core.CollectionSchedule{Days: []int{0, 6}}, "", fri21, false},
-		{&core.CollectionSchedule{FromHour: h(17), ToHour: h(22)}, "", fri21, true},
-		{&core.CollectionSchedule{FromHour: h(17), ToHour: h(21)}, "", fri21, false},
-		{&core.CollectionSchedule{FromHour: h(22), ToHour: h(2)}, "", fri21, false},
-		{&core.CollectionSchedule{FromHour: h(22), ToHour: h(2)}, "", fri21.Add(3 * time.Hour), true},
-		{&core.CollectionSchedule{FromHour: h(9), ToHour: h(9)}, "", fri21, true},
-		{&core.CollectionSchedule{Devices: []string{"tv"}}, "mobile", fri21, false},
-		{&core.CollectionSchedule{Devices: []string{"tv"}}, "", fri21, true},
-	}
-	for i, c := range cases {
-		if got := scheduleAllows(c.sc, c.device, c.at); got != c.want {
-			t.Errorf("case %d: got %v want %v", i, got, c.want)
-		}
-	}
-}
-
 func TestMergeDiscoverParams(t *testing.T) {
 	q := url.Values{"with_keywords": {"1"}, "vote_count.gte": {"100"}, "primary_release_date.lte": {"2000-12-31"}}
 	if !mergeParams(q, url.Values{"with_keywords": {"2"}, "vote_count.gte": {"50"}, "primary_release_date.lte": {"1999-01-01"}}) {

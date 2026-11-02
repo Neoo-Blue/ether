@@ -12,11 +12,12 @@ import (
 const rowItems = 24
 
 // HomeRowsFor returns owner collections promoted to Home or section rows
-// for a user in a context: enabled, targeted at the user, inside their
-// schedule (days, hours, devices), with the user's content-rating limit,
-// personal rules, personal order and rotation applied. Each row says
-// whether it belongs on Home, in section hubs, or both; Hub.Type tells the
-// caller which section ("" for mixed collections).
+// for a user in a context: enabled, targeted at the user, with the user's
+// content-rating limit, personal rules, personal order and rotation
+// applied. Each row says whether it belongs on Home, in section hubs, or
+// both, and carries the collection's schedule, which the caller applies
+// (a viewer's Home override may replace it); Hub.Type tells the caller
+// which section ("" for mixed collections).
 // homeIndexWait bounds how long a home waits for the catalogue index's
 // first build before it skips the live rows that need it.
 const homeIndexWait = 300 * time.Millisecond
@@ -30,10 +31,6 @@ func (s *Service) HomeRowsFor(ctx context.Context, user *core.User, hc core.HubC
 	if err != nil {
 		return nil, err
 	}
-	now := hc.Now
-	if now.IsZero() {
-		now = s.now()
-	}
 	var out []core.CollectionRow
 	var indexReady *bool
 	for _, row := range rows {
@@ -42,9 +39,6 @@ func (s *Service) HomeRowsFor(ctx context.Context, user *core.User, hc core.HubC
 		}
 		sp := row.spec
 		if !visible(row, user) || (!sp.Targets.HomeRow && !sp.Targets.SectionRow) {
-			continue
-		}
-		if !scheduleAllows(sp.Targets.Schedule, hc.Device, now) {
 			continue
 		}
 		// A live row is evaluated on request, but a home does not wait out
@@ -94,71 +88,16 @@ func (s *Service) HomeRowsFor(ctx context.Context, user *core.User, hc core.HubC
 			hub.Context = "hub.home.collection"
 		}
 		out = append(out, core.CollectionRow{Hub: hub, CollectionID: row.publicID(),
-			HomeRow: sp.Targets.HomeRow, SectionRow: sp.Targets.SectionRow})
+			HomeRow: sp.Targets.HomeRow, SectionRow: sp.Targets.SectionRow, Schedule: sp.Targets.Schedule})
 	}
 	return out, nil
-}
-
-// scheduleAllows applies a row schedule. Days are 0 (Sunday) to 6; hours
-// are local, FromHour inclusive, ToHour exclusive, wrapping past midnight.
-// An unknown device passes a device filter.
-func scheduleAllows(sc *core.CollectionSchedule, device string, now time.Time) bool {
-	if sc == nil {
-		return true
-	}
-	if len(sc.Days) > 0 {
-		ok := false
-		for _, d := range sc.Days {
-			if d == int(now.Weekday()) {
-				ok = true
-				break
-			}
-		}
-		if !ok {
-			return false
-		}
-	}
-	if sc.FromHour != nil || sc.ToHour != nil {
-		from, to := 0, 24
-		if sc.FromHour != nil {
-			from = *sc.FromHour
-		}
-		if sc.ToHour != nil {
-			to = *sc.ToHour
-		}
-		h := now.Hour()
-		switch {
-		case from == to:
-			// All day.
-		case from < to:
-			if h < from || h >= to {
-				return false
-			}
-		default: // wraps midnight, e.g. 22 → 2
-			if h < from && h >= to {
-				return false
-			}
-		}
-	}
-	if len(sc.Devices) > 0 && device != "" {
-		ok := false
-		for _, d := range sc.Devices {
-			if d == device {
-				ok = true
-				break
-			}
-		}
-		if !ok {
-			return false
-		}
-	}
-	return true
 }
 
 // LayoutRow serves a collection explicitly selected by the owner's Home
 // template or viewer override, even when its default publication targets do
 // not include Home. Private ownership and viewer content limits still apply.
-// The layout policy supplies the publication scope and schedule.
+// The layout policy supplies the publication scope; the row carries the
+// collection's schedule for the caller to apply.
 func (s *Service) LayoutRow(ctx context.Context, user *core.User, hc core.HubContext, id string) (*core.CollectionRow, error) {
 	row, err := s.rowByID(ctx, id)
 	if err != nil {
@@ -191,5 +130,5 @@ func (s *Service) LayoutRow(ctx context.Context, user *core.User, hc core.HubCon
 	case MediaShow:
 		hub.Type = core.TypeShow
 	}
-	return &core.CollectionRow{Hub: hub, CollectionID: row.publicID(), HomeRow: true, SectionRow: true}, nil
+	return &core.CollectionRow{Hub: hub, CollectionID: row.publicID(), HomeRow: true, SectionRow: true, Schedule: row.spec.Targets.Schedule}, nil
 }

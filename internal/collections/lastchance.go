@@ -30,7 +30,7 @@ func (s *Service) LastChance(ctx context.Context, user *core.User, key core.Rati
 			return time.Time{}, ctx.Err()
 		}
 		sp := row.spec
-		if !visible(row, user) || sp.Rotate == nil || sp.Rotate.Size <= 0 || (!sp.Targets.CollectionsTab && !sp.Targets.HomeRow && !sp.Targets.SectionRow) || !scheduleAllows(sp.Targets.Schedule, "", now) {
+		if !visible(row, user) || sp.Rotate == nil || sp.Rotate.Size <= 0 || (!sp.Targets.CollectionsTab && !sp.Targets.HomeRow && !sp.Targets.SectionRow) || !sp.Targets.Schedule.Allows("", now) {
 			continue
 		}
 		ms := s.cached(row.id)

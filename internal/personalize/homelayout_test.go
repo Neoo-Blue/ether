@@ -3,6 +3,7 @@ package personalize
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"testing"
 	"time"
@@ -173,6 +174,7 @@ func TestProductionFinalizerAndDraftPreviewShareSlots(t *testing.T) {
 type selectedCollectionSource struct {
 	fakeCollections
 	picks         []core.Title
+	schedule      *core.CollectionSchedule
 	selectedCalls int
 }
 
@@ -188,7 +190,82 @@ func (s *selectedCollectionSource) LayoutRow(ctx context.Context, u *core.User, 
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-	return &core.CollectionRow{CollectionID: id, HomeRow: true, SectionRow: true, Hub: core.Hub{ID: "collection." + id, Title: "Just for this viewer", Items: s.picks}}, nil
+	return &core.CollectionRow{CollectionID: id, HomeRow: true, SectionRow: true, Schedule: s.schedule, Hub: core.Hub{ID: "collection." + id, Title: "Just for this viewer", Items: s.picks}}, nil
+}
+
+// A collection row follows its collection's schedule, wherever the layout
+// places it; a designer draft previews an edited schedule, and only a
+// viewer override with its own When replaces it.
+func TestCollectionRowFollowsCollectionSchedule(t *testing.T) {
+	today := int(testNow.Weekday())
+	source := &selectedCollectionSource{schedule: &core.CollectionSchedule{Days: []int{(today + 1) % 7}}}
+	h := newHarness(t, func(o *Options) { o.Collections = source; o.OwnerRowsWait = time.Millisecond })
+	ctx := context.Background()
+	for i := 0; i < 6; i++ {
+		source.picks = append(source.picks, h.cat.titles[movieKey(8, i)])
+	}
+	u := core.User{ID: 1}
+	h.rebuild(u)
+	hc := hubContext(testNow, core.DeviceTV)
+	placed := core.RowPolicy{Row: "collection:select", Status: "always", Slot: 2}
+	base := core.HomeLayout{Global: []core.LayoutPage{{Section: "home", Rows: []core.RowPolicy{placed}}}}
+	shown := func(d core.HomeLayout) *core.HomeRow {
+		t.Helper()
+		p, err := h.e.PreviewLayout(ctx, &u, hc, "home", 12, d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rowByKind(p.Rows, "collection:select")
+	}
+	if r := shown(base); r != nil {
+		t.Fatalf("placed row ignored its collection's schedule: %+v", r)
+	}
+	draft := base
+	draft.CollectionSchedules = map[string]*core.CollectionSchedule{"select": {Days: []int{today}}}
+	if r := shown(draft); r == nil || r.Hidden {
+		t.Fatalf("draft schedule not previewed: %+v", r)
+	}
+	cleared := base
+	cleared.CollectionSchedules = map[string]*core.CollectionSchedule{"select": nil}
+	if r := shown(cleared); r == nil || r.Hidden {
+		t.Fatalf("cleared draft schedule not previewed: %+v", r)
+	}
+	override := base
+	override.Viewers = []core.ViewerLayout{{UserID: 1, Pages: []core.LayoutPage{{Section: "home", Rows: []core.RowPolicy{
+		{Row: "collection:select", Status: "always", Slot: 2, When: &core.LayoutWhen{Days: []int{today}}}}}}}}
+	if r := shown(override); r == nil || r.Hidden {
+		t.Fatalf("viewer override did not replace the schedule: %+v", r)
+	}
+	override.Viewers[0].Pages[0].Rows[0].When = &core.LayoutWhen{Days: []int{(today + 2) % 7}}
+	if r := shown(override); r != nil && !r.Hidden {
+		t.Fatalf("viewer override schedule not applied: %+v", r)
+	}
+}
+
+func TestEveryonePolicyCannotScheduleACollectionRow(t *testing.T) {
+	h := newHarness(t, nil)
+	ctx := context.Background()
+	when := &core.LayoutWhen{Days: []int{1}}
+	bad := core.HomeLayout{Global: []core.LayoutPage{{Section: "home", Rows: []core.RowPolicy{{Row: "collection:7", Status: "eligible", When: when}}}}}
+	var ve *ValidationError
+	if _, err := h.e.SetHomeLayout(ctx, bad); !errors.As(err, &ve) || ve.Problems[0].Field != "layout.global[0].rows[0].when" {
+		t.Fatalf("Everyone When on a collection row: %v", err)
+	}
+	ok := core.HomeLayout{
+		Global:              []core.LayoutPage{{Section: "home", Rows: []core.RowPolicy{{Row: "collection:*", Status: "eligible", When: when}}}},
+		Viewers:             []core.ViewerLayout{{UserID: 2, Pages: []core.LayoutPage{{Section: "home", Rows: []core.RowPolicy{{Row: "collection:7", Status: "eligible", When: when}}}}}},
+		CollectionSchedules: map[string]*core.CollectionSchedule{"7": {Days: []int{2}}},
+	}
+	saved, err := h.e.SetHomeLayout(ctx, ok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.CollectionSchedules != nil {
+		t.Fatalf("collection schedules stored with the layout: %+v", saved.CollectionSchedules)
+	}
+	if got, _ := h.e.HomeLayout(ctx); got.CollectionSchedules != nil {
+		t.Fatalf("collection schedules kept by the engine: %+v", got.CollectionSchedules)
+	}
 }
 func TestViewerAddsCollectionWithoutChangingPublicationTargets(t *testing.T) {
 	source := &selectedCollectionSource{}
