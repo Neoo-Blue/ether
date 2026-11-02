@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -123,3 +124,30 @@ func TestHandler(t *testing.T) {
 		t.Fatalf("bad kind status %d", rec.Code)
 	}
 }
+
+func TestHandlerResolvesPluginCopyInsideMeta(t *testing.T) {
+	r := New()
+	p := "dev.example"
+	d := Descriptor{Kind: KindCollectionSource, ID: PluginID(p, "list"), Owner: p, Label: PluginText(p, "list.label")}.WithMeta(map[string]any{
+		"params": []any{
+			map[string]any{"key": "user", "label": "$t:param.user", "options": []any{map[string]any{"value": "a", "label": PluginText(p, "opt.a")}}},
+		},
+	})
+	if err := r.ReplaceOwner(p, []Descriptor{d}); err != nil {
+		t.Fatal(err)
+	}
+	copyFR := map[string]string{"list.label": "Liste", "param.user": "Utilisateur", "opt.a": "Option A"}
+	h := Handler(r, func(plugin, key, locale string) (string, bool) {
+		s, ok := copyFR[key]
+		return s, ok && plugin == p && locale == "fr"
+	})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/?kinds=collectionSource&locale=fr", nil))
+	body := rec.Body.String()
+	for _, want := range []string{`"resolved":"Liste"`, `"label":"Utilisateur"`, `"resolved":"Option A"`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("response missing %s: %s", want, body)
+		}
+	}
+}
+
