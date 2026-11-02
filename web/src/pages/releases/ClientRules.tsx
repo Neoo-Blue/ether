@@ -1,3 +1,4 @@
+import { QualityHelp } from "./QualityHelp";
 import {
   Button,
   EmptyState,
@@ -157,9 +158,14 @@ export function ClientRulesTab() {
     <>
       <Section
         title={t("Rules")}
-        description={t(
-          "Checked from the top. The first rule that matches picks the quality profile; anything no rule matches uses the defaults.",
-        )}
+        description={
+          <QualityHelp
+            summary={t("The first matching rule picks the profile.")}
+            detail={t(
+              "When no rule matches, the At home or Away default applies. Device capabilities still apply before playback.",
+            )}
+          />
+        }
         actions={
           <Button
             size="sm"
@@ -202,9 +208,6 @@ export function ClientRulesTab() {
         )}
       </Section>
       <p className="text-sm text-fg-muted">
-        {t(
-          "Rules choose among your quality profiles. What each app can actually play is still checked before playback.",
-        )}{" "}
         <Link className="text-primary underline" to="/playback/devices">
           {t("View device capabilities")}
         </Link>

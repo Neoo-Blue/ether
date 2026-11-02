@@ -3,7 +3,7 @@ import { useState } from "react";
 import { ErrorPanel, LoadingRows } from "../../components/feedback";
 import { Segmented } from "../../components/fields";
 import { useViewers, viewerName } from "../../components/pickers";
-import { MonitorCheck, ShieldCheck } from "lucide-react";
+import { MonitorCheck, ShieldCheck, CheckCircle2, ChevronRight } from "lucide-react";
 import { t } from "../../i18n";
 import { searchSelectLabels } from "../../i18n/appkit-labels";
 import { api } from "../../lib/api";
@@ -31,62 +31,36 @@ export function answerHeadline(a: QualityAnswer): string {
   return parts.join(" · ");
 }
 
-function deviceHDR(l: QualityLayer): string {
-  if (l.hdr && l.dolbyVision) return t("It plays HDR and Dolby Vision.");
-  if (l.hdr) return t("It plays HDR but not Dolby Vision.");
-  return t("It doesn't play HDR.");
-}
-
-/** Plain, translated copy for one layer. `viewer` names the checked viewer. */
-export function layerText(l: QualityLayer, viewer: string): string {
-  const profile = l.profile ?? "";
-  const n = l.rule ?? 0;
+export function layerText(l: QualityLayer, _viewer: string): string {
   switch (l.kind) {
     case "profile":
-      switch (l.source) {
-        case "rule":
-          return l.beatsRemote
-            ? t("Rule {n} picks {profile}, ahead of the Away profile.", { n, profile })
-            : t("Rule {n} picks {profile}.", { n, profile });
-        case "remote":
-          return t("Away from home uses {profile}.", { profile });
-        case "default":
-          return t("No rule matches, so {profile} applies.", { profile });
-        case "first":
-          return t("No default profile is set, so {profile} applies.", { profile });
-        default:
-          return t("No profiles yet, so the built-in profile applies.");
-      }
+      return l.source === "rule"
+        ? t("Rule {n} · {profile}", { n: l.rule ?? 0, profile: l.profile ?? "" })
+        : l.source === "remote"
+          ? t("Default away")
+          : t("Default at home");
     case "device":
-      return `${
-        l.maxHeight
-          ? t("This app plays up to {height}.", { height: heightName(l.maxHeight) })
-          : t("This app plays any resolution.")
-      } ${deviceHDR(l)}`;
+      if (!l.decisive) return t("No limit");
+      return (
+        [
+          l.maxHeight ? t("Up to {height}", { height: heightName(l.maxHeight) }) : "",
+          l.hdr === false ? t("No HDR") : l.dolbyVision === false ? t("No Dolby Vision") : "",
+        ]
+          .filter(Boolean)
+          .join(" · ") || t("No limit")
+      );
+    case "remote-cap":
+    case "viewer-cap":
+      return l.bitrateKbps ? rateName(l.bitrateKbps) : t("No limit");
+    case "remote-blocked":
+      return t("Away playback disabled");
     case "rule-height":
       return l.ignored
-        ? t("Rule {n}'s maximum resolution is ignored because this app's resolution is fixed.", {
-            n,
-          })
-        : t("Rule {n} caps resolution at {height}.", { n, height: heightName(l.maxHeight) });
+        ? t("Device resolution is fixed")
+        : t("Rule {n} · up to {height}", { n: l.rule ?? 0, height: heightName(l.maxHeight) });
     case "android-lift":
-      return t("Rule {n} lifts Android's usual 1080p limit to {height}.", {
-        n,
-        height: heightName(l.maxHeight),
-      });
-    case "remote-cap":
-      return l.bitrateKbps
-        ? t("Away from home is limited to {rate}.", { rate: rateName(l.bitrateKbps) })
-        : t("No bitrate limit away from home.");
-    case "viewer-cap":
-      return t("{name} is limited to {rate}.", {
-        name: viewer,
-        rate: rateName(l.bitrateKbps ?? 0),
-      });
-    case "remote-blocked":
-      return t("{name} can't stream away from home.", { name: viewer });
+      return t("Rule {n} lifts the device limit", { n: l.rule ?? 0 });
   }
-  return l.reason;
 }
 
 function Answer({ answer, viewer }: { answer: QualityAnswer; viewer: string }) {
@@ -123,32 +97,59 @@ function Answer({ answer, viewer }: { answer: QualityAnswer; viewer: string }) {
           </div>
         </div>
       </div>
-      <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label={t("What decided it")}>
-        {answer.layers.map((l, i) => (
-          <li
-            key={`${l.kind}-${i}`}
-            className={cn(
-              "space-y-3 rounded-xl border border-border bg-surface p-4",
-              l.ignored && "opacity-60",
-              l.decisive && "border-primary/40",
-            )}
-          >
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <span className="text-fg-muted">{i + 1}</span>
-              {labels[l.kind] ?? t("Limit")}
-            </div>
-            <p className={cn("text-sm text-fg-muted", l.ignored && "line-through")}>
-              {layerText(l, viewer)}
-            </p>
-            {l.decisive ? (
-              <Badge variant="info">
-                <ShieldCheck size={12} />
-                {t("Sets the limit")}
-              </Badge>
-            ) : null}
-            {l.edited ? <Badge variant="secondary">{t("Edited")}</Badge> : null}
-          </li>
-        ))}
+      <ol className="flex flex-col gap-6 sm:flex-row" aria-label={t("What decided it")}>
+        {answer.layers.map((original, i) => {
+          const profile = answer.layers.find((step) => step.kind === "profile");
+          const hdrCap =
+            original.kind === "device" &&
+            ((profile?.hdr === true && original.hdr === false) ||
+              (profile?.dolbyVision === true && original.dolbyVision === false));
+          const l = hdrCap
+            ? {
+                ...original,
+                decisive: true,
+                maxHeight: original.decisive ? original.maxHeight : undefined,
+              }
+            : original;
+          return (
+            <li
+              key={`${l.kind}-${i}`}
+              className={cn(
+                "relative min-w-0 flex-1 space-y-3 rounded-xl border border-border bg-surface p-4",
+                l.ignored && "opacity-60",
+                l.decisive && "border-primary/40",
+              )}
+            >
+              {i > 0 ? (
+                <ChevronRight
+                  aria-hidden
+                  size={18}
+                  className="absolute -left-6 top-1/2 hidden text-fg-muted sm:block"
+                />
+              ) : null}
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <span className="text-fg-muted">{i + 1}</span>
+                {labels[l.kind] ?? t("Limit")}
+              </div>
+              <p className={cn("text-sm text-fg-muted", l.ignored && "line-through")}>
+                {layerText(l, viewer)}
+              </p>
+              {l.decisive ? (
+                <Badge variant="info">
+                  <ShieldCheck size={12} />
+                  {t("Sets the limit")}
+                </Badge>
+              ) : (
+                <CheckCircle2
+                  aria-label={t("No additional limit")}
+                  size={16}
+                  className="text-success"
+                />
+              )}
+              {l.edited ? <Badge variant="secondary">{t("Edited")}</Badge> : null}
+            </li>
+          );
+        })}
       </ol>
       <p className="text-xs text-fg-muted">
         {t("Apps can ask for less in their own quality settings.")}

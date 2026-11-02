@@ -24,7 +24,10 @@ describe("who gets what", () => {
     const fake = await renderChecker();
     await settleUi(() => expect(headline()).toBe("4KHDRDolby Vision"));
     const layers = screen.getByRole("list", { name: "What decided it" });
-    const rule = within(layers).getByText("Rule 1 picks 4K.").closest("li")!;
+    expect(within(layers).getByText("No limit")).toBeVisible();
+    expect(within(layers).queryByText(/It plays HDR/)).not.toBeInTheDocument();
+    expect(within(layers).queryByText("Away limit")).not.toBeInTheDocument();
+    const rule = within(layers).getByText("Rule 1 · 4K").closest("li")!;
     expect(within(rule).getByText("Sets the limit")).toBeInTheDocument();
     expect(calls(fake, "POST", "/quality/explain").at(-1)?.body).toEqual({
       userId: 1,
@@ -34,8 +37,8 @@ describe("who gets what", () => {
 
     fireEvent.click(screen.getByRole("radio", { name: "Away" }));
     await settleUi(() => expect(headline()).toBe("4KHDRDolby VisionUp to 8 Mbps"));
-    expect(screen.getByText("Rule 1 picks 4K, ahead of the Away profile.")).toBeInTheDocument();
-    const cap = screen.getByText("Away from home is limited to 8 Mbps.").closest("li")!;
+    expect(screen.getByText("Rule 1 · 4K")).toBeInTheDocument();
+    const cap = screen.getByText("8 Mbps").closest("li")!;
     expect(within(cap).getByText("Sets the limit")).toBeInTheDocument();
   });
 
@@ -53,12 +56,12 @@ describe("who gets what", () => {
     fireEvent.click(screen.getByRole("button", { name: "App" }));
     fireEvent.click(await screen.findByRole("option", { name: "Plex for Android" }, WAIT));
     await settleUi(() => expect(headline()).toBe("1080pSDRUp to 4 Mbps"));
-    expect(screen.getByText("No rule matches, so 1080p applies.")).toBeInTheDocument();
-    expect(screen.getByText("Sam Rivera is limited to 4 Mbps.")).toBeInTheDocument();
+    expect(screen.getByText("Default at home")).toBeInTheDocument();
+    expect(screen.getByText("4 Mbps")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("radio", { name: "Away" }));
     await settleUi(() => expect(headline()).toBe("Can't play away from home"));
-    expect(screen.getByText("Sam Rivera can't stream away from home.")).toBeInTheDocument();
+    expect(screen.getByText("Away playback disabled")).toBeInTheDocument();
     expect(calls(fake, "POST", "/quality/explain").at(-1)?.body).toEqual({
       userId: 2,
       clientId: "plex-android",
@@ -100,23 +103,23 @@ describe("who gets what", () => {
     };
     expect(answerHeadline(answer)).toBe("720p · HDR on");
     expect(answer.layers.map((l) => layerText(l, "Sam"))).toEqual([
-      "Rule 2 picks At home, ahead of the Away profile.",
-      "This app plays up to 4K. It plays HDR but not Dolby Vision.",
-      "Rule 2 caps resolution at 720p.",
-      "No bitrate limit away from home.",
+      "Rule 2 · At home",
+      "No limit",
+      "Rule 2 · up to 720p",
+      "No limit",
     ]);
     expect(
       layerText(
         { kind: "rule-height", reason: "", rule: 1, ignored: true, decisive: false },
         "Sam",
       ),
-    ).toBe("Rule 1's maximum resolution is ignored because this app's resolution is fixed.");
+    ).toBe("Device resolution is fixed");
     expect(
       layerText(
         { kind: "android-lift", reason: "", rule: 3, maxHeight: 2160, decisive: false },
         "Sam",
       ),
-    ).toBe("Rule 3 lifts Android's usual 1080p limit to 4K.");
+    ).toBe("Rule 3 lifts the device limit");
     expect(
       answerHeadline({ ...answer, maxHeight: 0, hdr: false, bitrateKbps: 12500, layers: [] }),
     ).toBe("Any resolution · HDR off · Up to 12.5 Mbps");

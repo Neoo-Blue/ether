@@ -386,8 +386,8 @@ describe("Release selection", () => {
     expect(screen.queryByRole("button", { name: "More options: How Ether searches" })).toBeNull();
     expect(screen.getByLabelText("Releases to keep ready")).toHaveValue(3);
     expect(screen.getByLabelText("Health check samples")).toHaveValue(12);
-    expect(screen.getByLabelText("Remember searches for")).toHaveValue("6h0m0s");
-    expect(screen.getByLabelText("Retry unavailable titles after")).toHaveValue("24h0m0s");
+    expect(screen.getByLabelText("Remember searches for")).toHaveValue(6);
+    expect(screen.getByLabelText("Retry unavailable titles after")).toHaveValue(1);
   });
 
   it("edits blocked words next to blocked releases", async () => {

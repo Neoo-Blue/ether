@@ -33,6 +33,9 @@ it("orders profile sections before away, source order, and versions", async () =
   renderApp("/quality/profiles");
   await screen.findByRole("button", { name: "Add profile" }, { timeout: 10000 });
   await screen.findByText("Same-quality versions to offer", {}, { timeout: 10000 });
+  const flow = screen.getByRole("navigation", { name: "How quality works" });
+  expect(flow.querySelector("[aria-current=step]")).toHaveTextContent("Profiles");
+  expect(within(flow).queryByRole("link", { name: /Profiles/ })).not.toBeInTheDocument();
   const headings = screen.getAllByRole("heading").map((h) => h.textContent);
   const order = ["Profiles", "Away from home", "Which source goes first", "Version menu"].map((s) =>
     headings.indexOf(s),

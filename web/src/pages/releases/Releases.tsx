@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { Link } from "react-router-dom";
 import { Layers, ListFilter, MonitorCheck, ArrowRight } from "lucide-react";
 import { WhoGetsWhat } from "./WhoGetsWhat";
@@ -31,7 +32,10 @@ export default function Releases() {
   return (
     <DomainPage title={t("Quality")} base="/quality" tabs={TABS} active={tab}>
       {tab === "profiles" || tab === "rules" ? (
-        <nav aria-label={t("How quality works")} className="grid gap-3 sm:grid-cols-3">
+        <nav
+          aria-label={t("How quality works")}
+          className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center"
+        >
           {[
             {
               key: "profiles",
@@ -51,20 +55,43 @@ export default function Releases() {
               detail: t("See what a viewer gets"),
               Icon: MonitorCheck,
             },
-          ].map(({ key, title, detail, Icon }) => (
-            <Link
-              key={key}
-              to={`/quality/${key}`}
-              className="flex items-center gap-3 rounded-xl border border-border bg-surface p-4"
-            >
-              <Icon size={20} className="text-primary" />
-              <span className="flex-1">
-                <span className="block text-sm font-medium">{title}</span>
-                <span className="text-xs text-fg-muted">{detail}</span>
-              </span>
-              <ArrowRight size={16} className="text-fg-muted" />
-            </Link>
-          ))}
+          ].map(({ key, title, detail, Icon }, i) => {
+            const content = (
+              <>
+                <Icon size={20} className="text-primary" />
+                <span>
+                  <span className="block text-sm font-medium">{title}</span>
+                  <span className="text-xs text-fg-muted">{detail}</span>
+                </span>
+              </>
+            );
+            return (
+              <Fragment key={key}>
+                {i > 0 ? (
+                  <ArrowRight
+                    aria-hidden
+                    size={18}
+                    className="shrink-0 rotate-90 self-center text-fg-muted sm:rotate-0"
+                  />
+                ) : null}
+                {tab === key ? (
+                  <span
+                    aria-current="step"
+                    className="flex flex-1 items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 p-4"
+                  >
+                    {content}
+                  </span>
+                ) : (
+                  <Link
+                    to={`/quality/${key}`}
+                    className="flex flex-1 items-center gap-3 rounded-xl border border-border bg-surface p-4"
+                  >
+                    {content}
+                  </Link>
+                )}
+              </Fragment>
+            );
+          })}
         </nav>
       ) : null}
       {tab === "check" ? <WhoGetsWhat /> : null}
