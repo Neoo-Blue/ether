@@ -237,6 +237,7 @@ type Engine struct {
 	version       uint64
 	homeLayout    core.HomeLayout
 	extraHomeRows func(context.Context, *core.User, core.HubContext, string, int) []core.Hub
+	rowKinds      *RowKindRegistry
 	layoutVer     uint64
 	owner         map[string]*ownerEntry
 
@@ -305,7 +306,7 @@ func New(opts Options) (*Engine, error) {
 	st := &sqlStore{db: opts.DB, loc: opts.Location}
 	e := &Engine{
 		opts: opts, log: opts.Logger, catalog: opts.Catalog, state: opts.State, llm: opts.LLM, trakt: opts.Trakt,
-		store: st, loc: opts.Location,
+		store: st, loc: opts.Location, rowKinds: NewRowKindRegistry(),
 		models: map[int64]*userModel{}, users: map[int64]core.User{}, lastCtx: map[int64]core.HubContext{},
 		flights: map[int64]*flight{}, debounce: map[int64]*time.Timer{}, owner: map[string]*ownerEntry{},
 		hubKinds: map[string]string{}, active: map[playKey]*activePlay{}, memo: map[memoKey]*memoEntry{},

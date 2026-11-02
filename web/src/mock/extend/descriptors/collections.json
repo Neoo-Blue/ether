@@ -1,0 +1,683 @@
+[
+  {
+    "kind": "collectionSource",
+    "id": "catalog",
+    "owner": "builtin",
+    "label": {
+      "source": "Whole catalogue"
+    },
+    "hint": {
+      "source": "Everything browsable in Ether"
+    },
+    "icon": "library",
+    "order": 10,
+    "meta": {
+      "editor": "none",
+      "defaults": {}
+    }
+  },
+  {
+    "kind": "collectionSource",
+    "id": "tmdbList",
+    "owner": "builtin",
+    "label": {
+      "source": "TMDB chart"
+    },
+    "hint": {
+      "source": "Trending, popular, top rated, now playing…"
+    },
+    "icon": "trending-up",
+    "order": 20,
+    "meta": {
+      "params": [
+        {
+          "name": "mediaType",
+          "kind": "select",
+          "label": {
+            "source": "Media"
+          },
+          "hint": {},
+          "required": true,
+          "options": [
+            {
+              "value": "movie",
+              "label": {
+                "source": "Movies"
+              }
+            },
+            {
+              "value": "show",
+              "label": {
+                "source": "TV"
+              }
+            }
+          ]
+        },
+        {
+          "name": "list",
+          "kind": "select",
+          "label": {
+            "source": "Chart"
+          },
+          "hint": {},
+          "required": true,
+          "options": [
+            {
+              "value": "trending_day",
+              "label": {
+                "source": "Trending today"
+              },
+              "media": ["movie", "show"]
+            },
+            {
+              "value": "trending_week",
+              "label": {
+                "source": "Trending this week"
+              },
+              "media": ["movie", "show"]
+            },
+            {
+              "value": "popular",
+              "label": {
+                "source": "Popular"
+              },
+              "media": ["movie", "show"]
+            },
+            {
+              "value": "top_rated",
+              "label": {
+                "source": "Top rated"
+              },
+              "media": ["movie", "show"]
+            },
+            {
+              "value": "now_playing",
+              "label": {
+                "source": "Now in cinemas"
+              },
+              "media": ["movie"]
+            },
+            {
+              "value": "upcoming",
+              "label": {
+                "source": "Upcoming"
+              },
+              "media": ["movie"]
+            },
+            {
+              "value": "airing_today",
+              "label": {
+                "source": "Airing today"
+              },
+              "media": ["show"]
+            },
+            {
+              "value": "on_the_air",
+              "label": {
+                "source": "On the air"
+              },
+              "media": ["show"]
+            }
+          ]
+        }
+      ],
+      "editor": "tmdbChart",
+      "defaults": {
+        "list": "trending_week",
+        "mediaType": "movie"
+      }
+    }
+  },
+  {
+    "kind": "collectionSource",
+    "id": "titles",
+    "owner": "builtin",
+    "label": {
+      "source": "Hand-picked titles"
+    },
+    "hint": {
+      "source": "Choose titles one by one, in your order"
+    },
+    "icon": "bookmark",
+    "order": 30,
+    "meta": {
+      "params": [
+        {
+          "name": "keys",
+          "kind": "title",
+          "label": {
+            "source": "Titles"
+          },
+          "hint": {},
+          "required": true
+        }
+      ],
+      "editor": "titles",
+      "defaults": {
+        "keys": []
+      }
+    }
+  },
+  {
+    "kind": "collectionSource",
+    "id": "tmdbPerson",
+    "owner": "builtin",
+    "label": {
+      "source": "Person's filmography"
+    },
+    "hint": {
+      "source": "Everything an actor or director made"
+    },
+    "icon": "user-round",
+    "order": 40,
+    "meta": {
+      "params": [
+        {
+          "name": "id",
+          "kind": "number",
+          "label": {
+            "source": "Entry"
+          },
+          "hint": {},
+          "required": true,
+          "lookup": "person"
+        },
+        {
+          "name": "label",
+          "kind": "text",
+          "label": {
+            "source": "Name"
+          },
+          "hint": {}
+        },
+        {
+          "name": "role",
+          "kind": "select",
+          "label": {
+            "source": "Role"
+          },
+          "hint": {},
+          "options": [
+            {
+              "value": "",
+              "label": {
+                "source": "Every credit"
+              }
+            },
+            {
+              "value": "cast",
+              "label": {
+                "source": "Cast"
+              }
+            },
+            {
+              "value": "director",
+              "label": {
+                "source": "Director"
+              }
+            },
+            {
+              "value": "writer",
+              "label": {
+                "source": "Writer"
+              }
+            },
+            {
+              "value": "crew",
+              "label": {
+                "source": "Crew"
+              }
+            }
+          ]
+        }
+      ],
+      "editor": "lookup",
+      "defaults": {
+        "id": 0
+      }
+    }
+  },
+  {
+    "kind": "collectionSource",
+    "id": "tmdbCollection",
+    "owner": "builtin",
+    "label": {
+      "source": "TMDB collection"
+    },
+    "hint": {
+      "source": "A franchise such as “The Lord of the Rings”"
+    },
+    "icon": "layers",
+    "order": 50,
+    "meta": {
+      "params": [
+        {
+          "name": "id",
+          "kind": "number",
+          "label": {
+            "source": "Entry"
+          },
+          "hint": {},
+          "required": true,
+          "lookup": "collection"
+        },
+        {
+          "name": "label",
+          "kind": "text",
+          "label": {
+            "source": "Name"
+          },
+          "hint": {}
+        }
+      ],
+      "editor": "lookup",
+      "defaults": {
+        "id": 0
+      }
+    }
+  },
+  {
+    "kind": "collectionSource",
+    "id": "tmdbKeyword",
+    "owner": "builtin",
+    "label": {
+      "source": "Keyword"
+    },
+    "hint": {
+      "source": "Titles tagged with a TMDB keyword"
+    },
+    "icon": "tag",
+    "order": 60,
+    "meta": {
+      "params": [
+        {
+          "name": "id",
+          "kind": "number",
+          "label": {
+            "source": "Entry"
+          },
+          "hint": {},
+          "required": true,
+          "lookup": "keyword"
+        },
+        {
+          "name": "label",
+          "kind": "text",
+          "label": {
+            "source": "Name"
+          },
+          "hint": {}
+        }
+      ],
+      "editor": "lookup",
+      "defaults": {
+        "id": 0
+      }
+    }
+  },
+  {
+    "kind": "collectionSource",
+    "id": "tmdbCompany",
+    "owner": "builtin",
+    "label": {
+      "source": "Studio"
+    },
+    "hint": {
+      "source": "Titles from a production company"
+    },
+    "icon": "clapperboard",
+    "order": 70,
+    "meta": {
+      "params": [
+        {
+          "name": "id",
+          "kind": "number",
+          "label": {
+            "source": "Entry"
+          },
+          "hint": {},
+          "required": true,
+          "lookup": "company"
+        },
+        {
+          "name": "label",
+          "kind": "text",
+          "label": {
+            "source": "Name"
+          },
+          "hint": {}
+        }
+      ],
+      "editor": "lookup",
+      "defaults": {
+        "id": 0
+      }
+    }
+  },
+  {
+    "kind": "collectionSource",
+    "id": "tmdbNetwork",
+    "owner": "builtin",
+    "label": {
+      "source": "TV network"
+    },
+    "hint": {
+      "source": "Shows from a network such as HBO"
+    },
+    "icon": "tv",
+    "order": 80,
+    "meta": {
+      "params": [
+        {
+          "name": "id",
+          "kind": "number",
+          "label": {
+            "source": "Entry"
+          },
+          "hint": {},
+          "required": true,
+          "lookup": "network"
+        },
+        {
+          "name": "label",
+          "kind": "text",
+          "label": {
+            "source": "Name"
+          },
+          "hint": {}
+        }
+      ],
+      "editor": "lookup",
+      "defaults": {
+        "id": 0
+      }
+    }
+  },
+  {
+    "kind": "collectionSource",
+    "id": "watchProvider",
+    "owner": "builtin",
+    "label": {
+      "source": "Streaming service"
+    },
+    "hint": {
+      "source": "What's on a service in your region"
+    },
+    "icon": "monitor-play",
+    "order": 90,
+    "meta": {
+      "params": [
+        {
+          "name": "id",
+          "kind": "number",
+          "label": {
+            "source": "Entry"
+          },
+          "hint": {},
+          "required": true,
+          "lookup": "watchProvider"
+        },
+        {
+          "name": "label",
+          "kind": "text",
+          "label": {
+            "source": "Name"
+          },
+          "hint": {}
+        },
+        {
+          "name": "region",
+          "kind": "text",
+          "label": {
+            "source": "Region"
+          },
+          "hint": {}
+        }
+      ],
+      "editor": "lookup",
+      "defaults": {
+        "id": 0
+      }
+    }
+  },
+  {
+    "kind": "collectionSource",
+    "id": "tmdbDiscover",
+    "owner": "builtin",
+    "label": {
+      "source": "TMDB discover query"
+    },
+    "hint": {
+      "source": "Raw TMDB discover parameters"
+    },
+    "icon": "search",
+    "order": 100,
+    "meta": {
+      "params": [
+        {
+          "name": "params",
+          "kind": "list",
+          "label": {
+            "source": "Parameters"
+          },
+          "hint": {},
+          "required": true
+        }
+      ],
+      "editor": "discover",
+      "defaults": {
+        "params": {}
+      }
+    }
+  },
+  {
+    "kind": "collectionSource",
+    "id": "traktList",
+    "owner": "builtin",
+    "label": {
+      "source": "Trakt list"
+    },
+    "hint": {
+      "source": "A public Trakt list URL"
+    },
+    "icon": "list-video",
+    "order": 110,
+    "meta": {
+      "params": [
+        {
+          "name": "url",
+          "kind": "url",
+          "label": {
+            "source": "List URL"
+          },
+          "hint": {},
+          "required": true,
+          "placeholder": "https://trakt.tv/users/…/lists/…"
+        }
+      ],
+      "editor": "urlList",
+      "defaults": {
+        "url": ""
+      }
+    }
+  },
+  {
+    "kind": "collectionSource",
+    "id": "letterboxdList",
+    "owner": "builtin",
+    "label": {
+      "source": "Letterboxd list"
+    },
+    "hint": {
+      "source": "A public Letterboxd list URL"
+    },
+    "icon": "list-video",
+    "order": 120,
+    "meta": {
+      "params": [
+        {
+          "name": "url",
+          "kind": "url",
+          "label": {
+            "source": "List URL"
+          },
+          "hint": {},
+          "required": true,
+          "placeholder": "https://letterboxd.com/…/list/…"
+        }
+      ],
+      "editor": "urlList",
+      "defaults": {
+        "url": ""
+      }
+    }
+  },
+  {
+    "kind": "collectionSource",
+    "id": "mdblist",
+    "owner": "builtin",
+    "label": {
+      "source": "MDBList"
+    },
+    "hint": {
+      "source": "A public MDBList URL"
+    },
+    "icon": "list-video",
+    "order": 130,
+    "meta": {
+      "params": [
+        {
+          "name": "url",
+          "kind": "url",
+          "label": {
+            "source": "List URL"
+          },
+          "hint": {},
+          "required": true,
+          "placeholder": "https://mdblist.com/lists/…"
+        }
+      ],
+      "editor": "urlList",
+      "defaults": {
+        "url": ""
+      }
+    }
+  },
+  {
+    "kind": "collectionSource",
+    "id": "anilistList",
+    "owner": "builtin",
+    "label": {
+      "source": "AniList list"
+    },
+    "hint": {
+      "source": "A public AniList anime list URL"
+    },
+    "icon": "list-video",
+    "order": 140,
+    "meta": {
+      "params": [
+        {
+          "name": "url",
+          "kind": "url",
+          "label": {
+            "source": "List URL"
+          },
+          "hint": {},
+          "required": true,
+          "placeholder": "https://anilist.co/user/…/animelist/Completed"
+        }
+      ],
+      "editor": "urlList",
+      "defaults": {
+        "url": ""
+      }
+    }
+  },
+  {
+    "kind": "collectionSource",
+    "id": "stevenlu",
+    "owner": "builtin",
+    "label": {
+      "source": "StevenLu popular movies"
+    },
+    "hint": {
+      "source": "Movies people are talking about"
+    },
+    "icon": "flame",
+    "order": 150,
+    "meta": {
+      "params": [
+        {
+          "name": "list",
+          "kind": "select",
+          "label": {
+            "source": "List"
+          },
+          "hint": {},
+          "required": true,
+          "options": [
+            {
+              "value": "movies",
+              "label": {
+                "source": "All popular movies"
+              }
+            },
+            {
+              "value": "movies-imdb-min7",
+              "label": {
+                "source": "IMDb 7+"
+              }
+            },
+            {
+              "value": "movies-imdb-min8",
+              "label": {
+                "source": "IMDb 8+"
+              }
+            },
+            {
+              "value": "movies-metacritic-min50",
+              "label": {
+                "source": "Metacritic 50+"
+              }
+            },
+            {
+              "value": "movies-metacritic-min60",
+              "label": {
+                "source": "Metacritic 60+"
+              }
+            },
+            {
+              "value": "movies-metacritic-min70",
+              "label": {
+                "source": "Metacritic 70+"
+              }
+            },
+            {
+              "value": "movies-metacritic-min80",
+              "label": {
+                "source": "Metacritic 80+"
+              }
+            },
+            {
+              "value": "movies-rottentomatoes-min70",
+              "label": {
+                "source": "Rotten Tomatoes 70+"
+              }
+            },
+            {
+              "value": "movies-rottentomatoes-min80",
+              "label": {
+                "source": "Rotten Tomatoes 80+"
+              }
+            }
+          ]
+        }
+      ],
+      "editor": "listSelect",
+      "defaults": {
+        "list": "movies"
+      }
+    }
+  }
+]

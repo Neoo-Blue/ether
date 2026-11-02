@@ -40,6 +40,10 @@ const (
 	CapMetadata
 	// CapProbe is the public address source traffic leaves from.
 	CapProbe
+	// CapPlugins is plugin traffic: manifest and artifact fetches, remote
+	// plugin calls and plugin http.fetch. It follows the Stremio route
+	// decision, so a source proxy carries it with add-on traffic.
+	CapPlugins
 )
 
 // Policy is the live routing decision. Proxy is nil when there is nothing
@@ -185,7 +189,7 @@ func (p Policy) routes(cap Capability) bool {
 	switch cap {
 	case CapIndexers:
 		return p.Indexers
-	case CapStremio:
+	case CapStremio, CapPlugins:
 		return p.Stremio
 	case CapDebrid:
 		return p.Debrid

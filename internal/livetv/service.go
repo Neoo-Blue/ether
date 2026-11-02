@@ -40,6 +40,7 @@ type Service struct {
 	transMu          sync.RWMutex
 	transcodes       map[string]core.HLSSession
 	o                Options
+	kinds            *KindRegistry
 	policyReads      atomic.Uint64
 	mu               sync.Mutex
 	lineupUnix       int64
@@ -62,7 +63,11 @@ func New(o Options) (*Service, error) {
 		o.HTTPClient = egress.Client(egress.CapDirect, 20*time.Second)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	s := &Service{o: o, sessions: map[string]*session{}, transcodes: map[string]core.HLSSession{}, ctx: ctx, cancel: cancel, lineupUnix: o.Now().Unix()}
+	kinds := o.Kinds
+	if kinds == nil {
+		kinds = NewKindRegistry()
+	}
+	s := &Service{o: o, kinds: kinds, sessions: map[string]*session{}, transcodes: map[string]core.HLSSession{}, ctx: ctx, cancel: cancel, lineupUnix: o.Now().Unix()}
 	s.wg.Add(2)
 	go s.maintain()
 	go s.refreshLoop()
@@ -1099,48 +1104,15 @@ func (s *Service) ImportSource(ctx context.Context, src Source) (Source, error) 
 	if err := s.prepareSourceAuth(ctx, &src); err != nil {
 		return src, err
 	}
-	var err error
-	if src.PlaylistURL != "" {
-		src.Playlist, err = s.readURLWith(ctx, src.PlaylistURL, maxPlaylistBytes, src.Auth.header(), "playlist")
-		if err != nil {
-			return src, err
-		}
-	}
-	if strings.TrimSpace(src.Playlist) == "" && strings.TrimSpace(src.Guide) == "" && src.GuideURL == "" {
+	kind, ok := s.kindRegistry().Classify(src)
+	if !ok {
 		return src, fmt.Errorf("source needs a playlist or an XMLTV guide")
 	}
-	var cs []Channel
-	if strings.TrimSpace(src.Playlist) != "" { // guide-only (EPG) sources add no channels
-		cs, err = ParseM3U(strings.NewReader(src.Playlist), src.ID)
-		if err != nil {
-			return src, err
-		}
-	}
-	allow, err := s.guideAllow(ctx, src, cs)
+	fetched, err := kind.Fetch(ctx, s, &src)
 	if err != nil {
 		return src, err
 	}
-	filter := guideFilter{From: s.o.Now().Add(-guideLookback), Until: s.o.Now().Add(guideLookahead), IDs: allow}
-	g := XMLGuide{}
-	if src.GuideURL != "" {
-		g, err = s.readGuide(ctx, src.GuideURL, src.Auth.header(), filter)
-		if err != nil {
-			return src, err
-		}
-	} else if src.Guide != "" {
-		var dropped bool
-		g, dropped, err = parseXMLTV(strings.NewReader(src.Guide), filter)
-		if err != nil {
-			return src, err
-		}
-		if dropped {
-			trimmed, err := formatXMLTV(g)
-			if err != nil {
-				return src, err
-			}
-			src.Guide = trimmed
-		}
-	}
+	cs, g := fetched.Channels, fetched.Guide
 	tx, err := s.o.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return src, err
