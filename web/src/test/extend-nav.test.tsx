@@ -3,10 +3,34 @@ import { describe, expect, it } from "vitest";
 import { buildNavigation } from "../App";
 import { descriptors } from "../mock/extend/descriptors/console";
 import { fixturePluginPage } from "../lib/console-descriptors.test";
-import type { Descriptor } from "../lib/extend";
+import { resetRegistryCache, type Descriptor } from "../lib/extend";
 import { renderApp, settleUi } from "./harness";
 
 describe("registry navigation", () => {
+  it("uses the served page route for its compiled component", async () => {
+    resetRegistryCache();
+    renderApp("/nodes", {}, (fake) => {
+      const original = fake.fetch;
+      fake.fetch = async (...args) => {
+        const response = await original(...args);
+        if (!String(args[0]).includes("/extend/registry")) return response;
+        const body = await response.json();
+        for (const descriptor of body.descriptors) {
+          if (descriptor.kind === "page" && descriptor.id === "cluster") {
+            descriptor.meta.route = "/nodes";
+          }
+        }
+        return new Response(JSON.stringify(body), {
+          headers: { "content-type": "application/json" },
+        });
+      };
+    });
+    await settleUi(() =>
+      expect(screen.getByRole("heading", { name: "Cluster" })).toBeInTheDocument(),
+    );
+    resetRegistryCache();
+  });
+
   it("builds the sidebar in the same order as before", () => {
     const groups = buildNavigation(descriptors);
     expect(groups.map((g) => g.label)).toEqual(["", "Library", "Streaming", "Server"]);

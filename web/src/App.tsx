@@ -391,10 +391,54 @@ function PageFallback() {
   );
 }
 
+// Compiled components and local parameters; base paths come from page descriptors.
+const BUILTIN_PAGES: Record<
+  string,
+  {
+    element: ReactNode;
+    suffix?: string;
+    children?: ReactNode;
+    extra?: { suffix: string; element: ReactNode }[];
+  }
+> = {
+  overview: { element: <Home /> },
+  activity: { element: <Activity />, suffix: "/:tab?" },
+  viewers: { element: <ViewersList />, extra: [{ suffix: "/:id/:tab?", element: <ViewerById /> }] },
+  home: { element: <Designer /> },
+  collections: {
+    element: <CollectionsLayout />,
+    children: (
+      <>
+        <Route path="new" element={<CollectionDrawer fresh />} />
+        <Route path=":id" element={<CollectionDrawer />} />
+      </>
+    ),
+  },
+  livetv: { element: <LiveTV />, suffix: "/:tab?" },
+  calendar: { element: <Calendar />, suffix: "/:view?" },
+  catalog: { element: <Catalog />, suffix: "/:tab?" },
+  metadata: { element: <Metadata />, suffix: "/:tab?" },
+  sources: { element: <Sources />, suffix: "/:tab?" },
+  releases: { element: <Releases />, suffix: "/:tab?" },
+  cache: { element: <Cache />, suffix: "/:tab?" },
+  playback: { element: <Playback />, suffix: "/:tab?/:section?" },
+  notifications: { element: <Notifications />, suffix: "/:tab?" },
+  general: { element: <GeneralPage />, suffix: "/:tab?" },
+  apps: { element: <Apps />, suffix: "/:tab?/:section?" },
+  integrations: { element: <ServicesPage />, suffix: "/:tab?" },
+  cluster: { element: <ClusterPage /> },
+  maintenance: { element: <MaintenancePage />, suffix: "/:tab?/:backupTab?" },
+};
+
 function Shell() {
   const { boot } = useApp();
   const location = useLocation();
-  const { descriptors: navDescriptors } = useRegistry("page", "navItem");
+  const {
+    descriptors: navDescriptors,
+    loading: registryLoading,
+    error: registryError,
+    reload: reloadRegistry,
+  } = useRegistry<PageMeta>("page", "navItem");
   const remoteSession = boot.authRequired && Boolean(getToken());
   const version = versionLabel(boot.version);
   const serverName = boot.serverName?.trim() || "Ether";
@@ -500,47 +544,52 @@ function Shell() {
       >
         <SaveBarHost>
           <Suspense fallback={<PageFallback />}>
-            {/* Built-in pages stay compiled components: this route table is
-                the client map from registry page routes to components.
-                Plugin pages route through /p/:plugin/:page below. */}
             <Routes>
+              <Route path="/setup" element={<Setup />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/plugins/:tab?/*" element={<Plugins />} />
+              <Route path="/p/:plugin/:page/*" element={<PluginPage />} />
+              {navDescriptors
+                .filter((d) => d.kind === "page" && d.owner === BUILTIN && d.meta?.route)
+                .flatMap((d) => {
+                  const page = BUILTIN_PAGES[d.id];
+                  if (!page) return [];
+                  const base = d.meta!.route!;
+                  const element =
+                    d.id === "overview" && !(boot.setupComplete || boot.ownerConfigured) ? (
+                      <Navigate to="/setup" replace />
+                    ) : (
+                      page.element
+                    );
+                  return [
+                    <Route
+                      key={d.id}
+                      path={`${base === "/" ? "" : base}${page.suffix ?? ""}` || "/"}
+                      element={element}
+                    >
+                      {page.children}
+                    </Route>,
+                    ...(page.extra ?? []).map(({ suffix, element }) => (
+                      <Route
+                        key={`${d.id}:${suffix}`}
+                        path={`${base}${suffix}`}
+                        element={element}
+                      />
+                    )),
+                  ];
+                })}
               <Route
-                path="/"
+                path="*"
                 element={
-                  boot.setupComplete || boot.ownerConfigured ? (
-                    <Home />
+                  registryLoading ? (
+                    <PageFallback />
+                  ) : registryError ? (
+                    <ErrorPanel error={registryError} onRetry={reloadRegistry} />
                   ) : (
-                    <Navigate to="/setup" replace />
+                    <Navigate to="/" replace />
                   )
                 }
               />
-              <Route path="/setup" element={<Setup />} />
-              <Route path="/activity/:tab?" element={<Activity />} />
-              <Route path="/viewers" element={<ViewersList />} />
-              <Route path="/viewers/:id/:tab?" element={<ViewerById />} />
-              <Route path="/home" element={<Designer />} />
-              <Route path="/collections" element={<CollectionsLayout />}>
-                <Route path="new" element={<CollectionDrawer fresh />} />
-                <Route path=":id" element={<CollectionDrawer />} />
-              </Route>
-              <Route path="/livetv/:tab?" element={<LiveTV />} />
-              <Route path="/calendar/:view?" element={<Calendar />} />
-              <Route path="/catalog/:tab?" element={<Catalog />} />
-              <Route path="/metadata/:tab?" element={<Metadata />} />
-              <Route path="/sources/:tab?" element={<Sources />} />
-              <Route path="/releases/:tab?" element={<Releases />} />
-              <Route path="/cache/:tab?" element={<Cache />} />
-              <Route path="/playback/:tab?/:section?" element={<Playback />} />
-              <Route path="/notifications/:tab?" element={<Notifications />} />
-              <Route path="/profile" element={<Profile />} />
-              <Route path="/server/:tab?" element={<GeneralPage />} />
-              <Route path="/apps/:tab?/:section?" element={<Apps />} />
-              <Route path="/services/:tab?" element={<ServicesPage />} />
-              <Route path="/plugins/:tab?/*" element={<Plugins />} />
-              <Route path="/p/:plugin/:page/*" element={<PluginPage />} />
-              <Route path="/cluster" element={<ClusterPage />} />
-              <Route path="/maintenance/:tab?/:backupTab?" element={<MaintenancePage />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>
         </SaveBarHost>
