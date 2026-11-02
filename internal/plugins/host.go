@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/braedonsaunders/ether/internal/safefetch"
 )
 
 // host implements Host for one plugin. Grants are re-read on every call,
@@ -90,6 +93,22 @@ func (h *host) KVList(ctx context.Context, prefix string) ([]string, error) {
 	return h.m.store.kvList(ctx, h.plugin, prefix)
 }
 
+// Settings returns the plugin's stored non-secret settings.
+func (h *host) Settings(ctx context.Context) (map[string]any, error) {
+	if _, _, err := h.record(ctx); err != nil {
+		return nil, err
+	}
+	row, err := h.m.store.settings(ctx, h.plugin)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]any, len(row.Settings))
+	for k, v := range row.Settings {
+		out[k] = v
+	}
+	return out, nil
+}
+
 func (h *host) SecretGet(ctx context.Context, name string) (string, error) {
 	r, g, err := h.record(ctx)
 	if err != nil {
@@ -133,6 +152,25 @@ func hostAllowed(patterns []string, host string) bool {
 	return false
 }
 
+// ErrFetchFailed is returned when a plugin's outbound request fails. Its
+// message names only the host and a category: request URLs can carry
+// plugin secrets (API keys in the query), and net/http errors include the
+// full URL, so neither the URL nor the underlying error text is exposed.
+var ErrFetchFailed = errors.New("plugins: request failed")
+
+func fetchError(host string, err error) error {
+	reason := "network error"
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		reason = "timed out"
+	case errors.Is(err, context.Canceled):
+		reason = "canceled"
+	case errors.Is(err, safefetch.ErrBlocked):
+		return fmt.Errorf("%w: %s is not allowed (%w)", ErrFetchFailed, host, safefetch.ErrBlocked)
+	}
+	return fmt.Errorf("%w: %s: %s", ErrFetchFailed, host, reason)
+}
+
 func (h *host) HTTPFetch(ctx context.Context, req FetchRequest) (FetchResponse, error) {
 	r, g, err := h.record(ctx)
 	if err != nil {
@@ -160,22 +198,24 @@ func (h *host) HTTPFetch(ctx context.Context, req FetchRequest) (FetchResponse, 
 	}
 	resp, err := h.m.client.Do(hr)
 	if err != nil {
-		return FetchResponse{}, err
+		return FetchResponse{}, fetchError(u.Hostname(), err)
 	}
 	defer resp.Body.Close() //nolint:errcheck
 	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxFetchBytes+1))
 	if err != nil {
-		return FetchResponse{}, err
+		return FetchResponse{}, fetchError(u.Hostname(), err)
 	}
 	if len(body) > MaxFetchBytes {
 		return FetchResponse{}, fmt.Errorf("plugins: response larger than %d bytes", MaxFetchBytes)
 	}
 	// Privacy label: record the observed host and bytes.
+	h.m.healthMu.Lock()
 	if hh, err := h.m.store.health(ctx, h.plugin); err == nil {
 		hh.Observed[u.Hostname()]++
 		hh.EgressBytes += int64(len(body) + len(req.Body))
 		_ = h.m.store.putHealth(ctx, h.plugin, hh)
 	}
+	h.m.healthMu.Unlock()
 	out := FetchResponse{Status: resp.StatusCode, Headers: map[string]string{}, Body: body}
 	for k := range resp.Header {
 		out.Headers[k] = resp.Header.Get(k)
@@ -212,6 +252,22 @@ func (h *host) CatalogGet(ctx context.Context, id string) (json.RawMessage, erro
 		return nil, ErrUnavailable
 	}
 	return h.m.deps.Backends.CatalogGet(ctx, id)
+}
+
+func (h *host) ViewerGranted(ctx context.Context) (json.RawMessage, error) {
+	r, g, err := h.record(ctx)
+	if err != nil {
+		return nil, err
+	}
+	p := r.Manifest.Ether.Permissions.Viewers
+	allowed := (!g.revoked("viewers.watch_history") && normLevel(p.WatchHistory) != "none") || (!g.revoked("viewers.identity") && normLevel(p.Identity) != "none")
+	if !allowed || len(g.Viewers) == 0 {
+		return json.RawMessage(`[]`), nil
+	}
+	if h.m.deps.Backends.ViewerNames == nil {
+		return nil, ErrUnavailable
+	}
+	return h.m.deps.Backends.ViewerNames(ctx, g.Viewers)
 }
 
 func (h *host) ViewerHistory(ctx context.Context, viewerID int64, limit, offset int) (json.RawMessage, error) {
@@ -372,12 +428,35 @@ func (h *host) folderCheck(ctx context.Context, root, path string) (string, erro
 		h.noteDenied("folders")
 		return "", fmt.Errorf("%w: folder was not picked for this plugin", ErrPermissionDenied)
 	}
+	return h.resolveFolderPath(root, path)
+}
+
+// resolveFolderPath confines path to the picked root, lexically and after
+// resolving symlinks.
+func (h *host) resolveFolderPath(root, path string) (string, error) {
 	cleanRoot := filepath.Clean(root)
 	joined := filepath.Clean(filepath.Join(cleanRoot, path))
-	if joined != cleanRoot && !strings.HasPrefix(joined, cleanRoot+string(filepath.Separator)) {
+	if !within(cleanRoot, joined) {
 		return "", fmt.Errorf("%w: path leaves the picked folder", ErrPermissionDenied)
 	}
-	return joined, nil
+	// Symlinks are resolved on both sides, so a link inside the picked
+	// folder cannot expose anything outside it.
+	realRoot, err := filepath.EvalSymlinks(cleanRoot)
+	if err != nil {
+		return "", err
+	}
+	real, err := filepath.EvalSymlinks(joined)
+	if err != nil {
+		return "", err
+	}
+	if !within(realRoot, real) {
+		return "", fmt.Errorf("%w: path leaves the picked folder", ErrPermissionDenied)
+	}
+	return real, nil
+}
+
+func within(root, path string) bool {
+	return path == root || strings.HasPrefix(path, root+string(filepath.Separator))
 }
 
 func (h *host) FoldersList(ctx context.Context, root, path string) ([]FolderEntry, error) {
@@ -389,9 +468,30 @@ func (h *host) FoldersList(ctx context.Context, root, path string) ([]FolderEntr
 	if err != nil {
 		return nil, err
 	}
+	realRoot, err := filepath.EvalSymlinks(filepath.Clean(root))
+	if err != nil {
+		return nil, err
+	}
 	out := make([]FolderEntry, 0, len(entries))
 	for _, e := range entries {
 		fe := FolderEntry{Name: e.Name(), Path: filepath.Join(path, e.Name()), Dir: e.IsDir()}
+		if e.Type()&os.ModeSymlink != 0 {
+			// Follow a link only when its target stays inside the grant.
+			target, err := filepath.EvalSymlinks(filepath.Join(dir, e.Name()))
+			if err != nil || !within(realRoot, target) {
+				continue
+			}
+			info, err := os.Stat(target)
+			if err != nil {
+				continue
+			}
+			fe.Dir, fe.Size, fe.Mtime = info.IsDir(), info.Size(), info.ModTime().Unix()
+			out = append(out, fe)
+			if len(out) >= 1000 {
+				break
+			}
+			continue
+		}
 		if info, err := e.Info(); err == nil {
 			fe.Size, fe.Mtime = info.Size(), info.ModTime().Unix()
 		}

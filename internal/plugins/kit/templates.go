@@ -279,15 +279,14 @@ func GenerateTemplateFiles(opts TemplateOptions) (map[string][]byte, error) {
 			},
 			{
 				Name:       "subtitles_requires_pick",
-				Method:     "GET",
-				Path:       "/subtitles/movie/tt0012349/videoHash=0123456789abcdef.json",
-				WantStatus: 400,
+				Method:     "POST",
+				Path:       "/ether/subtitles/download",
+				WantStatus: 403,
 			},
 			{
-				Name:       "subtitles_with_pick",
+				Name:       "subtitles_listing",
 				Method:     "GET",
 				Path:       "/subtitles/movie/tt0012349/videoHash=0123456789abcdef.json",
-				Headers:    map[string]string{"X-Ether-Pick": "test-pick-1"},
 				WantStatus: 200,
 			},
 		}
@@ -536,9 +535,11 @@ def handle_request(method: str, path: str, headers: dict, body: bytes) -> tuple[
         return 200, {"streams": []}
     if path.startswith("/catalog/"):
         return 200, {"metas": []}
-    if path.startswith("/subtitles/"):
+    if path == "/ether/subtitles/download":
         if not headers.get("X-Ether-Pick") and not headers.get("x-ether-pick"):
-            return 400, {"error": {"code": "pick_required", "message": "Subtitle requests require a viewer pick token"}}
+            return 403, {"error": {"code": "pick_required", "message": "Subtitle download requires a viewer pick token"}}
+        return 200, {"format": "srt", "encoding": "utf8", "data": ""}
+    if path.startswith("/subtitles/"):
         return 200, {"subtitles": []}
     if path == "/ether/event":
         payload = json.loads(body.decode("utf-8") or "{}")
@@ -626,16 +627,13 @@ function handle(req) {
   if (p.indexOf("/catalog/") === 0) {
     return jsonResponse(200, { metas: [] });
   }
-  if (p.indexOf("/subtitles/") === 0) {
+  if (p === "/ether/subtitles/download") {
     const hdrs = req.headers || {};
     const pick = hdrs["X-Ether-Pick"] || hdrs["x-ether-pick"];
-    if (!pick) {
-      return jsonResponse(400, {
-        error: { code: "pick_required", message: "Subtitle requests require a viewer pick token" },
-      });
-    }
-    return jsonResponse(200, { subtitles: [] });
+    if (!pick) return jsonResponse(403, { error: { code: "pick_required", message: "Subtitle download requires a viewer pick token" } });
+    return jsonResponse(200, { format: "srt", encoding: "utf8", data: "" });
   }
+  if (p.indexOf("/subtitles/") === 0) return jsonResponse(200, { subtitles: [] });
   if (p.indexOf("/ether/markers/") === 0) {
     return jsonResponse(200, { markers: [] });
   }
@@ -771,16 +769,13 @@ export function handle(req: PluginRequest): PluginResponse {
   if (p.startsWith("/catalog/")) {
     return jsonResponse(200, { metas: [] });
   }
-  if (p.startsWith("/subtitles/")) {
+  if (p === "/ether/subtitles/download") {
     const hdrs = req.headers || {};
     const pick = hdrs["X-Ether-Pick"] || hdrs["x-ether-pick"];
-    if (!pick) {
-      return jsonResponse(400, {
-        error: { code: "pick_required", message: "Subtitle requests require a viewer pick token" },
-      });
-    }
-    return jsonResponse(200, { subtitles: [] });
+    if (!pick) return jsonResponse(403, { error: { code: "pick_required", message: "Subtitle download requires a viewer pick token" } });
+    return jsonResponse(200, { format: "srt", encoding: "utf8", data: "" });
   }
+  if (p.startsWith("/subtitles/")) return jsonResponse(200, { subtitles: [] });
   if (p.startsWith("/ether/markers/")) {
     return jsonResponse(200, { markers: [] });
   }

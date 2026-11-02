@@ -106,6 +106,7 @@ export function createMockHostClient(initial?: Partial<MockHostState>): MockHost
       get: (id: string) => state.catalog.get(id) ?? null,
     },
     viewers: {
+      granted: () => Array.from(state.history.keys(), (id) => ({ id, name: String(id) })),
       history: (viewerId: number, limit = 50, offset = 0) => {
         const list = state.history.get(viewerId) ?? [];
         return list.slice(offset, offset + limit);

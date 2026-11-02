@@ -815,6 +815,9 @@ func (f *fakeHost) CatalogGet(_ context.Context, _, id string) (json.RawMessage,
 	return out, nil
 }
 
+func (f *fakeHost) ViewerGranted(context.Context, string) (json.RawMessage, error) {
+	return json.RawMessage(`[]`), nil
+}
 func (f *fakeHost) ViewerHistory(_ context.Context, _ string, viewerID int64, limit, offset int) (json.RawMessage, error) {
 	if f.denyHistory {
 		return nil, ErrPermissionDenied
@@ -841,6 +844,10 @@ func (f *fakeHost) CollectionsUpsert(_ context.Context, pluginID string, collect
 	f.collections = append(f.collections, pluginID+":"+string(collection))
 	f.mu.Unlock()
 	return nil
+}
+
+func (f *fakeHost) Settings(_ context.Context, pluginID string) (map[string]any, error) {
+	return map[string]any{"plugin": pluginID}, nil
 }
 
 func (f *fakeHost) NotifyOwner(_ context.Context, pluginID, text string) error {
@@ -939,6 +946,9 @@ func TestPluginHostAPIEndpointsAuthAndGrants(t *testing.T) {
 	}
 
 	// Viewer history and watch state.
+	if status, _ := doHost(http.MethodGet, "/ether/plugin-host/viewers/granted", "cred-one", ""); status != http.StatusOK {
+		t.Fatalf("granted viewers: status %d", status)
+	}
 	status, histOut := doHost(http.MethodGet, "/ether/plugin-host/viewers/7/history?limit=10", "cred-one", "")
 	if status != http.StatusOK || histOut["viewerId"] != float64(7) {
 		t.Fatalf("viewer history = %d %+v", status, histOut)

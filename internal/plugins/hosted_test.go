@@ -45,6 +45,9 @@ func (h *memHost) CatalogSearch(context.Context, string, int, int) (json.RawMess
 	return json.RawMessage(`{"titles":[]}`), nil
 }
 func (h *memHost) CatalogGet(context.Context, string) (json.RawMessage, error) { return nil, nil }
+func (h *memHost) ViewerGranted(context.Context) (json.RawMessage, error) {
+	return json.RawMessage(`[]`), nil
+}
 func (h *memHost) ViewerHistory(context.Context, int64, int, int) (json.RawMessage, error) {
 	return nil, ErrPermissionDenied
 }
@@ -61,6 +64,9 @@ func (h *memHost) FoldersStat(context.Context, string, string) (FolderEntry, err
 	return FolderEntry{}, ErrPermissionDenied
 }
 func (h *memHost) NotifyOwner(context.Context, string) error { return nil }
+func (h *memHost) Settings(context.Context) (map[string]any, error) {
+	return map[string]any{"greeting": "Hi"}, nil
+}
 func (h *memHost) Log(context.Context, string, string, map[string]any) error {
 	return nil
 }

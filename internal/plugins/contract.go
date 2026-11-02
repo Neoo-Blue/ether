@@ -362,6 +362,7 @@ type Host interface {
 	CatalogGet(ctx context.Context, id string) (json.RawMessage, error)
 
 	// ViewerHistory needs viewers.watch_history for that viewer.
+	ViewerGranted(ctx context.Context) (json.RawMessage, error)
 	ViewerHistory(ctx context.Context, viewerID int64, limit, offset int) (json.RawMessage, error)
 	// SetWatchState needs viewers.write_watch_state; journalled.
 	SetWatchState(ctx context.Context, viewerID int64, titleID string, watched bool) error
@@ -372,6 +373,12 @@ type Host interface {
 	// root. They never return file contents.
 	FoldersList(ctx context.Context, root, path string) ([]FolderEntry, error)
 	FoldersStat(ctx context.Context, root, path string) (FolderEntry, error)
+
+	// Settings returns the plugin's current non-secret settings. Plugins
+	// read them per request instead of keeping them in instance memory,
+	// because hosted plugins run in a pool of instances that restart.
+	// Secrets stay behind SecretGet.
+	Settings(ctx context.Context) (map[string]any, error)
 
 	// NotifyOwner posts a console notice (rate-limited).
 	NotifyOwner(ctx context.Context, text string) error

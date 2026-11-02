@@ -1,0 +1,34 @@
+{
+  "fields": [
+    {
+      "key": "url",
+      "kind": "url",
+      "label": "$t:url",
+      "required": true
+    },
+    {
+      "key": "token",
+      "kind": "secret",
+      "label": "$t:token",
+      "required": true
+    },
+    {
+      "key": "started",
+      "kind": "text",
+      "label": "$t:started",
+      "hint": "$t:service_hint"
+    },
+    {
+      "key": "paused",
+      "kind": "text",
+      "label": "$t:paused",
+      "hint": "$t:service_hint"
+    },
+    {
+      "key": "stopped",
+      "kind": "text",
+      "label": "$t:stopped",
+      "hint": "$t:service_hint"
+    }
+  ]
+}

@@ -520,7 +520,7 @@ func (h *recordingHost) CallHost(ctx context.Context, name string, raw json.RawM
 		resp := map[string]any{
 			"status":  200,
 			"headers": map[string]string{"content-type": "application/json"},
-			"body":    `{"ok":true}`,
+			"body":    `{"ok":true,"status":true,"subtitles":[]}`,
 		}
 		b, _ := json.Marshal(resp)
 		return b, nil
@@ -534,6 +534,8 @@ func (h *recordingHost) CallHost(ctx context.Context, name string, raw json.RawM
 			return nil, wasm.Forbidden("catalog permission not declared")
 		}
 		return json.RawMessage(`{"id":1,"title":"The Kid","type":"movie","year":1921}`), nil
+	case "viewers.granted":
+		return json.RawMessage(`[]`), nil
 	case "viewers.history":
 		if h.man.Ether.Permissions.Viewers.WatchHistory == "" || h.man.Ether.Permissions.Viewers.WatchHistory == "none" {
 			return nil, wasm.Forbidden("viewers.watch_history permission not declared")
@@ -841,16 +843,15 @@ func checkRoutes(ctx context.Context, rep *Report, man plugins.Manifest, plug *w
 		})
 	}
 
-	// Subtitles: must refuse calls without X-Ether-Pick and succeed with X-Ether-Pick.
+	// Listing is public to the host; download requires a viewer pick.
 	if man.HasCapability(plugins.CapSubtitles) {
 		subPath := "/subtitles/movie/tt0012349/videoHash=0123456789abcdef.json"
-		// 1. Without pick token: must refuse (status >= 400 or error object).
-		callNoPick(ctx, rep, plug, subPath)
-		// 2. With pick token: must return subtitles array.
+		// Download must refuse a missing pick token.
+		callNoPick(ctx, rep, plug, "/ether/subtitles/download")
+		// Listing succeeds without a pick and returns a subtitles array.
 		fixtures = append(fixtures, routeFixture{
-			method:  "GET",
-			path:    subPath,
-			headers: map[string]string{"X-Ether-Pick": "kit-pick-token-1"},
+			method: "GET",
+			path:   subPath,
 			validate: func(resp wasm.Response) string {
 				var doc struct {
 					Subtitles []map[string]any `json:"subtitles"`
@@ -1006,13 +1007,13 @@ func callNoPick(ctx context.Context, rep *Report, plug *wasm.Plugin, subPath str
 	defer cancel()
 	t0 := time.Now()
 	resp, _, err := plug.CallDetailed(cctx, wasm.Request{
-		Method:  "GET",
+		Method:  "POST",
 		Path:    subPath,
 		Headers: map[string]string{"X-Ether-Request-Id": "kit-nopick"},
 	})
 	dur := time.Since(t0)
 	rt := RouteTiming{
-		Method:     "GET",
+		Method:     "POST",
 		Route:      subPath + " (without X-Ether-Pick)",
 		Status:     resp.Status,
 		Duration:   dur,
@@ -1031,8 +1032,8 @@ func callNoPick(ctx context.Context, rep *Report, plug *wasm.Plugin, subPath str
 		rep.addErr("subtitles", subPath, rt.Error)
 		return
 	}
-	if resp.Status < 400 || resp.Status >= 500 {
-		rt.Error = "subtitle route must refuse calls without X-Ether-Pick (expected HTTP 4xx)"
+	if resp.Status != 403 {
+		rt.Error = "subtitle route must refuse calls without X-Ether-Pick (expected HTTP 403)"
 		rep.Routes = append(rep.Routes, rt)
 		rep.addErr("subtitles", subPath, rt.Error)
 		return

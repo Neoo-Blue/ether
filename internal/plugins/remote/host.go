@@ -27,10 +27,13 @@ type Host interface {
 	CatalogSearch(ctx context.Context, pluginID, query string, limit, offset int) (json.RawMessage, error)
 	CatalogGet(ctx context.Context, pluginID, id string) (json.RawMessage, error)
 
+	ViewerGranted(ctx context.Context, pluginID string) (json.RawMessage, error)
 	ViewerHistory(ctx context.Context, pluginID string, viewerID int64, limit, offset int) (json.RawMessage, error)
 	SetWatchState(ctx context.Context, pluginID string, viewerID int64, titleID string, watched bool) error
 
 	CollectionsUpsert(ctx context.Context, pluginID string, collection json.RawMessage) error
+
+	Settings(ctx context.Context, pluginID string) (map[string]any, error)
 
 	NotifyOwner(ctx context.Context, pluginID, text string) error
 	Log(ctx context.Context, pluginID, level, msg string, attrs map[string]any) error
@@ -79,8 +82,10 @@ func NewHostHandler(opts HostOptions) *HostHandler {
 	mux.HandleFunc("GET /ether/plugin-host/catalog/search", h.catalogSearch)
 	mux.HandleFunc("GET /ether/plugin-host/catalog/{id...}", h.catalogGet)
 	mux.HandleFunc("GET /ether/plugin-host/viewers/{viewerId}/history", h.viewerHistory)
+	mux.HandleFunc("GET /ether/plugin-host/viewers/granted", h.viewerGranted)
 	mux.HandleFunc("POST /ether/plugin-host/viewers/watch-state", h.setWatchState)
 	mux.HandleFunc("POST /ether/plugin-host/collections/upsert", h.collectionsUpsert)
+	mux.HandleFunc("GET /ether/plugin-host/settings", h.settings)
 	mux.HandleFunc("POST /ether/plugin-host/notify", h.notify)
 	mux.HandleFunc("POST /ether/plugin-host/log", h.logLine)
 	h.mux = mux
@@ -187,6 +192,11 @@ func (h *HostHandler) catalogGet(w http.ResponseWriter, r *http.Request) {
 
 // --- Viewers ---
 
+func (h *HostHandler) viewerGranted(w http.ResponseWriter, r *http.Request) {
+	out, err := h.host.ViewerGranted(r.Context(), pluginIDOf(r))
+	h.writeRaw(w, out, err)
+}
+
 func (h *HostHandler) viewerHistory(w http.ResponseWriter, r *http.Request) {
 	viewerID, err := strconv.ParseInt(r.PathValue("viewerId"), 10, 64)
 	if err != nil || viewerID <= 0 {
@@ -233,6 +243,14 @@ func (h *HostHandler) collectionsUpsert(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (h *HostHandler) settings(w http.ResponseWriter, r *http.Request) {
+	v, err := h.host.Settings(r.Context(), pluginIDOf(r))
+	if !h.finishErr(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"settings": v})
 }
 
 func (h *HostHandler) notify(w http.ResponseWriter, r *http.Request) {

@@ -132,14 +132,15 @@ func baseGoodFiles() ([]byte, map[string][]byte) {
     ether.http.fetch({ method: "GET", url: "https://api.example.com/list" });
     return { status: 200, body: JSON.stringify({ metas: [] }) };
   }
-  if (p.indexOf("/subtitles/") === 0) {
+  if (p === "/ether/subtitles/download") {
     var hdrs = (req && req.headers) || {};
     var pick = hdrs["X-Ether-Pick"] || hdrs["x-ether-pick"] || "";
     if (!pick) {
-      return { status: 403, body: JSON.stringify({ error: { code: "missing_pick", message: "Subtitle route requires an X-Ether-Pick header." } }) };
+      return { status: 403, body: JSON.stringify({ error: { code: "missing_pick", message: "Subtitle download requires an X-Ether-Pick header." } }) };
     }
-    return { status: 200, body: JSON.stringify({ subtitles: [] }) };
+    return { status: 200, body: JSON.stringify({ format: "srt", encoding: "utf8", data: "" }) };
   }
+  if (p.indexOf("/subtitles/") === 0) return { status: 200, body: JSON.stringify({ subtitles: [] }) };
   if (p.indexOf("/ether/markers/") === 0) {
     return { status: 200, body: JSON.stringify({ markers: [] }) };
   }

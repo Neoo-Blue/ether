@@ -77,7 +77,7 @@ globalThis.ether = (() => {
     secret: { get: (n) => call("secret.get", [n]) },
     http: { fetch: (req) => call("http.fetch", [req]) },
     catalog: { search: (q) => call("catalog.search", [q]), get: (id) => call("catalog.get", [id]) },
-    viewers: { history: (id, page) => call("viewers.history", [id, page == null ? 0 : page]),
+    viewers: { granted: () => call("viewers.granted", []), history: (id, page) => call("viewers.history", [id, page == null ? 0 : page]),
                setWatchState: (v) => call("viewers.setWatchState", [v]) },
     collections: { upsert: (c) => call("collections.upsert", [c]) },
     folders: { list: (root, path) => call("folders.list", [root, path == null ? "" : path]),

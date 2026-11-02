@@ -14,12 +14,14 @@ export interface HostFetchRequest {
   url: string;
   headers?: Record<string, string>;
   body?: string;
+  bodyBase64?: string;
 }
 
 export interface HostFetchResponse {
   status: number;
   headers: Record<string, string>;
   body: string;
+  bodyBase64?: string;
 }
 
 export interface FolderEntry {
@@ -37,12 +39,17 @@ export interface CatalogTitleSummary {
   year?: number;
   imdbId?: string;
   tmdbId?: number;
+  genres?: string[];
+  posterPath?: string;
+  summary?: string;
 }
 
 export interface ViewerWatchEntry {
   titleId: string;
   title?: string;
   watchedAt?: string;
+  type?: string;
+  progress?: number;
   completed?: boolean;
 }
 
@@ -68,6 +75,7 @@ export interface EtherHost {
     get(id: string): MaybePromise<CatalogTitleSummary | null>;
   };
   viewers: {
+    granted(): MaybePromise<Array<{ id: number; name: string }>>;
     history(
       viewerId: number,
       limit?: number,
@@ -115,6 +123,7 @@ interface GlobalEtherBindings {
       get: (id: string) => CatalogTitleSummary | null;
     };
     viewers: {
+      granted: () => Array<{ id: number; name: string }>;
       history: (viewerId: number, limit?: number, offset?: number) => ViewerWatchEntry[];
       setWatchState: (
         viewerIdOrObj: number | { viewerId: number; titleId: string; watched: boolean },
@@ -194,7 +203,7 @@ export function createHostedClient(): EtherHost {
           method: req.method ?? "GET",
           url: req.url,
           headers: req.headers ?? {},
-          body: req.body ?? "",
+          ...(req.bodyBase64 !== undefined ? { bodyBase64: req.bodyBase64 } : { body: req.body ?? "" }),
         };
         if (g.ether?.http) return g.ether.http.fetch(normalized);
         return callHost<HostFetchResponse>("http.fetch", [normalized]);
@@ -218,6 +227,7 @@ export function createHostedClient(): EtherHost {
       },
     },
     viewers: {
+      granted() { return callHost<Array<{ id: number; name: string }>>("viewers.granted", []) ?? []; },
       history(viewerId: number, limit = 50, offset = 0): ViewerWatchEntry[] {
         if (typeof g.__ether_host === "function") {
           return callHost<ViewerWatchEntry[]>("viewers.history", [viewerId, limit, offset]) ?? [];
@@ -436,6 +446,7 @@ export function createRemoteHostClient(opts: RemoteHostOptions = {}): EtherHost 
       },
     },
     viewers: {
+      async granted() { return (await callJson<Array<{ id: number; name: string }>>("GET", "/ether/plugin-host/viewers/granted")) ?? []; },
       async history(viewerId: number, limit = 50, offset = 0): Promise<ViewerWatchEntry[]> {
         const params = new URLSearchParams({
           limit: String(limit),
