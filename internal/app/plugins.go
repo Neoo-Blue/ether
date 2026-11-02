@@ -12,13 +12,15 @@ import (
 	"github.com/braedonsaunders/ether/internal/extend"
 	"github.com/braedonsaunders/ether/internal/playback"
 	"github.com/braedonsaunders/ether/internal/plugins"
+	"github.com/braedonsaunders/ether/internal/plugins/studio"
 	"github.com/braedonsaunders/ether/internal/plugins/wasm"
 	"github.com/braedonsaunders/ether/internal/state"
 )
 
-// pluginRuntime is the plugin host and its adapters (WS7, WS8, WS9).
+// pluginRuntime is the plugin host and its adapters (WS7, WS8, WS9, WS11).
 type pluginRuntime struct {
-	mgr *plugins.Manager
+	mgr    *plugins.Manager
+	studio *studio.Studio
 }
 
 func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRuntime, error) {
@@ -73,6 +75,18 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 	}
 	unsubscribe := mgr.SubscribeInvalidations()
 
+	studioSvc := studio.New(studio.Deps{
+		Manager: mgr,
+		Engine:  engine,
+		Publish: func(pubCtx context.Context, event string, data any) error {
+			if a.streamRT != nil {
+				a.streamRT.Publish(pubCtx, event, data)
+			}
+			return nil
+		},
+		Logger: a.log.With("component", "plugins-studio"),
+	})
+
 	// Event sources (SPEC §5.7): playback and watch state. Normalized
 	// notify kinds (title.available, user.joined) reach plugins through
 	// Manager.Publish; the notify service has no subscribe hook yet.
@@ -125,13 +139,17 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 		stopState()
 		unsubscribe()
 	})
-	return &pluginRuntime{mgr: mgr}, nil
+	return &pluginRuntime{mgr: mgr, studio: studioSvc}, nil
 }
 
-// pluginHandlers mounts the owner plugin API under /api/plugins (WS7).
+// pluginHandlers mounts the owner plugin API under /api/plugins (WS7, WS11).
 func (a *App) pluginHandlers(m map[string]http.Handler) {
 	if a.pluginsRT != nil && a.pluginsRT.mgr != nil {
-		m["plugins"] = a.pluginsRT.mgr.Handler()
+		h := a.pluginsRT.mgr.Handler()
+		if a.pluginsRT.studio != nil {
+			h = a.pluginsRT.studio.WrapPluginHandler(h)
+		}
+		m["plugins"] = h
 	}
 }
 
