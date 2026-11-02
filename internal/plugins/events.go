@@ -29,11 +29,11 @@ func (m *Manager) Publish(ctx context.Context, ev Event) {
 	if ev.At.IsZero() {
 		ev.At = m.now()
 	}
-	m.store.logEvent(ctx, ev)
 	recs, err := m.store.list(ctx)
 	if err != nil {
 		return
 	}
+	logged := false
 	for _, r := range recs {
 		if !r.Enabled || r.Manifest.Ether == nil || !r.Manifest.HasCapability(CapEvents) {
 			continue
@@ -52,6 +52,10 @@ func (m *Manager) Publish(ctx context.Context, ev Event) {
 		g, _ := m.store.grants(ctx, r.ID)
 		if g.revoked("events") {
 			continue
+		}
+		if !logged {
+			m.store.logEvent(ctx, ev)
+			logged = true
 		}
 		out := ev
 		if !viewerOK(g, normLevel(r.Manifest.Ether.Permissions.Viewers.Identity), ev.ViewerID) {
