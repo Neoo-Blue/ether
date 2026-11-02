@@ -33,7 +33,7 @@ func TestSearchItemArrivesBeforeFeedFinishes(t *testing.T) {
 			t.Errorf("arrival: %+v", batch)
 		}
 		close(seen)
-	})
+	}, c.clientIdentityFor(true, false))
 	if err != nil || len(r) != 1 {
 		t.Fatalf("waited for the complete feed: %v, %d", err, len(r))
 	}
@@ -61,7 +61,7 @@ func TestJSONSearchItemArrivesBeforeFeedFinishes(t *testing.T) {
 		if count == 1 {
 			close(seen)
 		}
-	})
+	}, c.clientIdentityFor(true, false))
 	if err != nil || len(rs) != 2 || count != 2 {
 		t.Fatalf("streamed JSON: %v, results %d, arrivals %d", err, len(rs), count)
 	}

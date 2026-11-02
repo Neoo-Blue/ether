@@ -146,6 +146,40 @@ func TestProwlarrImportIsAdditiveNeverRemovesAbsent(t *testing.T) {
 	}
 }
 
+// A per-indexer identity is the owner's answer to a site that treats
+// unfamiliar clients badly; a sync must not silently drop it.
+func TestProwlarrImportKeepsIndexerClientIdentity(t *testing.T) {
+	body := `[{"id":4,"name":"News","enable":true,"protocol":"usenet"}]`
+	status := http.StatusOK
+	a, store, url := prowlarrTestApp(t, &body, &status, "")
+	if w := postProwlarr(t, a, url, true); w.Code != http.StatusOK {
+		t.Fatalf("import1 code=%d body=%s", w.Code, w.Body.String())
+	}
+	prefix := newznab.ProwlarrIDPrefix(config.Prowlarr{URL: url})
+	if err := store.Update(func(c *config.Config) error {
+		for i := range c.Indexers {
+			if c.Indexers[i].ID == prefix+"4" {
+				c.Indexers[i].ClientIdentity = config.IdentitySonarr
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if w := postProwlarr(t, a, url, true); w.Code != http.StatusOK {
+		t.Fatalf("import2 code=%d body=%s", w.Code, w.Body.String())
+	}
+	for _, ix := range store.Get().Indexers {
+		if ix.ID == prefix+"4" {
+			if ix.ClientIdentity != config.IdentitySonarr {
+				t.Fatalf("override lost on sync: %+v", ix)
+			}
+			return
+		}
+	}
+	t.Fatal("synced indexer missing")
+}
+
 // A 429 from Prowlarr propagates a validated Retry-After to the caller;
 // malformed/huge values are never forwarded verbatim.
 func TestProwlarrHandlerPropagatesValidatedRetryAfter(t *testing.T) {

@@ -62,12 +62,13 @@ func (c *Client) recent(ctx context.Context, offset, limit int) ([]core.Release,
 	if !c.feedMode.unfiltered {
 		q.Set("cat", joinCats(recentCategories(cfg)))
 	}
-	rs, err := c.doSearch(ctx, q)
+	id := c.generalIdentity()
+	rs, err := c.doSearch(ctx, q, id)
 	if err != nil || len(rs) > 0 || offset != 0 || c.feedMode.unfiltered || c.now().Sub(c.feedMode.checked) < 6*time.Hour {
 		return rs, err
 	}
 	q.Del("cat")
-	rs, err = c.doSearch(ctx, q)
+	rs, err = c.doSearch(ctx, q, id)
 	if err != nil {
 		return nil, err
 	} // don't call a denied/failed probe an empty feed

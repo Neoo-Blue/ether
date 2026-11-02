@@ -44,6 +44,22 @@ export interface Indexer {
   settings?: Record<string, string> | null;
   /** A built-in site's password settings; each set value is redacted to "••••". */
   secretSettings?: Record<string, string> | null;
+  /** Client identity preset overriding the global policy for this indexer. */
+  clientIdentity?: string;
+}
+
+/**
+ * Input.clientIdentity: one preset per purpose and media, plus the owner's
+ * own user agent and headers when a preset is "custom".
+ */
+export interface ClientIdentityConfig {
+  tvSearch?: string;
+  movieSearch?: string;
+  tvGrab?: string;
+  movieGrab?: string;
+  userAgent?: string;
+  /** Header values are sealed server-side and arrive redacted to "••••". */
+  headers?: Record<string, string> | null;
 }
 
 export type IndexerProtocol = "usenet" | "torrent";
@@ -262,6 +278,8 @@ export interface EtherConfig {
     };
   };
   indexers: Indexer[] | null;
+  /** Client Ether presents to Newznab/Torznab indexers. */
+  clientIdentity?: ClientIdentityConfig;
   indexerSites?: IndexerSitesConfig;
   /** Absent on servers without debrid support. */
   debrid?: DebridConfig;

@@ -187,9 +187,16 @@ func ValidateConfig(cfg config.Config) []FieldError {
 	}
 
 	seenIx := map[string]bool{}
+	for _, e := range cfg.ClientIdentity.Validate() {
+		v.add("clientIdentity."+e.Field, "%s", e.Message)
+	}
+
 	for i, ix := range cfg.Indexers {
 		f := fmt.Sprintf("indexers[%d]", i)
 		v.httpURL(f+".url", ix.URL, true)
+		if ix.ClientIdentity != "" && !config.ValidSearchIdentity(ix.ClientIdentity) {
+			v.add(f+".clientIdentity", "must be a client that searches or empty to inherit")
+		}
 		if ix.Kind != "" {
 			v.oneOf(f+".kind", ix.Kind, config.IndexerKindNewznab, config.IndexerKindCardigann, config.IndexerKindStremio)
 		}
