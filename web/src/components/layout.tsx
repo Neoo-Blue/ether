@@ -128,7 +128,7 @@ export function Section({
 export function SubtabNav(props: ComponentProps<typeof AppKitSubtabNav>) {
   const root = useRef<HTMLDivElement>(null);
   return (
-    <div ref={root} className="pb-6">
+    <div ref={root} className="mb-6">
       <AppKitSubtabNav
         {...props}
         onSelect={(key) => {

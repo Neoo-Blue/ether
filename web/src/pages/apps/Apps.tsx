@@ -33,7 +33,12 @@ import { AwayFromHome } from "./AwayFromHome";
 import { PlexApp } from "./PlexApp";
 import { appLabel, appPath, appPurpose, appRank } from "./catalog";
 import { LevelBadge } from "../../components/status";
-import { StatusRow, AddressChip } from "../../components/AppStatusList";
+import {
+  StatusRow,
+  AddressChip,
+  ConnectionStatusRow,
+  StatusHelp,
+} from "../../components/AppStatusList";
 import { HomeStatusRow } from "./HomeStatus";
 import { awaySummary, usableAddresses } from "./reachability";
 
@@ -206,15 +211,19 @@ function ConnectDevice({
   if (!info.enabled) return null;
   if (["stremio", "webdav", "m3u"].includes(info.descriptor.id)) {
     return (
-      <Link className="text-primary underline" to="/me">
-        {t("Connect a device")}
-      </Link>
+      <Button asChild variant="outline">
+        <Link to="/me">{t("Connect a device")}</Link>
+      </Button>
     );
   }
   if (!url) return null;
   return (
     <div>
-      {open ? null : <Button onClick={() => setOpen(true)}>{t("Connect a device")}</Button>}
+      {open ? null : (
+        <Button variant="outline" onClick={() => setOpen(true)}>
+          {t("Connect a device")}
+        </Button>
+      )}
       {open ? (
         <div className="space-y-2 pt-3">
           <p>{t("Enter this server address in a supported app:")}</p>
@@ -347,9 +356,9 @@ function ProtocolSettings({
         {shared ? (
           <SettingsSection title={t("Connect")} description={shared}>
             <div className="px-5 py-3">
-              <Link className="text-primary underline" to="/me">
-                {t("Open your account")}
-              </Link>
+              <Button asChild variant="outline">
+                <Link to="/me">{t("Open your account")}</Link>
+              </Button>
             </div>
           </SettingsSection>
         ) : null}
@@ -561,41 +570,51 @@ function SignInSection({
   const ownerPath = useOwnerViewerPath();
   const portalURL = viewerPortalAddress(info ? usableAddresses(info.status)[0] : undefined);
   return (
-    <SettingsSection
-      title={t("How people sign in")}
-      description={t("Infuse needs an app password. The Emby for TV app isn't supported.")}
-    >
+    <SettingsSection title={t("How people sign in")}>
       <SettingsRow
         title={t("Viewer accounts")}
         description={t("People sign in with their Ether viewer account.")}
         control={
-          <Link className="text-primary underline" to="/viewers">
-            {t("Viewers")}
-          </Link>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/viewers">{t("Viewers")}</Link>
+          </Button>
         }
       />
-      <div className="flex flex-wrap items-center gap-3 px-5 py-3">
-        <Link className="text-primary underline" to={ownerPath}>
-          {t("Open my account")}
-        </Link>
-        <AddressChip address={portalURL} />
-      </div>
       <SettingsRow
         title={t("Quick Connect")}
         description={t("Approve the code in the viewer portal.")}
         control={
-          quickConnect ? (
-            <Switch
-              checked={quickConnect.checked}
-              aria-label={t("Quick Connect")}
-              onChange={(e) => quickConnect.onChange(e.currentTarget.checked)}
-            />
-          ) : undefined
+          <div className="flex flex-wrap items-center gap-3">
+            <AddressChip address={portalURL} />
+            {quickConnect ? (
+              <Switch
+                checked={quickConnect.checked}
+                aria-label={t("Quick Connect")}
+                onChange={(e) => quickConnect.onChange(e.currentTarget.checked)}
+              />
+            ) : null}
+          </div>
         }
       />
       <SettingsRow
-        title={t("App password")}
+        title={
+          <span className="flex items-center gap-2">
+            {t("App password")}
+            <StatusHelp
+              text={
+                info?.descriptor.id === "emby"
+                  ? t("The Emby for TV app isn't supported.")
+                  : t("Infuse needs an app password.")
+              }
+            />
+          </span>
+        }
         description={t("Create an app password under Connect apps in your account.")}
+        control={
+          <Button asChild variant="outline" size="sm">
+            <Link to={ownerPath}>{t("Open your account")}</Link>
+          </Button>
+        }
       />
     </SettingsSection>
   );
@@ -610,7 +629,7 @@ function AppDetail({ info, startOpen = false }: { info: FrontendInfo; startOpen?
     <div className="space-y-6 pb-6">
       <SettingsSection title={t("Status")}>
         <HomeStatusRow status={info.status} address={chosen} />
-        <StatusRow state={info.status.wan} title={away.title} description={away.detail} />
+        <ConnectionStatusRow state={info.status.wan} title={away.title} detail={away.detail} />
         {info.status.error ? (
           <StatusRow
             state="unreachable"

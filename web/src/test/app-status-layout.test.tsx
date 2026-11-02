@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import { StatusRow, AddressChip } from "../components/AppStatusList";
+import { StatusRow, AddressChip, ConnectionStatusRow } from "../components/AppStatusList";
 import { SubtabNav } from "../components/layout";
 
 it.each([
@@ -45,4 +45,20 @@ it("restores the scroll container after selecting a tab", () => {
   frame!(0);
   expect(container.firstElementChild!.scrollTop).toBe(180);
   vi.restoreAllMocks();
+});
+
+it("keeps connection details in help and the address in a separate copyable chip", () => {
+  render(
+    <ConnectionStatusRow
+      state="unknown"
+      title="At home"
+      detail="Detailed explanation"
+      address="http://192.168.1.2:8096"
+    />,
+  );
+  expect(screen.getByText("· Not checked yet")).toBeVisible();
+  expect(screen.queryByText("Detailed explanation")).not.toBeInTheDocument();
+  expect(screen.getByRole("link")).toHaveTextContent("http://192.168.1.2:8096");
+  fireEvent.focus(screen.getByRole("button", { name: "More information" }));
+  expect(screen.getByRole("tooltip")).toHaveTextContent("Detailed explanation");
 });

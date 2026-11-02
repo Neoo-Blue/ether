@@ -114,22 +114,17 @@ describe("Apps", () => {
     expect(screen.queryByRole("button", { name: "Connect a device" })).not.toBeInTheDocument();
     expect(screen.queryByRole("spinbutton", { name: "Port" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Silo" }));
-    expect(await screen.findByText(/Reachable at home/)).toBeInTheDocument();
+    expect(await screen.findByText(/· Reachable/)).toBeInTheDocument();
     expect(screen.getByText(/192\.168\.1\.2:8090/)).toBeInTheDocument();
     expect(screen.queryByText(/LAN:/)).not.toBeInTheDocument();
-    expect(screen.getByText(/Outside access is not checked/)).toBeInTheDocument();
+    expect(screen.queryByText(/Outside access is not checked/)).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "How people sign in" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Copy address" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Copy address" })).toHaveLength(2);
     expect(
       screen.getByText("Create an app password under Connect apps in your account."),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText("Infuse needs an app password. The Emby for TV app isn't supported."),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open my account" })).toHaveAttribute(
-      "href",
-      "/viewers",
-    );
+    expect(screen.queryByText(/The Emby for TV/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Open my account" })).not.toBeInTheDocument();
     expect(screen.getByText("People sign in with their Ether viewer account.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Viewers" })).toHaveAttribute("href", "/viewers");
     fireEvent.click(screen.getByRole("button", { name: "Connect a device" }));
@@ -208,7 +203,7 @@ describe("Apps", () => {
       throw new Error(`Unexpected request: ${path}`);
     });
     renderApps("/apps/jellyfin");
-    const line = await screen.findByText(/Not checked yet/);
+    const line = await screen.findByRole("link", { name: urls[0] });
     expect(line.textContent).toContain("http://192.168.68.65:32400/jellyfin");
     expect(line.textContent).not.toMatch(/fd79|100\.65|10\.255|:8098/);
     expect(screen.queryByText("http://[fd79:f184::1]:32400/jellyfin")).not.toBeInTheDocument();
@@ -220,8 +215,8 @@ describe("Apps", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "Server address" }), {
       target: { value: "http://192.168.68.65:8098" },
     });
-    expect(screen.getByText(/Not checked yet/).textContent).toContain("http://192.168.68.65:8098");
-    expect(screen.getByText(/Not checked yet/).textContent).not.toContain("32400/jellyfin");
+    expect(screen.getByRole("link", { name: "http://192.168.68.65:8098" })).toBeInTheDocument();
+    expect(line).not.toHaveTextContent("32400/jellyfin");
   });
 
   it("hides Connect a device when the panel is already open", async () => {

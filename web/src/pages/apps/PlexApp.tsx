@@ -24,9 +24,9 @@ import { SchemaField, type FieldDef } from "../settings/SchemaForm";
 import * as schema from "../settings/schema";
 import { PlexStatus } from "../settings/sections";
 import { claimFailureMessage, plexAccountClaimed, translatePlexFieldError } from "./plex-account";
-import { StatusRow } from "../../components/AppStatusList";
+import { StatusRow, ConnectionStatusRow } from "../../components/AppStatusList";
 import { HomeStatusRow } from "./HomeStatus";
-import { awaySummary, claimSummary, type ReachabilityStatus } from "./reachability";
+import { awaySummary, type ReachabilityStatus } from "./reachability";
 
 type Obj = Record<string, unknown>;
 type PlexDraft = { plex: Obj };
@@ -201,13 +201,10 @@ function PlexAccount({
       <>
         <StatusRow
           state={claimed ? "reachable" : "unknown"}
-          title={claimed ? t("Signed in") : t("Not signed in")}
-          description={
+          title={
             claimed
-              ? claimSummary(true, owner)
-              : t(
-                  "Not signed in to plex.tv. Sign in to claim this server so Plex apps can find it.",
-                )
+              ? t("Claimed by {owner}", { owner: owner || t("your Plex account") })
+              : t("Not claimed")
           }
           control={
             claimed ? (
@@ -387,7 +384,7 @@ export function PlexApp({
     <>
       <SettingsSection title={t("Status")}>
         <HomeStatusRow status={status} />
-        <StatusRow state={status?.wan} title={away.title} description={away.detail} />
+        <ConnectionStatusRow state={status?.wan} title={away.title} detail={away.detail} />
         <PlexAccount
           config={config.data}
           onChanged={async () => {

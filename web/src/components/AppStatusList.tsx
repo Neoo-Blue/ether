@@ -1,5 +1,5 @@
-import { Button, toast } from "@braedonsaunders/appkit-ui";
-import { AlertTriangle, CheckCircle2, XCircle, Copy } from "lucide-react";
+import { Button, Tooltip, toast } from "@braedonsaunders/appkit-ui";
+import { AlertTriangle, CheckCircle2, XCircle, Copy, CircleHelp } from "lucide-react";
 import type { ComponentProps } from "react";
 import { SettingsRow } from "./SettingsRow";
 import { t } from "../i18n";
@@ -50,5 +50,50 @@ export function AddressChip({ address }: { address: string }) {
         <Copy size={16} />
       </Button>
     </div>
+  );
+}
+
+export function StatusHelp({ text }: { text: string }) {
+  return (
+    <Tooltip content={text} className="max-w-xs whitespace-normal">
+      <button
+        type="button"
+        aria-label={t("More information")}
+        className="inline-flex text-fg-muted"
+      >
+        <CircleHelp size={15} />
+      </button>
+    </Tooltip>
+  );
+}
+export function ConnectionStatusRow({
+  state,
+  title,
+  detail,
+  address,
+}: {
+  state?: string;
+  title: string;
+  detail: string;
+  address?: string;
+}) {
+  const label =
+    state === "reachable"
+      ? t("Reachable")
+      : state === "unreachable"
+        ? t("Can't reach it")
+        : t("Not checked yet");
+  return (
+    <StatusRow
+      state={state}
+      title={
+        <span className="flex flex-wrap items-center gap-2">
+          {title}
+          <span className="font-normal text-fg-muted">· {label}</span>
+          <StatusHelp text={detail} />
+        </span>
+      }
+      control={address ? <AddressChip address={address} /> : undefined}
+    />
   );
 }
