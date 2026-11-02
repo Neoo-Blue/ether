@@ -468,6 +468,10 @@ class RemoteHostClient:
                 msg or f"Host call {method} {path} failed with HTTP {exc.code}"
             ) from exc
 
+    def settings_get(self) -> Dict[str, Any]:
+        result = self._call_json("GET", "/ether/plugin-host/settings")
+        return result.get("settings", {})
+
     def log(
         self,
         level: str,
@@ -706,9 +710,18 @@ class PluginInstance:
         pick_token = _get_header(headers, "X-Ether-Pick")
         request_id = _get_header(headers, "X-Ether-Request-ID")
         host_client = self._host if self._host is not None else create_remote_host_client()
+        settings = dict(self._current_settings)
+        getter = getattr(host_client, "settings_get", None)
+        if callable(getter) and str(req.get("path", "")) != "/ether/configure" and (not isinstance(host_client, RemoteHostClient) or host_client.credential):
+            fresh = getter()
+            for field in collect_setting_fields(self._settings_schema):
+                key = field.get("key")
+                if field.get("kind") == "secret" and key in self._current_settings:
+                    fresh[key] = self._current_settings[key]
+            settings, _ = decode_settings(self._settings_schema, fresh, self._default_settings)
         return PluginContext(
             manifest=self.manifest,
-            settings=dict(self._current_settings),
+            settings=settings,
             locale=locale,
             pick_token=pick_token,
             request_id=request_id,

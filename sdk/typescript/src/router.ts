@@ -47,7 +47,7 @@ import {
   type RemoteHostOptions,
 } from "./host.ts";
 import { createI18n, type I18nHelper, type StringsCatalog } from "./i18n.ts";
-import { decodeSettings } from "./settings.ts";
+import { collectSettingFields, decodeSettings } from "./settings.ts";
 
 export { PluginHttpError as PluginRouteError };
 
@@ -323,7 +323,7 @@ export function plugin<S = Record<string, unknown>>(
     }
   }
 
-  function buildContext(req: RawRequest): PluginContext<S> {
+  function buildContext(req: RawRequest): MaybePromise<PluginContext<S>> {
     const { query } = parseUrlPathAndQuery(req.path, req.query);
     const localeHeader =
       req.locale ??
@@ -340,9 +340,9 @@ export function plugin<S = Record<string, unknown>>(
       (isHostedRuntime()
         ? createHostedClient()
         : createRemoteHostClient(def.remoteHostOptions));
-    return {
+    const makeContext = (settings: S): PluginContext<S> => ({
       manifest,
-      settings: currentSettings,
+      settings,
       locale,
       pickToken,
       requestId,
@@ -351,7 +351,17 @@ export function plugin<S = Record<string, unknown>>(
       ether: hostClient,
       i18n,
       t: (key, params) => i18n.t(key, params, locale),
+    });
+    if (!hostClient.settings || req.path === "/ether/configure") return makeContext(currentSettings);
+    const fresh = hostClient.settings.get();
+    const resolve = (v: Record<string, unknown>) => {
+      const merged = { ...v };
+      for (const field of collectSettingFields(settingsSchema)) {
+        if (field.kind === "secret" && (currentSettings as Record<string, unknown>)[field.key] !== undefined) merged[field.key] = (currentSettings as Record<string, unknown>)[field.key];
+      }
+      return makeContext(decodeSettings<S>(settingsSchema, merged, def.defaultSettings).settings);
     };
+    return fresh instanceof Promise ? fresh.then(resolve) : resolve(fresh);
   }
 
   function mapResult<T>(
@@ -698,7 +708,7 @@ export function plugin<S = Record<string, unknown>>(
   function handleRequest(req: RawRequest): MaybePromise<RawResponse> {
     try {
       const ctx = buildContext(req);
-      const res = dispatchCore(req, ctx);
+      const res = ctx instanceof Promise ? ctx.then(c => dispatchCore(req, c)) : dispatchCore(req, ctx);
       return res instanceof Promise ? res.catch(handleRouteError) : res;
     } catch (err) {
       return handleRouteError(err);
@@ -707,7 +717,7 @@ export function plugin<S = Record<string, unknown>>(
 
   async function dispatch(req: RawRequest): Promise<RawResponse> {
     try {
-      const ctx = buildContext(req);
+      const ctx = await buildContext(req);
       return await dispatchCore(req, ctx);
     } catch (err) {
       return handleRouteError(err);

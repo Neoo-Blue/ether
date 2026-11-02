@@ -1,0 +1,14 @@
+{
+  "summary": "Associez les vidéos locales aux titres du catalogue.",
+  "folder": "Dossier",
+  "folderHint": "Choisissez un dossier contenant des films ou des séries.",
+  "page": "Dossiers locaux",
+  "description": "Associez les dossiers non identifiés automatiquement.",
+  "empty": "Tous les dossiers analysés sont associés.",
+  "search": "Rechercher un titre",
+  "saved": "Association enregistrée.",
+  "noFolder": "Choisissez un dossier dans les réglages du module.",
+  "scan": "Analyser le dossier",
+  "scanned": "Analyse terminée.",
+  "notScanned": "Analysez le dossier pour trouver les vidéos."
+}

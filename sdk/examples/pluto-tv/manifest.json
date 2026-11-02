@@ -1,0 +1,12 @@
+{
+  "id": "tv.ether.examples.pluto", "version": "1.0.0", "name": "Pluto TV", "description": "Live channels and guide from Pluto TV.",
+  "types": ["tv"], "resources": ["stream"],
+  "ether": {
+    "protocol": 1, "kind": "livetv_source", "capabilities": ["livetv_channels"],
+    "summary": "$t:summary", "icon": "assets/icon.svg", "runtime": {"kind":"hosted", "entry":"plugin.ts"},
+    "permissions": {"network":["api.pluto.tv","boot.pluto.tv"]},
+    "strings": {"en":"i18n/en.json", "fr":"i18n/fr.json"},
+    "settings": {"fields":[{"key":"region", "kind":"select", "label":"$t:region", "hint":"$t:regionHint", "default":"auto", "options":[{"value":"auto","label":"$t:auto"},{"value":"us","label":"United States"},{"value":"ca","label":"Canada"},{"value":"gb","label":"United Kingdom"}]}]},
+    "contributes": {"channels":{"refresh":"1h","test":true}}
+  }
+}
