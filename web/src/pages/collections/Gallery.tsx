@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ActionMenu } from "../../components/ActionMenu";
+import { PluginActionMenu } from "../../viewspec/slots/Slots";
 import { Artwork } from "../../components/Artwork";
 import { ErrorPanel } from "../../components/feedback";
 import { ToolbarPicker } from "../../components/ToolbarPicker";
@@ -570,7 +570,10 @@ export default function CollectionsGallery({
                         </Button>
                       </>
                     )}
-                    <ActionMenu
+                    <PluginActionMenu
+                      slot="actionMenu.collection"
+                      recordId={String(selected!.id)}
+                      onRefresh={() => void collections.reload()}
                       label={t("Collection actions")}
                       items={[
                         {

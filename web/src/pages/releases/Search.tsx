@@ -12,7 +12,7 @@ import {
 import { Ban, HeartPulse, Pin as PinIcon, PinOff, RotateCcw, SearchX, Undo2 } from "lucide-react";
 import { useId, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ActionMenu } from "../../components/ActionMenu";
+import { PluginActionMenu } from "../../viewspec/slots/Slots";
 import { ErrorPanel, LoadingInline, LoadingRows } from "../../components/feedback";
 import { Field } from "../../components/fields";
 import { Section } from "../../components/layout";
@@ -522,7 +522,10 @@ export function ReleaseSearch({ onPinsChanged }: { onPinsChanged?: () => void })
                     header: <span className="sr-only">{t("Actions")}</span>,
                     align: "right",
                     cell: (r) => (
-                      <ActionMenu
+                      <PluginActionMenu
+                        slot="actionMenu.release"
+                        recordId={r.release.id}
+                        onRefresh={() => void result.reload()}
                         label={t("Actions for {release}", { release: r.release.name })}
                         items={[
                           r.pinned

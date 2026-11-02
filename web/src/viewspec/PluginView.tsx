@@ -146,7 +146,9 @@ export function PluginView({
   // view (page, tab) reset with them.
   const paramsKey = JSON.stringify(toParams(params));
   useEffect(() => {
-    setViewParams(JSON.parse(paramsKey) as Record<string, string>);
+    setViewParams((prev) =>
+      JSON.stringify(prev) === paramsKey ? prev : (JSON.parse(paramsKey) as Record<string, string>),
+    );
   }, [paramsKey]);
 
   const refresh = useCallback(() => setTick((n) => n + 1), []);
@@ -210,6 +212,7 @@ export function PluginView({
         else if (toastSpec.kind === "info") toast.info(toastSpec.text);
         else toast.success(toastSpec.text);
       }
+      if (result.job) return;
       if (result.proposal) setProposal(result.proposal);
       if (result.open) open(result.open);
       if (result.refresh) refresh();

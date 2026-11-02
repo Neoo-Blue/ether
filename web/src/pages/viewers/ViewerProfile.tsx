@@ -1,3 +1,7 @@
+import { PluginActionMenu, useSlots } from "../../viewspec/slots/Slots";
+import { PluginView } from "../../viewspec/PluginView";
+import { SlotAnchor } from "../../components/SlotXray";
+import { textOf } from "../../lib/extend";
 import {
   Avatar,
   Badge,
@@ -55,7 +59,9 @@ function asTab(raw: string | undefined): Tab | undefined {
 export default function ViewerProfile() {
   const { id: raw, tab: routeTab } = useParams();
   const id = Number(raw);
-  const tab: Tab = asTab(routeTab) ?? "taste";
+  const slots = useSlots("viewer.tab");
+  const pluginTab = slots.find((d) => `plugin:${d.owner}:${d.meta?.key}` === routeTab);
+  const tab: string = pluginTab ? routeTab! : (asTab(routeTab) ?? "taste");
   const navigate = useNavigate();
 
   const viewer = useAsync<ViewerDetail | null>(() => api.viewer(id), [id]);
@@ -130,7 +136,7 @@ export default function ViewerProfile() {
   // Watchlist, alerts and connected apps need server access; a viewer kept
   // for imported history (or whose access ended) has none of them.
   const serverAccess = v.isOwner || viewerStatus(v) === "active";
-  const view: Tab = !serverAccess && (tab === "watchlist" || tab === "alerts") ? "taste" : tab;
+  const view: string = !serverAccess && (tab === "watchlist" || tab === "alerts") ? "taste" : tab;
 
   return (
     <DetailPageLayout
@@ -163,6 +169,11 @@ export default function ViewerProfile() {
                 <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />{" "}
                 {t("Rebuild rows")}
               </Button>
+              <PluginActionMenu
+                slot="actionMenu.viewer"
+                recordId={String(id)}
+                onRefresh={() => void viewer.reload()}
+              />
               <Button variant="outline" size="sm" onClick={() => navigate("/home")}>
                 <LayoutTemplate size={14} /> {t("Home")}
               </Button>
@@ -174,28 +185,40 @@ export default function ViewerProfile() {
         </div>
       }
       subtabs={
-        <SubtabNav
-          ariaLabel={t("Viewer sections")}
-          active={view}
-          onSelect={setTab}
-          tabs={[
-            { key: "taste", label: t("Taste") },
-            { key: "activity", label: t("Activity"), count: v.recent?.length },
-            { key: "home", label: t("Their Home") },
-            { key: "access", label: t("Limits & preferences") },
-            { key: "playback", label: t("Audio & subtitles") },
-            ...(serverAccess
-              ? [
-                  { key: "watchlist", label: t("Watchlist") },
-                  { key: "alerts", label: t("Alerts") },
-                ]
-              : []),
-            { key: "sign-in", label: t("Sign-in methods & devices") },
-          ]}
-        />
+        <SlotAnchor slot="viewer.tab" onPickSlot={() => navigate("/plugins/develop")}>
+          <SubtabNav
+            ariaLabel={t("Viewer sections")}
+            active={view}
+            onSelect={setTab}
+            tabs={[
+              { key: "taste", label: t("Taste") },
+              { key: "activity", label: t("Activity"), count: v.recent?.length },
+              { key: "home", label: t("Their Home") },
+              { key: "access", label: t("Limits & preferences") },
+              { key: "playback", label: t("Audio & subtitles") },
+              ...(serverAccess
+                ? [
+                    { key: "watchlist", label: t("Watchlist") },
+                    { key: "alerts", label: t("Alerts") },
+                  ]
+                : []),
+              { key: "sign-in", label: t("Sign-in methods & devices") },
+              ...slots.map((d) => ({
+                key: `plugin:${d.owner}:${d.meta!.key}`,
+                label: textOf(d.label),
+              })),
+            ]}
+          />
+        </SlotAnchor>
       }
     >
-      {view === "taste" ? (
+      {pluginTab && view === tab ? (
+        <PluginView
+          plugin={pluginTab.owner}
+          page={pluginTab.meta!.key}
+          params={{ recordType: "viewer", recordId: String(id) }}
+        />
+      ) : view === "taste" ? (
         taste.error ? (
           <ErrorPanel error={taste.error} onRetry={() => void taste.reload()} />
         ) : !taste.data ? (

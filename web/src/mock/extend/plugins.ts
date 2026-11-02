@@ -541,6 +541,28 @@ function fixturePlugins(): Fixture[] {
       settings: {},
       schema: {},
       descriptors: [
+        // Fixture plugin contributions exercise every native console slot.
+        ...[
+          "title.panel",
+          "viewer.tab",
+          "dashboard.panel",
+          "actionMenu.title",
+          "actionMenu.viewer",
+          "actionMenu.collection",
+          "actionMenu.release",
+        ].map((slot) => ({
+          kind: "slot" as const,
+          id: `plugin:${wrapped.id}/fixture-${slot}`,
+          owner: wrapped.id,
+          group: wrapped.name,
+          label: text(wrapped.id, `Fixture ${slot}`),
+          meta: {
+            slot,
+            key: `fixture-${slot}`,
+            route: slot.startsWith("actionMenu.") ? undefined : "/ether/view/fixture",
+            action: slot.startsWith("actionMenu.") ? "fixture" : undefined,
+          },
+        })),
         {
           kind: "page",
           id: "plugin:community.example.wrapped/wrapped",
@@ -627,6 +649,7 @@ function descriptorsFromManifest(
     capabilities?: string[];
     contributes?: {
       pages?: { key: string; label: string; route: string }[];
+      slots?: { key: string; label: string; slot: string; route?: string; action?: string }[];
       listSources?: { key: string; label: string }[];
       rankingSteps?: { key: string; label: string }[];
       ruleConditions?: { key: string; label: string }[];
@@ -640,6 +663,16 @@ function descriptorsFromManifest(
       owner: id,
       label: text(p.label),
       meta: { route: p.route },
+    });
+  }
+  for (const slot of ether.contributes?.slots ?? []) {
+    out.push({
+      kind: "slot",
+      id: `plugin:${id}/${slot.key}`,
+      owner: id,
+      group: name,
+      label: text(slot.label),
+      meta: { slot: slot.slot, key: slot.key, route: slot.route, action: slot.action },
     });
   }
   for (const ls of ether.contributes?.listSources ?? []) {
@@ -1113,8 +1146,16 @@ export function createPluginsMock(): {
       bump();
       return json({ status: "removed" });
     }
-    if (method === "GET" && seg[2] === "view") {
-      return json({ spec: { specVersion: 1, blocks: [] }, data: {} });
+    if (method === "GET" && seg[2] === "views") {
+      return json({
+        spec: {
+          specVersion: 1,
+          layout: "bare",
+          header: [],
+          body: [{ kind: "text", content: "Fixture plugin content" }],
+        },
+        data: {},
+      });
     }
     if (method === "POST" && seg[2] === "actions") {
       return json({ toast: "Done" });

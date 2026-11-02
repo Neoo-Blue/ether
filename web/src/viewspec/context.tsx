@@ -35,6 +35,7 @@ export interface PluginOpen {
 }
 
 export interface PluginActionResult {
+  job?: string;
   toast?: string | { text: string; kind?: "success" | "error" | "info" };
   refresh?: boolean;
   open?: PluginOpen;

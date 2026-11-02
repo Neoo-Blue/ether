@@ -262,3 +262,30 @@ func TestSlotPrewiringAndHTTPRoutes(t *testing.T) {
 		t.Fatalf("POST install status = %d, body = %s", instRec.Code, instRec.Body.String())
 	}
 }
+
+func TestActionSlotScaffold(t *testing.T) {
+	for _, tc := range []struct{ template, action string }{{"page", "createHighlight"}, {"list", "syncShelf"}, {"local_files", "matchFolder"}} {
+		t.Run(tc.template, func(t *testing.T) {
+			tpl, ok := LookupTemplate(tc.template)
+			if !ok {
+				t.Fatal("missing template")
+			}
+			_, _, files := applyProjectOptions(tpl, CreateProjectOptions{Slot: "actionMenu.title"})
+			var manifest plugins.Manifest
+			if err := json.Unmarshal([]byte(files["manifest.json"]), &manifest); err != nil {
+				t.Fatal(err)
+			}
+			slots := manifest.Ether.Contributes.Slots
+			if len(slots) != 1 || slots[0].Action != tc.action || slots[0].Route != "" {
+				t.Fatalf("unexpected slots: %+v", slots)
+			}
+			if err := manifest.Validate(); err != nil {
+				t.Fatal(err)
+			}
+			var stringsEN map[string]string
+			if err := json.Unmarshal([]byte(files["i18n/en.json"]), &stringsEN); err != nil || stringsEN["slot_label"] == "" {
+				t.Fatalf("missing slot label: %v", err)
+			}
+		})
+	}
+}

@@ -44,7 +44,7 @@ func DescriptorsFor(man Manifest) []extend.Descriptor {
 			"route": "/plugins/" + id + "/" + p.Key, "pageKey": p.Key})
 	}
 	for _, s := range c.Slots {
-		add(extend.KindSlot, s.Key, textOf(id, s.Label), map[string]any{"slot": s.Slot, "route": s.Route})
+		add(extend.KindSlot, s.Key, textOf(id, s.Label), map[string]any{"slot": s.Slot, "route": s.Route, "action": s.Action, "key": s.Key})
 	}
 	for _, cm := range c.Commands {
 		add(extend.KindCommand, cm.Key, textOf(id, cm.Label), map[string]any{"action": cm.Action})

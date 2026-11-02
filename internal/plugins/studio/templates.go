@@ -1219,6 +1219,13 @@ func applyProjectOptions(tpl Template, opts CreateProjectOptions) (pluginID, nam
 
 	if slot := strings.TrimSpace(opts.Slot); slot != "" && etherObj != nil && contributes != nil {
 		ensureUICap(etherObj)
+		var en map[string]string
+		if json.Unmarshal([]byte(files["i18n/en.json"]), &en) == nil && en != nil {
+			if en["slot_label"] == "" {
+				en["slot_label"] = "Plugin action"
+				files["i18n/en.json"] = prettyJSON(en)
+			}
+		}
 		switch slot {
 		case "page":
 			contributes["pages"] = []map[string]any{
@@ -1237,14 +1244,20 @@ func applyProjectOptions(tpl Template, opts CreateProjectOptions) (pluginID, nam
 				},
 			}
 		default:
-			contributes["slots"] = []map[string]any{
-				{
-					"slot":  slot,
-					"key":   "custom_slot",
-					"label": "$t:slot_label",
-					"route": "/ether/view/overview",
-				},
+			entry := map[string]any{"slot": slot, "key": "custom_slot", "label": "$t:slot_label"}
+			if strings.HasPrefix(slot, "actionMenu.") {
+				action := "createHighlight"
+				switch tpl.ID {
+				case "list":
+					action = "syncShelf"
+				case "local_files":
+					action = "matchFolder"
+				}
+				entry["action"] = action
+			} else {
+				entry["route"] = "/ether/view/overview"
 			}
+			contributes["slots"] = []map[string]any{entry}
 		}
 	}
 
