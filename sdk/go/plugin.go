@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -38,27 +39,28 @@ func (c *Context) T(key string, params map[string]any) string {
 
 // Routes holds the capability handlers for a Plugin.
 type Routes struct {
-	Catalog    func(ctx *Context, req CatalogRequest) (CatalogResponse, error)
-	Meta       func(ctx *Context, req MetaRequest) (MetaResponse, error)
-	Stream     func(ctx *Context, req StreamRequest) (StreamResponse, error)
-	OpenStream func(ctx *Context, req OpenStreamRequest) (OpenStreamResponse, error)
-	Subtitles  func(ctx *Context, req SubtitlesRequest) (SubtitlesResponse, error)
-	Markers    func(ctx *Context, req MarkersRequest) (MarkersResponse, error)
-	Channels   func(ctx *Context) (ChannelsResponse, error)
-	Guide      func(ctx *Context, req GuideRequest) (GuideResponse, error)
-	Configure  func(ctx *Context, settings map[string]any) (ConfigureResponse, error)
-	Test       func(ctx *Context) (TestResponse, error)
-	Options    func(ctx *Context, field string) ([]FieldOption, error)
-	Health     func(ctx *Context) (HealthResponse, error)
-	Notify     func(ctx *Context, req NotifyRequest) (NotifyResponse, error)
-	Event      func(ctx *Context, events []EtherEvent) (EventResponse, error)
-	View       func(ctx *Context, req ViewRequest) (ViewResponse, error)
-	Action     func(ctx *Context, req ActionRequest) (ActionResponse, error)
-	Tool       func(ctx *Context, req ToolRequest) (ToolResponse, error)
-	Job        func(ctx *Context, req JobRequest) (JobResponse, error)
-	File       func(ctx *Context, req FileRequest) (FileRangeResponse, error)
-	RankKey    func(candidate CandidateFacts, config map[string]any) int64
-	CondMatch  func(candidate CandidateFacts, operator string, value any) bool
+	Catalog          func(ctx *Context, req CatalogRequest) (CatalogResponse, error)
+	Meta             func(ctx *Context, req MetaRequest) (MetaResponse, error)
+	Stream           func(ctx *Context, req StreamRequest) (StreamResponse, error)
+	OpenStream       func(ctx *Context, req OpenStreamRequest) (OpenStreamResponse, error)
+	Subtitles        func(ctx *Context, req SubtitlesRequest) (SubtitlesResponse, error)
+	SubtitleDownload func(ctx *Context, req SubtitleDownloadRequest) (SubtitleDownloadResponse, error)
+	Markers          func(ctx *Context, req MarkersRequest) (MarkersResponse, error)
+	Channels         func(ctx *Context) (ChannelsResponse, error)
+	Guide            func(ctx *Context, req GuideRequest) (GuideResponse, error)
+	Configure        func(ctx *Context, settings map[string]any) (ConfigureResponse, error)
+	Test             func(ctx *Context) (TestResponse, error)
+	Options          func(ctx *Context, field string) ([]FieldOption, error)
+	Health           func(ctx *Context) (HealthResponse, error)
+	Notify           func(ctx *Context, req NotifyRequest) (NotifyResponse, error)
+	Event            func(ctx *Context, events []EtherEvent) (EventResponse, error)
+	View             func(ctx *Context, req ViewRequest) (ViewResponse, error)
+	Action           func(ctx *Context, req ActionRequest) (ActionResponse, error)
+	Tool             func(ctx *Context, req ToolRequest) (ToolResponse, error)
+	Job              func(ctx *Context, req JobRequest) (JobResponse, error)
+	File             func(ctx *Context, req FileRequest) (FileRangeResponse, error)
+	RankKey          func(candidate CandidateFacts, config map[string]any) int64
+	CondMatch        func(candidate CandidateFacts, operator string, value any) bool
 }
 
 // Definition configures a new Plugin instance.
@@ -83,8 +85,9 @@ type Plugin struct {
 	remoteOpts      RemoteHostOptions
 	pageRoutes      map[string]string
 
-	mu       sync.RWMutex
-	settings map[string]any
+	mu              sync.RWMutex
+	settings        map[string]any
+	settingsFailure sync.Once
 }
 
 // New constructs a Plugin from a Definition.
@@ -401,20 +404,22 @@ func (p *Plugin) Dispatch(ctx context.Context, req RawRequest) RawResponse {
 		if !isRemote || remote.credential != "" {
 			settings, err := getter.SettingsGet(ctx)
 			if err != nil {
-				return toRouteErrorResponse(err)
-			}
-			var schema *SettingsSchema
-			if p.manifest.Ether != nil {
-				schema = p.manifest.Ether.Settings
-			}
-			for _, field := range CollectSettingFields(schema) {
-				if field.Kind == "secret" {
-					if v, ok := pctx.Settings[field.Key]; ok {
-						settings[field.Key] = v
+				p.settingsFailure.Do(func() { log.Print("plugin settings lookup failed") })
+				pctx.Settings = map[string]any{}
+			} else {
+				var schema *SettingsSchema
+				if p.manifest.Ether != nil {
+					schema = p.manifest.Ether.Settings
+				}
+				for _, field := range CollectSettingFields(schema) {
+					if field.Kind == "secret" {
+						if v, ok := pctx.Settings[field.Key]; ok {
+							settings[field.Key] = v
+						}
 					}
 				}
+				pctx.Settings, _ = DecodeSettings(schema, settings, p.defaultSettings)
 			}
-			pctx.Settings, _ = DecodeSettings(schema, settings, p.defaultSettings)
 		}
 	}
 	method := strings.ToUpper(req.Method)
@@ -438,6 +443,23 @@ func (p *Plugin) Dispatch(ctx context.Context, req RawRequest) RawResponse {
 		return okJSON(HealthResponse{Status: "ok"}, http.StatusOK)
 	}
 
+	if method == http.MethodPost && path == "/ether/subtitles/download" {
+		if strings.TrimSpace(pctx.PickToken) == "" {
+			return errorJSON(http.StatusForbidden, "pick_required", "Subtitle downloads require an X-Ether-Pick token.")
+		}
+		if p.routes.SubtitleDownload == nil {
+			return errorJSON(http.StatusNotFound, "not_found", "Subtitle download handler is not registered.")
+		}
+		var input SubtitleDownloadRequest
+		if err := json.Unmarshal(req.Body, &input); err != nil {
+			return errorJSON(http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+		}
+		res, err := p.routes.SubtitleDownload(pctx, input)
+		if err != nil {
+			return toRouteErrorResponse(err)
+		}
+		return okJSON(res, http.StatusOK)
+	}
 	if method == http.MethodPost && path == "/ether/configure" {
 		bodyMap, err := decodeJSONMap(req.Body)
 		if err != nil {
@@ -773,13 +795,6 @@ func (p *Plugin) Dispatch(ctx context.Context, req RawRequest) RawResponse {
 		if stremio := matchStremioRoute(path, query); stremio != nil {
 			switch stremio.resource {
 			case "subtitles":
-				if strings.TrimSpace(pctx.PickToken) == "" {
-					return errorJSON(
-						http.StatusForbidden,
-						"pick_required",
-						"Subtitles requests require an X-Ether-Pick token.",
-					)
-				}
 				if p.routes.Subtitles == nil {
 					return errorJSON(http.StatusNotFound, "not_found", "Subtitles handler is not registered.")
 				}

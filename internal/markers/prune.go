@@ -13,6 +13,7 @@ func (s *Service) Prune(ctx context.Context) (int64, error) {
 	var total int64
 	for _, q := range []string{
 		`DELETE FROM markers_cache WHERE expires_at<=?`,
+		`DELETE FROM markers_plugin_cache WHERE expires_at<=?`,
 	} {
 		res, err := s.o.DB.ExecContext(ctx, q, now)
 		if err != nil {

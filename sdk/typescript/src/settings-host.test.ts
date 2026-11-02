@@ -37,3 +37,10 @@ test("request settings refresh from the host, including asynchronous sidecars", 
     "two",
   );
 });
+
+test("settings failure leaves routes available with empty settings", async () => {
+  const host = createMockHostClient();
+  host.settings = { get: async () => { throw new Error("failure"); } };
+  const p = plugin({ manifest: { id: "test.settings", name: "Settings", version: "1" }, host, routes: { test: (ctx) => ({ ok: Object.keys(ctx.settings).length === 0, message: "ok" }) } });
+  assert.equal(((await p.dispatch({method: "POST", path: "/ether/test"})).body as any).ok, true);
+});

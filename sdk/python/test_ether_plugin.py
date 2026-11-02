@@ -177,6 +177,7 @@ class EtherPluginSDKTest(unittest.TestCase):
                         }
                     ]
                 },
+                "subtitle_download": lambda req, _ctx: {"format": req["format"], "encoding": "utf8", "data": "picked"},
                 "subtitles": lambda req, _ctx: {
                     "subtitles": [
                         {
@@ -254,10 +255,15 @@ class EtherPluginSDKTest(unittest.TestCase):
         self.assertEqual(stream_res["status"], 200)
         self.assertEqual(len(stream_res["body"]["streams"]), 1)
 
-        # Subtitles without X-Ether-Pick must fail with 403 pick_required
+        # Search is allowed without a token, download is not.
         sub_denied = harness.subtitles("movie", "tt0133093")
-        self.assertEqual(sub_denied["status"], 403)
-        self.assertEqual(sub_denied["body"]["error"]["code"], "pick_required")
+        self.assertEqual(sub_denied["status"], 200)
+        denied = harness.request({"method": "POST", "path": "/ether/subtitles/download", "body": {"id": "sub", "lang": "en", "format": "srt"}})
+        self.assertEqual(denied["status"], 403)
+        self.assertEqual(denied["body"]["error"]["code"], "pick_required")
+        picked = harness.request({"method": "POST", "path": "/ether/subtitles/download", "headers": {"X-Ether-Pick": "pick"}, "body": {"id": "sub", "lang": "en", "format": "srt"}})
+        self.assertEqual(picked["status"], 200)
+        self.assertEqual(picked["body"]["data"], "picked")
 
         # Subtitles with X-Ether-Pick succeeds
         pick = fixtures.pick_token("tt0133093")

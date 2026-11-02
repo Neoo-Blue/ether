@@ -3,6 +3,7 @@ package etherplugin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 )
 
@@ -26,5 +27,19 @@ func TestCurrentHostSettingsOnEveryRequest(t *testing.T) {
 		if err := json.Unmarshal(r.Body, &body); err != nil || body.Message != want {
 			t.Fatalf("response %s: %s %v", want, r.Body, err)
 		}
+	}
+}
+
+type failingSettingsHost struct{ *MockHost }
+
+func (h *failingSettingsHost) SettingsGet(context.Context) (map[string]any, error) {
+	return nil, errors.New("failure")
+}
+func TestSettingsFailureDoesNotBlockRoutes(t *testing.T) {
+	p := New(Definition{Manifest: Manifest{ID: "test.settings", Name: "Settings", Version: "1"}, Host: &failingSettingsHost{NewMockHost()}, Routes: Routes{Test: func(ctx *Context) (TestResponse, error) { return TestResponse{OK: len(ctx.Settings) == 0}, nil }}})
+	r := p.Dispatch(context.Background(), RawRequest{Method: "POST", Path: "/ether/test"})
+	var body TestResponse
+	if json.Unmarshal(r.Body, &body) != nil || !body.OK {
+		t.Fatalf("unexpected response: %s", r.Body)
 	}
 }

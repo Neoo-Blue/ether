@@ -256,6 +256,17 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 	}
 	a.closers = append(a.closers, func() { _ = tunnel.Close() })
 	adapters.Attach(mgr, a.collections, a.personalize, a.livetv)
+	adapters.AttachSubtitles(mgr, a.subtitles)
+	markerCtx, cancelMarkers := context.WithCancel(context.Background())
+	markerBridge := adapters.AttachMarkers(markerCtx, mgr, a.markers, a.catalog, func(id string) bool {
+		for _, source := range a.cfg.Get().Markers.SourceOrder {
+			if source == id {
+				return true
+			}
+		}
+		return false
+	})
+	a.closers = append(a.closers, func() { cancelMarkers(); markerBridge.Wait() })
 	if err := mgr.Start(ctx); err != nil {
 		return nil, err
 	}
@@ -286,6 +297,9 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 	stopPlayback := func() {}
 	if a.playback != nil {
 		stopPlayback = a.playback.Subscribe(func(ev playback.Event) {
+			if ev.Kind == "start" && ev.Session != nil {
+				markerBridge.Schedule(ev.Session.Key, ev.Session.Info.Duration)
+			}
 			name := plugins.NormalizePlayback(ev.Kind, "")
 			if name == "" {
 				return

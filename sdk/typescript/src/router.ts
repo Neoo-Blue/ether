@@ -324,6 +324,7 @@ export function plugin<S = Record<string, unknown>>(
     }
   }
 
+  let settingsFailureLogged = false;
   function buildContext(req: RawRequest): MaybePromise<PluginContext<S>> {
     const { query } = parseUrlPathAndQuery(req.path, req.query);
     const localeHeader =
@@ -354,7 +355,12 @@ export function plugin<S = Record<string, unknown>>(
       t: (key, params) => i18n.t(key, params, locale),
     });
     if (!hostClient.settings || req.path === "/ether/configure") return makeContext(currentSettings);
-    const fresh = hostClient.settings.get();
+    const fallback = () => {
+      if (!settingsFailureLogged) { console.warn("plugin settings lookup failed"); settingsFailureLogged = true; }
+      return makeContext({} as S);
+    };
+    let fresh: MaybePromise<Record<string, unknown>>;
+    try { fresh = hostClient.settings.get(); } catch { return fallback(); }
     const resolve = (v: Record<string, unknown>) => {
       const merged = { ...v };
       for (const field of collectSettingFields(settingsSchema)) {
@@ -362,7 +368,7 @@ export function plugin<S = Record<string, unknown>>(
       }
       return makeContext(decodeSettings<S>(settingsSchema, merged, def.defaultSettings).settings);
     };
-    return fresh instanceof Promise ? fresh.then(resolve) : resolve(fresh);
+    return fresh instanceof Promise ? fresh.then(resolve, fallback) : resolve(fresh);
   }
 
   function mapResult<T>(

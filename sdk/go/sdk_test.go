@@ -189,6 +189,9 @@ func TestRouterAllCapabilities(t *testing.T) {
 					}},
 				}, nil
 			},
+			SubtitleDownload: func(_ *Context, req SubtitleDownloadRequest) (SubtitleDownloadResponse, error) {
+				return SubtitleDownloadResponse{Format: req.Format, Encoding: "utf8", Data: "picked"}, nil
+			},
 			Markers: func(_ *Context, _ MarkersRequest) (MarkersResponse, error) {
 				return MarkersResponse{
 					Markers: []MarkerItem{{Kind: "intro", Start: 10, End: 65, Label: "Skip intro"}},
@@ -298,10 +301,18 @@ func TestRouterAllCapabilities(t *testing.T) {
 		t.Fatalf("unexpected stream: %d %+v %v", status, streamRes, err)
 	}
 
-	// Subtitles without X-Ether-Pick must fail with 403 pick_required
-	subStatus, _, rawSub := h.Subtitles("movie", "tt0133093", "", nil)
-	if subStatus != http.StatusForbidden || !strings.Contains(string(rawSub.Body), "pick_required") {
-		t.Fatalf("expected 403 pick_required, got %d %s", subStatus, string(rawSub.Body))
+	// Listing needs no token; download does.
+	subStatus, _, _ := h.Subtitles("movie", "tt0133093", "", nil)
+	if subStatus != http.StatusOK {
+		t.Fatalf("listing status %d", subStatus)
+	}
+	rawSub := h.Request(RawRequest{Method: "POST", Path: "/ether/subtitles/download", Body: json.RawMessage(`{"id":"sub","lang":"en","format":"srt"}`)})
+	if rawSub.Status != http.StatusForbidden {
+		t.Fatalf("download status %d", rawSub.Status)
+	}
+	picked := h.Request(RawRequest{Method: "POST", Path: "/ether/subtitles/download", Headers: map[string]string{"X-Ether-Pick": "pick"}, Body: json.RawMessage(`{"id":"sub","lang":"en","format":"srt"}`)})
+	if picked.Status != http.StatusOK || !strings.Contains(string(picked.Body), "picked") {
+		t.Fatalf("picked download: %+v", picked)
 	}
 
 	// Subtitles with X-Ether-Pick succeeds

@@ -96,6 +96,12 @@ func (s *Service) searchEnabled() bool {
 	if s.dir == "" {
 		return false
 	}
+	s.mu.Lock()
+	hasPlugins := len(s.pluginProviders) > 0
+	s.mu.Unlock()
+	if hasPlugins {
+		return true
+	}
 	for _, p := range s.providerList() {
 		switch p.Kind {
 		case config.SubtitleProviderOpenSubtitles:
@@ -256,7 +262,14 @@ func (s *Service) searchProviders(ctx context.Context, title *core.Title, lang, 
 			}
 			cands, err = s.searchStremio(ctx, p, title, lang, movieHash, videoSize)
 		default:
-			continue
+			pluginID := strings.TrimSuffix(strings.TrimPrefix(p.Kind, "plugin:"), "/subtitles")
+			s.mu.Lock()
+			provider := s.pluginProviders[pluginID]
+			s.mu.Unlock()
+			if !strings.HasPrefix(p.Kind, "plugin:") || provider == nil {
+				continue
+			}
+			cands, err = provider.Search(ctx, title, lang, movieHash, videoSize)
 		}
 		if err != nil {
 			if firstErr == nil {
@@ -267,6 +280,39 @@ func (s *Service) searchProviders(ctx context.Context, title *core.Title, lang, 
 		}
 		for j := range cands {
 			cands[j].providerOrder = i
+		}
+		all = append(all, cands...)
+	}
+	s.mu.Lock()
+	pluginProviders := make([]PluginProvider, 0, len(s.pluginProviders))
+	for _, p := range s.pluginProviders {
+		pluginProviders = append(pluginProviders, p)
+	}
+	s.mu.Unlock()
+	sort.Slice(pluginProviders, func(i, j int) bool { return pluginProviders[i].ID() < pluginProviders[j].ID() })
+	for i, p := range pluginProviders {
+		configured := false
+		s.mu.Lock()
+		entries := append([]config.SubtitleProvider(nil), s.providers...)
+		s.mu.Unlock()
+		for _, entry := range entries {
+			if entry.Kind == "plugin:"+p.ID()+"/subtitles" {
+				configured = true
+				break
+			}
+		}
+		if configured {
+			continue
+		}
+		cands, err := p.Search(ctx, title, lang, movieHash, videoSize)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		for j := range cands {
+			cands[j].providerOrder = len(s.providerList()) + i
 		}
 		all = append(all, cands...)
 	}
