@@ -3275,6 +3275,7 @@ export function createFakeServer(opts: FakeOptions = {}) {
     const method = (init?.method ?? req?.method ?? "GET").toUpperCase();
     let body: unknown = undefined;
     const raw = init?.body ?? null;
+    if (raw instanceof FormData) body = raw;
     if (typeof raw === "string" && raw) {
       try {
         body = JSON.parse(raw);

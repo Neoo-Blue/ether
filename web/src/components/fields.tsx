@@ -106,7 +106,8 @@ export const PasswordInput = forwardRef<
 
 /**
  * Password input that understands the server's redaction placeholder: the
- * stored secret arrives as "••••" and sending it back unchanged keeps it.
+ * stored secret arrives as "••••" (or "Saved" for plugin secrets) and sending
+ * it back unchanged keeps it.
  */
 export function SecretInput({
   value,
@@ -123,7 +124,7 @@ export function SecretInput({
   ariaLabel?: string;
   invalid?: boolean;
 }) {
-  const isStored = value === REDACTED;
+  const isStored = value === REDACTED || value === "Saved";
   return (
     <div className="space-y-1">
       {isStored ? (
