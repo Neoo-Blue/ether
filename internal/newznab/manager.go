@@ -353,13 +353,28 @@ func (m *Manager) SearchWith(ctx context.Context, req core.SearchRequest, arrive
 	return merged, nil
 }
 
+// grabEvent reports one NZB fetch. A fetch Ether cancelled itself (the
+// viewer moved on from a detail page, or another release won a race) says
+// nothing about the indexer: it is neither a success nor a failure, as on
+// the search path, so it cannot raise an indexer outage alert (#271). Real
+// failures are logged, so an outage alert can be traced to its cause.
+func (m *Manager) grabEvent(ctx context.Context, indexer string, r core.Release, started time.Time, err error) {
+	if err != nil && (errors.Is(err, context.Canceled) || ctx.Err() != nil) {
+		return
+	}
+	if err != nil {
+		m.log.Warn("indexer NZB fetch failed", "indexer", indexer, "release", r.Name, "err", err)
+	}
+	m.emitEvent(Event{Indexer: indexer, Kind: "grab", Success: err == nil, BudgetExhausted: errors.Is(err, core.ErrBudgetExhausted), Duration: time.Since(started), At: time.Now()})
+}
+
 // FetchNZB implements core.Indexer by routing to the originating client.
 func (m *Manager) FetchNZB(ctx context.Context, r core.Release) ([]byte, error) {
 	for _, cl := range m.Clients() {
 		if cl.Name() == r.Indexer {
 			started := time.Now()
 			b, err := cl.FetchNZB(ctx, r)
-			m.emitEvent(Event{Indexer: cl.Name(), Kind: "grab", Success: err == nil, BudgetExhausted: errors.Is(err, core.ErrBudgetExhausted), Duration: time.Since(started), At: time.Now()})
+			m.grabEvent(ctx, cl.Name(), r, started, err)
 			return b, err
 		}
 	}
@@ -372,7 +387,7 @@ func (m *Manager) FetchNZB(ctx context.Context, r core.Release) ([]byte, error) 
 		}
 		started := time.Now()
 		b, err := cl.FetchNZB(ctx, r)
-		m.emitEvent(Event{Indexer: cl.Name(), Kind: "grab", Success: err == nil, BudgetExhausted: errors.Is(err, core.ErrBudgetExhausted), Duration: time.Since(started), At: time.Now()})
+		m.grabEvent(ctx, cl.Name(), r, started, err)
 		if err == nil {
 			return b, nil
 		}
