@@ -44,14 +44,7 @@ import {
 type Obj = Record<string, unknown>;
 
 export type ServiceTab =
-  | "overview"
-  | "tmdb"
-  | "trakt"
-  | "simkl"
-  | "llm"
-  | "opensubtitles"
-  | "ratings"
-  | "introdb";
+  "overview" | "tmdb" | "trakt" | "simkl" | "llm" | "opensubtitles" | "ratings" | "introdb";
 
 const TAB_ORDER: ServiceTab[] = [
   "overview",

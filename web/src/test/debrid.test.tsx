@@ -6,9 +6,7 @@ import type { PageMeta } from "../lib/console-descriptors";
 import type { Descriptor } from "../lib/extend";
 
 const destinations = () =>
-  destinationsFrom(
-    consoleDescriptors.filter((d) => d.kind === "page") as Descriptor<PageMeta>[],
-  );
+  destinationsFrom(consoleDescriptors.filter((d) => d.kind === "page") as Descriptor<PageMeta>[]);
 import { engineSummary, latencySummary } from "../pages/sources/Debrid";
 import { debridFix, sourceMonogram } from "../pages/sources/cards";
 import { debridMark } from "../pages/sources/marks";

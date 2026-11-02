@@ -95,10 +95,6 @@ export function pluginNavGroup(d: Descriptor<PageMeta>): string | undefined {
 /** The console route a page descriptor opens. */
 export function pageRoute(d: Descriptor<PageMeta>): string {
   if (d.owner !== BUILTIN) {
-    const route = d.meta?.route;
-    if (route && route.startsWith("/") && !route.startsWith("/ether/")) {
-      return route;
-    }
     return pluginPageRoute(d.owner, pluginLocalId(d));
   }
   return d.meta?.route || "/";

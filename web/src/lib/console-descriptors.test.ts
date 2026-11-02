@@ -33,6 +33,9 @@ describe("console descriptors", () => {
         meta: { route: "/ether/view/wrapped", group: "server" },
       }),
     ).toBe("/p/dev.example/wrapped");
+    expect(pageRoute({ ...fixturePluginPage, meta: { route: "/server" } })).toBe(
+      "/p/dev.example/wrapped",
+    );
   });
 
   it("lists a plugin page as a search destination", () => {
