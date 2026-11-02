@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 )
 
@@ -145,19 +146,19 @@ type ScheduleEntry struct {
 // Permissions is what a plugin asks for; anything not declared is denied
 // (SPEC §5.4). Empty means none.
 type Permissions struct {
-	Network     []string    `json:"network,omitempty"`
-	Catalog     string      `json:"catalog,omitempty"` // ""|none|read
-	Viewers     ViewerPerms `json:"viewers,omitempty"`
-	Collections string      `json:"collections,omitempty"` // ""|none|write
-	Folders     string      `json:"folders,omitempty"`     // ""|none|read
-	Secrets     []string    `json:"secrets,omitempty"`
+	Network     []string    `json:"network,omitempty" yaml:"network,omitempty"`
+	Catalog     string      `json:"catalog,omitempty" yaml:"catalog,omitempty"` // ""|none|read
+	Viewers     ViewerPerms `json:"viewers,omitempty" yaml:"viewers,omitempty"`
+	Collections string      `json:"collections,omitempty" yaml:"collections,omitempty"` // ""|none|write
+	Folders     string      `json:"folders,omitempty" yaml:"folders,omitempty"`         // ""|none|read
+	Secrets     []string    `json:"secrets,omitempty" yaml:"secrets,omitempty"`
 }
 
 // ViewerPerms holds the three viewer permission levels.
 type ViewerPerms struct {
-	Identity        string `json:"identity,omitempty"`          // none|granted_viewers|all
-	WatchHistory    string `json:"watch_history,omitempty"`     // none|granted_viewers|all
-	WriteWatchState string `json:"write_watch_state,omitempty"` // none|granted_viewers
+	Identity        string `json:"identity,omitempty" yaml:"identity,omitempty"`                   // none|granted_viewers|all
+	WatchHistory    string `json:"watch_history,omitempty" yaml:"watch_history,omitempty"`         // none|granted_viewers|all
+	WriteWatchState string `json:"write_watch_state,omitempty" yaml:"write_watch_state,omitempty"` // none|granted_viewers
 }
 
 // Contributes carries per-capability metadata and UI contributions.
@@ -466,6 +467,27 @@ type ClientCaps struct {
 	Codecs    []string `json:"codecs,omitempty"`
 }
 
+// CatalogueArtifact is a resolved version from the signed plugin catalogue (WS12).
+type CatalogueArtifact struct {
+	ID           string
+	Version      string
+	URL          string
+	SHA256       string
+	Kind         Kind
+	Permissions  Permissions
+	Capabilities []Capability
+}
+
+// Catalogue is the signed catalogue hook used by the owner API, install
+// and update flows (WS12).
+type Catalogue interface {
+	http.Handler
+	// Resolve looks up a plugin in the verified catalogue by plugin ID (or
+	// artifact URL) and optional version (empty means latest). It fails when
+	// the plugin is not in the catalogue or is revoked.
+	Resolve(ctx context.Context, idOrURL, version string) (CatalogueArtifact, error)
+}
+
 // Sentinel errors. Adapters and the API map them to plain reasons.
 var (
 	ErrNotFound         = errors.New("plugins: not found")
@@ -476,6 +498,8 @@ var (
 	ErrNoRuntime        = errors.New("plugins: no runtime registered for this plugin")
 	ErrUnavailable      = errors.New("plugins: host service unavailable")
 	ErrShadow           = errors.New("plugins: write recorded in shadow mode")
+	ErrDigestMismatch   = errors.New("plugins: artifact digest does not match")
+	ErrRevoked          = errors.New("plugins: plugin was revoked")
 )
 
 // FieldError is one validation problem, keyed by a dotted field path.

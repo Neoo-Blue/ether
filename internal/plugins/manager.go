@@ -65,6 +65,7 @@ type Manager struct {
 	now       func() time.Time
 	client    *http.Client
 	mu        sync.Mutex
+	catalogue Catalogue
 	fatories  map[string]RuntimeFactory
 	runtimes  map[string]Runtime
 	syncHooks []func(ctx context.Context, r Record)
@@ -154,6 +155,19 @@ func (m *Manager) RegisterRuntime(kind string, f RuntimeFactory) {
 	m.mu.Lock()
 	m.fatories[kind] = f
 	m.mu.Unlock()
+}
+
+// SetCatalogue attaches the signed plugin catalogue (WS12).
+func (m *Manager) SetCatalogue(c Catalogue) {
+	m.mu.Lock()
+	m.catalogue = c
+	m.mu.Unlock()
+}
+
+func (m *Manager) getCatalogue() Catalogue {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.catalogue
 }
 
 func (m *Manager) isLeader() bool {
@@ -503,11 +517,58 @@ func (m *Manager) recordOK(ctx context.Context, pluginID string) {
 	_ = m.store.putHealth(ctx, pluginID, h)
 }
 
+// Revoke disables an installed plugin that was marked revoked in the
+// signed catalogue, records the reason in its health, and posts a console
+// notice (SPEC WS12, §10). It returns true when an installed plugin was
+// newly disabled or updated with the revocation reason.
+func (m *Manager) Revoke(ctx context.Context, id, reason string) (bool, error) {
+	r, err := m.store.record(ctx, id)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "This plugin was revoked by the catalogue."
+	}
+	healthReason := "Revoked: " + reason
+	h, _ := m.store.health(ctx, id)
+	if !r.Enabled && h.Status == "disabled" && h.Reason == healthReason {
+		return false, nil
+	}
+	r.Enabled = false
+	if err := m.store.upsert(ctx, r); err != nil {
+		return false, err
+	}
+	h.Status = "disabled"
+	h.Reason = healthReason
+	h.LastError = reason
+	_ = m.store.putHealth(ctx, id, h)
+	m.closeRuntime(id)
+	m.syncDescriptors(ctx, r)
+	m.broadcast(ctx)
+	msg := "Plugin " + r.Name + " was disabled because it was revoked: " + reason
+	m.log.Warn(msg, "plugin", id, "reason", reason)
+	if m.deps.Backends.Notice != nil {
+		m.deps.Backends.Notice(msg)
+	}
+	return true, nil
+}
+
 // SetEnabled enables or disables a plugin and refreshes its descriptors.
 func (m *Manager) SetEnabled(ctx context.Context, id string, enabled bool) error {
 	r, err := m.store.record(ctx, id)
 	if err != nil {
 		return err
+	}
+	if enabled {
+		if cat := m.getCatalogue(); cat != nil {
+			if _, cerr := cat.Resolve(ctx, id, ""); errors.Is(cerr, ErrRevoked) {
+				return cerr
+			}
+		}
 	}
 	r.Enabled = enabled
 	if err := m.store.upsert(ctx, r); err != nil {
