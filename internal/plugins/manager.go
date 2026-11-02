@@ -413,6 +413,9 @@ func redactValue(v any) {
 // from 1s to 5 minutes, and five failures in ten minutes disables the
 // plugin with a console notice.
 func (m *Manager) recordFailure(ctx context.Context, pluginID, reason string, restart bool) {
+	// A timed-out call still needs its health failure persisted.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
 	m.healthMu.Lock()
 	defer m.healthMu.Unlock()
 	h, err := m.store.health(ctx, pluginID)

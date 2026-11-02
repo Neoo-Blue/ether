@@ -17,6 +17,7 @@ import (
 // order (full titles when they came from TMDB, so they can be joined to the
 // catalogue), plus problems worth showing the owner.
 type sourceResult struct {
+	err      error
 	titles   []core.Title
 	keys     []core.RatingKey // keys known to be in the catalogue already
 	all      bool             // the whole catalogue

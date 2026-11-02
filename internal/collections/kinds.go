@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/extend"
@@ -29,6 +30,19 @@ type SourceKind interface {
 	Describe() KindDescribe
 	Validate(ve *ValidationError, path string, src core.CollectionSource)
 	Gather(g *Gather)
+}
+
+// minimumSourceRefresh respects source-specific lower bounds on refresh cadence.
+func (s *Service) minimumSourceRefresh(sp core.CollectionSpec) time.Duration {
+	var min time.Duration
+	for _, src := range sp.Sources {
+		if k, ok := s.kindRegistry().Lookup(src.Kind); ok {
+			if timed, ok := k.(interface{ MinRefresh() time.Duration }); ok && timed.MinRefresh() > min {
+				min = timed.MinRefresh()
+			}
+		}
+	}
+	return min
 }
 
 // KindDescribe carries everything the console needs to offer a kind in the
@@ -55,6 +69,9 @@ type Gather struct {
 	Kinds []string
 	Res   sourceResult
 }
+
+// Fail ends a preview when a source cannot be evaluated.
+func (g *Gather) Fail(err error) { g.Res.err = err }
 
 func (g *Gather) Warn(format string, args ...any) {
 	g.Res.warnings = append(g.Res.warnings, fmt.Sprintf(format, args...))

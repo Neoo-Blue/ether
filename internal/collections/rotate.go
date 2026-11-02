@@ -128,8 +128,13 @@ func (s *Service) due(row *specRow) bool {
 	if row.lastBuilt.IsZero() || row.buildHash == "" {
 		return true // includes live collections, so the Studio has a count
 	}
-	if row.spec.Refresh == RefreshLive {
+	interval := refreshInterval(row.spec.Refresh)
+	minimum := s.minimumSourceRefresh(row.spec)
+	if row.spec.Refresh == RefreshLive && minimum == 0 {
 		return false
 	}
-	return schedule.Due(s.now(), row.lastBuilt, refreshInterval(row.spec.Refresh))
+	if minimum > interval {
+		interval = minimum
+	}
+	return schedule.Due(s.now(), row.lastBuilt, interval)
 }

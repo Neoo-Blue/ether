@@ -6,6 +6,7 @@ package adapters
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -13,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/braedonsaunders/ether/internal/collections"
 	"github.com/braedonsaunders/ether/internal/core"
@@ -87,7 +89,7 @@ func (b *Bridge) Sync(_ context.Context, r plugins.Record) {
 
 	c := r.Manifest.Ether.Contributes
 	for _, ls := range c.ListSources {
-		if ls.Key == "" {
+		if !r.Manifest.HasCapability(plugins.CapListSource) || ls.Key == "" {
 			continue
 		}
 		kind := &listSourceKind{
@@ -151,6 +153,14 @@ type listSourceKind struct {
 	fields     []plugins.ListParamField
 }
 
+func (k *listSourceKind) MinRefresh() time.Duration {
+	d, err := time.ParseDuration(k.meta.Refresh)
+	if err != nil || d < time.Hour {
+		return time.Hour
+	}
+	return d
+}
+
 func (k *listSourceKind) ID() string {
 	return extend.PluginID(k.pluginID, k.meta.Key)
 }
@@ -173,6 +183,9 @@ func (k *listSourceKind) mediaTypes() []string {
 
 func (k *listSourceKind) Describe() collections.KindDescribe {
 	params, defaults := plugins.ParamFieldsFromList(k.pluginID, k.fields)
+	if defaults != "{}" {
+		defaults = `{"params":` + defaults + `}`
+	}
 	return collections.KindDescribe{
 		Label:      pluginText(k.pluginID, firstNonEmpty(k.meta.Label, k.meta.Key)),
 		Hint:       pluginText(k.pluginID, k.meta.Hint),
@@ -276,12 +289,6 @@ func (k *listSourceKind) catalogTargets(g *collections.Gather) []catalogTarget {
 	return out
 }
 
-type catalogPage struct {
-	Metas   []catalogMeta `json:"metas"`
-	Items   []catalogMeta `json:"items"`
-	HasMore *bool         `json:"hasMore,omitempty"`
-}
-
 type catalogMeta struct {
 	ID          string `json:"id"`
 	IMDBID      string `json:"imdb_id"`
@@ -311,7 +318,11 @@ func (k *listSourceKind) fetchCatalogPages(g *collections.Gather, catType, catID
 			Path:   path,
 		})
 		if err != nil {
-			g.Warn("%s: %v", k.label(), err)
+			if collections.IsPreview(g.Ctx) && errors.Is(err, context.DeadlineExceeded) {
+				g.Fail(fmt.Errorf("plugin list preview timed out: %w", err))
+			} else {
+				g.Warn("%s: %v", k.label(), err)
+			}
 			return refs, false
 		}
 		if resp.Status >= 400 {
@@ -384,21 +395,17 @@ func buildCatalogPath(catType, catID string, params map[string]string, skip int)
 }
 
 func decodeCatalogPage(body json.RawMessage) ([]catalogMeta, *bool, error) {
-	if len(body) == 0 {
-		return nil, nil, nil
+	var page struct {
+		Metas   *[]catalogMeta `json:"metas"`
+		HasMore *bool          `json:"hasMore,omitempty"`
 	}
-	var page catalogPage
-	if err := json.Unmarshal(body, &page); err == nil {
-		if len(page.Metas) > 0 {
-			return page.Metas, page.HasMore, nil
-		}
-		return page.Items, page.HasMore, nil
-	}
-	var arr []catalogMeta
-	if err := json.Unmarshal(body, &arr); err != nil {
+	if err := json.Unmarshal(body, &page); err != nil {
 		return nil, nil, err
 	}
-	return arr, nil, nil
+	if page.Metas == nil {
+		return nil, nil, fmt.Errorf("missing metas array")
+	}
+	return *page.Metas, page.HasMore, nil
 }
 
 func itemIdentity(m catalogMeta) string {
@@ -447,7 +454,9 @@ func parseCatalogMeta(m catalogMeta, defaultMedia string) (collections.ExternalR
 			ref.TVDB = id
 		}
 	}
-	if ref.TMDB == 0 && ref.IMDB == "" && ref.TVDB == 0 && ref.Title == "" {
+	// Plugin lists only match stable catalogue IDs, never title guesses.
+	ref.Title, ref.TVDB = "", 0
+	if ref.TMDB == 0 && ref.IMDB == "" {
 		return collections.ExternalRef{}, false
 	}
 	return ref, true

@@ -25,7 +25,7 @@ describe("plugin collection parameters", () => {
       const [source, setSource] = useState<Source>({
         kind: descriptor.id,
         params: { adult: "false" },
-      });
+      } as unknown as Source);
       return (
         <>
           <SourceEditor

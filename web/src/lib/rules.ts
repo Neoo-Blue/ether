@@ -537,7 +537,7 @@ export function newSourceFromDescriptor(
 ): Source {
   const src: Record<string, unknown> = { kind: d.id, ...(d.meta?.defaults ?? {}) };
   if ("mediaType" in src && mediaType === "show") src.mediaType = "show";
-  if (paramField(d, "region")) src.region = region;
+  if (paramField(d, "region") && d.meta?.editor !== "plugin") src.region = region;
   return src as Source;
 }
 

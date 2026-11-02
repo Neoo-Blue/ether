@@ -357,6 +357,9 @@ func (s *Service) membersFor(ctx context.Context, row *specRow, wait bool) (*mem
 	fresh := ms != nil && ms.builtAt.Equal(row.lastBuilt) && row.buildHash != "" && ms.hash == row.buildHash
 	if row.spec.Refresh == RefreshLive {
 		fresh = ms != nil && row.buildHash != "" && ms.hash == row.buildHash && s.now().Sub(ms.loadedAt) < s.liveTTL
+		if min := s.minimumSourceRefresh(row.spec); min > 0 {
+			fresh = ms != nil && row.buildHash != "" && ms.hash == row.buildHash && s.now().Sub(row.lastBuilt) < min
+		}
 	}
 	if fresh {
 		return ms, nil
@@ -384,6 +387,19 @@ func (s *Service) membersFor(ctx context.Context, row *specRow, wait bool) (*mem
 	for _, src := range row.spec.Sources {
 		if strings.HasPrefix(src.Kind, "plugin:") {
 			wait = false
+			if ms == nil && !row.lastBuilt.IsZero() && row.buildHash != "" {
+				keys, unshared, err := s.loadMembers(ctx, row.id)
+				if err != nil {
+					return nil, err
+				}
+				ms = s.newMemberSet(row.spec, keys, unshared, row.lastBuilt, row.buildHash)
+				s.mu.Lock()
+				s.members[row.id] = ms
+				s.mu.Unlock()
+				if row.spec.Refresh == RefreshLive && s.now().Sub(row.lastBuilt) < s.minimumSourceRefresh(row.spec) {
+					return ms, nil
+				}
+			}
 			break
 		}
 	}

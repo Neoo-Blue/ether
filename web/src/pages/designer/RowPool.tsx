@@ -224,6 +224,7 @@ export function RowPool({
                           spec.name = e.title;
                           spec.sources = [newSourceFromDescriptor(descriptor, media)];
                           spec.targets.homeRow = true;
+                          spec.enabled = true;
                           navigate(newCollectionHref(), { state: { spec } });
                         }
                       : undefined

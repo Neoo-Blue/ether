@@ -24,12 +24,13 @@ import (
 )
 
 type listChannelFakeRuntime struct {
-	mu     sync.Mutex
-	calls  []plugins.Request
-	routes map[string]func(plugins.Request) (plugins.Response, error)
+	mu          sync.Mutex
+	calls       []plugins.Request
+	routes      map[string]func(plugins.Request) (plugins.Response, error)
+	callContext func(context.Context, plugins.Request) (plugins.Response, error)
 }
 
-func (f *listChannelFakeRuntime) Call(_ context.Context, req plugins.Request) (plugins.Response, error) {
+func (f *listChannelFakeRuntime) Call(ctx context.Context, req plugins.Request) (plugins.Response, error) {
 	f.mu.Lock()
 	f.calls = append(f.calls, req)
 	fn := f.routes[req.Path]
@@ -41,7 +42,11 @@ func (f *listChannelFakeRuntime) Call(_ context.Context, req plugins.Request) (p
 			}
 		}
 	}
+	ctxFn := f.callContext
 	f.mu.Unlock()
+	if ctxFn != nil {
+		return ctxFn(ctx, req)
+	}
 	if fn != nil {
 		return fn(req)
 	}
@@ -267,15 +272,20 @@ func TestListSourceLifecycleAndMatching(t *testing.T) {
 		t.Fatalf("expected personalize RowSourceKind %s to be registered", kindID)
 	}
 	// Extend descriptors exist for both collectionSource and rowSource.
-	if _, ok := h.reg.Get(extend.KindCollectionSource, kindID); !ok {
+	desc, ok := h.reg.Get(extend.KindCollectionSource, kindID)
+	if !ok {
 		t.Fatalf("expected extend collectionSource descriptor for %s", kindID)
+	}
+	meta, err := extend.MetaOf[extend.CollectionSourceMeta](desc)
+	if err != nil || meta.Editor != "plugin" || len(meta.Params) != 1 || meta.Params[0].Name != "genre" {
+		t.Fatalf("bad served parameters: %+v, %v", meta, err)
 	}
 	if _, ok := h.reg.Get(extend.KindRowSource, kindID); !ok {
 		t.Fatalf("expected extend rowSource descriptor for %s", kindID)
 	}
 
 	// Required parameter validation rejects missing genre.
-	_, err := h.cols.Preview(ctx, core.CollectionSpec{
+	_, err = h.cols.Preview(ctx, core.CollectionSpec{
 		Name:      "Missing Param Preview",
 		MediaType: "movie",
 		Sources:   []core.CollectionSource{{Kind: kindID}},
@@ -339,7 +349,14 @@ func TestListSourceLifecycleAndMatching(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSpec failed: %v", err)
 	}
+	if !strings.Contains(strings.Join(created.Warnings, " "), "1 of 4") {
+		t.Fatalf("expected unmatched warning from build, got %v", created.Warnings)
+	}
 	h.rt.resetCalls()
+	listed, err := h.cols.List(ctx, &core.User{ID: 1, IsOwner: true}, core.TypeMovie)
+	if err != nil || len(listed) == 0 {
+		t.Fatalf("cached collection browse failed: %+v %v", listed, err)
+	}
 	rows, err := h.cols.HomeRowsFor(ctx, &core.User{ID: 1, IsOwner: true}, core.HubContext{Now: time.Now()})
 	if err != nil || len(rows) != 1 || len(rows[0].Hub.Items) != 3 {
 		t.Fatalf("cached HomeRowsFor failed: rows=%+v err=%v", rows, err)
@@ -441,5 +458,93 @@ func TestListSourceMaxItemsCapAndHealthFailure(t *testing.T) {
 	}
 	if _, ok := h.cols.KindRegistry().Lookup(kindID); ok {
 		t.Fatal("expected auto-disabled plugin to unregister its collection SourceKind")
+	}
+}
+
+func TestPreviewFirstPageCapAndDeadline(t *testing.T) {
+	h := newListTestHarness(t)
+	rec := installListPlugin(t, h.mgr, 100)
+	kind := extend.PluginID(rec.ID, "staff_picks")
+	var deadline time.Duration
+	h.rt.callContext = func(ctx context.Context, req plugins.Request) (plugins.Response, error) {
+		d, ok := ctx.Deadline()
+		if !ok {
+			t.Error("missing deadline")
+		} else {
+			deadline = time.Until(d)
+		}
+		metas := make([]map[string]string, 25)
+		for i := range metas {
+			metas[i] = map[string]string{"id": "unknown"}
+		}
+		data, _ := json.Marshal(map[string]any{"metas": metas, "hasMore": true})
+		return plugins.Response{Status: 200, Body: data}, nil
+	}
+	prev, err := h.cols.Preview(context.Background(), core.CollectionSpec{Name: "Preview", MediaType: "movie", Sources: []core.CollectionSource{{Kind: kind, Params: map[string]string{"genre": "scifi"}}}}, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deadline <= 0 || deadline > 10*time.Second {
+		t.Fatalf("invalid preview deadline: %v", deadline)
+	}
+	paths := h.rt.paths()
+	if len(paths) != 1 {
+		t.Fatalf("expected first page only: %v", paths)
+	}
+	if len(prev.Warnings) == 0 || !strings.Contains(strings.Join(prev.Warnings, " "), "20 of 20") {
+		t.Fatalf("expected 20 unmatched, got %v", prev.Warnings)
+	}
+}
+
+func TestPreviewReportsTimeout(t *testing.T) {
+	h := newListTestHarness(t)
+	rec := installListPlugin(t, h.mgr, 50)
+	h.rt.callContext = func(context.Context, plugins.Request) (plugins.Response, error) {
+		return plugins.Response{}, context.DeadlineExceeded
+	}
+	_, err := h.cols.Preview(context.Background(), core.CollectionSpec{Name: "Preview", MediaType: "movie", Sources: []core.CollectionSource{{Kind: extend.PluginID(rec.ID, "staff_picks"), Params: map[string]string{"genre": "scifi"}}}}, 20)
+	if err == nil || !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("expected clear timeout error, got %v", err)
+	}
+}
+
+func TestLiveCollectionViewerUsesSnapshot(t *testing.T) {
+	h := newListTestHarness(t)
+	ctx := context.Background()
+	rec := installListPlugin(t, h.mgr, 50)
+	h.rt.routes["/catalog/movie/staff_picks/genre=scifi.json"] = func(plugins.Request) (plugins.Response, error) {
+		return plugins.Response{Status: 200, Body: json.RawMessage(`{"metas":[{"id":"tmdb:101"}],"hasMore":false}`)}, nil
+	}
+	_, err := h.cols.CreateSpec(ctx, core.CollectionSpec{Name: "Live", MediaType: "movie", Refresh: "live", Enabled: true, Sources: []core.CollectionSource{{Kind: extend.PluginID(rec.ID, "staff_picks"), Params: map[string]string{"genre": "scifi"}}}, Targets: core.CollectionTargets{CollectionsTab: true, HomeRow: true, Users: core.AllUsers()}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.rt.resetCalls()
+	got, err := h.cols.List(ctx, &core.User{ID: 1, IsOwner: true}, core.TypeMovie)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("browse live snapshot: %+v %v", got, err)
+	}
+	rows, err := h.cols.HomeRowsFor(ctx, &core.User{ID: 1, IsOwner: true}, core.HubContext{Now: time.Now()})
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("home live snapshot: %+v %v", rows, err)
+	}
+	if calls := h.rt.paths(); len(calls) != 0 {
+		t.Fatalf("viewer path called plugin: %v", calls)
+	}
+}
+
+func TestMalformedCatalogRecordsHealth(t *testing.T) {
+	h := newListTestHarness(t)
+	rec := installListPlugin(t, h.mgr, 10)
+	h.rt.routes["/catalog/movie/staff_picks/genre=bad.json"] = func(plugins.Request) (plugins.Response, error) {
+		return plugins.Response{Status: 200, Body: json.RawMessage(`{}`)}, nil
+	}
+	_, err := h.cols.Preview(context.Background(), core.CollectionSpec{Name: "Bad", MediaType: "movie", Sources: []core.CollectionSource{{Kind: extend.PluginID(rec.ID, "staff_picks"), Params: map[string]string{"genre": "bad"}}}}, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	health, err := h.mgr.HealthOf(context.Background(), rec.ID)
+	if err != nil || len(health.Failures) != 1 {
+		t.Fatalf("invalid payload not recorded: %+v %v", health, err)
 	}
 }
