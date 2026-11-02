@@ -85,9 +85,9 @@ function metadataRoutes() {
   };
 }
 
-describe("Watchlist alerts (Notifications)", () => {
+describe("Watchlists (Catalog settings)", () => {
   it("starts monitoring and notifications off and saves opt-in settings in place", async () => {
-    const { fake } = renderAppWith("/notifications", discoveryRoutes());
+    const { fake } = renderAppWith("/catalog/settings", discoveryRoutes());
     const enabled = await screen.findByLabelText("Watchlist monitoring", {}, WAIT);
     expect(enabled).not.toBeChecked();
     expect(screen.getByLabelText("Tell me too")).not.toBeChecked();
@@ -187,7 +187,7 @@ describe("Metadata › Ratings", () => {
     expect(screen.queryByRole("button", { name: /Edit rating sources/ })).toBeNull();
     expect(screen.queryByLabelText("Viewer")).toBeNull();
     fireEvent.click(toggle);
-    fireEvent.change(screen.getByLabelText("Provider"), { target: { value: "mdblist" } });
+    expect(screen.queryByLabelText("Provider")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("API key")).not.toBeInTheDocument();
     expect(
       screen
@@ -198,11 +198,10 @@ describe("Metadata › Ratings", () => {
     await waitFor(() =>
       expect(calls(fake, "PUT", "/discovery/ratings/settings").at(-1)?.body).toMatchObject({
         enabled: true,
-        provider: "mdblist",
         apiKey: "",
       }),
     );
-    expect(await screen.findByRole("link", { name: "OMDb and MDBList connected" })).toHaveAttribute(
+    expect(await screen.findByRole("link", { name: /^(OMDb|MDBList) connected$/ })).toHaveAttribute(
       "href",
       "/services/ratings",
     );

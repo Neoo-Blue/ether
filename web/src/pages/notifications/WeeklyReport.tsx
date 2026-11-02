@@ -23,14 +23,39 @@ import type { EtherUser } from "../../lib/types";
 import { viewerLabel } from "../activity/types";
 import type { NewsletterSettings, NotificationsData } from "./types";
 
-const HOURS = Array.from({ length: 24 }, (_, h) => h);
+const WEEK = 7 * 1440;
+
+/** Minutes the browser's clock is ahead of UTC. The schedule is stored in UTC. */
+function offset() {
+  return -new Date().getTimezoneOffset();
+}
+
+/** A UTC weekday and hour as a local weekday and minute of the day. */
+function toLocal(weekday: number, hour: number) {
+  const total = (((weekday * 1440 + hour * 60 + offset()) % WEEK) + WEEK) % WEEK;
+  return { day: Math.floor(total / 1440), minute: total % 1440 };
+}
+
+/** A local weekday and minute of the day back to the stored UTC weekday and hour. */
+function toUTC(day: number, minute: number) {
+  const total = (((day * 1440 + minute - offset()) % WEEK) + WEEK) % WEEK;
+  return { weekday: Math.floor(total / 1440), hour: Math.floor((total % 1440) / 60) };
+}
+
+/** The 24 stored UTC hours, labelled and ordered by local time. */
+function hourOptions() {
+  return Array.from({ length: 24 }, (_, h) => {
+    const minute = (((h * 60 + offset()) % 1440) + 1440) % 1440;
+    const label = `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+    return { minute, label };
+  }).sort((a, b) => a.minute - b.minute);
+}
 
 function scheduleSummary(s: NewsletterSettings): string {
   const next =
     s.enabled && s.nextDue
-      ? t("Next report {time} UTC.", {
+      ? t("Next report {time}.", {
           time: new Date(s.nextDue * 1000).toLocaleString(getLocale(), {
-            timeZone: "UTC",
             dateStyle: "full",
             timeStyle: "short",
           }),
@@ -124,6 +149,7 @@ export function WeeklyReport({ notifications }: { notifications: NotificationsDa
   if (!draft) return <LoadingRows rows={3} />;
 
   const edit = (p: Partial<NewsletterSettings>) => setDraft({ ...draft, ...p });
+  const local = toLocal(draft.weekday, draft.hour);
   const save = async () => {
     setSaving(true);
     setError(null);
@@ -181,13 +207,12 @@ export function WeeklyReport({ notifications }: { notifications: NotificationsDa
         />
         <SettingsRow
           title={t("Day")}
-          description={t("In UTC.")}
           control={
             <div className="w-44">
               <Select
                 aria-label={t("Day")}
-                value={String(draft.weekday)}
-                onChange={(e) => edit({ weekday: Number(e.target.value) })}
+                value={String(local.day)}
+                onChange={(e) => edit(toUTC(Number(e.target.value), local.minute))}
               >
                 {WEEKDAYS_LONG.map((day, i) => (
                   <option key={day} value={String(i)}>
@@ -200,17 +225,17 @@ export function WeeklyReport({ notifications }: { notifications: NotificationsDa
         />
         <SettingsRow
           title={t("Time")}
-          description={t("In UTC.")}
+          description={t("Your local time.")}
           control={
             <div className="w-44">
               <Select
                 aria-label={t("Time")}
-                value={String(draft.hour)}
-                onChange={(e) => edit({ hour: Number(e.target.value) })}
+                value={String(local.minute)}
+                onChange={(e) => edit(toUTC(local.day, Number(e.target.value)))}
               >
-                {HOURS.map((h) => (
-                  <option key={h} value={String(h)}>
-                    {`${String(h).padStart(2, "0")}:00 UTC`}
+                {hourOptions().map((o) => (
+                  <option key={o.minute} value={String(o.minute)}>
+                    {o.label}
                   </option>
                 ))}
               </Select>

@@ -59,6 +59,9 @@ describe("Catalog workspace", () => {
     const { fake } = renderAppWith("/catalog/settings", () => undefined);
     const language = await screen.findByLabelText("Language");
     expect(screen.getByLabelText("Region")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Minimum popularity")).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Some" })).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "More options: What's browsable" }));
     expect(screen.getByLabelText("Minimum popularity")).toBeInTheDocument();
     expect(
       screen

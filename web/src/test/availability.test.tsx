@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { applyReleaseMode, releaseMode } from "../lib/release-mode";
 import { destinations } from "../lib/sitemap";
@@ -121,6 +121,9 @@ describe("New release modes", () => {
     });
     expect(screen.queryByText("Ready Movie")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("radio", { name: /On digital release/ }));
+    expect(calls(fake, "PUT", "/config/availability")).toHaveLength(0);
+    const bar = screen.getByRole("region", { name: "Unsaved changes" });
+    fireEvent.click(within(bar).getByRole("button", { name: "Save changes" }));
     await settleUi(() => {
       expect(calls(fake, "PUT", "/config/availability")).toHaveLength(1);
     });
@@ -133,15 +136,14 @@ describe("New release modes", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("keeps a daily ceiling behind Advanced", async () => {
-    const { fake } = renderApp("/catalog/settings");
-    await settleUi(() => {
-      expect(screen.getByRole("button", { name: "More options: Advanced" })).toBeVisible();
-    });
-    fireEvent.click(screen.getByRole("button", { name: "More options: Advanced" }));
-    const field = screen.getByLabelText("Daily request ceiling");
+  it("keeps the daily budget on Sources › Indexers, behind More options", async () => {
+    const { fake } = renderApp("/sources/indexers");
+    const more = await screen.findByRole("button", { name: "More options: Daily budgets" });
+    fireEvent.click(more);
+    const field = screen.getByLabelText("Daily budget for new-release checks");
     fireEvent.change(field, { target: { value: "48" } });
-    fireEvent.blur(field);
+    const bar = screen.getByRole("region", { name: "Unsaved changes" });
+    fireEvent.click(within(bar).getByRole("button", { name: "Save changes" }));
     await settleUi(() => {
       expect(calls(fake, "PUT", "/config/availability")).toHaveLength(1);
     });
@@ -149,5 +151,17 @@ describe("New release modes", () => {
       effort: "custom",
       feedRequests: 48,
     });
+  });
+
+  it("hides the release-date gate when new movies show right away", async () => {
+    renderApp("/catalog/settings");
+    const gate = await screen.findByRole("switch", {
+      name: "Wait for digital or physical release",
+    });
+    expect(gate).toBeVisible();
+    fireEvent.click(screen.getByRole("radio", { name: /Right away/ }));
+    expect(
+      screen.queryByRole("switch", { name: "Wait for digital or physical release" }),
+    ).not.toBeInTheDocument();
   });
 });
