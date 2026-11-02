@@ -78,6 +78,7 @@ type Channel struct {
 	Enabled       bool           `json:"enabled"`
 	Favorite      bool           `json:"favorite"`
 	Logo          string         `json:"logo,omitempty"`
+	LogoMatched   bool           `json:"logoMatched,omitempty"`
 	Rating        string         `json:"rating,omitempty"`
 	AllowedUsers  []int64        `json:"allowedUsers,omitempty"`
 	SourceID      string         `json:"sourceId,omitempty"`

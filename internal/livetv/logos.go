@@ -73,6 +73,7 @@ func (s *Service) matchLogos(ctx context.Context, cs []Channel) {
 		key := logoName(cs[i].Name)
 		if !ambiguous[key] {
 			cs[i].Logo = logos[key]
+			cs[i].LogoMatched = cs[i].Logo != ""
 		}
 	}
 }

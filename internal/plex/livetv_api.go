@@ -272,7 +272,7 @@ func (s *Server) handleLiveDevices(w http.ResponseWriter, r *http.Request) {
 	s.write(w, r, &liveContainer{Size: len(devices), Identifier: livetv.Provider, Device: devices})
 }
 func liveLogo(c livetv.Channel) string {
-	if c.Logo != "" {
+	if c.Logo != "" && !c.LogoMatched {
 		return c.Logo
 	}
 	return "/livetv/channels/" + url.PathEscape(c.ID) + "/logo.svg"
@@ -671,6 +671,17 @@ func (s *Server) handleLiveLogo(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, c := range cs {
 		if c.ID == id {
+			if c.LogoMatched && c.Logo != "" && s.channelLogos != nil {
+				data, ct, err := s.channelLogos.GetUntrustedURL(r.Context(), c.Logo)
+				if err == nil && len(data) > 0 {
+					setArtworkHeaders(w.Header(), ct)
+					w.Header().Set("Cache-Control", "private, max-age=300")
+					if r.Method != "HEAD" {
+						_, _ = w.Write(data)
+					}
+					return
+				}
+			}
 			setArtworkHeaders(w.Header(), "image/svg+xml")
 			w.Header().Set("Cache-Control", "private, max-age=300")
 			if r.Method != "HEAD" {

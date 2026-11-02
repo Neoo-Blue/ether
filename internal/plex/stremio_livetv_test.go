@@ -55,3 +55,14 @@ func TestStremioNativeGuideOnPlexGrid(t *testing.T) {
 		t.Fatalf("grid: %d %s", res.Code, res.Body.String())
 	}
 }
+
+func TestMatchedChannelLogoUsesArtworkProxy(t *testing.T) {
+	c := livetv.Channel{ID: "channel", Logo: "https://example.test/logo.png", LogoMatched: true}
+	if got := liveLogo(c); got != "/livetv/channels/channel/logo.svg" {
+		t.Fatalf("matched logo path = %q", got)
+	}
+	c.LogoMatched = false
+	if got := liveLogo(c); got != c.Logo {
+		t.Fatalf("original logo path changed: %q", got)
+	}
+}

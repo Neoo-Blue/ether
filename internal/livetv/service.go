@@ -551,6 +551,12 @@ func (s *Service) SaveChannel(ctx context.Context, c Channel) (Channel, error) {
 	if c.ID == "" {
 		c.ID = randomID()
 	}
+	if c.LogoMatched {
+		old, err := s.Channel(ctx, c.ID)
+		if err != nil || !old.LogoMatched || old.Logo != c.Logo {
+			c.LogoMatched = false
+		}
+	}
 	if err := s.expand(ctx, &c); err != nil {
 		return c, err
 	}
