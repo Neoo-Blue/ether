@@ -524,6 +524,7 @@ export function createFakeServer(opts: FakeOptions = {}) {
   const liveTV = createLiveTVMock(catalog);
   const calendar = createCalendarMock();
   const safetyPolicies = new Map<number, Record<string, unknown>>();
+  const simklAccounts = new Map<number, { connected: boolean; lastSync?: string }>();
   const state = {
     boot: {
       ok: true,
@@ -571,8 +572,6 @@ export function createFakeServer(opts: FakeOptions = {}) {
       lifecycle: v.lifecycle,
       streamLimit: 0,
       maxContentRating: v.id === 3 ? "PG" : "",
-      subtitleLanguages: [],
-      audioLanguages: [],
       allowedSections: [],
     })),
     favoritesMirror: new Map<number, boolean>(),
@@ -2078,8 +2077,6 @@ export function createFakeServer(opts: FakeOptions = {}) {
         lifecycle: viewer.lifecycle,
         streamLimit: 0,
         maxContentRating: "",
-        subtitleLanguages: [],
-        audioLanguages: [],
         allowedSections: [],
       });
       return json({ id }, 201);
@@ -2117,8 +2114,6 @@ export function createFakeServer(opts: FakeOptions = {}) {
         lifecycle: viewer.lifecycle,
         streamLimit: 0,
         maxContentRating: "",
-        subtitleLanguages: [],
-        audioLanguages: [],
         allowedSections: [],
       });
       return json({ id, url: "/ether/me#invite=mock-secret" }, 201);
@@ -3360,8 +3355,22 @@ export function createFakeServer(opts: FakeOptions = {}) {
         }
       }
     }
-    // Per-viewer safety policy (Viewer › Limits).
+    // Per-viewer safety policy (Viewer › Limits). The preset's rating limit
+    // is for the user record; the rest is the policy.
     if (seg[0] === "safety" && seg[1] === "policies") {
+      if (seg[2] === "presets" && seg[3] === "kids" && method === "GET") {
+        const age = url.searchParams.get("age");
+        const rating = age === "preschool" ? "TV-Y" : age === "teens" ? "PG-13" : "PG";
+        return json({
+          maxContentRating: rating,
+          blockedGenres: null,
+          blockedKeywords: ["pornography", "erotic movie"],
+          remoteDisabled: false,
+          maxBitrateKbps: 0,
+          allowedHours: null,
+          timezone: "",
+        });
+      }
       const id = Number(seg[2]);
       if (Number.isFinite(id) && method === "GET") return json(safetyPolicies.get(id) ?? {});
       if (Number.isFinite(id) && method === "PUT") {
@@ -3430,6 +3439,32 @@ export function createFakeServer(opts: FakeOptions = {}) {
         state.pausedViewers.delete(id);
         state.removedViewers.add(id);
         return json({ removed: true });
+      }
+    }
+    // One viewer's Simkl account (Viewer › Limits).
+    if (seg[0] === "simkl" && seg[1] && /^\d+$/.test(seg[1])) {
+      const id = Number(seg[1]);
+      const cur = simklAccounts.get(id) ?? { connected: false };
+      if (seg[2] === "status" && method === "GET") return json(cur);
+      if (seg[2] === "start" && method === "POST")
+        return json({
+          userCode: "ABCD-EFGH",
+          verificationUri: "https://simkl.com/pin",
+          verificationUriComplete: "https://simkl.com/pin?user_code=ABCD-EFGH",
+          expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+          interval: 5,
+        });
+      if (seg[2] === "poll" && method === "POST") {
+        simklAccounts.set(id, { connected: true });
+        return json({ status: "authorized" });
+      }
+      if (seg[2] === "sync" && method === "POST") {
+        simklAccounts.set(id, { ...cur, lastSync: new Date().toISOString() });
+        return json({ imported: 3, skipped: 0 });
+      }
+      if (seg[2] === "disconnect" && method === "POST") {
+        simklAccounts.delete(id);
+        return json({ ok: true });
       }
     }
     if (seg[0] === "users" && seg[1] && (method === "PATCH" || method === "PUT")) {

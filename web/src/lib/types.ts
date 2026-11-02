@@ -506,10 +506,10 @@ export interface EtherUser {
   thumb?: string;
   isOwner: boolean;
   lifecycle?: ViewerLifecycle;
+  /** Streams at once; 0 uses server.defaultStreamLimit. */
   streamLimit: number;
+  /** Content rating limit; "" is unrestricted. */
   maxContentRating: string;
-  subtitleLanguages: string[] | null;
-  audioLanguages: string[] | null;
   allowedSections: number[] | null;
 }
 

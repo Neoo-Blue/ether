@@ -377,24 +377,20 @@ export function StreamRulesFields({
 // ---- Safety policy (/safety/policies/:user) ----------------------------------------
 
 export type SafetyPolicy = {
-  maxContentRating: string;
   blockedGenres: string[];
   blockedKeywords: string[];
   remoteDisabled: boolean;
   maxBitrateKbps: number;
-  streamLimit: number;
   allowedHours: number[];
   timezone: string;
 };
 
 export function emptyPolicy(): SafetyPolicy {
   return {
-    maxContentRating: "",
     blockedGenres: [],
     blockedKeywords: [],
     remoteDisabled: false,
     maxBitrateKbps: 0,
-    streamLimit: 0,
     allowedHours: [],
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   };
