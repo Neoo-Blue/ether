@@ -320,6 +320,11 @@ func (c *Client) streamOpenAI(ctx context.Context, base string, cfg config.LLM, 
 		body["max_tokens"] = req.MaxTokens
 	}
 	rc, err := c.openStream(ctx, base+"/chat/completions", openAIHeaders(cfg.APIKey), body)
+	if err != nil && strings.Contains(strings.ToLower(err.Error()), "stream_options") {
+		// Some OpenAI-compatible servers reject stream_options; retry without.
+		delete(body, "stream_options")
+		rc, err = c.openStream(ctx, base+"/chat/completions", openAIHeaders(cfg.APIKey), body)
+	}
 	if err != nil {
 		return err
 	}
@@ -612,6 +617,9 @@ func (c *Client) streamGemini(ctx context.Context, base string, cfg config.LLM, 
 				var parsed any
 				if json.Unmarshal([]byte(r.Content), &parsed) != nil {
 					parsed = map[string]any{"content": r.Content}
+				} else if _, isObj := parsed.(map[string]any); !isObj {
+					// Gemini functionResponse.response must be an object.
+					parsed = map[string]any{"content": parsed}
 				}
 				parts = append(parts, part{FunctionResponse: map[string]any{"name": r.Name, "response": parsed}})
 			}

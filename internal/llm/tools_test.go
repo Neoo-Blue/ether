@@ -159,6 +159,35 @@ func TestStreamToolsRefusal(t *testing.T) {
 	}
 }
 
+func TestStreamOpenAIRetriesWithoutStreamOptions(t *testing.T) {
+	fixture, err := os.ReadFile("testdata/openai_tools.sse")
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempts := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		raw, _ := io.ReadAll(r.Body)
+		if strings.Contains(string(raw), "stream_options") {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"message":"unknown field stream_options"}}`))
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write(fixture)
+	}))
+	defer srv.Close()
+	c := NewClient(ClientOptions{Config: config.LLM{Enabled: true, Provider: "custom", BaseURL: srv.URL, Model: "gpt-x"}, HTTPClient: srv.Client()})
+	ch, err := c.StreamTools(context.Background(), toolReq())
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertToolStream(t, collect(t, ch))
+	if attempts != 2 {
+		t.Errorf("attempts = %d, want 2", attempts)
+	}
+}
+
 func TestToolsSupported(t *testing.T) {
 	c := NewClient(ClientOptions{Config: config.LLM{}})
 	if ok, _ := c.ToolsSupported(); ok {
