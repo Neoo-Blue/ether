@@ -171,3 +171,46 @@ func TestAddonClientPreservesConfigurationQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestManifestRedirectDoesNotLeakInstallURL(t *testing.T) {
+	const secret = "sensitive-config-12345"
+	got := make(chan string, 1)
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got <- r.Referer()
+		fmt.Fprint(w, `{"id":"test","resources":["catalog"]}`)
+	}))
+	defer target.Close()
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, target.URL, http.StatusFound) }))
+	defer source.Close()
+	c, err := NewClient(source.URL+"/"+secret+"/manifest.json", source.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = c.Manifest(context.Background())
+	select {
+	case referer := <-got:
+		if strings.Contains(referer, secret) {
+			t.Fatal("redirect leaked install secret in Referer")
+		}
+	default:
+	}
+}
+
+func TestSubtitleRedirectDoesNotLeakDownloadURL(t *testing.T) {
+	const secret = "private-download-12345"
+	got := make(chan string, 1)
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { got <- r.Referer(); fmt.Fprint(w, "subtitle") }))
+	defer target.Close()
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, target.URL, http.StatusFound) }))
+	defer source.Close()
+	c, err := NewClient(source.URL+"/manifest.json", source.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.FetchBytes(context.Background(), source.URL+"/"+secret, 1024); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(<-got, secret) {
+		t.Fatal("download redirect leaked secret in Referer")
+	}
+}

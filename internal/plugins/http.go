@@ -666,6 +666,12 @@ func (m *Manager) handleView(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	clean := m.store.redactKnown(r.Context(), id, string(resp.Body))
+	if !json.Valid([]byte(clean)) {
+		writeErr(w, http.StatusBadGateway, "invalid_view", "Plugin returned an invalid view.", nil)
+		return
+	}
+	resp.Body = []byte(clean)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(resp.Status)
 	_, _ = w.Write(resp.Body)
@@ -688,6 +694,12 @@ func (m *Manager) handleAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if resp.Status < 200 || resp.Status >= 300 {
+		clean := m.store.redactKnown(r.Context(), id, string(resp.Body))
+		if !json.Valid([]byte(clean)) {
+			writeErr(w, http.StatusBadGateway, "invalid_action", "Plugin returned an invalid action.", nil)
+			return
+		}
+		resp.Body = []byte(clean)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(resp.Status)
 		_, _ = w.Write(resp.Body)
@@ -699,6 +711,11 @@ func (m *Manager) handleAction(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, err)
 		return
 	}
+	clean := m.store.redactKnown(r.Context(), id, string(result))
+	if !json.Valid([]byte(clean)) {
+		writeErr(w, http.StatusBadGateway, "invalid_action", "Plugin returned an invalid action.", nil)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_, _ = w.Write(result)
+	_, _ = w.Write([]byte(clean))
 }

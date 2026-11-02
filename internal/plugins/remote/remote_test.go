@@ -1324,3 +1324,48 @@ func TestCancelledStreamUnblocksTunnelDispatch(t *testing.T) {
 		t.Fatal("cancelled stream left the tunnel reader blocked")
 	}
 }
+
+func TestTunnelRejectsCallsAfterCredentialRevocation(t *testing.T) {
+	var revoked atomic.Bool
+	auth := CredentialResolverFunc(func(_ context.Context, credential string) (string, error) {
+		if credential != "test-credential" || revoked.Load() {
+			return "", ErrUnauthorized
+		}
+		return "org.example.revocation", nil
+	})
+	tunnel := NewTunnelServer(TunnelOptions{Auth: auth})
+	defer tunnel.Close()
+	srv := httptest.NewServer(tunnel.Handler())
+	defer srv.Close()
+	client, err := NewTunnelClient(TunnelClientOptions{URL: srv.URL + TunnelPath, Credential: "test-credential", Plugin: "org.example.revocation", Handler: func(context.Context, Request) (Response, error) { return Response{Status: 200}, nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- client.ServeOnce(ctx) }()
+	defer func() { cancel(); tunnel.Close(); <-done }()
+	waitConnected(t, tunnel, "org.example.revocation")
+	rt := tunnel.RuntimeFor("org.example.revocation")
+	if _, err := rt.Call(ctx, Request{Path: "/test"}); err != nil {
+		t.Fatal(err)
+	}
+	revoked.Store(true)
+	if _, err := rt.Call(ctx, Request{Path: "/test"}); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("revoked tunnel call: %v", err)
+	}
+}
+
+func TestFileHandlerRejectsTraversalEvenIfTargetExistsInRoot(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "video"), []byte("video"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	stream, err := FileHandler(root)(context.Background(), Request{Path: "/ether/file/../video"})
+	if stream != nil {
+		stream.Body.Close()
+	}
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("traversal accepted: %v", err)
+	}
+}

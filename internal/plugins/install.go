@@ -69,23 +69,35 @@ func (m *Manager) fetch(ctx context.Context, rawURL string, lan bool, max int64)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("plugins: invalid fetch URL")
 	}
 	req.Header.Set("User-Agent", "Ether plugin host")
-	resp, err := m.client.Do(req)
+	client := *m.client
+	priorRedirect := client.CheckRedirect
+	client.CheckRedirect = func(next *http.Request, via []*http.Request) error {
+		next.Header.Del("Referer")
+		if priorRedirect != nil {
+			return priorRedirect(next, via)
+		}
+		if len(via) >= 10 {
+			return errors.New("plugins: too many redirects")
+		}
+		return nil
+	}
+	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("plugins: fetch failed")
 	}
 	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("plugins: fetch %s: status %d", rawURL, resp.StatusCode)
+		return nil, fmt.Errorf("plugins: fetch returned status %d", resp.StatusCode)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, max+1))
 	if err != nil {
 		return nil, err
 	}
 	if int64(len(body)) > max {
-		return nil, fmt.Errorf("plugins: %s is larger than %d bytes", rawURL, max)
+		return nil, fmt.Errorf("plugins: fetch is larger than %d bytes", max)
 	}
 	return body, nil
 }
@@ -285,14 +297,23 @@ func readPkg(pkg []byte) (json.RawMessage, map[string][]byte, error) {
 		if f.FileInfo().IsDir() || unsafePath(name) || strings.HasPrefix(name, "__MACOSX") {
 			continue
 		}
+		if _, exists := files[name]; exists {
+			return nil, nil, fmt.Errorf("plugins: duplicate package path")
+		}
+		if f.UncompressedSize64 > 64<<20 {
+			return nil, nil, fmt.Errorf("plugins: package entry is too large")
+		}
 		rc, err := f.Open()
 		if err != nil {
 			return nil, nil, err
 		}
-		b, err := io.ReadAll(io.LimitReader(rc, 64<<20))
+		b, err := io.ReadAll(io.LimitReader(rc, (64<<20)+1))
 		rc.Close() //nolint:errcheck,gosec
 		if err != nil {
 			return nil, nil, err
+		}
+		if len(b) > 64<<20 {
+			return nil, nil, fmt.Errorf("plugins: package entry is too large")
 		}
 		total += int64(len(b))
 		if total > 128<<20 {

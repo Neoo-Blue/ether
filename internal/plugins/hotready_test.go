@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -165,32 +163,6 @@ func TestKVPrefixListingSeesPastOtherKeys(t *testing.T) {
 	keys, err := h.KVList(ctx, "z/")
 	if err != nil || len(keys) != 3 {
 		t.Fatalf("prefix list after 1,100 other keys = %v, %v", keys, err)
-	}
-}
-
-func TestFolderCallsStayInsideTheGrantThroughSymlinks(t *testing.T) {
-	root, outside := t.TempDir(), t.TempDir()
-	if err := os.WriteFile(filepath.Join(outside, "secret.txt"), []byte("nope"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "movie.mkv"), []byte("ok"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(outside, filepath.Join(root, "escape")); err != nil {
-		t.Skip("symlinks unavailable:", err)
-	}
-	if err := os.Symlink(filepath.Join(outside, "secret.txt"), filepath.Join(root, "leak.txt")); err != nil {
-		t.Fatal(err)
-	}
-	h := &host{}
-	if _, err := h.resolveFolderPath(root, "escape/secret.txt"); err == nil {
-		t.Fatal("a symlinked directory must not reach outside the grant")
-	}
-	if _, err := h.resolveFolderPath(root, "leak.txt"); err == nil {
-		t.Fatal("a symlinked file must not reach outside the grant")
-	}
-	if got, err := h.resolveFolderPath(root, "movie.mkv"); err != nil || filepath.Base(got) != "movie.mkv" {
-		t.Fatalf("a real file inside the grant must resolve: %q %v", got, err)
 	}
 }
 

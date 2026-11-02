@@ -346,13 +346,13 @@ func statusForFaultCode(code string) Status {
 // pool lends instances, building on demand up to size, discarding poisoned
 // ones so crash policy (backoff, disable) can count fresh failures.
 type pool struct {
-	makeFn func() (instance, error)
+	makeFn func(context.Context) (instance, error)
 	idle   chan instance
 	slots  chan struct{}
 	done   atomic.Bool
 }
 
-func newPool(size int, makeFn func() (instance, error)) *pool {
+func newPool(size int, makeFn func(context.Context) (instance, error)) *pool {
 	return &pool{makeFn: makeFn, idle: make(chan instance, size), slots: make(chan struct{}, size)}
 }
 
@@ -369,7 +369,7 @@ func (p *pool) get(ctx context.Context) (instance, error) {
 	case in := <-p.idle:
 		return in, nil
 	case p.slots <- struct{}{}:
-		in, err := p.makeFn()
+		in, err := p.makeFn(ctx)
 		if err != nil {
 			<-p.slots
 			return nil, err

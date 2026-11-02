@@ -1,12 +1,14 @@
 package catalogue
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/braedonsaunders/ether/internal/store"
@@ -39,7 +41,34 @@ type cacheStore struct {
 	db *sql.DB
 }
 
-func (s *cacheStore) save(ctx context.Context, idx Index, rawJSON []byte, sig string, fetchedAt time.Time, source string) error {
+// rejectRollback rejects signed older indexes and equivocation at the same
+// generation time. Equal indexes may be fetched repeatedly.
+func rejectRollback(old, next Index) error {
+	if old.GeneratedAt == "" {
+		return nil
+	}
+	prev, err := time.Parse(time.RFC3339Nano, old.GeneratedAt)
+	if err != nil {
+		return fmt.Errorf("catalogue: cached generation time invalid")
+	}
+	current, err := time.Parse(time.RFC3339Nano, next.GeneratedAt)
+	if err != nil {
+		return fmt.Errorf("catalogue: generation time required")
+	}
+	if current.Before(prev) {
+		return fmt.Errorf("catalogue: older signed index rejected")
+	}
+	if current.Equal(prev) {
+		a, _ := json.Marshal(old)
+		b, _ := json.Marshal(next)
+		if !bytes.Equal(a, b) {
+			return fmt.Errorf("catalogue: conflicting signed index generation")
+		}
+	}
+	return nil
+}
+
+func (s *cacheStore) save(ctx context.Context, idx Index, rawJSON []byte, sig string, fetchedAt time.Time, source string, key ed25519.PublicKey) error {
 	if s.db == nil {
 		return nil
 	}
@@ -49,6 +78,23 @@ func (s *cacheStore) save(ctx context.Context, idx Index, rawJSON []byte, sig st
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	// Serialize comparisons and updates across nodes sharing this database.
+	if _, err := tx.ExecContext(ctx, `INSERT INTO plugins_catalogue_index (id) VALUES (1) ON CONFLICT (id) DO UPDATE SET id=excluded.id`); err != nil {
+		return err
+	}
+	var oldRaw, oldSig, oldSource string
+	if err := tx.QueryRowContext(ctx, `SELECT raw_json,signature,source_hash FROM plugins_catalogue_index WHERE id=1`).Scan(&oldRaw, &oldSig, &oldSource); err != nil {
+		return err
+	}
+	if oldRaw != "" && oldSource == sourceHash(source) {
+		old, err := ParseAndVerify([]byte(oldRaw), []byte(oldSig), key)
+		if err == nil {
+			if err := rejectRollback(old, idx); err != nil {
+				return err
+			}
+		}
+	}
 
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO plugins_catalogue_index (id, raw_json, signature, fetched_at, source_hash)

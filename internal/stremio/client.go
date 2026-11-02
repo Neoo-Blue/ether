@@ -313,7 +313,7 @@ func (c *Client) FetchBytes(ctx context.Context, raw string, limit int64) ([]byt
 		return nil, fmt.Errorf("stremio: %s: invalid request", u.Host)
 	}
 	req.Header.Set("User-Agent", userAgent)
-	resp, err := c.http.Do(req)
+	resp, err := withoutReferer(c.http).Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()

@@ -25,6 +25,16 @@ type host struct {
 	plugin string
 }
 
+type readOnlyToolContextKey struct{}
+
+func (h *host) requireWritableToolContext(ctx context.Context) error {
+	if readOnly, _ := ctx.Value(readOnlyToolContextKey{}).(bool); readOnly {
+		h.noteDenied("read-only tool")
+		return fmt.Errorf("%w: read-only tool cannot write", ErrPermissionDenied)
+	}
+	return nil
+}
+
 func (h *host) record(ctx context.Context) (Record, Grants, error) {
 	r, err := h.m.store.record(ctx, h.plugin)
 	if err != nil {
@@ -196,7 +206,29 @@ func (h *host) HTTPFetch(ctx context.Context, req FetchRequest) (FetchResponse, 
 	for k, v := range req.Headers {
 		hr.Header.Set(k, v)
 	}
-	resp, err := h.m.client.Do(hr)
+	// Recheck the current grant before every redirect, as well as the SSRF
+	// guard's own redirect policy. A redirect is another network request.
+	client := *h.m.client
+	previousRedirect := client.CheckRedirect
+	client.CheckRedirect = func(next *http.Request, via []*http.Request) error {
+		current, grants, err := h.record(next.Context())
+		if err != nil {
+			return err
+		}
+		if err := h.deny(current, grants, "network", "", func(string) bool {
+			return hostAllowed(current.Manifest.Ether.Permissions.Network, next.URL.Hostname())
+		}); err != nil {
+			return err
+		}
+		if previousRedirect != nil {
+			return previousRedirect(next, via)
+		}
+		if len(via) >= 10 {
+			return errors.New("plugins: stopped after 10 redirects")
+		}
+		return nil
+	}
+	resp, err := client.Do(hr)
 	if err != nil {
 		return FetchResponse{}, fetchError(u.Hostname(), err)
 	}
@@ -313,6 +345,9 @@ type collectionInverse struct {
 }
 
 func (h *host) SetWatchState(ctx context.Context, viewerID int64, titleID string, watched bool) error {
+	if err := h.requireWritableToolContext(ctx); err != nil {
+		return err
+	}
 	r, g, err := h.record(ctx)
 	if err != nil {
 		return err
@@ -335,6 +370,9 @@ func (h *host) SetWatchState(ctx context.Context, viewerID int64, titleID string
 }
 
 func (h *host) CollectionsUpsert(ctx context.Context, doc json.RawMessage) error {
+	if err := h.requireWritableToolContext(ctx); err != nil {
+		return err
+	}
 	r, g, err := h.record(ctx)
 	if err != nil {
 		return err
@@ -428,60 +466,44 @@ func (h *host) folderCheck(ctx context.Context, root, path string) (string, erro
 		h.noteDenied("folders")
 		return "", fmt.Errorf("%w: folder was not picked for this plugin", ErrPermissionDenied)
 	}
-	return h.resolveFolderPath(root, path)
-}
-
-// resolveFolderPath confines path to the picked root, lexically and after
-// resolving symlinks.
-func (h *host) resolveFolderPath(root, path string) (string, error) {
 	cleanRoot := filepath.Clean(root)
 	joined := filepath.Clean(filepath.Join(cleanRoot, path))
-	if !within(cleanRoot, joined) {
+	if joined != cleanRoot && !strings.HasPrefix(joined, cleanRoot+string(filepath.Separator)) {
 		return "", fmt.Errorf("%w: path leaves the picked folder", ErrPermissionDenied)
 	}
-	// Symlinks are resolved on both sides, so a link inside the picked
-	// folder cannot expose anything outside it.
-	realRoot, err := filepath.EvalSymlinks(cleanRoot)
-	if err != nil {
-		return "", err
-	}
-	real, err := filepath.EvalSymlinks(joined)
-	if err != nil {
-		return "", err
-	}
-	if !within(realRoot, real) {
-		return "", fmt.Errorf("%w: path leaves the picked folder", ErrPermissionDenied)
-	}
-	return real, nil
-}
-
-func within(root, path string) bool {
-	return path == root || strings.HasPrefix(path, root+string(filepath.Separator))
+	return joined, nil
 }
 
 func (h *host) FoldersList(ctx context.Context, root, path string) ([]FolderEntry, error) {
-	dir, err := h.folderCheck(ctx, root, path)
+	_, err := h.folderCheck(ctx, root, path)
 	if err != nil {
 		return nil, err
 	}
-	entries, err := os.ReadDir(dir)
+	fs, err := os.OpenRoot(root)
 	if err != nil {
 		return nil, err
 	}
-	realRoot, err := filepath.EvalSymlinks(filepath.Clean(root))
+	defer fs.Close()
+	name := path
+	if name == "" {
+		name = "."
+	}
+	dir, err := fs.Open(name)
 	if err != nil {
+		return nil, err
+	}
+	defer dir.Close()
+	entries, err := dir.ReadDir(1000)
+	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, err
 	}
 	out := make([]FolderEntry, 0, len(entries))
 	for _, e := range entries {
 		fe := FolderEntry{Name: e.Name(), Path: filepath.Join(path, e.Name()), Dir: e.IsDir()}
 		if e.Type()&os.ModeSymlink != 0 {
-			// Follow a link only when its target stays inside the grant.
-			target, err := filepath.EvalSymlinks(filepath.Join(dir, e.Name()))
-			if err != nil || !within(realRoot, target) {
-				continue
-			}
-			info, err := os.Stat(target)
+			// Follow a link only when its target stays inside the grant;
+			// the rooted Stat fails for one that escapes.
+			info, err := fs.Stat(filepath.Join(name, e.Name()))
 			if err != nil {
 				continue
 			}
@@ -504,11 +526,20 @@ func (h *host) FoldersList(ctx context.Context, root, path string) ([]FolderEntr
 }
 
 func (h *host) FoldersStat(ctx context.Context, root, path string) (FolderEntry, error) {
-	full, err := h.folderCheck(ctx, root, path)
+	_, err := h.folderCheck(ctx, root, path)
 	if err != nil {
 		return FolderEntry{}, err
 	}
-	info, err := os.Stat(full)
+	fs, err := os.OpenRoot(root)
+	if err != nil {
+		return FolderEntry{}, err
+	}
+	defer fs.Close()
+	name := path
+	if name == "" {
+		name = "."
+	}
+	info, err := fs.Stat(name)
 	if err != nil {
 		return FolderEntry{}, err
 	}
@@ -534,12 +565,16 @@ func (m *Manager) rateOK(bucket map[string][]time.Time, key string, limit int, w
 }
 
 func (h *host) NotifyOwner(ctx context.Context, text string) error {
+	if err := h.requireWritableToolContext(ctx); err != nil {
+		return err
+	}
 	if _, _, err := h.record(ctx); err != nil {
 		return err
 	}
 	if !h.m.rateOK(h.m.notifyTimes, h.plugin, 5, time.Hour) {
 		return fmt.Errorf("plugins: owner notices are limited to five an hour")
 	}
+	text = h.m.store.redactKnown(ctx, h.plugin, text)
 	if h.m.deps.Backends.Notice != nil {
 		h.m.deps.Backends.Notice(truncate(text, 500))
 	}

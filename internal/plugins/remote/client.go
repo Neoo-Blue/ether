@@ -10,7 +10,6 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -388,27 +387,24 @@ func FileHandler(root string) StreamHandlerFunc {
 		if requestedRoot := firstHeader(req.Headers, "X-Ether-File-Root"); requestedRoot != "" && filepath.Clean(requestedRoot) != root {
 			return nil, ErrPermissionDenied
 		}
-		// URL paths are slash-separated on every platform.
-		clean := path.Clean("/" + rel)
-		full := filepath.Join(root, filepath.FromSlash(strings.TrimPrefix(clean, "/")))
-		realRoot, err := filepath.EvalSymlinks(root)
+		// Open through a rooted descriptor so a concurrent symlink swap cannot
+		// move the opened file outside the configured root.
+		for _, component := range strings.Split(rel, "/") {
+			if component == ".." {
+				return nil, ErrInvalid
+			}
+		}
+		rootFS, err := os.OpenRoot(root)
 		if err != nil {
 			return nil, ErrNotFound
 		}
-		full, err = filepath.EvalSymlinks(full)
-		if err != nil {
-			return nil, ErrNotFound
-		}
-		prefix := strings.TrimSuffix(realRoot, string(filepath.Separator)) + string(filepath.Separator)
-		if full != realRoot && !strings.HasPrefix(full, prefix) {
-			return nil, fmt.Errorf("%w: path escapes the file root", ErrInvalid)
-		}
-		f, err := os.Open(full)
+		f, err := rootFS.Open(filepath.FromSlash(rel))
+		_ = rootFS.Close()
 		if err != nil {
 			if os.IsNotExist(err) {
 				return nil, ErrNotFound
 			}
-			return nil, err
+			return nil, fmt.Errorf("%w: invalid file path", ErrInvalid)
 		}
 		info, err := f.Stat()
 		if err != nil || !info.Mode().IsRegular() {

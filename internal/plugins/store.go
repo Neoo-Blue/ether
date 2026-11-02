@@ -8,10 +8,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/braedonsaunders/ether/internal/config"
+	"github.com/braedonsaunders/ether/internal/logredact"
 	"github.com/braedonsaunders/ether/internal/store"
 )
 
@@ -158,6 +161,24 @@ func (s *storage) record(ctx context.Context, id string) (Record, error) {
 	if err != nil {
 		return Record{}, err
 	}
+	if r.SourceURL != "" {
+		plain, legacy, err := config.OpenWith(s.sealer, r.SourceURL, "plugins_installed", "source_url", r.ID)
+		if err != nil {
+			return Record{}, err
+		}
+		if legacy && s.sealer != nil {
+			sealed, err := config.SealWith(s.sealer, plain, "plugins_installed", "source_url", r.ID)
+			if err != nil {
+				return Record{}, err
+			}
+			if sealed != r.SourceURL {
+				if _, err = s.db.ExecContext(ctx, `UPDATE plugins_installed SET source_url=? WHERE id=? AND source_url=?`, sealed, r.ID, r.SourceURL); err != nil {
+					return Record{}, err
+				}
+			}
+		}
+		r.SourceURL = plain
+	}
 	r.ManifestRaw = json.RawMessage(man)
 	if err := json.Unmarshal([]byte(man), &r.Manifest); err != nil {
 		return Record{}, fmt.Errorf("plugins: stored manifest for %s: %w", id, err)
@@ -198,9 +219,13 @@ func (s *storage) list(ctx context.Context) ([]Record, error) {
 
 func (s *storage) upsert(ctx context.Context, r Record) error {
 	now := s.now().Unix()
-	_, err := s.db.ExecContext(ctx, `INSERT INTO plugins_installed(id,name,version,kind,manifest,source_kind,source_url,enabled,verified,shadow,auto_update,update_version,update_manifest,update_files,prev_version,installed_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+	sealedURL, err := config.SealWith(s.sealer, r.SourceURL, "plugins_installed", "source_url", r.ID)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO plugins_installed(id,name,version,kind,manifest,source_kind,source_url,enabled,verified,shadow,auto_update,update_version,update_manifest,update_files,prev_version,installed_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(id) DO UPDATE SET name=excluded.name,version=excluded.version,kind=excluded.kind,manifest=excluded.manifest,source_kind=excluded.source_kind,source_url=excluded.source_url,enabled=excluded.enabled,verified=excluded.verified,shadow=excluded.shadow,auto_update=excluded.auto_update,update_version=excluded.update_version,update_manifest=excluded.update_manifest,update_files=excluded.update_files,prev_version=excluded.prev_version,updated_at=excluded.updated_at`,
-		r.ID, r.Name, r.Version, r.Kind, string(r.ManifestRaw), r.SourceKind, r.SourceURL,
+		r.ID, r.Name, r.Version, r.Kind, string(r.ManifestRaw), r.SourceKind, sealedURL,
 		bi(r.Enabled), bi(r.Verified), bi(r.Shadow), bi(r.AutoUpdate), r.UpdateVersion, r.updateManifest, r.updateFiles, r.PrevVersion, timeOr(r.InstalledAt, now), now)
 	return err
 }
@@ -362,17 +387,49 @@ func (s *storage) kvGet(ctx context.Context, plugin, key string) ([]byte, bool, 
 }
 
 func (s *storage) kvPut(ctx context.Context, plugin, key string, value []byte) error {
-	var old int64
-	_ = s.db.QueryRowContext(ctx, `SELECT size FROM plugins_kv WHERE plugin=? AND kkey=?`, plugin, key).Scan(&old)
-	used, err := s.kvUsed(ctx, plugin)
+	if len(key) == 0 || len(key) > 256 {
+		return ErrQuotaExceeded
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	if used-old+int64(len(value)) > KVQuotaBytes {
+	defer tx.Rollback()
+	// Lock the plugin grant row across nodes before reading and changing usage.
+	result, err := tx.ExecContext(ctx, `UPDATE plugins_grants SET grants=grants WHERE plugin=?`, plugin)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return ErrPermissionDenied
+	}
+	var old int64
+	err = tx.QueryRowContext(ctx, `SELECT size FROM plugins_kv WHERE plugin=? AND kkey=?`, plugin, key).Scan(&old)
+	exists := err == nil
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	var used int64
+	var count int64
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(size),0),COUNT(*) FROM plugins_kv WHERE plugin=?`, plugin).Scan(&used, &count); err != nil {
+		return err
+	}
+	// A fixed key allowance also bounds Unicode keys on SQLite and PostgreSQL.
+	if !exists {
+		count++
+	}
+	if count > 10000 || used-old+int64(len(value))+count*256 > KVQuotaBytes {
 		return ErrQuotaExceeded
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO plugins_kv(plugin,kkey,value,size) VALUES(?,?,?,?) ON CONFLICT(plugin,kkey) DO UPDATE SET value=excluded.value,size=excluded.size`, plugin, key, value, len(value))
-	return err
+	_, err = tx.ExecContext(ctx, `INSERT INTO plugins_kv(plugin,kkey,value,size) VALUES(?,?,?,?) ON CONFLICT(plugin,kkey) DO UPDATE SET value=excluded.value,size=excluded.size`, plugin, key, value, len(value))
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *storage) kvDelete(ctx context.Context, plugin, key string) error {
@@ -565,7 +622,56 @@ func (s *storage) callStats(ctx context.Context, plugin string) (count, errors i
 	return len(ms), errors, pct(0.5), pct(0.95), nil
 }
 
+// redactKnown removes saved plugin credentials even when a plugin includes one
+// in free text or under a harmless-looking field name. Fail closed if the
+// settings cannot be read or decrypted.
+func (s *storage) redactKnown(ctx context.Context, plugin, value string) string {
+	row, err := s.settings(ctx, plugin)
+	if err != nil {
+		return "[redacted]"
+	}
+	// URL-mode add-ons commonly embed credentials in the source URL.
+	// Protect the URL and its configuration components in diagnostics too.
+	record, err := s.record(ctx, plugin)
+	if err != nil {
+		return "[redacted]"
+	}
+	if record.SourceURL != "" {
+		value = strings.ReplaceAll(value, record.SourceURL, "[redacted]")
+		if u, err := url.Parse(record.SourceURL); err == nil {
+			for _, segment := range strings.Split(u.Path, "/") {
+				if len(segment) >= 4 && segment != "manifest.json" {
+					value = strings.ReplaceAll(value, segment, "[redacted]")
+				}
+			}
+			for _, values := range u.Query() {
+				for _, secret := range values {
+					if len(secret) >= 4 {
+						value = strings.ReplaceAll(value, secret, "[redacted]")
+					}
+				}
+			}
+		}
+	}
+	for name, sealed := range row.Secrets {
+		secret, err := s.openSecret(plugin, name, sealed)
+		if err != nil {
+			return "[redacted]"
+		}
+		if secret == "" {
+			continue
+		}
+		value = strings.ReplaceAll(value, secret, "[redacted]")
+		encoded, _ := json.Marshal(secret)
+		if len(encoded) > 2 {
+			value = strings.ReplaceAll(value, string(encoded[1:len(encoded)-1]), "[redacted]")
+		}
+	}
+	return logredact.String(value)
+}
+
 func (s *storage) addLog(ctx context.Context, plugin, line string) {
+	line = s.redactKnown(ctx, plugin, line)
 	_, _ = s.db.ExecContext(ctx, `INSERT INTO plugins_logs(plugin,line,created) VALUES(?,?,?)`, plugin, truncate(line, 2000), s.now().Unix())
 	capRing(ctx, s.db, "plugins_logs", plugin, LogsCap)
 }

@@ -275,6 +275,23 @@ func (e *httpError) Error() string {
 	return fmt.Sprintf("stremio: %s answered HTTP %d", e.host, e.status)
 }
 
+// withoutReferer keeps credential-bearing URLs out of redirect headers.
+func withoutReferer(client *http.Client) *http.Client {
+	safeClient := *client
+	priorRedirect := safeClient.CheckRedirect
+	safeClient.CheckRedirect = func(next *http.Request, via []*http.Request) error {
+		next.Header.Del("Referer")
+		if priorRedirect != nil {
+			return priorRedirect(next, via)
+		}
+		if len(via) >= 10 {
+			return errors.New("stremio: too many redirects")
+		}
+		return nil
+	}
+	return &safeClient
+}
+
 // getJSON decodes base+suffix into out. Errors name only the addon host:
 // an addon URL may carry the owner's settings, including keys.
 func getJSON(ctx context.Context, client *http.Client, base *url.URL, suffix string, limit int64, out any) error {
@@ -289,7 +306,7 @@ func getJSON(ctx context.Context, client *http.Client, base *url.URL, suffix str
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", userAgent)
-	resp, err := client.Do(req)
+	resp, err := withoutReferer(client).Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()

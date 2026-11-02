@@ -487,13 +487,17 @@ func (m *Manager) Call(ctx context.Context, pluginID string, req Request) (Respo
 	}
 	rt, err := m.runtimeFor(ctx, r)
 	if err != nil {
-		m.recordFailure(ctx, pluginID, "runtime unavailable: "+err.Error(), false)
+		message := m.store.redactKnown(ctx, pluginID, err.Error())
+		m.recordFailure(ctx, pluginID, "runtime unavailable: "+message, false)
+		if message != err.Error() {
+			err = errors.New(message)
+		}
 		return Response{}, err
 	}
 	resp, err := rt.Call(cctx, req)
 	ms := m.now().Sub(start).Milliseconds()
 	rec := CallRecord{Plugin: pluginID, Route: req.Path, Method: req.Method, Status: resp.Status, MS: ms,
-		Request: redactJSON(req.Body), Response: redactJSON(resp.Body)}
+		Request: m.store.redactKnown(ctx, pluginID, redactJSON(req.Body)), Response: m.store.redactKnown(ctx, pluginID, redactJSON(resp.Body))}
 	if req.Path == "/ether/notify" || req.Path == "/ether/configure" || strings.HasPrefix(req.Path, "/subtitles/") || req.Path == "/ether/subtitles/download" {
 		rec.Request = ""
 		rec.Response = ""
@@ -502,11 +506,14 @@ func (m *Manager) Call(ctx context.Context, pluginID string, req Request) (Respo
 		if req.Path == "/ether/notify" || req.Path == "/ether/configure" {
 			err = errors.New("notification delivery failed")
 		}
-		rec.Error = err.Error()
+		rec.Error = m.store.redactKnown(ctx, pluginID, err.Error())
 		m.store.addCall(ctx, rec)
 		// Crash policy: drop the instance so the next call restarts it.
 		m.closeRuntime(pluginID)
-		m.recordFailure(ctx, pluginID, err.Error(), true)
+		m.recordFailure(ctx, pluginID, rec.Error, true)
+		if rec.Error != err.Error() {
+			err = errors.New(rec.Error)
+		}
 		return Response{}, err
 	}
 	if len(rec.Request) > 64*1024 {
