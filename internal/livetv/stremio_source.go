@@ -31,15 +31,23 @@ func (stremioKind) Fetch(ctx context.Context, s *Service, src *Source) (Fetched,
 	var out Fetched
 	out.Guide = XMLGuide{Channels: map[string]Channel{}, Names: map[string][]string{}}
 	seen := map[string]bool{}
+	readCatalogs := map[string]bool{}
 	for _, catalog := range manifest.Catalogs {
+		if len(out.Channels) >= stremio.MaxCatalogItems {
+			break
+		}
 		if catalog.Type != "tv" {
 			continue
 		}
+		readCatalogs[catalog.ID] = true
 		entries, err := c.Catalog(ctx, "tv", catalog.ID, nil, stremio.MaxCatalogItems)
 		if err != nil {
 			return Fetched{}, err
 		}
 		for _, entry := range entries {
+			if len(out.Channels) >= stremio.MaxCatalogItems {
+				break
+			}
 			if entry.ID == "" || seen[entry.ID] {
 				continue
 			}
@@ -80,7 +88,7 @@ func (stremioKind) Fetch(ctx context.Context, s *Service, src *Source) (Fetched,
 		from, until := s.o.Now().UTC().Add(-guideLookback), s.o.Now().UTC().Add(guideLookahead)
 		first := time.Date(from.Year(), from.Month(), from.Day(), 0, 0, 0, 0, time.UTC)
 		for _, catalog := range manifest.Catalogs {
-			if catalog.Type != "tv" {
+			if catalog.Type != "tv" || !readCatalogs[catalog.ID] {
 				continue
 			}
 			dated := false
@@ -120,7 +128,7 @@ func (stremioKind) Fetch(ctx context.Context, s *Service, src *Source) (Fetched,
 			return Fetched{}, fmt.Errorf("stremio: invalid guide URL")
 		}
 		u = c.Base().ResolveReference(u)
-		b, err := c.FetchBytes(ctx, u.String(), maxGuideBytes)
+		b, err := c.FetchBytes(ctx, u.String(), 32<<20)
 		if err != nil {
 			return Fetched{}, err
 		}

@@ -4,7 +4,7 @@ import { Drawer } from "../../components/Drawer";
 import { Field, SecretInput } from "../../components/fields";
 import { ErrorPanel, LoadingRows } from "../../components/feedback";
 import { t } from "../../i18n";
-import { api, errorMessage } from "../../lib/api";
+import { api, errorMessage, newId } from "../../lib/api";
 import { textOf, useRegistry } from "../../lib/extend";
 import { useAsync } from "../../lib/hooks";
 import type { EtherConfig } from "../../lib/types";
@@ -104,7 +104,7 @@ export function SubtitleProviders() {
         variant="outline"
         disabled={!config.data || busy}
         onClick={() =>
-          setEditing({ id: crypto.randomUUID(), kind: "stremio", name: "", url: "", enabled: true })
+          setEditing({ id: newId("sub"), kind: "stremio", name: "", url: "", enabled: true })
         }
       >
         {t("Add Stremio subtitle add-on")}

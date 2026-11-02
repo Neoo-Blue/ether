@@ -172,7 +172,11 @@ export default function CollectionEditor() {
     if (!ready) return;
     // Configured add-on URLs contain credentials; never persist a draft
     // holding a freshly pasted URL in browser storage.
-    if (debouncedSpec.sources.some((s) => s.kind === "stremioCatalog" && s.url && !s.url.endsWith(" (saved)"))) {
+    if (
+      debouncedSpec.sources.some(
+        (s) => s.kind === "stremioCatalog" && s.url && !s.url.endsWith(" (saved)"),
+      )
+    ) {
       clearDraft(dKey);
       setSavedLocallyAt(null);
       return;

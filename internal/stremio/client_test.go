@@ -154,3 +154,20 @@ func TestAddonErrorsDoNotExposeConfiguredPath(t *testing.T) {
 		t.Fatalf("unsafe error: %v", err)
 	}
 }
+
+func TestAddonClientPreservesConfigurationQuery(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("key") != "secret" {
+			t.Error("configuration query missing")
+		}
+		fmt.Fprint(w, `{"id":"example","resources":["catalog"]}`)
+	}))
+	defer srv.Close()
+	c, err := NewClient(srv.URL+"/manifest.json?key=secret", srv.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = c.Manifest(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}

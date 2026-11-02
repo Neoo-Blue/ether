@@ -46,6 +46,12 @@ func NewClient(rawURL string, httpClient *http.Client) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Catalog, TV and subtitle install links can carry configuration in
+	// their query string. Keep it without changing the stream indexer's
+	// existing BaseURL behaviour.
+	if parsed, err := url.Parse(strings.TrimSpace(rawURL)); err == nil {
+		base.RawQuery = parsed.RawQuery
+	}
 	if httpClient == nil {
 		httpClient = DefaultClient()
 	}

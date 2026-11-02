@@ -124,7 +124,8 @@ export function SecretInput({
   ariaLabel?: string;
   invalid?: boolean;
 }) {
-  const isStored = value === REDACTED || value === "Saved";
+  const isStored =
+    value === REDACTED || value === "Saved" || /^https?:\/\/[^\s]+ \(saved\)$/.test(value);
   return (
     <div className="space-y-1">
       {isStored ? (

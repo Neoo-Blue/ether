@@ -55,7 +55,12 @@ export function LiveTVOptions() {
               "Optional JSON index supplied by you. Channels without a matching logo show their name.",
             )}
           >
-            <Input id="livetv-logo-index" type="url" value={url} onChange={(e) => setUrl(e.currentTarget.value)} />
+            <Input
+              id="livetv-logo-index"
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.currentTarget.value)}
+            />
           </Field>
           <Field
             htmlFor="livetv-health-interval"

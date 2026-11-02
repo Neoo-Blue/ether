@@ -8,22 +8,9 @@ import (
 
 // Imported Stremio streams may repeat the add-on's credentials in their
 // URLs. The owner can reorder and disable them without receiving those URLs.
-func (s *Service) redactAddonChannels(ctx context.Context, channels []Channel) {
-	kinds := map[string]bool{}
+func (s *Service) redactAddonChannels(_ context.Context, channels []Channel) {
 	for i := range channels {
 		c := &channels[i]
-		if c.SourceID == "" {
-			continue
-		}
-		isAddon, ok := kinds[c.SourceID]
-		if !ok {
-			src, err := s.storedSourceByID(ctx, c.SourceID)
-			isAddon = err == nil && src.Kind == "stremio"
-			kinds[c.SourceID] = isAddon
-		}
-		if !isAddon {
-			continue
-		}
 		for j := range c.StreamSources {
 			input := &c.StreamSources[j]
 			if strings.HasPrefix(input.ID, "stremio-") {

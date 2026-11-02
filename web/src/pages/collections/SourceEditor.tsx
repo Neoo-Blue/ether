@@ -363,7 +363,11 @@ function StremioCatalogEditor({
           />
         </>
       )}
-      <Field label={t("Maximum items")} htmlFor={`${inputId}-max`} hint={t("Up to 2,000 items per refresh")}>
+      <Field
+        label={t("Maximum items")}
+        htmlFor={`${inputId}-max`}
+        hint={t("Up to 2,000 items per refresh")}
+      >
         <Input
           id={`${inputId}-max`}
           type="number"
