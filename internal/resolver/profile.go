@@ -59,21 +59,75 @@ func filterOutSurroundAudio(codecs []string) []string {
 	return kept
 }
 
-func matchingRule(q config.Quality, caps core.ClientCaps, user *core.User) (config.QualityRule, bool) {
-	byName := map[string]struct{}{}
+// ProfileSource names the layer that picked a client's quality profile.
+type ProfileSource string
+
+const (
+	ProfileFromRule    ProfileSource = "rule"    // the first matching quality rule
+	ProfileFromRemote  ProfileSource = "remote"  // the Away profile, for a remote client no rule covers
+	ProfileFromDefault ProfileSource = "default" // the At home (default) profile
+	ProfileFromFirst   ProfileSource = "first"   // the first configured profile
+	ProfileBuiltin     ProfileSource = "builtin" // no usable profile is configured
+)
+
+// profileChoice is which configured profile applies to a client, before
+// any clamp, and why.
+type profileChoice struct {
+	profile core.QualityProfile
+	source  ProfileSource
+	rule    int // index into q.Rules when source is ProfileFromRule, else -1
+}
+
+// chooseProfile is the single place that picks a client's profile.
+//
+// Selection order: the first rule whose non-empty matchers all match and
+// whose profile exists; otherwise q.Remote for a remote client (when set);
+// otherwise q.Default; otherwise the first profile; otherwise the built-in
+// default. A rule for a device or viewer is more specific than "away from
+// home", so it wins there too.
+func chooseProfile(q config.Quality, caps core.ClientCaps, user *core.User) profileChoice {
+	byName := map[string]core.QualityProfile{}
 	for _, p := range q.Profiles {
-		byName[p.Name] = struct{}{}
+		byName[p.Name] = p
 	}
-	for _, rule := range q.Rules {
+	for i, rule := range q.Rules {
 		if !ruleMatches(rule, caps, user) {
 			continue
 		}
-		if _, ok := byName[rule.Profile]; !ok {
-			continue
+		if p, ok := byName[rule.Profile]; ok {
+			return profileChoice{profile: p, source: ProfileFromRule, rule: i}
 		}
-		return rule, true
 	}
-	return config.QualityRule{}, false
+	if caps.Remote && q.Remote != "" {
+		if p, ok := byName[q.Remote]; ok {
+			return profileChoice{profile: p, source: ProfileFromRemote, rule: -1}
+		}
+	}
+	if q.Default != "" {
+		if p, ok := byName[q.Default]; ok {
+			return profileChoice{profile: p, source: ProfileFromDefault, rule: -1}
+		}
+	}
+	if len(q.Profiles) > 0 {
+		return profileChoice{profile: q.Profiles[0], source: ProfileFromFirst, rule: -1}
+	}
+	return profileChoice{profile: defaultProfile(), source: ProfileBuiltin, rule: -1}
+}
+
+// ruleEffect records what the matching quality rule did to the client's
+// capabilities in applyClientRules.
+type ruleEffect struct {
+	choice profileChoice
+	// ruleHeight is the rule's max height written over the client's ceiling.
+	ruleHeight int
+	// heightIgnored is set when the rule has a max height but the client
+	// (or an owner App compatibility edit) fixed the height.
+	heightIgnored bool
+	// lifted is the height an Android mobile client's usual 1080p ceiling
+	// was raised to because a rule picked a higher profile.
+	lifted int
+	// hdrLifted is set when that lift also turned HDR10 on.
+	hdrLifted bool
 }
 
 func stripSurroundAudioCaps(caps core.ClientCaps) core.ClientCaps {
@@ -127,126 +181,80 @@ func stripSurroundAudioCaps(caps core.ClientCaps) core.ClientCaps {
 // default remote bitrate cap is cleared so 4K releases are not demoted below
 // 8 Mbps.
 func ApplyClientRules(q config.Quality, caps core.ClientCaps, user *core.User) core.ClientCaps {
+	caps, _ = applyClientRules(q, caps, user)
+	return caps
+}
+
+func applyClientRules(q config.Quality, caps core.ClientCaps, user *core.User) (core.ClientCaps, ruleEffect) {
 	if len(caps.VideoCodecs) == 0 && caps.Protocol != "plex" && !strings.Contains(strings.ToLower(caps.Product), "plex") {
 		if defaults := clientreg.Playback(clientreg.Identity{Product: caps.Product, Platform: caps.Platform, Device: clientDevice(caps), Version: caps.Version}, nil); defaults.ID != "" && defaults.ID != "generic" && len(defaults.Video) > 0 {
 			caps.VideoCodecs = append([]string(nil), defaults.Video...)
 		}
 	}
+	// Rule matchers read only protocol, product, platform and viewer, none
+	// of which this function changes, so the choice holds for the result.
+	eff := ruleEffect{choice: chooseProfile(q, caps, user)}
 	if caps.Download {
-		return caps
+		return caps, eff
 	}
-	byName := map[string]core.QualityProfile{}
-	for _, p := range q.Profiles {
-		byName[p.Name] = p
-	}
-	var selected core.QualityProfile
-	var hasSelected bool
-	var matchedRule config.QualityRule
-	var hasRule bool
-	for _, rule := range q.Rules {
-		if !ruleMatches(rule, caps, user) {
-			continue
-		}
-		prof, ok := byName[rule.Profile]
-		if !ok {
-			continue
-		}
-		matchedRule, hasRule = rule, true
-		if !hasSelected {
-			selected, hasSelected = prof, true
-			targetHeight := rule.MaxHeight
-			if targetHeight <= 0 {
-				if prof.MaxHeight > 0 {
-					targetHeight = prof.MaxHeight
-				} else {
-					targetHeight = 2160
-				}
-			}
-			if !caps.ExplicitMaxHeight {
-				if rule.MaxHeight > 0 {
-					caps.MaxHeight = rule.MaxHeight
-				} else if defaultCappedAndroidClient(caps) && caps.MaxHeight < targetHeight {
-					caps.MaxHeight = targetHeight
-				}
-			}
-			if caps.MaxHeight >= 2160 && prof.AllowHDR && !caps.ExplicitNoHDR && defaultCappedAndroidClient(caps) {
-				caps.HDR10 = true
+	if eff.choice.source == ProfileFromRule {
+		rule, prof := q.Rules[eff.choice.rule], eff.choice.profile
+		targetHeight := rule.MaxHeight
+		if targetHeight <= 0 {
+			if prof.MaxHeight > 0 {
+				targetHeight = prof.MaxHeight
+			} else {
+				targetHeight = 2160
 			}
 		}
-		break
-	}
-	if hasRule && matchedRule.ConvertSurroundAudio {
-		caps = stripSurroundAudioCaps(caps)
-	}
-	// A rule names this device or viewer; the remote profile is only the
-	// fallback for remote clients no rule covers.
-	if !hasSelected && caps.Remote && q.Remote != "" {
-		if p, ok := byName[q.Remote]; ok {
-			selected, hasSelected = p, true
+		if !caps.ExplicitMaxHeight {
+			if rule.MaxHeight > 0 {
+				caps.MaxHeight = rule.MaxHeight
+				eff.ruleHeight = rule.MaxHeight
+			} else if defaultCappedAndroidClient(caps) && caps.MaxHeight < targetHeight {
+				caps.MaxHeight = targetHeight
+				eff.lifted = targetHeight
+			}
+		} else if rule.MaxHeight > 0 {
+			eff.heightIgnored = true
+		}
+		if caps.MaxHeight >= 2160 && prof.AllowHDR && !caps.ExplicitNoHDR && defaultCappedAndroidClient(caps) {
+			eff.hdrLifted = !caps.HDR10
+			caps.HDR10 = true
+		}
+		if rule.ConvertSurroundAudio {
+			caps = stripSurroundAudioCaps(caps)
 		}
 	}
-	if !hasSelected && q.Default != "" {
-		if p, ok := byName[q.Default]; ok {
-			selected, hasSelected = p, true
-		}
-	}
-	if !hasSelected && len(q.Profiles) > 0 {
-		selected, hasSelected = q.Profiles[0], true
-	}
-	if hasSelected && caps.DefaultRemoteBitrate && (selected.MaxHeight == 0 || selected.MaxHeight >= 2160) && (caps.MaxHeight == 0 || caps.MaxHeight >= 2160) {
+	selected := eff.choice.profile
+	if eff.choice.source != ProfileBuiltin && caps.DefaultRemoteBitrate && (selected.MaxHeight == 0 || selected.MaxHeight >= 2160) && (caps.MaxHeight == 0 || caps.MaxHeight >= 2160) {
 		caps.MaxBitrateKbps = 0
 		caps.DefaultRemoteBitrate = false
 	}
-	return caps
+	return caps, eff
 }
 
 // SelectProfile picks the quality profile for a client and clamps it
 // to what the client can direct-play. Playback uses it for
 // pre-resolution estimates; the resolver uses it for ranking.
 //
-// Selection order: the first rule whose non-empty matchers all match;
-// otherwise q.Remote for a remote client (when set); otherwise q.Default;
-// otherwise the first profile. A rule for a device or viewer is more
-// specific than "away from home", so it wins there too. Clamping: MaxHeight is
-// capped at caps.MaxHeight, HDR/DV are only allowed when the client
-// supports them, and preferred codecs the client cannot decode are
-// dropped.
+// Selection order is chooseProfile's. Clamping: MaxHeight is capped at
+// caps.MaxHeight, HDR/DV are only allowed when the client supports them,
+// and preferred codecs the client cannot decode are dropped.
 func SelectProfile(q config.Quality, caps core.ClientCaps, user *core.User) core.QualityProfile {
-	caps = ApplyClientRules(q, caps, user)
-	byName := map[string]core.QualityProfile{}
-	for _, p := range q.Profiles {
-		byName[p.Name] = p
-	}
-	var prof core.QualityProfile
-	found := false
-	pick := func(name string) bool {
-		if name == "" {
-			return false
-		}
-		if p, ok := byName[name]; ok {
-			prof, found = p, true
-			return true
-		}
-		return false
-	}
-	for _, rule := range q.Rules {
-		if ruleMatches(rule, caps, user) && pick(rule.Profile) {
-			break
-		}
-	}
-	if !found && caps.Remote {
-		pick(q.Remote)
-	}
-	if !found {
-		pick(q.Default)
-	}
-	if !found {
-		if len(q.Profiles) > 0 {
-			prof = q.Profiles[0]
-		} else {
-			prof = defaultProfile()
-		}
-	}
+	return decideProfile(q, caps, user).profile
+}
+
+// profileDecision is SelectProfile's answer with what decided it.
+type profileDecision struct {
+	profile core.QualityProfile // selected, then clamped to the client
+	caps    core.ClientCaps     // the client after quality rules
+	effect  ruleEffect
+}
+
+func decideProfile(q config.Quality, caps core.ClientCaps, user *core.User) profileDecision {
+	caps, eff := applyClientRules(q, caps, user)
+	prof := eff.choice.profile
 	// Deep-copy slices so callers cannot mutate config.
 	prof.PreferredSources = append([]core.Source(nil), prof.PreferredSources...)
 	prof.PreferredCodecs = append([]string(nil), prof.PreferredCodecs...)
@@ -306,7 +314,7 @@ func SelectProfile(q config.Quality, caps core.ClientCaps, user *core.User) core
 		}
 		prof.PreferredCodecs = kept
 	}
-	if rule, ok := matchingRule(q, caps, user); ok && rule.ConvertSurroundAudio && len(caps.AudioCodecs) > 0 {
+	if eff.choice.source == ProfileFromRule && q.Rules[eff.choice.rule].ConvertSurroundAudio && len(caps.AudioCodecs) > 0 {
 		kept := prof.PreferredAudio[:0:0]
 		for _, a := range prof.PreferredAudio {
 			if caps.SupportsAudio(a) {
@@ -315,7 +323,7 @@ func SelectProfile(q config.Quality, caps core.ClientCaps, user *core.User) core
 		}
 		prof.PreferredAudio = kept
 	}
-	return prof
+	return profileDecision{profile: prof, caps: caps, effect: eff}
 }
 
 // downloadProfile reshapes the selected profile for an offline download

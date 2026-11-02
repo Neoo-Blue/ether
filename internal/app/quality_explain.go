@@ -1,0 +1,118 @@
+package app
+
+import (
+	"encoding/json"
+	"net/http"
+	"strings"
+
+	"github.com/braedonsaunders/ether/internal/plex"
+	"github.com/braedonsaunders/ether/internal/resolver"
+)
+
+// qualityClient is a known app the owner can ask "who gets what" about.
+// The identities are what each official app sends, so the capability
+// registry and quality rules match them exactly as they match playback.
+type qualityClient struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Product  string `json:"product"`
+	Platform string `json:"platform"`
+	Device   string `json:"device,omitempty"`
+}
+
+func qualityClients() []qualityClient {
+	return []qualityClient{
+		{ID: "plex-apple-tv", Name: "Plex for Apple TV", Product: "Plex for Apple TV", Platform: "tvOS", Device: "Apple TV"},
+		{ID: "plex-ios", Name: "Plex for iPhone and iPad", Product: "Plex for iOS", Platform: "iOS", Device: "iPhone"},
+		{ID: "plex-android-tv", Name: "Plex for Android TV", Product: "Plex for Android (TV)", Platform: "Android", Device: "Android TV"},
+		{ID: "plex-shield", Name: "Plex on NVIDIA Shield", Product: "Plex for Android (TV)", Platform: "Android", Device: "SHIELD Android TV"},
+		{ID: "plex-fire-tv", Name: "Plex for Fire TV", Product: "Plex for Android (TV)", Platform: "Android", Device: "AFTKRT"},
+		{ID: "plex-android", Name: "Plex for Android phones", Product: "Plex for Android (Mobile)", Platform: "Android", Device: "Pixel 8"},
+		{ID: "plex-roku", Name: "Plex for Roku", Product: "Plex for Roku", Platform: "Roku"},
+		{ID: "plex-lg", Name: "Plex for LG", Product: "Plex for LG", Platform: "webOS"},
+		{ID: "plex-samsung", Name: "Plex for Samsung", Product: "Plex for Samsung", Platform: "Tizen"},
+		{ID: "plex-xbox", Name: "Plex for Xbox", Product: "Plex for Xbox", Platform: "Xbox"},
+		{ID: "plex-playstation", Name: "Plex for PlayStation", Product: "Plex for PlayStation", Platform: "PlayStation"},
+		{ID: "plex-web-chrome", Name: "Plex Web in Chrome", Product: "Plex Web", Platform: "Chrome"},
+		{ID: "plex-web-safari", Name: "Plex Web in Safari", Product: "Plex Web", Platform: "Safari"},
+		{ID: "plex-htpc", Name: "Plex HTPC", Product: "Plex HTPC", Platform: "Windows"},
+		{ID: "plex-desktop", Name: "Plex for Windows and Mac", Product: "Plex for Windows", Platform: "Windows"},
+	}
+}
+
+type qualityExplainIn struct {
+	UserID   int64          `json:"userId"`
+	ClientID string         `json:"clientId,omitempty"`
+	Client   *qualityClient `json:"client,omitempty"`
+	Remote   bool           `json:"remote"`
+}
+
+// qualityHandler serves the Quality page's "Who gets what" checker.
+func (a *App) qualityHandler() http.Handler {
+	m := http.NewServeMux()
+	m.HandleFunc("GET /clients", func(w http.ResponseWriter, r *http.Request) {
+		writeQualityJSON(w, http.StatusOK, map[string]any{"clients": qualityClients()})
+	})
+	m.HandleFunc("POST /explain", a.handleQualityExplain)
+	return m
+}
+
+func (a *App) handleQualityExplain(w http.ResponseWriter, r *http.Request) {
+	var in qualityExplainIn
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&in); err != nil {
+		writeQualityError(w, http.StatusBadRequest, "bad_json", "the request body must be a JSON object")
+		return
+	}
+	var client qualityClient
+	switch {
+	case in.ClientID != "":
+		found := false
+		for _, c := range qualityClients() {
+			if c.ID == in.ClientID {
+				client, found = c, true
+				break
+			}
+		}
+		if !found {
+			writeQualityError(w, http.StatusBadRequest, "unknown_client", "no such app")
+			return
+		}
+	case in.Client != nil && strings.TrimSpace(in.Client.Product) != "":
+		client = qualityClient{Product: strings.TrimSpace(in.Client.Product), Platform: strings.TrimSpace(in.Client.Platform), Device: strings.TrimSpace(in.Client.Device)}
+	default:
+		writeQualityError(w, http.StatusBadRequest, "missing_client", "choose an app")
+		return
+	}
+	if len(client.Product) > 128 || len(client.Platform) > 128 || len(client.Device) > 128 {
+		writeQualityError(w, http.StatusBadRequest, "bad_client", "app fields are too long")
+		return
+	}
+	u, err := a.users.ActiveUser(r.Context(), in.UserID)
+	if err != nil || u == nil {
+		writeQualityError(w, http.StatusNotFound, "unknown_viewer", "no such viewer")
+		return
+	}
+	cfg := a.cfg.Read()
+	// The Plex request path: registry, owner App compatibility edits, the
+	// request's headers and the remote bitrate cap (plex.Request.ClientCapsWith).
+	pr := &plex.Request{Product: client.Product, Platform: client.Platform, Device: client.Device, DeviceName: client.Device, Remote: in.Remote, User: u}
+	declared := pr.ClientCapsWith(cfg.Transcode.RemoteMaxBitrateKbps, cfg.Clients.Overrides)
+	builtin := pr.ClientCapsWith(cfg.Transcode.RemoteMaxBitrateKbps, nil)
+	q := resolver.QualityQuestion{Quality: cfg.Quality, Caps: declared, Builtin: &builtin, User: u, RemoteMaxBitrateKbps: cfg.Transcode.RemoteMaxBitrateKbps}
+	if a.safety != nil {
+		policy := a.safety.ForUser(u)
+		q.ViewerMaxBitrateKbps = policy.MaxBitrateKbps
+		q.RemoteDisabled = policy.RemoteDisabled
+	}
+	writeQualityJSON(w, http.StatusOK, resolver.ExplainQuality(q))
+}
+
+func writeQualityJSON(w http.ResponseWriter, code int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func writeQualityError(w http.ResponseWriter, code int, kind, message string) {
+	writeQualityJSON(w, code, map[string]any{"error": map[string]string{"code": kind, "message": message}})
+}
