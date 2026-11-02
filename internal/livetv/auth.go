@@ -201,6 +201,13 @@ func (a *SourceAuth) hasRedacted() bool {
 // prepareSourceAuth runs before an import: it restores secrets the owner
 // API sent back redacted, validates the settings and derives Xtream URLs.
 func (s *Service) prepareSourceAuth(ctx context.Context, src *Source) error {
+	if src.Kind == "stremio" && src.PlaylistURL == redactedSecret {
+		old, err := s.storedSourceByID(ctx, src.ID)
+		if err != nil || old.Kind != "stremio" || old.PlaylistURL == "" {
+			return errSourceSecretMoved
+		}
+		src.PlaylistURL = old.PlaylistURL
+	}
 	if src.Auth.empty() {
 		src.Auth = nil
 		return nil
@@ -234,6 +241,9 @@ func isXtreamURL(raw, server string) bool {
 // redactSourceAuth hides secrets (and Xtream URLs, which embed them) from a
 // source about to be returned by the owner API.
 func redactSourceAuth(src *Source) {
+	if src.Kind == "stremio" && src.PlaylistURL != "" {
+		src.PlaylistURL = redactedSecret
+	}
 	if src.Auth == nil {
 		return
 	}

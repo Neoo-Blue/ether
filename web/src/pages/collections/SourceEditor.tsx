@@ -1,12 +1,13 @@
 import { Badge, Button, Input, SearchSelect } from "@braedonsaunders/appkit-ui";
 import { ArrowDown, ArrowUp, Plus, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Link } from "react-router-dom";
 import { Artwork } from "../../components/Artwork";
-import { Field, Segmented } from "../../components/fields";
+import { Field, SecretInput, Segmented } from "../../components/fields";
 import { LookupPicker, TitleSearch } from "../../components/pickers";
 import { titleSubtitle } from "../../components/Poster";
 import { DragHandle, SortableList, arrayMove } from "../../components/Sortable";
+import { apiFetch, errorMessage } from "../../lib/api";
 import { t, tx } from "../../i18n";
 import { searchSelectLabels } from "../../i18n/appkit-labels";
 import type { LookupKind, Source, TitleCard } from "../../lib/contract";
@@ -25,6 +26,7 @@ type SourceRecord = Source & Record<string, unknown>;
 
 export function SourceEditor({
   source,
+  collectionId,
   onChange,
   onRemove,
   index,
@@ -34,6 +36,7 @@ export function SourceEditor({
   descriptors,
 }: {
   source: Source;
+  collectionId?: string;
   onChange: (s: Source) => void;
   onRemove: () => void;
   index: number;
@@ -81,6 +84,7 @@ export function SourceEditor({
       <div className="mt-2 empty:hidden">
         <SourceBody
           source={source as SourceRecord}
+          collectionId={collectionId}
           descriptor={descriptor}
           onChange={onChange}
           region={region}
@@ -100,12 +104,14 @@ export function SourceEditor({
  */
 function SourceBody({
   source,
+  collectionId,
   descriptor,
   onChange,
   region,
   label,
 }: {
   source: SourceRecord;
+  collectionId?: string;
   descriptor?: SourceDescriptor;
   onChange: (s: Source) => void;
   region: string;
@@ -151,6 +157,8 @@ function SourceBody({
         </div>
       );
     }
+    case "stremioCatalog":
+      return <StremioCatalogEditor source={source} set={set} collectionId={collectionId} />;
     case "lookup": {
       const field = paramField(descriptor, "id");
       const lookup = (field?.lookup ?? "keyword") as LookupKind;
@@ -257,6 +265,116 @@ function SourceBody({
     default:
       return <GenericParams descriptor={descriptor} source={source} set={set} label={label} />;
   }
+}
+
+function StremioCatalogEditor({
+  source,
+  set,
+  collectionId,
+}: {
+  source: SourceRecord;
+  collectionId?: string;
+  set: (patch: Record<string, unknown>) => void;
+}) {
+  const inputId = useId();
+  const [catalogs, setCatalogs] = useState<{ id: string; type: string; name: string }[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const inspect = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const result = await apiFetch<{ catalogs: { id: string; type: string; name: string }[] }>(
+        "/collections/stremio/manifest",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            url: source.url,
+            collectionId,
+            catalogId: source.list,
+            mediaType: source.mediaType,
+          }),
+        },
+      );
+      setCatalogs(result.catalogs);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="space-y-3">
+      <Field label={t("Add-on URL")} htmlFor={`${inputId}-url`}>
+        <SecretInput
+          id={`${inputId}-url`}
+          value={String(source.url ?? "")}
+          onChange={(url) => {
+            set({ url });
+            setCatalogs([]);
+          }}
+        />
+      </Field>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={busy || !source.url}
+        onClick={() => void inspect()}
+      >
+        {busy ? t("Loading catalogs…") : t("Find catalogs")}
+      </Button>
+      {error ? (
+        <p role="alert" className="text-sm text-danger">
+          {error}
+        </p>
+      ) : null}
+      {catalogs.length ? (
+        <SearchSelect
+          value={`${source.mediaType ?? "movie"}:${source.list ?? ""}`}
+          onChange={(v) => {
+            const c = catalogs.find((item) => `${item.type}:${item.id}` === v);
+            if (c) set({ list: c.id, mediaType: c.type });
+          }}
+          options={catalogs.map((c) => ({
+            value: `${c.type}:${c.id}`,
+            label: `${c.name} (${c.type === "show" ? t("TV") : t("Movies")})`,
+          }))}
+          ariaLabel={t("Catalog")}
+          {...searchSelectLabels()}
+        />
+      ) : (
+        <>
+          <Field label={t("Catalog ID")} htmlFor={`${inputId}-catalog`}>
+            <Input
+              id={`${inputId}-catalog`}
+              value={String(source.list ?? "")}
+              onChange={(e) => set({ list: e.currentTarget.value })}
+            />
+          </Field>
+          <Segmented
+            ariaLabel={t("Type")}
+            value={String(source.mediaType ?? "movie")}
+            onChange={(mediaType) => set({ mediaType })}
+            options={[
+              { value: "movie", label: t("Movies") },
+              { value: "show", label: t("TV") },
+            ]}
+          />
+        </>
+      )}
+      <Field label={t("Maximum items")} htmlFor={`${inputId}-max`} hint={t("Up to 2,000 items per refresh")}>
+        <Input
+          id={`${inputId}-max`}
+          type="number"
+          min={1}
+          max={2000}
+          value={Number(source.maxItems ?? 100)}
+          onChange={(e) => set({ maxItems: Number(e.currentTarget.value) })}
+        />
+      </Field>
+    </div>
+  );
 }
 
 /** One served param field, for kinds without a named editor yet. */

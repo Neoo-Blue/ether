@@ -138,3 +138,19 @@ func TestCatalogMaxItemsClamp(t *testing.T) {
 		t.Fatalf("metas = %d err=%v", len(metas), err)
 	}
 }
+
+type errorTransport struct{}
+
+func (errorTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, fmt.Errorf("proxy failed for /SECRET/manifest.json")
+}
+func TestAddonErrorsDoNotExposeConfiguredPath(t *testing.T) {
+	c, err := NewClient("https://addon.example/SECRET/manifest.json", &http.Client{Transport: errorTransport{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = c.Manifest(context.Background())
+	if err == nil || strings.Contains(err.Error(), "SECRET") {
+		t.Fatalf("unsafe error: %v", err)
+	}
+}

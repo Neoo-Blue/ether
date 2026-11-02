@@ -128,10 +128,23 @@ func (h *Handler) unredactCollectionSources(ctx context.Context, id string, spec
 			continue
 		}
 		wantRedacted := strings.TrimSpace(src.URL)
+		matches := map[string]bool{}
+		exact := map[string]bool{}
 		for _, old := range existing.Sources {
 			if old.Kind == "stremioCatalog" && redactStremioURL(old.URL) == wantRedacted {
-				src.URL = old.URL
-				break
+				matches[old.URL] = true
+				if old.List == src.List && old.MediaType == src.MediaType {
+					exact[old.URL] = true
+				}
+			}
+		}
+		if len(matches) == 1 {
+			for url := range matches {
+				src.URL = url
+			}
+		} else if len(exact) == 1 {
+			for url := range exact {
+				src.URL = url
 			}
 		}
 	}
@@ -301,6 +314,8 @@ func (h *Handler) handleInspectStremioManifest(w http.ResponseWriter, r *http.Re
 	var body struct {
 		URL          string `json:"url"`
 		CollectionID string `json:"collectionId,omitempty"`
+		CatalogID    string `json:"catalogId,omitempty"`
+		MediaType    string `json:"mediaType,omitempty"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_json", err.Error())
@@ -309,10 +324,15 @@ func (h *Handler) handleInspectStremioManifest(w http.ResponseWriter, r *http.Re
 	rawURL := strings.TrimSpace(body.URL)
 	if isRedactedStremioURL(rawURL) && strings.TrimSpace(body.CollectionID) != "" && h.deps.Collections != nil {
 		if existing, err := h.deps.Collections.GetSpec(r.Context(), body.CollectionID); err == nil && existing != nil {
+			var choices = map[string]bool{}
 			for _, old := range existing.Sources {
-				if old.Kind == "stremioCatalog" && redactStremioURL(old.URL) == rawURL {
-					rawURL = old.URL
-					break
+				if old.Kind == "stremioCatalog" && old.List == body.CatalogID && old.MediaType == body.MediaType && redactStremioURL(old.URL) == rawURL {
+					choices[old.URL] = true
+				}
+			}
+			if len(choices) == 1 {
+				for choice := range choices {
+					rawURL = choice
 				}
 			}
 		}

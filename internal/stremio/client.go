@@ -205,6 +205,8 @@ type Video struct {
 	Title     string    `json:"title"`
 	Overview  string    `json:"overview,omitempty"`
 	Released  time.Time `json:"released,omitempty"`
+	StartTime time.Time `json:"startTime,omitempty"`
+	EndTime   time.Time `json:"endTime,omitempty"`
 	Thumbnail string    `json:"thumbnail,omitempty"`
 }
 
@@ -212,6 +214,50 @@ type Video struct {
 type Meta struct {
 	MetaPreview
 	Videos []Video `json:"videos,omitempty"`
+}
+
+// GuideCatalog reads the dated native EPG pages, which return detailed
+// metadata instead of the normal catalog previews.
+func (c *Client) GuideCatalog(ctx context.Context, id, date string) ([]Meta, error) {
+	var out []Meta
+	seen := map[string]bool{}
+	for skip := 0; len(out) < MaxCatalogItems; {
+		extra := map[string]string{"date": date}
+		if skip > 0 {
+			extra["skip"] = strconv.Itoa(skip)
+		}
+		var page struct {
+			MetasDetailed []Meta `json:"metasDetailed"`
+		}
+		suffix := "/catalog/tv/" + url.PathEscape(id) + extraSuffix(extra) + ".json"
+		if err := getJSON(ctx, c.http, c.base, suffix, maxCatalogPage, &page); err != nil {
+			var he *httpError
+			if skip > 0 && errors.As(err, &he) && he.status == http.StatusNotFound {
+				break
+			}
+			return nil, err
+		}
+		if len(page.MetasDetailed) == 0 {
+			break
+		}
+		added := 0
+		for _, m := range page.MetasDetailed {
+			if m.ID == "" || seen[m.ID] {
+				continue
+			}
+			seen[m.ID] = true
+			out = append(out, m)
+			added++
+			if len(out) == MaxCatalogItems {
+				break
+			}
+		}
+		if added == 0 {
+			break
+		}
+		skip += len(page.MetasDetailed)
+	}
+	return out, nil
 }
 
 // Meta reads meta/{type}/{id}.json.
@@ -275,7 +321,7 @@ func (c *Client) FetchBytes(ctx context.Context, raw string, limit int64) ([]byt
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
-		return nil, fmt.Errorf("stremio: %s: %w", u.Host, err)
+		return nil, fmt.Errorf("stremio: %s: download read failed", u.Host)
 	}
 	if int64(len(data)) > limit {
 		return nil, fmt.Errorf("stremio: %s answered with more than %d bytes", u.Host, limit)

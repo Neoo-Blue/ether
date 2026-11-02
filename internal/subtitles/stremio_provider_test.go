@@ -28,7 +28,7 @@ func TestStremioSubtitleProviderSearchRankAndPickOnlyDownload(t *testing.T) {
 		lastSubPath.Store(r.URL.Path)
 		fileBase := "http://" + r.Host + "/files"
 		fmt.Fprintf(w, `{"subtitles":[
-			{"id":"sub-1","url":"%s/My.Movie.2024.1080p.WEB-DL-GRP.en.srt","lang":"eng"},
+			{"id":"sub-1","url":"%s/My.Movie.2024.1080p.WEB-DL-GRP.en.srt?token=secret","lang":"eng"},
 			{"id":"sub-2","url":"%s/Other.Release.720p.en.srt","lang":"eng"},
 			{"id":"sub-fr","url":"%s/My.Movie.2024.fr.srt","lang":"fre"}
 		]}`, fileBase, fileBase, fileBase)
@@ -108,6 +108,9 @@ func TestStremioSubtitleProviderSearchRankAndPickOnlyDownload(t *testing.T) {
 	var stremioCand Candidate
 	foundOpenSubtitles := false
 	for _, c := range cands {
+		if strings.Contains(c.FileName, "secret") || strings.Contains(c.Release, "secret") {
+			t.Fatal("subtitle URL query leaked into the offer")
+		}
 		if c.Provider == "SubSense" && strings.Contains(c.Release, "1080p.WEB-DL-GRP") {
 			stremioCand = c
 		}

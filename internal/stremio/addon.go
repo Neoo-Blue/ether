@@ -73,13 +73,13 @@ type Manifest struct {
 }
 
 // BehaviorHints is the part of a manifest's behaviorHints Ether reads.
-// EpgURL/EPGProvider name a native guide some tv add-ons publish
-// (an XMLTV URL, absolute or relative to the add-on base).
+// EPGProvider opts into dated native guide catalogs. EpgURL is an
+// optional XMLTV extension used by some add-ons.
 type BehaviorHints struct {
 	ConfigurationRequired bool   `json:"configurationRequired"`
 	Configurable          bool   `json:"configurable,omitempty"`
 	EpgURL                string `json:"epgUrl,omitempty"`
-	EPGProvider           string `json:"epgProvider,omitempty"`
+	EPGProvider           bool   `json:"epgProvider,omitempty"`
 }
 
 // GuideURL returns the add-on's native guide URL, if it declares one.
@@ -87,7 +87,7 @@ func (m Manifest) GuideURL() string {
 	if m.BehaviorHints.EpgURL != "" {
 		return m.BehaviorHints.EpgURL
 	}
-	return m.BehaviorHints.EPGProvider
+	return ""
 }
 
 // CatalogDef is one catalog an add-on offers (manifest "catalogs").
@@ -291,14 +291,10 @@ func getJSON(ctx context.Context, client *http.Client, base *url.URL, suffix str
 	req.Header.Set("User-Agent", userAgent)
 	resp, err := client.Do(req)
 	if err != nil {
-		var ue *url.Error
-		if errors.As(err, &ue) {
-			err = ue.Err
-		}
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return fmt.Errorf("stremio: %s: %w", base.Host, err)
+		return fmt.Errorf("stremio: %s: request failed", base.Host)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
@@ -308,7 +304,7 @@ func getJSON(ctx context.Context, client *http.Client, base *url.URL, suffix str
 	body := io.LimitReader(resp.Body, limit+1)
 	data, err := io.ReadAll(body)
 	if err != nil {
-		return fmt.Errorf("stremio: %s: %w", base.Host, err)
+		return fmt.Errorf("stremio: %s: response read failed", base.Host)
 	}
 	if int64(len(data)) > limit {
 		return fmt.Errorf("stremio: %s answered with more than %d bytes", base.Host, limit)

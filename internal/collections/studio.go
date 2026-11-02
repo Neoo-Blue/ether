@@ -98,6 +98,15 @@ func (s *Service) UpdateSpec(ctx context.Context, id string, sp core.CollectionS
 
 func (s *Service) afterSave(ctx context.Context, row *specRow) (*core.CollectionSpec, error) {
 	if row.enabled {
+		if hasStremioCatalog(row.spec) {
+			go func() {
+				bctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+				defer cancel()
+				_, _ = s.build(bctx, row)
+			}()
+			v := row.view()
+			return &v, nil
+		}
 		bctx, cancel := context.WithTimeout(ctx, s.buildBudget)
 		_, err := s.build(bctx, row)
 		cancel()
@@ -167,6 +176,9 @@ func (s *Service) Preview(ctx context.Context, sp core.CollectionSpec, n int) (*
 	}
 	if err := s.validate(&named); err != nil {
 		return nil, err
+	}
+	if hasStremioCatalog(named) {
+		return &core.CollectionPreview{Items: []core.Title{}, Warnings: []string{"Stremio catalogs refresh in the background after saving"}}, nil
 	}
 	res, err := s.evaluate(ctx, named, evalOptions{seed: named.Name})
 	if err != nil {

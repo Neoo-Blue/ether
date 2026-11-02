@@ -68,7 +68,9 @@ type Block struct {
 	Watched     string          `json:"watched,omitempty"`
 }
 type Channel struct {
-	Transcode     bool           `json:"transcode"` // IPTV: normalize codecs through the transcoder
+	numberMissing bool           // import did not supply a channel number
+	Health        string         `json:"health,omitempty"` // owner-facing sweep status
+	Transcode     bool           `json:"transcode"`        // IPTV: normalize codecs through the transcoder
 	ID            string         `json:"id"`
 	Number        string         `json:"number"`
 	Name          string         `json:"name"`
@@ -114,6 +116,7 @@ type Channel struct {
 type Source struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
+	Kind        string `json:"kind,omitempty"` // stremio for a Stremio tv add-on
 	PlaylistURL string `json:"playlistUrl,omitempty"`
 	GuideURL    string `json:"guideUrl,omitempty"`
 	// Inline uploads are supplied on import and are not returned by GET.
@@ -169,15 +172,18 @@ type Policy struct {
 	MaxRating string   `json:"maxRating,omitempty"`
 }
 type Options struct {
-	CanPlay     func(*core.User, bool, time.Time) bool
-	StreamLimit func(*core.User) int
-	DB          *sql.DB
-	Catalog     core.Catalog
-	Collections core.Collections
-	Playback    core.Playback
-	Transcoder  core.Transcoder
-	HTTPClient  *http.Client
-	Now         func() time.Time
+	CanPlay            func(*core.User, bool, time.Time) bool
+	StreamLimit        func(*core.User) int
+	DB                 *sql.DB
+	Catalog            core.Catalog
+	Collections        core.Collections
+	Playback           core.Playback
+	Transcoder         core.Transcoder
+	HTTPClient         *http.Client
+	StremioHTTP        *http.Client // optional test transport; nil uses the guarded Stremio client
+	LogoIndexURL       func() string
+	HealthSweepMinutes func() int // 0 defaults to 15; negative disables
+	Now                func() time.Time
 	// Allowed applies additional owner title/genre policies to every surface.
 	Allowed func(*core.User, *core.Title) bool
 	// Warm resolves/primes a title without opening a viewer stream.

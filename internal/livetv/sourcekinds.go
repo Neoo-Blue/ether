@@ -154,7 +154,7 @@ func (s *Service) SourceKindOf(src Source) string {
 }
 
 func builtinSourceKinds() []SourceKind {
-	return []SourceKind{xtreamKind{}, guideOnlyKind{}, m3uKind{}, virtualKind{}}
+	return []SourceKind{stremioKind{}, xtreamKind{}, guideOnlyKind{}, m3uKind{}, virtualKind{}}
 }
 
 func authParams() []extend.ParamField {

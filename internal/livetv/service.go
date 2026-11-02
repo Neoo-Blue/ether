@@ -35,6 +35,8 @@ type Service struct {
 	probeMu          sync.Mutex
 	probeCache       map[string]liveProbeEntry
 	probeWait        map[string]*liveProbeFlight
+	healthMu         sync.RWMutex
+	channelHealth    map[string]sweepResult
 	sourceMu         sync.Mutex
 	sourceHealth     map[string]streamSourceHealth
 	transMu          sync.RWMutex
@@ -68,9 +70,10 @@ func New(o Options) (*Service, error) {
 		kinds = NewKindRegistry()
 	}
 	s := &Service{o: o, kinds: kinds, sessions: map[string]*session{}, transcodes: map[string]core.HLSSession{}, ctx: ctx, cancel: cancel, lineupUnix: o.Now().Unix()}
-	s.wg.Add(2)
+	s.wg.Add(3)
 	go s.maintain()
 	go s.refreshLoop()
+	go s.healthSweepLoop()
 	return s, nil
 }
 func (s *Service) Close() error {
@@ -202,7 +205,11 @@ func (s *Service) expireSessions() {
 	}
 }
 func (s *Service) Channels(ctx context.Context) ([]Channel, error) {
-	return channels(ctx, s.o.DB)
+	cs, err := channels(ctx, s.o.DB)
+	for i := range cs {
+		cs[i].Health = s.sweepState(cs[i])
+	}
+	return cs, err
 }
 
 type queryer interface {
@@ -677,6 +684,9 @@ func (s *Service) allowedWithLookup(ctx context.Context, u *core.User, c Channel
 	if u == nil || !c.Enabled {
 		return false
 	}
+	if !u.IsOwner && s.sweepState(c) == "unavailable" {
+		return false
+	}
 	_, pol, err := s.withPolicy(ctx, u)
 	if err != nil {
 		return false
@@ -1113,6 +1123,7 @@ func (s *Service) ImportSource(ctx context.Context, src Source) (Source, error) 
 		return src, err
 	}
 	cs, g := fetched.Channels, fetched.Guide
+	s.matchLogos(ctx, cs)
 	tx, err := s.o.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return src, err
@@ -1139,6 +1150,9 @@ func (s *Service) ImportSource(ctx context.Context, src Source) (Source, error) 
 			oldByID[c.ID] = c
 		}
 	}
+	if err := assignImportedNumbers(ctx, tx, src.ID, cs, oldByID, old, s.o.Now()); err != nil {
+		return src, err
+	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM livetv_programmes WHERE source_id=?`, src.ID); err != nil {
 		return src, err
 	}
@@ -1156,9 +1170,15 @@ func (s *Service) ImportSource(ctx context.Context, src Source) (Source, error) 
 			c.GuideID = previous.GuideID
 			c.GuideSourceID = previous.GuideSourceID
 			c.Transcode = previous.Transcode
-			c.StreamSources = mergeImportedStreams(c, previous)
-			if err := normalizeStreamSources(&c); err != nil {
-				return src, err
+			if src.Kind == "stremio" {
+				c.StreamSources = mergeStremioStreams(c.StreamSources, previous.StreamSources)
+			} else {
+				c.StreamSources = mergeImportedStreams(c, previous)
+			}
+			if len(c.StreamSources) > 0 {
+				if err := normalizeStreamSources(&c); err != nil {
+					return src, err
+				}
 			}
 		}
 		if guide, ok := g.Channels[c.GuideID]; ok && c.Logo == "" {
@@ -1190,6 +1210,17 @@ func (s *Service) ImportSource(ctx context.Context, src Source) (Source, error) 
 	err = tx.Commit()
 	if err == nil {
 		s.bumpLineup()
+		if src.Kind == "stremio" {
+			var newChannels []string
+			for _, c := range stored {
+				if _, existed := oldByID[c.ID]; !existed {
+					newChannels = append(newChannels, c.ID)
+				}
+			}
+			if len(newChannels) > 0 {
+				_, _ = s.MatchGuides(ctx, GuideMatchRequest{ChannelIDs: newChannels})
+			}
+		}
 		// Only tunes whose stream changed or disappeared are interrupted, so
 		// a scheduled refresh does not cut off viewers.
 		for _, id := range changedStreams(oldByID, stored) {

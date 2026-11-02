@@ -8,4 +8,19 @@ import rows from "./rows.json";
 export const descriptors: Descriptor[] = [
   ...(collections as Descriptor[]),
   ...(rows as Descriptor[]),
+  {
+    kind: "rowSource",
+    id: "stremioCatalog",
+    owner: "builtin",
+    label: { source: "Stremio catalog" },
+    hint: { source: "A Home row from a Stremio catalog" },
+    group: "collections",
+    order: 1000,
+    meta: {
+      hubId: "collection:*",
+      rowKind: "stremioCatalog",
+      sections: ["home", "movies", "shows"],
+      collectionSource: "stremioCatalog",
+    },
+  },
 ];

@@ -92,6 +92,9 @@ func (r *RowKindRegistry) RowDescriptors(extra []core.RowDescriptor) []core.RowD
 	kinds := r.Kinds()
 	out := make([]core.RowDescriptor, 0, len(kinds)+len(extra))
 	for _, k := range kinds {
+		if _, template := k.(interface{ CollectionSourceKind() string }); template {
+			continue // list-backed templates become real rows through collections
+		}
 		out = append(out, k.Descriptor())
 	}
 	sort.SliceStable(extra, func(i, j int) bool { return extra[i].Title < extra[j].Title })
@@ -106,13 +109,17 @@ func (r *RowKindRegistry) Descriptors() []extend.Descriptor {
 	out := make([]extend.Descriptor, 0, len(kinds))
 	for i, k := range kinds {
 		d := k.Descriptor()
+		collectionSource := ""
+		if list, ok := k.(interface{ CollectionSourceKind() string }); ok {
+			collectionSource = list.CollectionSourceKind()
+		}
 		out = append(out, extend.Descriptor{
 			Kind: extend.KindRowSource, ID: d.Kind, Owner: extend.Builtin,
 			Label: extend.Text{Source: d.Title}, Hint: extend.Text{Source: d.Description},
 			Group: d.Group, Order: (i + 1) * 10,
 		}.WithMeta(extend.RowSourceMeta{
 			HubID: d.HubID, RowKind: d.Kind, Sections: d.Sections,
-			Source: infoFor(d.Kind).source,
+			Source: infoFor(d.Kind).source, CollectionSource: collectionSource,
 		}))
 	}
 	return out

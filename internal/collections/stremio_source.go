@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -30,7 +29,7 @@ func WithSealer(sealer config.FieldSealer) Option {
 // Stremio add-on manifest.
 type StremioCatalogOption struct {
 	ID        string   `json:"id"`
-	Type      string   `json:"type"`      // "movie" or "show"
+	Type      string   `json:"type"` // "movie" or "show"
 	Name      string   `json:"name"`
 	Genres    []string `json:"genres,omitempty"`
 	CanSearch bool     `json:"canSearch,omitempty"`
@@ -124,7 +123,7 @@ func (stremioCatalogKind) Describe() KindDescribe {
 		Defaults:   `{"url":"","list":"","mediaType":"movie","maxItems":100}`,
 		MediaTypes: []string{"movie", "show"},
 		Params: []extend.ParamField{
-			{Name: "url", Kind: "url", Label: extend.T("Manifest URL"), Required: true, Placeholder: "https://example.com/manifest.json"},
+			{Name: "url", Kind: "secret", Label: extend.T("Manifest URL"), Required: true, Placeholder: "https://example.com/manifest.json"},
 			{Name: "mediaType", Kind: "select", Label: extend.T("Type"), Required: true, Options: []extend.ParamOption{
 				{Value: "movie", Label: extend.T("Movies")},
 				{Value: "show", Label: extend.T("TV")},
@@ -246,15 +245,7 @@ func (stremioCatalogKind) Gather(g *Gather) {
 	}
 }
 
-func stremioSourceOrigin(raw string) string {
-	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || u.Host == "" {
-		return ""
-	}
-	return strings.ToLower(u.Scheme + "://" + u.Host)
-}
-
-func (s *Service) sealSpec(sp core.CollectionSpec) (core.CollectionSpec, error) {
+func (s *Service) sealSpec(sp core.CollectionSpec, collectionID int64) (core.CollectionSpec, error) {
 	if s == nil || s.sealer == nil {
 		return sp, nil
 	}
@@ -264,7 +255,7 @@ func (s *Service) sealSpec(sp core.CollectionSpec) (core.CollectionSpec, error) 
 		if src.Kind != "stremioCatalog" || strings.TrimSpace(src.URL) == "" {
 			continue
 		}
-		sealed, err := config.SealWith(s.sealer, src.URL, "collections_specs", "sources.url", src.Kind)
+		sealed, err := config.SealWith(s.sealer, src.URL, "collections_specs", "sources.url", strconv.FormatInt(collectionID, 10), src.Kind)
 		if err != nil {
 			return sp, err
 		}
@@ -273,7 +264,7 @@ func (s *Service) sealSpec(sp core.CollectionSpec) (core.CollectionSpec, error) 
 	return out, nil
 }
 
-func openSpecSources(sealer config.FieldSealer, sp *core.CollectionSpec) error {
+func openSpecSources(sealer config.FieldSealer, sp *core.CollectionSpec, collectionID int64) error {
 	if sealer == nil || sp == nil {
 		return nil
 	}
@@ -282,7 +273,7 @@ func openSpecSources(sealer config.FieldSealer, sp *core.CollectionSpec) error {
 		if src.Kind != "stremioCatalog" || strings.TrimSpace(src.URL) == "" {
 			continue
 		}
-		plain, _, err := config.OpenWith(sealer, src.URL, "collections_specs", "sources.url", src.Kind)
+		plain, _, err := config.OpenWith(sealer, src.URL, "collections_specs", "sources.url", strconv.FormatInt(collectionID, 10), src.Kind)
 		if err != nil {
 			return err
 		}

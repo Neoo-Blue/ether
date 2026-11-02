@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
+	"net/url"
 	"path"
 	"sort"
 	"strconv"
@@ -188,12 +189,15 @@ func (s *Service) searchStremio(ctx context.Context, p config.SubtitleProvider, 
 			file = sub.SubFileName
 		}
 		if file == "" {
-			file = path.Base(sub.URL)
+			if u, err := url.Parse(sub.URL); err == nil {
+				file = path.Base(u.Path)
+			}
+		}
+		file = path.Base(strings.SplitN(strings.SplitN(file, "?", 2)[0], "#", 2)[0])
+		if file == "." || file == "/" {
+			file = "subtitle"
 		}
 		rel := strings.TrimSuffix(file, path.Ext(file))
-		if sub.ID != "" && (rel == "" || rel == "subtitle" || rel == "sub") {
-			rel = sub.ID
-		}
 		hashMatch := sub.HashMatch || (movieHash != "" && strings.Contains(strings.ToLower(sub.ID+" "+sub.URL+" "+file), strings.ToLower(movieHash)))
 		out = append(out, Candidate{
 			FileID:      stremioFileID(p.ID, sub.ID, sub.URL),
@@ -271,15 +275,15 @@ func (s *Service) searchProviders(ctx context.Context, title *core.Title, lang, 
 	}
 	Rank(all, releaseName)
 	sort.SliceStable(all, func(i, j int) bool {
-		if all[i].HashMatch != all[j].HashMatch {
-			return all[i].HashMatch
-		}
 		if lang != "" {
 			ti := langtag.MatchTier(lang, all[i].Language)
 			tj := langtag.MatchTier(lang, all[j].Language)
 			if ti != tj {
 				return ti > tj
 			}
+		}
+		if all[i].HashMatch != all[j].HashMatch {
+			return all[i].HashMatch
 		}
 		if all[i].Score != all[j].Score {
 			return all[i].Score > all[j].Score

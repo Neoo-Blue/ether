@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"strings"
 	"testing"
 
@@ -115,27 +114,26 @@ func TestStremioCatalogGatherAndUnmatchedCount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Preview: %v", err)
 	}
-	var gotKeys []core.RatingKey
-	for _, it := range preview.Items {
-		gotKeys = append(gotKeys, it.Key)
-	}
-	wantKeys := []core.RatingKey{core.MovieKey(101), core.MovieKey(107)}
-	if !slices.Equal(gotKeys, wantKeys) {
-		t.Fatalf("preview items = %v, want %v (warnings=%v)", gotKeys, wantKeys, preview.Warnings)
-	}
-	hasUnmatchedWarning := false
-	for _, w := range preview.Warnings {
-		if strings.Contains(w, "2 of 4 items in the Stremio catalog could not be matched to the catalogue") {
-			hasUnmatchedWarning = true
-		}
-	}
-	if !hasUnmatchedWarning {
-		t.Fatalf("expected unmatched count warning in %v", preview.Warnings)
+	if len(preview.Items) != 0 || len(preview.Warnings) == 0 {
+		t.Fatalf("preview should not fetch: %+v", preview)
 	}
 
 	created, err := e.svc.CreateSpec(e.ctx, sp)
 	if err != nil {
 		t.Fatalf("CreateSpec: %v", err)
+	}
+	created, err = e.svc.Rebuild(e.ctx, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, warning := range created.Warnings {
+		if strings.Contains(warning, "2 of 4 items in the Stremio catalog could not be matched to the catalogue") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("missing unmatched count: %v", created.Warnings)
 	}
 	page, err := e.svc.Items(e.ctx, owner, core.SmartKey(mustInt(t, created.ID)), 0, 50)
 	if err != nil {

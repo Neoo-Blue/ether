@@ -478,7 +478,7 @@ func (s *Service) buildNow(ctx context.Context, row *specRow) (*memberSet, error
 	}
 	resolved := row.rawSpec
 	if !row.builtin && resolvedChanged(row.spec, res.resolved) {
-		if sealed, err := s.sealSpec(res.resolved); err == nil {
+		if sealed, err := s.sealSpec(res.resolved, row.id); err == nil {
 			if js, err := specJSON(sealed); err == nil {
 				resolved = js
 			}
