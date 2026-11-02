@@ -224,6 +224,13 @@ type Candidate struct {
 	// carries that signal separately).
 	Forced bool
 	Score  float64 // filled by Rank
+	// Provider names the source shown to viewers ("OpenSubtitles" or an
+	// add-on name); ProviderID is its configured id. DownloadURL, when
+	// set, is the add-on file URL fetched only on a viewer pick.
+	Provider      string
+	ProviderID    string
+	DownloadURL   string
+	providerOrder int
 }
 
 type searchResponse struct {

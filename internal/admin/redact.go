@@ -78,6 +78,15 @@ func RedactConfig(cfg config.Config) config.Config {
 	out.Trakt.ClientSecret = redact(out.Trakt.ClientSecret)
 	out.Simkl.ClientSecret = redact(out.Simkl.ClientSecret)
 	out.OpenSubtitles = redactOpenSubtitles(out.OpenSubtitles)
+	if cfg.Subtitles.Providers != nil {
+		out.Subtitles.Providers = make([]config.SubtitleProvider, len(cfg.Subtitles.Providers))
+		for i, p := range cfg.Subtitles.Providers {
+			if p.Kind == config.SubtitleProviderStremio {
+				p.URL = redactStremioURL(p.URL)
+			}
+			out.Subtitles.Providers[i] = p
+		}
+	}
 	out.LLM = redactLLM(out.LLM)
 	out.Outbound.Password = redact(out.Outbound.Password)
 	out.Prowlarr.APIKey = redact(out.Prowlarr.APIKey)
@@ -261,6 +270,26 @@ func UnredactConfig(next, prev config.Config) (config.Config, []FieldError) {
 	out.Trakt = errs.unredactTrakt(next.Trakt, prev.Trakt)
 	out.Simkl.ClientSecret = errs.restore("simkl.clientSecret", next.Simkl.ClientSecret, prev.Simkl.ClientSecret, strings.TrimSpace(next.Simkl.ClientID) == strings.TrimSpace(prev.Simkl.ClientID))
 	out.OpenSubtitles = errs.unredactOpenSubtitles(next.OpenSubtitles, prev.OpenSubtitles)
+	if next.Subtitles.Providers != nil {
+		out.Subtitles.Providers = make([]config.SubtitleProvider, len(next.Subtitles.Providers))
+		for i, p := range next.Subtitles.Providers {
+			if p.Kind == config.SubtitleProviderStremio && isRedactedStremioURL(p.URL) {
+				restored := ""
+				for _, o := range prev.Subtitles.Providers {
+					if p.ID != "" && o.ID == p.ID && o.Kind == config.SubtitleProviderStremio &&
+						(isRedacted(p.URL) || stremioURLHost(p.URL) == stremioURLHost(o.URL)) {
+						restored = o.URL
+						break
+					}
+				}
+				if restored == "" {
+					errs.add(fmt.Sprintf("subtitles.providers[%d].url", i))
+				}
+				p.URL = restored
+			}
+			out.Subtitles.Providers[i] = p
+		}
+	}
 	out.LLM = errs.unredactLLM(next.LLM, prev.LLM)
 	out.Outbound.Password = errs.restore("outbound.password", next.Outbound.Password, prev.Outbound.Password, strings.TrimSpace(next.Outbound.URL) == strings.TrimSpace(prev.Outbound.URL))
 	out.Prowlarr.APIKey = errs.restore("prowlarr.apiKey", next.Prowlarr.APIKey, prev.Prowlarr.APIKey, sameProwlarrURL(next.Prowlarr.URL, prev.Prowlarr.URL))
