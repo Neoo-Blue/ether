@@ -90,11 +90,15 @@ func (b *MarkerBridge) run(ctx context.Context) {
 			b.refresh(ctx, j)
 			if j.key.Kind() == core.KindEpisode {
 				if next, err := b.catalog.NextEpisode(ctx, j.key); err == nil && next != nil {
-					nextJob := markerJob{next.Key, j.duration}
+					duration := next.Runtime
+					if duration <= 0 {
+						duration = j.duration
+					}
+					nextJob := markerJob{next.Key, duration}
 					b.mu.Lock()
 					b.recent[nextJob] = time.Now()
 					b.mu.Unlock()
-					_ = b.svc.RememberRefreshTarget(ctx, next.Key, j.duration)
+					_ = b.svc.RememberRefreshTarget(ctx, next.Key, duration)
 					b.refresh(ctx, nextJob)
 				}
 			}
