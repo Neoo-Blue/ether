@@ -17,8 +17,7 @@ export const descriptors: Descriptor[] = [
     owner: "builtin",
     label: { source: "Stremio subtitle add-on" },
     hint: {
-      source:
-        "Search a Stremio add-on whose manifest provides subtitles (such as SubSense).",
+      source: "Search a Stremio add-on whose manifest provides subtitles (such as SubSense).",
     },
     icon: "Puzzle",
     order: 20,

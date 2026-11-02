@@ -23,4 +23,11 @@ describe("Stremio built-ins", () => {
     expect(await screen.findByText("Stremio catalog")).toBeInTheDocument();
     expect(await screen.findByLabelText("Add-on URL")).toBeInTheDocument();
   });
+
+  it("offers the Stremio source in Live TV", async () => {
+    renderApp("/livetv");
+    fireEvent.click(await screen.findByRole("button", { name: "Add" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Stremio add-on/ }));
+    expect(await screen.findByLabelText("Add-on URL")).toBeInTheDocument();
+  });
 });

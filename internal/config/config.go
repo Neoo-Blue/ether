@@ -49,16 +49,16 @@ type Config struct {
 	// Stremio subtitle add-ons). Empty means OpenSubtitles alone, as before.
 	Subtitles Subtitles `json:"subtitles,omitempty"`
 	// LiveTV holds owner Live TV options (logo index, health sweep).
-	LiveTV LiveTV `json:"liveTV,omitempty"`
-	LLM           LLM           `json:"llm"`
-	Updates       Updates       `json:"updates"`
-	Plugins       Plugins       `json:"plugins,omitempty"`
-	Spike         Spike         `json:"spike"`
-	Downloads     Downloads     `json:"downloads"`
-	Markers       Markers       `json:"markers"`
-	Personalize   Personalize   `json:"personalize"`
-	Extras        Extras        `json:"extras"`
-	Debrid        Debrid        `json:"debrid"`
+	LiveTV      LiveTV      `json:"liveTV,omitempty"`
+	LLM         LLM         `json:"llm"`
+	Updates     Updates     `json:"updates"`
+	Plugins     Plugins     `json:"plugins,omitempty"`
+	Spike       Spike       `json:"spike"`
+	Downloads   Downloads   `json:"downloads"`
+	Markers     Markers     `json:"markers"`
+	Personalize Personalize `json:"personalize"`
+	Extras      Extras      `json:"extras"`
+	Debrid      Debrid      `json:"debrid"`
 	// Clients holds owner overrides of the capability registry.
 	Clients ClientCompatibility `json:"clients"`
 	// Database is node-local storage selection (SQLite or PostgreSQL).
