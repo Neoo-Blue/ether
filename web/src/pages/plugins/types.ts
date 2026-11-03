@@ -25,6 +25,9 @@ export interface PluginSummary {
   sourceKind?: string;
   stremioOnly?: boolean;
   installedAt: number;
+  /** A Stremio add-on's roles and which are on; never its link. */
+  roles?: { role: string; on: boolean }[] | null;
+  host?: string;
 }
 
 export interface PluginHealth {

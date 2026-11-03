@@ -56,8 +56,11 @@ describe("Server › Plugins (WS10a)", () => {
     expect(screen.getByText("Dub language")).toBeTruthy();
     expect(screen.getByText("Ether Wrapped")).toBeTruthy();
 
+    // An installed Stremio add-on is listed with the plugins.
+    expect(screen.getByText("Stream Addon")).toBeTruthy();
+
     expect(screen.getByText("Update v1.3.0")).toBeTruthy();
-    expect(screen.getByText("Unverified")).toBeTruthy();
+    expect(screen.getAllByText("Unverified")).toHaveLength(2);
     expect(screen.getByText("Trying out", { selector: "span *, span" })).toBeTruthy();
 
     const plutoSwitch = screen.getByRole("switch", { name: "Enable Pluto TV" }) as HTMLInputElement;

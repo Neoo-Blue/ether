@@ -1,118 +1,140 @@
-import { Badge } from "@braedonsaunders/appkit-ui";
+import { Badge, Switch, toast } from "@braedonsaunders/appkit-ui";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { ADDON_ROLE_LABEL, addonsApi, type AddonRole } from "../../components/addons/addons";
 import { t } from "../../i18n";
-import { useRegistry, type DescriptorKind } from "../../lib/extend";
+import { errorMessage } from "../../lib/api";
+import { invalidateRegistry } from "../../lib/extend";
 import type { PluginDetail } from "./types";
 
-/** What an imported add-on's declared resources do inside Ether, and
- * whether each one is connected to its native surface right now. */
-export function AddonResources({ detail }: { detail: PluginDetail }) {
-  const registry = useRegistry();
-  const resources = (detail.manifest.resources ?? []).map((r) =>
-    typeof r === "string" ? r : r.name,
-  );
+/**
+ * What a Stremio add-on does in Ether: every role its manifest offers,
+ * each switched on or off here, with a link to where it shows up.
+ */
+export function AddonResources({
+  detail,
+  onChanged,
+}: {
+  detail: PluginDetail;
+  onChanged?: () => void;
+}) {
+  const [roles, setRoles] = useState(detail.roles ?? []);
+  const [busy, setBusy] = useState<string | null>(null);
+  useEffect(() => setRoles(detail.roles ?? []), [detail.roles]);
+
+  const toggle = async (role: string, on: boolean) => {
+    const off = roles.filter((r) => (r.role === role ? !on : !r.on)).map((r) => r.role);
+    setBusy(role);
+    try {
+      const res = await addonsApi.setRoles(detail.id, off);
+      setRoles(res.roles);
+      invalidateRegistry();
+      onChanged?.();
+    } catch (e) {
+      toast.error(t("That didn't work"), { description: errorMessage(e) });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-fg-muted">
-        {t("Declared capabilities and their current native support.")}
+        {detail.host
+          ? t("Reached at {host}. Choose what this add-on does in Ether.", { host: detail.host })
+          : t("Choose what this add-on does in Ether.")}
       </p>
-      <ul className="space-y-3">
-        {resources.map((resource) => {
-          const support = resourceSupport(resource);
-          const active =
-            detail.enabled &&
-            support.kind &&
-            registry.descriptors.some((d) => d.owner === detail.id && d.kind === support.kind);
-          return (
-            <li key={resource} className="rounded-xl border border-border p-4">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="font-medium">{support.label}</h3>
-                <Badge variant={active ? "success" : "secondary"}>
-                  {!detail.enabled ? t("Off") : active ? t("Connected") : t("Not supported yet")}
-                </Badge>
-              </div>
-              <p className="mt-2 text-sm text-fg-muted">{support.detail}</p>
-              {active && support.href ? (
-                <Link
-                  className="mt-2 inline-block text-sm text-primary underline"
-                  to={support.href}
-                >
-                  {t("Open in Ether")}
-                </Link>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
-      {detail.manifest.catalogs?.length ? (
-        <ul className="divide-y divide-border rounded-xl border border-border px-4">
-          {detail.manifest.catalogs.map((c) => (
-            <li key={`${c.type}:${c.id}`} className="flex justify-between gap-3 py-3 text-sm">
-              <span>{c.name ?? c.id}</span>
-              <span className="text-fg-muted">{c.type}</span>
-            </li>
-          ))}
+      {roles.length === 0 ? (
+        <p className="rounded-xl border border-border p-4 text-sm text-fg-muted">
+          {t("This add-on offers nothing Ether can use yet.")}
+        </p>
+      ) : (
+        <ul className="space-y-3">
+          {roles.map((r) => {
+            const info = roleInfo(r.role);
+            return (
+              <li key={r.role} className="rounded-xl border border-border p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="font-medium">{ADDON_ROLE_LABEL[r.role as AddonRole] ?? r.role}</h3>
+                  <div className="flex items-center gap-2">
+                    {!detail.enabled ? <Badge variant="secondary">{t("Add-on off")}</Badge> : null}
+                    <Switch
+                      aria-label={ADDON_ROLE_LABEL[r.role as AddonRole] ?? r.role}
+                      checked={r.on}
+                      disabled={busy !== null}
+                      onChange={(e) => void toggle(r.role, e.currentTarget.checked)}
+                    />
+                  </div>
+                </div>
+                <p className="mt-2 text-sm text-fg-muted">{info.detail}</p>
+                {r.on && detail.enabled && info.href ? (
+                  <Link className="mt-2 inline-block text-sm text-primary underline" to={info.href}>
+                    {info.link}
+                  </Link>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
+      )}
+      {detail.manifest.catalogs?.length ? (
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold">{t("Catalogs")}</h3>
+          <ul className="divide-y divide-border rounded-xl border border-border px-4">
+            {detail.manifest.catalogs.map((c) => (
+              <li key={`${c.type}:${c.id}`} className="flex justify-between gap-3 py-3 text-sm">
+                <span>{c.name ?? c.id}</span>
+                <span className="text-fg-muted">{c.type}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
     </div>
   );
 }
 
-function resourceSupport(resource: string): {
-  label: string;
-  kind?: DescriptorKind;
-  detail: string;
-  href?: string;
-} {
-  switch (resource) {
-    case "catalog":
+function roleInfo(role: string): { detail: string; href?: string; link?: string } {
+  switch (role) {
+    case "stream_source":
       return {
-        label: t("Catalogues"),
-        kind: "collectionSource",
         detail: t(
-          "Available to collections and Home rows. Titles need a supported catalogue identity; shared visibility rules still apply.",
+          "Searched like an indexer when someone presses Play, in the order you set under Sources.",
         ),
-        href: "/collections",
+        href: "/sources/indexers",
+        link: t("Open Sources"),
       };
-    case "meta":
+    case "list_source":
       return {
-        label: t("Metadata"),
-        kind: "metadataProvider",
         detail: t(
-          "Movie and show details are stored when a collection uses this add-on. IMDb and TMDB identities are supported; episode mapping is not yet.",
+          "Its catalogs can fill collections and Home rows. They refresh in the background.",
         ),
         href: "/collections",
+        link: t("Open Collections"),
+      };
+    case "livetv_channels":
+      return {
+        detail: t("Its TV channels and guide join Live TV."),
+        href: "/livetv",
+        link: t("Open Live TV"),
       };
     case "subtitles":
       return {
-        label: t("Subtitles"),
-        kind: "subtitleProvider",
         detail: t(
-          "Uses the shared subtitle broker for search and explicit download. Provider checks validate timed text; they do not verify playback rendering.",
+          "Searched beside your other subtitle providers. A file downloads only when a viewer picks it.",
         ),
         href: "/playback/subtitles",
+        link: t("Open subtitle providers"),
       };
-    case "stream":
+    case "metadata":
       return {
-        label: t("Sources"),
-        kind: "sourceKind",
         detail: t(
-          "Mapped into native source search. Playback depends on the returned stream format, upstream access and configured transports.",
-        ),
-        href: "/sources/indexers",
-      };
-    case "addon_catalog":
-      return {
-        label: t("Plugin directories"),
-        kind: "pluginDirectory",
-        detail: t(
-          "Available through Browse plugins. Each entry is fetched and reviewed before installation.",
+          "Fills in details for titles its catalogs add that the catalogue doesn't know yet.",
         ),
       };
+    case "plugin_directory":
+      return { detail: t("Lists more add-ons you can browse and add.") };
     default:
-      return {
-        label: resource,
-        detail: t("This declared resource does not have a native adapter yet."),
-      };
+      return { detail: t("Ether doesn't use this yet.") };
   }
 }
