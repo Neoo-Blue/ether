@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/braedonsaunders/ether/internal/core"
@@ -25,6 +26,35 @@ type channelSourceKind struct {
 	pluginID   string
 	pluginName string
 	meta       plugins.ChannelsMeta
+
+	// mode caches whether the plugin is a plain Stremio add-on (its
+	// channels come from `tv` catalogs) once its record has been read.
+	modeMu sync.Mutex
+	mode   channelMode
+}
+
+type channelMode int
+
+const (
+	modeUnknown channelMode = iota
+	modeNative
+	modeAddon
+)
+
+// stremioAddon reports whether the plugin is a plain Stremio add-on. A
+// record is fixed for the life of a registered kind: an update re-registers.
+func (k *channelSourceKind) stremioAddon(ctx context.Context) bool {
+	k.modeMu.Lock()
+	defer k.modeMu.Unlock()
+	if k.mode == modeUnknown && k.mgr != nil {
+		if rec, err := k.mgr.Get(ctx, k.pluginID); err == nil {
+			k.mode = modeNative
+			if rec.Manifest.IsStremioOnly() {
+				k.mode = modeAddon
+			}
+		}
+	}
+	return k.mode == modeAddon
 }
 
 func (k *channelSourceKind) ID() string {
@@ -33,6 +63,21 @@ func (k *channelSourceKind) ID() string {
 
 func (k *channelSourceKind) Describe() livetv.SourceDescribe {
 	label := firstNonEmpty(k.pluginName, k.pluginID)
+	if k.stremioAddon(context.Background()) {
+		return livetv.SourceDescribe{
+			Label:          pluginText(k.pluginID, label),
+			Hint:           extend.T("Live channels from a Stremio add-on."),
+			Icon:           "tv",
+			Order:          50,
+			Editor:         "addon",
+			YieldsChannels: true,
+			YieldsGuide:    true,
+			Params: []extend.ParamField{
+				{Name: "name", Kind: "text", Label: extend.T("Source name"), Required: true},
+				{Name: "refreshHours", Kind: "number", Label: extend.T("Keep it fresh")},
+			},
+		}
+	}
 	return livetv.SourceDescribe{
 		Label:          pluginText(k.pluginID, label),
 		Hint:           extend.T("An M3U playlist of live streams, with an optional XMLTV guide."),
@@ -75,6 +120,9 @@ func (k *channelSourceKind) Fetch(ctx context.Context, s *livetv.Service, src *l
 		if hrs := parseRefreshHours(k.meta.Refresh); hrs > 0 {
 			src.RefreshHours = hrs
 		}
+	}
+	if k.stremioAddon(ctx) {
+		return k.fetchAddon(ctx, s, src)
 	}
 
 	resp, err := k.mgr.Call(ctx, k.pluginID, plugins.Request{
