@@ -1453,7 +1453,9 @@ func rejectIdentity(rel core.Release, t *core.Title, sreq core.SearchRequest, ca
 		releaseparse.TitleMatches(rel.Info, wantTitle) ||
 		(!isEpisode && t.OriginalTitle != "" && releaseparse.TitleMatches(rel.Info, t.OriginalTitle)) ||
 		(isEpisode && t.ShowOriginalTitle != "" && releaseparse.TitleMatches(rel.Info, t.ShowOriginalTitle)) ||
-		matchesAlternativeTitle(rel.Info, sreq.AlternativeTitles)
+		matchesAlternativeTitle(rel.Info, sreq.AlternativeTitles) ||
+		(!isEpisode && matchesAlternativeTitle(rel.Info, t.AlternativeTitles)) ||
+		(isEpisode && matchesAlternativeTitle(rel.Info, t.ShowAlternativeTitles))
 	if titleOK && !idMatch && regionTagConflicts(rel.Info.Title, wantTitle, t.Countries) {
 		titleOK = false
 	}
