@@ -184,22 +184,24 @@ func (g *generation) releaseID() string {
 
 // session is the internal, mutable form of a core.PlaySession.
 type session struct {
-	sources          *sourceLifetime
-	reserve          reserveState
-	viewerPosition   time.Duration // guarded by mu, from authenticated Plex timeline
-	viewerAt         time.Time
-	viewerState      string
-	warm             warmState // the encoder input range being prefetched
-	playbackGroup    string
-	id               string
-	ident            identity
-	user             core.User
-	caps             core.ClientCaps
-	title            *core.Title
-	titleName        string
-	profileKey       string // profileKey of the resolving profile
-	originalLanguage string // catalogue language when this session was selected
-	startedAt        time.Time
+	sources               *sourceLifetime
+	reserve               reserveState
+	viewerPosition        time.Duration // guarded by mu, from authenticated Plex timeline
+	viewerAt              time.Time
+	viewerState           string
+	encoderRecoveryReason string
+	encoderRunway         *time.Duration
+	warm                  warmState // the encoder input range being prefetched
+	playbackGroup         string
+	id                    string
+	ident                 identity
+	user                  core.User
+	caps                  core.ClientCaps
+	title                 *core.Title
+	titleName             string
+	profileKey            string // profileKey of the resolving profile
+	originalLanguage      string // catalogue language when this session was selected
+	startedAt             time.Time
 
 	// virtual is the byte/time layout of the first generation: the file the
 	// client was told about. Direct-play byte offsets are always in these
@@ -252,13 +254,18 @@ type session struct {
 	registered        bool
 
 	// Speed-coupled down-failover state (guarded by speedMu).
-	speedMu    sync.Mutex
-	speed      speedTracker
-	genSince   time.Time // when the current generation started serving
-	graceUntil time.Time // slow-source checks are ignored before this
-	slowChecks int       // consecutive slow evaluations
-	lastSrcPos int64     // latest source read position on the current generation
-	expectPos  int64     // next sequential read offset (-1 = unknown)
+	speedMu           sync.Mutex
+	speed             speedTracker
+	genSince          time.Time // when the current generation started serving
+	graceUntil        time.Time // slow-source checks are ignored before this
+	slowChecks        int       // consecutive slow evaluations
+	encoderSampleAt   time.Time
+	encoderRunAt      time.Time
+	encoderSeekAt     time.Time
+	encoderSlowChecks int
+	encoderRetryAt    time.Time
+	lastSrcPos        int64 // latest source read position on the current generation
+	expectPos         int64 // next sequential read offset (-1 = unknown)
 }
 
 func newSession(id string, ident identity, user *core.User, caps core.ClientCaps, title *core.Title, profileKey string, now time.Time) *session {

@@ -152,6 +152,18 @@ func (s *Session) CheckSwap(info core.MediaInfo) error {
 	return s.contract.check(info, s.m.feat)
 }
 
+// SwapWouldCopyVideo is a preference only; CheckSwap remains the admission
+// check. It evaluates the probed stream against the delivered contract.
+func (s *Session) SwapWouldCopyVideo(info core.MediaInfo) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if info.Estimated || info.Video() == nil || s.closed {
+		return false
+	}
+	d := adaptToContract(s.audioMatchBaseDecision(), s.info, info, s.container, s.contract)
+	return d.VideoCopy && !d.BurnSubtitles
+}
+
 // adaptDecision keeps a failover's output compatible with what the client
 // is already playing: same codecs, container and size. Streams are matched
 // by language; anything the new release cannot copy is transcoded to the

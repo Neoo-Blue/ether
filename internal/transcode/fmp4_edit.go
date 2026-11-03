@@ -84,6 +84,8 @@ type runEdits struct {
 	// shifted lists the files already moved, so a repeated poll never
 	// moves one twice.
 	shifted map[string]bool
+	// Tracks with no edit list may only be omitted from every fragment.
+	absent map[uint32]bool
 	// published: the run's init passed checkPublishedEdits.
 	published bool
 	// failed: the run's output could not be held to the clock.
@@ -95,11 +97,15 @@ type runEdits struct {
 // corrections. With no retained clock yet the run is left as written: its
 // init, once published, becomes the retained clock.
 func prepareRunEdits(r *run, retained map[string]trackEdit) error {
+	return prepareRunEditsForPath(r, retained, "")
+}
+
+func prepareRunEditsForPath(r *run, retained map[string]trackEdit, path string) error {
 	if r.edits != nil && r.edits.ready {
 		return nil
 	}
-	path := filepath.Join(r.spec.Dir, r.spec.InitName)
-	b, err := os.ReadFile(path)
+	initPath := filepath.Join(r.spec.Dir, r.spec.InitName)
+	b, err := os.ReadFile(initPath)
 	if err != nil {
 		return err
 	}
@@ -125,13 +131,23 @@ func prepareRunEdits(r *run, retained map[string]trackEdit) error {
 			}
 			p, err := elstPatch(b, t.TrackID, d)
 			if err != nil {
-				return err
+				if path == "" || t.Handler != "vide" {
+					return err
+				}
+				if e := requireAbsentTrack(path, t.TrackID); e != nil {
+					return err
+				}
+				if re.absent == nil {
+					re.absent = map[uint32]bool{}
+				}
+				re.absent[t.TrackID] = true
+				continue
 			}
 			patches = append(patches, p)
 			re.delta[t.TrackID] = d
 		}
 		if len(patches) > 0 {
-			if err := rewriteFile(path, patches); err != nil {
+			if err := rewriteFile(initPath, patches); err != nil {
 				return err
 			}
 		}
@@ -199,6 +215,83 @@ func trackID(tkhd []byte) uint32 {
 		return binary.BigEndian.Uint32(tkhd[12:])
 	}
 	return 0
+}
+
+// requireAbsentTrack validates every moof without reading media payloads into
+// memory. An absent video track permits an audio-only tail to retain the
+// original video initialization; any video fragment fails closed.
+func requireAbsentTrack(path string, id uint32) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	size := st.Size()
+	var hdr [16]byte
+	found := false
+	for off := int64(0); off < size; {
+		if size-off < 8 {
+			return errShortBox
+		}
+		if _, err := f.ReadAt(hdr[:8], off); err != nil {
+			return err
+		}
+		n := int64(binary.BigEndian.Uint32(hdr[:4]))
+		typ := string(hdr[4:8])
+		if n == 1 {
+			if size-off < 16 {
+				return errShortBox
+			}
+			if _, err := f.ReadAt(hdr[8:], off+8); err != nil {
+				return err
+			}
+			n = int64(binary.BigEndian.Uint64(hdr[8:]))
+		} else if n == 0 {
+			n = size - off
+		}
+		if n < 8 || n > size-off {
+			return errShortBox
+		}
+		if typ == "moof" {
+			found = true
+			if n > maxMoofSize {
+				return errors.New("fmp4: oversized moof")
+			}
+			b := make([]byte, n)
+			if _, err := f.ReadAt(b, off); err != nil {
+				return err
+			}
+			boxes, err := readBoxes(b, 0, len(b))
+			if err != nil || len(boxes) != 1 {
+				return errShortBox
+			}
+			children, err := readBoxes(b, boxes[0].start+boxes[0].hdr, boxes[0].end)
+			if err != nil {
+				return err
+			}
+			for _, traf := range children {
+				if traf.typ != "traf" {
+					continue
+				}
+				tfhd, ok := child(b, traf, "tfhd")
+				if !ok || len(tfhd.payload(b)) < 8 {
+					return errors.New("fmp4: invalid track fragment")
+				}
+				if binary.BigEndian.Uint32(tfhd.payload(b)[4:]) == id {
+					return fmt.Errorf("fmp4: unexpected fragment for track %d", id)
+				}
+			}
+		}
+		off += n
+	}
+	if !found {
+		return errors.New("fmp4: no moof")
+	}
+	return nil
 }
 
 // shiftDecodeTimes moves every fragment's decode time (tfdt) of the tracks
@@ -437,7 +530,7 @@ func (s *Session) moveOntoRetained(r *run, path string) error {
 		s.mu.Lock()
 		_, retained := s.clockLocked(r, runTrack(s, r))
 		s.mu.Unlock()
-		if err := prepareRunEdits(r, retained); err != nil {
+		if err := prepareRunEditsForPath(r, retained, path); err != nil {
 			return err
 		}
 	}
@@ -451,7 +544,7 @@ func (s *Session) moveOntoRetainedLocked(r *run, t int, path string) error {
 	}
 	if r.edits == nil || !r.edits.ready {
 		_, retained := s.clockLocked(r, t)
-		if err := prepareRunEdits(r, retained); err != nil {
+		if err := prepareRunEditsForPath(r, retained, path); err != nil {
 			return err
 		}
 	}
@@ -461,6 +554,11 @@ func (s *Session) moveOntoRetainedLocked(r *run, t int, path string) error {
 // shift moves path's decode times by the run's correction unless it has
 // already.
 func (re *runEdits) shift(path string) error {
+	for id := range re.absent {
+		if err := requireAbsentTrack(path, id); err != nil {
+			return err
+		}
+	}
 	if len(re.delta) == 0 || re.shifted[path] {
 		return nil
 	}
@@ -479,6 +577,22 @@ func (s *Session) holdInitEditsLocked(r *run, t int) error {
 		return nil
 	}
 	c, retained := s.clockLocked(r, t)
+	if r.edits != nil && len(r.edits.absent) > 0 {
+		if retained == nil || s.initFileLocked(t) == "" {
+			return errors.New("fmp4: no retained init for audio-only tail")
+		}
+		audio := map[string]trackEdit{}
+		for name, edit := range retained {
+			if !r.edits.absent[edit.id] {
+				audio[name] = edit
+			}
+		}
+		if _, err := checkPublishedEdits(audio, filepath.Join(r.spec.Dir, r.spec.InitName)); err != nil {
+			return err
+		}
+		r.edits.published = true
+		return nil
+	}
 	edits, err := checkPublishedEdits(retained, filepath.Join(r.spec.Dir, r.spec.InitName))
 	if err != nil {
 		return err

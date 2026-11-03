@@ -166,6 +166,13 @@ func (s *Session) startRunLocked(seg int, bigProbe bool) error {
 	// supersedes it; only the newest transition may start another encoder.
 	s.runSeq++
 	sequence := s.runSeq
+	s.pendingStart, s.pendingSegment, s.pendingTrack = true, seg, s.wantTrack
+	defer func() {
+		if sequence == s.runSeq {
+			s.pendingStart = false
+			s.broadcastLocked()
+		}
+	}()
 	for s.reaping != nil || s.starting != nil {
 		barrier := s.reaping
 		if s.starting != nil {
@@ -236,6 +243,12 @@ func (s *Session) startRunLocked(seg int, bigProbe bool) error {
 		FastStart:    rp.fastStart,
 		Rate:         rp.rate,
 	}
+	if s.container == ContainerFMP4 && !s.isDASH() {
+		_, retained := s.clockLocked(&run{startSeg: seg}, s.wantTrack)
+		if video, ok := retained["vide"]; ok {
+			spec.VideoTimescale = video.scale
+		}
+	}
 	if s.container == ContainerMatroska {
 		spec.InitName = fmt.Sprintf("header-%d.mkv", s.runSeq)
 	}
@@ -303,6 +316,7 @@ func (s *Session) startRunLocked(seg int, bigProbe bool) error {
 		}
 	}
 	r := &run{
+		reason:   cause,
 		chunks:   cr,
 		seq:      s.runSeq,
 		startSeg: seg,

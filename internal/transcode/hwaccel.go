@@ -29,6 +29,9 @@ const DefaultVAAPIDevice = "/dev/dri/renderD128"
 
 // features is what the ffmpeg build offers: encoders, hwaccels, filters.
 type features struct {
+	// A one-frame device probe confirms the installed CUDA filter accepts
+	// P010 output. A filter name or version alone does not establish this.
+	cudaP010ToneMap bool
 	// scaleVTFormat is a build capability, not an FFmpeg version guess:
 	// upstream builds can expose scale_vt without its format option.
 	scaleVTFormat bool
@@ -42,6 +45,17 @@ type features struct {
 	// every filter exists.
 	filtersProbed bool
 	probeDetail   string
+}
+
+func cudaP010ProbeArgs() []string {
+	return []string{"-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=size=64x64:rate=1:duration=1,format=p010le,setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc", "-vf", "hwupload_cuda,tonemap_cuda=tonemap=hable:format=p010le:t=bt709:m=bt709:p=bt709,hwdownload,format=p010le", "-frames:v", "1", "-f", "null", "-"}
+}
+
+func probeCUDAP010(ctx context.Context, d hwDetector, hw core.HWAccel, f features) bool {
+	if hw.Name != AccelNVENC || !f.hwaccels["cuda"] || !f.hasFilter("tonemap_cuda") || !f.hasFilter("hwupload_cuda") || !f.hasFilter("scale_cuda") {
+		return false
+	}
+	return d.testRun(ctx, cudaP010ProbeArgs()) == nil
 }
 
 func (f features) hasEncoder(n string) bool { return f.encoders[n] }

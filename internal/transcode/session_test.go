@@ -300,6 +300,23 @@ func TestSessionMissingFilterTriesNextGraph(t *testing.T) {
 	}
 }
 
+// While a replacement encoder is being launched, a fetch at that position
+// must wait for it; a seek to a different position must still supersede it.
+func TestPendingEncoderStartCoalescesSamePosition(t *testing.T) {
+	s := &Session{}
+	s.pendingStart, s.pendingSegment, s.pendingTrack = true, 7, 0
+	if s.needsRestartLocked(7) {
+		t.Fatal("same-position fetch would replace the pending encoder")
+	}
+	if !s.needsRestartLocked(8) {
+		t.Fatal("newer seek must supersede the pending encoder")
+	}
+	s.wantTrack = 1
+	if !s.needsRestartLocked(7) {
+		t.Fatal("a different rendition must not reuse the pending encoder")
+	}
+}
+
 func TestSessionMissingToneMapFilterDoesNotRetrySameGraph(t *testing.T) {
 	fr := newFakeRunner()
 	fr.failStart = func(args []string) (string, bool) {

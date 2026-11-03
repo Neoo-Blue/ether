@@ -17,6 +17,9 @@ func gpuPipeline(s runSpec, accel string, w, h int, toneMap, tenBit, burn bool) 
 	}
 	switch accel {
 	case AccelNVENC:
+		if toneMap && tenBit && !s.Features.cudaP010ToneMap {
+			return nil, nil, false
+		}
 		// H.264 High 10 is not decoded by the validated pre-Blackwell
 		// NVDEC devices. Keep software decoding/filtering with NVENC
 		// encoding instead of launching an unusable CUDA frame graph.
@@ -28,7 +31,7 @@ func gpuPipeline(s runSpec, accel string, w, h int, toneMap, tenBit, burn bool) 
 		}
 		input = []string{"-hwaccel", "cuda", "-hwaccel_output_format", "cuda"}
 		if toneMap {
-			filters = append(filters, "tonemap_cuda=tonemap=hable:format=nv12:t=bt709:m=bt709:p=bt709")
+			filters = append(filters, "tonemap_cuda=tonemap=hable:format="+format+":t=bt709:m=bt709:p=bt709")
 		}
 		filters = append(filters, fmt.Sprintf("scale_cuda=w=%d:h=%d:format=%s", w, h, format))
 	case AccelVideoToolbox:

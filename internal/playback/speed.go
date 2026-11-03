@@ -151,10 +151,22 @@ func (m *Manager) checkSpeed(s *session, now time.Time) {
 	s.mu.Lock()
 	decision, downs, misses, viewerState := s.decision, s.downFailovers, s.downMisses, s.viewerState
 	s.mu.Unlock()
-	if downs+misses >= m.opts.MaxDownFailovers || viewerState == "paused" || viewerState == "stopped" {
+	if viewerState == "paused" || viewerState == "stopped" {
+		s.mu.Lock()
+		s.encoderRecoveryReason, s.encoderRunway = "", nil
+		s.mu.Unlock()
+		s.speedMu.Lock()
+		s.encoderSlowChecks = 0
+		s.speedMu.Unlock()
 		return
 	}
 	hls, hasHLS := m.deps.HLSLookup(s.id)
+	if hasHLS && hls != nil && m.checkEncoderSpeed(s, g, hls, time.Now()) {
+		return // encoder-bound output is not evidence against the provider
+	}
+	if downs+misses >= m.opts.MaxDownFailovers {
+		return
+	}
 	if retry, ok := g.src.(core.DirectPlayRetrier); ok && retry.RetryDirectPlay() && !hasHLS && decision == core.DecisionDirectPlay {
 		// Byte-range players do not renegotiate when delivery slows. Keep
 		// their representation intact; bitrate adaptation belongs to an

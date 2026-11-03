@@ -25,12 +25,13 @@ type runSpec struct {
 	Info              core.MediaInfo
 	Decision          core.Decision
 	// Start is the media timestamp of the run's first segment (StartSeg).
-	Start    time.Duration
-	SegDur   time.Duration
-	StartSeg int
-	Dir      string
-	Playlist string // ffmpeg's own playlist file name, in Dir
-	InitName string // fMP4 init segment file name, in Dir
+	Start          time.Duration
+	SegDur         time.Duration
+	StartSeg       int
+	Dir            string
+	Playlist       string // ffmpeg's own playlist file name, in Dir
+	InitName       string // fMP4 init segment file name, in Dir
+	VideoTimescale uint32 // retained fMP4 clock, zero for the first run
 	// Accel is the hardware to use; Name AccelNone (or "") means CPU.
 	Accel    core.HWAccel
 	Features features
@@ -446,8 +447,12 @@ func hlsMuxArgs(s runSpec) []string {
 		// keyframe (HEVC CRA) presents after its leading pictures and
 		// was moved before them. HLS does not use sidx, and the chunked
 		// path already drops it from multi-chunk segments.
+		options := "movflags=+frag_discont+skip_sidx"
+		if s.VideoTimescale != 0 {
+			options += ":video_track_timescale=" + strconv.FormatUint(uint64(s.VideoTimescale), 10)
+		}
 		args = append(args, "-hls_segment_type", "fmp4", "-hls_fmp4_init_filename", s.InitName,
-			"-hls_segment_options", "movflags=+frag_discont+skip_sidx")
+			"-hls_segment_options", options)
 	} else {
 		args = append(args, "-hls_segment_type", "mpegts")
 	}
@@ -700,8 +705,10 @@ func planPicture(s runSpec, v *core.StreamInfo, codec string) picturePlan {
 // convert/tone-map plus finish. finish sizes/pads/formats software frames.
 func planFilterChain(s runSpec, v *core.StreamInfo, pic picturePlan, accel string, burn bool, finish func([]string) []string) (inputArgs, chain []string, hwFrames bool) {
 	// Software filters only: GPU scalers neither pad nor convert SDR to
-	// HDR, and their 8-bit tone-map paths cannot feed a 10-bit contract.
-	gpuOff := s.PictureCrop != nil || pic.pad || pic.convert != "" || (pic.tonemap && pic.tenBit)
+	// HDR, and only the explicitly probed CUDA path can feed a 10-bit
+	// tone-mapped contract. Tone mappers produce limited-range BT.709.
+	p010CUDA := accel == AccelNVENC && s.Features.cudaP010ToneMap && !pictureOf(v).full && (s.Target == nil || (s.Target.pic.prim == "bt709" && s.Target.pic.matrix == "bt709" && !s.Target.pic.full))
+	gpuOff := s.PictureCrop != nil || pic.pad || pic.convert != "" || (pic.tonemap && pic.tenBit && !p010CUDA)
 	gpuInput, gpuFilters, gpuOK := gpuPipeline(s, accel, pic.w, pic.h, pic.tonemap, pic.tenBit, burn)
 	switch {
 	case gpuOK && !gpuOff:
