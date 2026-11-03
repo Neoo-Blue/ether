@@ -10,6 +10,7 @@ import {
 import { ArrowLeft, CheckCircle2, History } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { PageSubtabs } from "../../components/layout";
 import { Artwork } from "../../components/Artwork";
 import { Meter } from "../../components/charts";
 import { ErrorPanel, LoadingRows } from "../../components/feedback";
@@ -83,7 +84,13 @@ export default function ViewerProfile() {
   );
   const loadHidden = useCallback(async (): Promise<NotInterestedEntry[]> => {
     const result = await apiFetch<{
-      items: { handle: string; title?: string; year?: number; posterPath?: string }[];
+      items: {
+        handle: string;
+        title?: string;
+        year?: number;
+        poster?: string;
+        posterPath?: string;
+      }[];
     }>(`/viewers/${id}/not-interested`);
     return (result.items ?? []).map((item) => ({
       handle: item.handle,
@@ -218,18 +225,24 @@ export default function ViewerProfile() {
         <div className="space-y-6">
           {serverAccess ? (
             <>
-              <div className="pb-4">
-                <SubtabNav
-                  ariaLabel={t("Lists and alerts sections")}
-                  active={listTab}
-                  onSelect={(next) => setSearch({ list: next })}
-                  tabs={[
-                    { key: "watchlist", label: t("Watchlist") },
-                    { key: "alerts", label: t("Alerts") },
-                    { key: "hidden", label: t("Not interested") },
-                  ]}
-                />
-              </div>
+              <PageSubtabs
+                ariaLabel={t("Lists and alerts sections")}
+                active={listTab}
+                onSelect={(next) =>
+                  setSearch(
+                    (previous) => {
+                      previous.set("list", next);
+                      return previous;
+                    },
+                    { preventScrollReset: true },
+                  )
+                }
+                tabs={[
+                  { key: "watchlist", label: t("Watchlist") },
+                  { key: "alerts", label: t("Alerts") },
+                  { key: "hidden", label: t("Not interested") },
+                ]}
+              />
               {listTab === "watchlist" ? (
                 <>
                   <ViewerWatchlist viewerId={id} />

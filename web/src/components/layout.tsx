@@ -118,3 +118,22 @@ export function Section({
     </section>
   );
 }
+
+/** Shared spacing and navigation for URL-backed sections within a page. */
+export function PageSubtabs({
+  active,
+  onSelect,
+  tabs,
+  ariaLabel,
+}: {
+  active: string;
+  onSelect: (key: string) => void;
+  tabs: PageTab[];
+  ariaLabel: string;
+}) {
+  return (
+    <div className="pb-4">
+      <SubtabNav active={active} onSelect={onSelect} tabs={tabs} ariaLabel={ariaLabel} />
+    </div>
+  );
+}

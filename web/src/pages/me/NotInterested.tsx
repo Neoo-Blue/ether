@@ -86,7 +86,6 @@ export function NotInterested({ load, restore }: Props) {
                     <Artwork
                       src={entry.unavailable ? undefined : entry.poster}
                       alt=""
-                      title={label}
                       className="w-10 aspect-[2/3] shrink-0 rounded"
                     />
                     <span className="text-sm">
