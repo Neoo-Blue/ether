@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/braedonsaunders/ether/internal/core"
@@ -76,6 +77,12 @@ func (c *Catalog) MaterializeMetadata(ctx context.Context, provider string, req 
 			return nil, err
 		}
 		if title != nil && title.IDs.TMDB <= 0 {
+			// Many add-ons (Cinemeta among them) name titles only by IMDb or
+			// TVDB. Translating the provider's own ID to the canonical TMDB
+			// identity is the same title, not a switch of identity source.
+			c.adoptCanonicalTMDB(ctx, title)
+		}
+		if title != nil && title.IDs.TMDB <= 0 {
 			return nil, core.ErrMetadataIdentity
 		}
 		if title == nil || title.Type != req.Type || strings.TrimSpace(title.Title) == "" {
@@ -129,6 +136,26 @@ func (c *Catalog) MaterializeMetadata(ctx context.Context, provider string, req 
 	}
 	return title, nil
 }
+
+// adoptCanonicalTMDB fills a provider title's TMDB ID from its IMDb or TVDB
+// ID through the catalogue's external-ID lookup (local first, then TMDB).
+func (c *Catalog) adoptCanonicalTMDB(ctx context.Context, title *core.Title) {
+	lookups := [][2]string{}
+	if title.IDs.IMDB != "" {
+		lookups = append(lookups, [2]string{"imdb", title.IDs.IMDB})
+	}
+	if title.IDs.TVDB > 0 {
+		lookups = append(lookups, [2]string{"tvdb", strconv.FormatInt(title.IDs.TVDB, 10)})
+	}
+	for _, l := range lookups {
+		found, err := c.byExternalID(ctx, l[0], l[1], title.Type, true)
+		if err == nil && found != nil && found.Type == title.Type && found.IDs.TMDB > 0 {
+			title.IDs.TMDB = found.IDs.TMDB
+			return
+		}
+	}
+}
+
 func metadataMatches(t *core.Title, ids core.IDs) bool {
 	return t != nil && (ids.TMDB == 0 || ids.TMDB == t.IDs.TMDB) && (ids.IMDB == "" || ids.IMDB == t.IDs.IMDB) && (ids.TVDB == 0 || ids.TVDB == t.IDs.TVDB)
 }
