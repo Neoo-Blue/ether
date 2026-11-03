@@ -31,10 +31,10 @@ type Prerolls interface {
 
 var _ Prerolls = (*prerolls.Service)(nil)
 
-// prerollRoutes registers the pre-roll API. The thumbnail and preview are
-// capability URLs (unguessable ids) because <img> and <video> cannot send
-// the owner token; the list that reveals ids requires it.
-func (h *Handler) prerollRoutes(mux *http.ServeMux, api func(string, http.HandlerFunc)) {
+// prerollRoutes registers the pre-roll API. Every route needs the owner
+// token; the console fetches the thumbnail and the range-capable preview
+// with it (no cookies).
+func (h *Handler) prerollRoutes(api func(string, http.HandlerFunc)) {
 	if h.deps.Prerolls == nil {
 		return
 	}
@@ -47,8 +47,8 @@ func (h *Handler) prerollRoutes(mux *http.ServeMux, api func(string, http.Handle
 	api("DELETE /api/admin/prerolls/{id}", h.handlePrerollDelete)
 	api("POST /api/admin/prerolls/{id}/video", h.handlePrerollVideo)
 	api("GET /api/admin/prerolls/{id}/plays", h.handlePrerollPlays)
-	mux.HandleFunc("GET /api/admin/prerolls/{id}/thumb", h.handlePrerollThumb)
-	mux.HandleFunc("GET /api/admin/prerolls/{id}/preview", h.handlePrerollPreview)
+	api("GET /api/admin/prerolls/{id}/thumb", h.handlePrerollThumb)
+	api("GET /api/admin/prerolls/{id}/preview", h.handlePrerollPreview)
 }
 
 // prerollVideoUpload reports whether path is a pre-roll video upload,
@@ -253,7 +253,6 @@ func (h *Handler) servePrerollFile(w http.ResponseWriter, r *http.Request, thumb
 	}
 	w.Header().Set("Content-Type", ctype)
 	w.Header().Set("Content-Security-Policy", "sandbox")
-	w.Header().Set("Cache-Control", "private, max-age=60")
 	http.ServeContent(w, r, "", st.ModTime(), f)
 }
 

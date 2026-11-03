@@ -448,7 +448,7 @@ func (h *Handler) routes() *http.ServeMux {
 	}
 	h.personalizationRoutes(api)
 	h.collectionRoutes(mux, api)
-	h.prerollRoutes(mux, api)
+	h.prerollRoutes(api)
 
 	mux.HandleFunc("/api/", h.requireAuth(func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "no such API endpoint")

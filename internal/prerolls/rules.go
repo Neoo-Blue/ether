@@ -290,7 +290,9 @@ func (s *Service) rules(pc *playContext, p *Preroll, window time.Duration, check
 	if episode && r.FirstEpisodeOnly {
 		check(ReasonFirstEpisode, func() bool { return !req.AutoPlay })
 	}
-	if episode && r.BingeGapMinutes > 0 {
+	// The binge gap refines "first episode only"; with that off a pre-roll
+	// plays before every episode.
+	if episode && r.FirstEpisodeOnly && r.BingeGapMinutes > 0 {
 		check(ReasonBingeGap, func() bool {
 			if req.AutoPlay {
 				return false

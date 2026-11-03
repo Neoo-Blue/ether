@@ -7,6 +7,7 @@ import (
 	"encoding/base32"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -116,8 +117,11 @@ func scanPreroll(row scanner) (Preroll, error) {
 	}
 	p.CreatedAt = time.Unix(0, created).UTC()
 	p.UpdatedAt = time.Unix(0, updated).UTC()
-	p.Video.ThumbURL = "/api/admin/prerolls/" + p.ID + "/thumb"
-	p.Video.PreviewURL = "/api/admin/prerolls/" + p.ID + "/preview"
+	// Browser paths, like collection artwork; the stamp changes with
+	// every new video.
+	stamp := "?v=" + strconv.FormatInt(updated, 36)
+	p.Video.ThumbURL = "/ether/api/admin/prerolls/" + p.ID + "/thumb" + stamp
+	p.Video.PreviewURL = "/ether/api/admin/prerolls/" + p.ID + "/preview" + stamp
 	return p, nil
 }
 
