@@ -27,7 +27,7 @@ it("restores the scroll container after selecting a tab", () => {
     return 1;
   });
   const { container } = render(
-    <div>
+    <div className="app-scroll">
       <SubtabNav
         active="one"
         tabs={[
@@ -44,6 +44,7 @@ it("restores the scroll container after selecting a tab", () => {
   fireEvent.click(screen.getByRole("tab", { name: "Two" }));
   frame!(0);
   expect(container.firstElementChild!.scrollTop).toBe(180);
+  expect((container.firstElementChild as HTMLElement).style.overflowAnchor).toBe("none");
   vi.restoreAllMocks();
 });
 

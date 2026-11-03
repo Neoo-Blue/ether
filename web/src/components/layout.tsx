@@ -135,6 +135,9 @@ export function SubtabNav(props: ComponentProps<typeof AppKitSubtabNav>) {
           const positions: [HTMLElement, number][] = [];
           let node: HTMLElement | null = root.current;
           while (node) {
+            // Keep Chrome from moving the viewport to a different anchor when
+            // the selected panel becomes shorter.
+            if (node.classList.contains("app-scroll")) node.style.overflowAnchor = "none";
             positions.push([node, node.scrollTop]);
             node = node.parentElement;
           }
