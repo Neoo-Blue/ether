@@ -1273,6 +1273,38 @@ func (m *Manager) addBuffered(ps *core.PlaySession) {
 	ps.BufferedUntil = pos + ahead
 }
 
+// addReserved counts a completed source reserve (reserve.go) as read-ahead
+// for direct play, like the engine's own play-ahead. An HLS session keeps its
+// published-segment buffer, which is what the player can actually use.
+func (m *Manager) addReserved(s *session, ps *core.PlaySession) {
+	if ps == nil {
+		return
+	}
+	if m.deps.HLSLookup != nil {
+		if hls, ok := m.deps.HLSLookup(ps.ID); ok && hls != nil {
+			return
+		}
+	}
+	g := s.current()
+	r := &s.reserve
+	r.mu.Lock()
+	until := r.until
+	done := !r.running && r.generation == g && g != nil
+	r.mu.Unlock()
+	if !done || until <= ps.BufferedUntil {
+		return
+	}
+	pos := time.Duration(0)
+	if ps.ViewOffset != nil {
+		pos = time.Duration(*ps.ViewOffset) * time.Millisecond
+	}
+	if until <= pos {
+		return
+	}
+	ps.BufferedUntil = until
+	ps.BufferedBytes = max(ps.BufferedBytes, bytesForDuration(ps.Info, until-pos))
+}
+
 func bytesForDuration(info core.MediaInfo, d time.Duration) int64 {
 	if d <= 0 || info.Size <= 0 || info.Duration <= 0 {
 		return 0
@@ -1293,6 +1325,7 @@ func (m *Manager) Sessions() []*core.PlaySession {
 	for _, s := range list {
 		ps := m.snapshotWithEncoder(s, now)
 		m.addBuffered(ps)
+		m.addReserved(s, ps)
 		out = append(out, ps)
 	}
 	sort.Slice(out, func(i, j int) bool {
