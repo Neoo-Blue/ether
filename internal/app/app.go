@@ -620,6 +620,9 @@ func (a *App) Run(ctx context.Context) error {
 	// scrobbles, and its import queue is claimed per row.
 	// Tracked like every other background loop, so Run returns (and the
 	// caller closes the database) only after they have stopped.
+	// Every node serves search: build its title index now, in the
+	// background, so the first search does not fall back to SQL.
+	a.catalog.WarmSearch(ctx)
 	if parityRunCatalogueWorkers() {
 		background.start(func() { a.cluster.RunAsLeader(ctx, "catalogue sync", a.catalog.Run) })
 		background.start(func() { a.cluster.RunAsLeader(ctx, "trending charts", a.catalog.RunTrends) })

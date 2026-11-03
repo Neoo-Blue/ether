@@ -48,14 +48,14 @@ func TestHomeMemoExpiresAndEvictsWithoutTruncatingRows(t *testing.T) {
 		e.memoPut(memoKey{user: int64(i)}, memoEntry{rows: rows})
 		clock.Set(clock.Now().Add(time.Millisecond))
 	}
-	e.memoPut(memoKey{user: 1000}, memoEntry{rows: rows})
+	e.memoPut(memoKey{user: memoMaxEntries + 1000}, memoEntry{rows: rows})
 	if len(e.memo) != memoMaxEntries {
 		t.Fatalf("entries: %d", len(e.memo))
 	}
 	if _, ok := e.memoGet(memoKey{user: 0}); ok {
 		t.Fatal("oldest entry retained")
 	}
-	got, ok := e.memoGet(memoKey{user: 1000})
+	got, ok := e.memoGet(memoKey{user: memoMaxEntries + 1000})
 	if !ok || len(got.rows[0].Items) != 20 {
 		t.Fatal("full shelf not retained")
 	}
