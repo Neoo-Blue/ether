@@ -12,6 +12,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/contentrating"
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/libraryfilter"
+	"github.com/braedonsaunders/ether/internal/store"
 )
 
 // Browse queries the browsable mirror entirely in SQL, with generation-stamped
@@ -885,7 +886,11 @@ func (c *Catalog) countFacet(ctx context.Context, f core.Filter, facet string) (
 		// Titles per contentrating.Level ("0" is unrated), mildest first.
 		q = `SELECT CAST(t.content_rating_rank AS TEXT), COUNT(*) FROM catalog_titles t WHERE ` + base + ` GROUP BY t.content_rating_rank ORDER BY t.content_rating_rank ASC`
 	case "firstCharacter":
-		q = `SELECT CASE WHEN t.sort_title < 'a' THEN '#' WHEN t.sort_title >= 'a' AND t.sort_title < '{' THEN UPPER(SUBSTR(t.sort_title, 1, 1)) ELSE '~' END, COUNT(*) FROM catalog_titles t WHERE ` + base + ` GROUP BY 1 ORDER BY 1 ASC`
+		bucket := `CASE WHEN t.sort_title < 'a' THEN '#' WHEN t.sort_title >= 'a' AND t.sort_title < '{' THEN UPPER(SUBSTR(t.sort_title, 1, 1)) ELSE '~' END`
+		if store.DialectOf(c.db) == store.Postgres {
+			bucket = "(" + bucket + `) COLLATE "C"`
+		}
+		q = `SELECT ` + bucket + `, COUNT(*) FROM catalog_titles t WHERE ` + base + ` GROUP BY 1 ORDER BY 1 ASC`
 	default:
 		return nil, fmt.Errorf("catalog: unknown facet %q", facet)
 	}

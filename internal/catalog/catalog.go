@@ -161,6 +161,9 @@ CREATE INDEX IF NOT EXISTS catalog_titles_season_key ON catalog_titles(key ASC) 
 CREATE INDEX IF NOT EXISTS catalog_titles_season_updated ON catalog_titles(fetched_at DESC, key ASC) WHERE type='season' AND adult=0;
 CREATE INDEX IF NOT EXISTS catalog_titles_season_released ON catalog_titles(released_ts DESC, key ASC) WHERE type='season' AND release_known=1 AND adult=0;
 `)
+	// Browse and jump-bar ranges use the same byte ordering as SQLite.
+	store.Register("catalog", 30, `SELECT 1;`)
+	store.RegisterDialect("catalog", 30, store.Postgres, `ALTER TABLE catalog_titles ALTER COLUMN sort_title TYPE TEXT COLLATE "C";`)
 	store.Register("catalog", 27, `CREATE INDEX catalog_countries_lower_country ON catalog_countries(LOWER(country), key);`)
 	store.Register("catalog", 7, `
 CREATE INDEX catalog_titles_type_browse_sort ON catalog_titles(type, browsable, adult, sort_title ASC, key ASC);
