@@ -3,6 +3,7 @@ package frontend
 import (
 	"context"
 	"sort"
+	"time"
 
 	"github.com/braedonsaunders/ether/internal/core"
 )
@@ -78,6 +79,9 @@ func regularSeriesEpisodes(eps []Title, series RatingKey) []Title {
 	out := make([]Title, 0, len(eps))
 	for _, ep := range eps {
 		if ep.Key.Kind() != KindEpisode {
+			continue
+		}
+		if ep.Key.Season() == 0 || (!ep.Released.IsZero() && ep.Released.After(time.Now())) {
 			continue
 		}
 		if ep.Type != "" && ep.Type != core.TypeEpisode {
