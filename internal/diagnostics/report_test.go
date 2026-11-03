@@ -21,7 +21,7 @@ func TestReportReferencesRedactedJournalLines(t *testing.T) {
 		t.Fatalf("findings: %+v", findings)
 	}
 	report := string(reportMarkdown(rows, findings, nil))
-	if !strings.Contains(report, "Example") || !strings.Contains(report, "journal lines [1 2]") {
+	if !strings.Contains(report, "Example") || !strings.Contains(report, "requests #1–2") || !strings.Contains(report, "## What happened") || !strings.Contains(report, "## Request timeline") {
 		t.Fatalf("report: %s", report)
 	}
 	body, _, _ = eventsJSONL(events, [3]bool{}, "test", nil)

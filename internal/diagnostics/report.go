@@ -41,7 +41,7 @@ func analyzeJournal(body string) ([]reportRow, []Finding) {
 		line      int
 	}
 	seen := map[string][]occurrence{}
-	var errors, slow, empty, hero, cancelled, playbackFailures []int
+	var errors, slow, empty, hero, playbackFailures []int
 	failureLines := map[int]bool{}
 	addFailure := func(line int) {
 		if !failureLines[line] {
@@ -60,11 +60,8 @@ func analyzeJournal(body string) ([]reportRow, []Finding) {
 		if e.Status >= 400 {
 			errors = append(errors, row.line)
 		}
-		if e.DurationMS >= 2000 || e.DBTimeMS >= 500 || e.DBQueries > 300 {
+		if e.DurationMS > 2000 || e.DBTimeMS > 500 || e.DBQueries > 300 {
 			slow = append(slow, row.line)
-		}
-		if e.Cancelled {
-			cancelled = append(cancelled, row.line)
 		}
 		if e.Response == nil {
 			continue
@@ -119,7 +116,6 @@ func analyzeJournal(body string) ([]reportRow, []Finding) {
 	add("other_hero", "A hero row other than Continue Watching was returned.", hero)
 	add("slow_request", "A request exceeded a wall-time or database budget.", slow)
 	add("http_error", "A request returned an HTTP error.", errors)
-	add("cancelled_request", "A request context was cancelled when the handler returned.", cancelled)
 	if len(playbackFailures) >= 2 {
 		add("repeated_playback_failures", "Multiple playback decision requests failed.", playbackFailures)
 	}
@@ -137,77 +133,108 @@ func analyzeJournal(body string) ([]reportRow, []Finding) {
 
 func reportMarkdown(rows []reportRow, findings []Finding, extra []archived) []byte {
 	var b bytes.Buffer
-	b.WriteString("# Recording report\n\nThis report describes server observations. A cancelled request does not by itself prove a client timeout. Times are UTC. Line references point to events.jsonl.\n\n## Findings\n\n")
+	b.WriteString("# Recording report\n\n## What happened\n\n")
+	b.WriteString(strings.Join(reportOverview(rows, findings), " "))
+	b.WriteString("\n\nRequest numbers refer to lines in events.jsonl. Times are UTC. The server cannot see what the client displayed.\n\n## Findings\n\n")
 	if len(findings) == 0 {
 		b.WriteString("No automated rule matched the retained requests.\n")
 	}
+	byLine := make(map[int]exportEvent, len(rows))
+	for _, row := range rows {
+		byLine[row.line] = row.event
+	}
 	for _, f := range findings {
-		fmt.Fprintf(&b, "- %s (journal lines %v)", f.Text, f.Lines)
+		if f.Code == "slow_request" {
+			for _, line := range f.Lines {
+				if e, ok := byLine[line]; ok {
+					fmt.Fprintf(&b, "- Request #%d exceeded a budget: %s.\n", line, reportBudget(e))
+				}
+			}
+			if f.Truncated {
+				b.WriteString("- Additional budget references were omitted.\n")
+			}
+			continue
+		}
+		fmt.Fprintf(&b, "- %s (%s)", f.Text, reportRefs(f.Lines))
 		if f.Truncated {
 			b.WriteString(" (additional detail omitted)")
 		}
 		b.WriteByte('\n')
 	}
+	b.WriteString("\n## Request timeline\n\n| Time (UTC) | Client | Request | Status | Duration | Response |\n| --- | --- | --- | --- | --- | --- |\n")
+	count := 0
+	for _, row := range rows {
+		e := row.event
+		if e.Kind != KindRequest {
+			continue
+		}
+		if count >= 200 || b.Len() > 200<<10 {
+			b.WriteString("\nTimeline shortened; see events.jsonl for the remaining requests.\n")
+			break
+		}
+		request := e.Method + " " + e.Route
+		if q := reportKeyParams(e.Query); q != "" {
+			request += "?" + q
+		}
+		fmt.Fprintf(&b, "| #%d %s | %s | %s | %d | %s | %s |\n", row.line, e.At.UTC().Format("15:04:05.000"), reportCell(reportClient(e)), reportCell(request), e.Status, reportDuration(e.DurationMS), reportCell(reportResponse(e)))
+		count++
+	}
+	var viewer *ViewerFacts
 	for _, file := range extra {
-		switch file.name {
-		case "server.json":
-			var server struct {
-				Version     string `json:"version"`
-				Commit      string `json:"commit"`
-				BuildDate   string `json:"buildDate"`
-				Platform    string `json:"platform"`
-				Container   string `json:"container"`
-				InstallType string `json:"installType"`
-				Uptime      int64  `json:"uptimeSeconds"`
+		if file.name == "viewer.json" {
+			var v ViewerFacts
+			if json.Unmarshal(file.body, &v) == nil {
+				viewer = &v
 			}
-			if json.Unmarshal(file.body, &server) == nil {
-				fmt.Fprintf(&b, "\n## Server\n\nVersion %s, commit %s, build date %s, platform %s, install type %s, container %s, uptime %d seconds. Empty values were not available.\n", strconv.Quote(server.Version), strconv.Quote(server.Commit), strconv.Quote(server.BuildDate), strconv.Quote(server.Platform), strconv.Quote(server.InstallType), strconv.Quote(server.Container), server.Uptime)
-			}
-		case "storage.json":
-			var storage StorageFact
-			if json.Unmarshal(file.body, &storage) == nil {
-				fmt.Fprintf(&b, "\n## Storage\n\nDatabase %d bytes (known: %t); WAL %d bytes (known: %t); filesystem %s; free space %d bytes (known: %t).\n", storage.DatabaseBytes, storage.DatabaseKnown, storage.WALBytes, storage.WALKnown, strconv.Quote(storage.Filesystem), storage.DiskFreeBytes, storage.DiskFreeKnown)
-				fmt.Fprintf(&b, "Cache filesystem %s; free space %d bytes (known: %t); configured cache budget %d bytes.\n", strconv.Quote(storage.CacheFilesystem), storage.CacheFreeBytes, storage.CacheFreeKnown, storage.CacheBudgetBytes)
-			}
+			break
 		}
 	}
-	for _, file := range extra {
-		if file.name != "viewer.json" {
-			continue
+	b.WriteString("\n## Viewer snapshot\n\n")
+	if viewer == nil {
+		b.WriteString("No viewer snapshot was available.\n")
+	} else {
+		v := viewer
+		selected := 0
+		for _, candidate := range v.Candidates {
+			if candidate.Included {
+				selected++
+			}
 		}
-		var v ViewerFacts
-		if json.Unmarshal(file.body, &v) != nil {
-			continue
+		b.WriteString("This snapshot was taken when the archive was built; counts may overlap and may have changed since the requests.\n\n| Measure | Result |\n| --- | --- |\n")
+		fmt.Fprintf(&b, "| Watch states sampled | %d%s |\n", v.WatchSample, reportTruncated(v.WatchSampleTruncated))
+		fmt.Fprintf(&b, "| In progress / watched in sample | %d / %d |\n", v.InProgress, v.Watched)
+		fmt.Fprintf(&b, "| Candidates / selected | %d / %d%s |\n", len(v.Candidates), selected, reportTruncated(v.CandidatesTruncated))
+		fmt.Fprintf(&b, "| Visible sections | %d%s |\n", len(v.Sections), reportTruncated(v.SectionsTruncated))
+		fmt.Fprintf(&b, "| Home layout policies | %d%s |\n", len(v.Layout), reportTruncated(v.LayoutTruncated))
+		for _, note := range v.Notes {
+			fmt.Fprintf(&b, "\n%s\n", reportCell(note))
 		}
-		fmt.Fprintf(&b, "\n## Viewer snapshot\n\nSampled %d watch states: %d in progress and %d watched; sample truncated: %t. Candidate list truncated: %t.\n", v.WatchSample, v.InProgress, v.Watched, v.WatchSampleTruncated, v.CandidatesTruncated)
+		b.WriteString("\n### Viewer candidates\n\n")
+		if len(v.Candidates) == 0 {
+			b.WriteString("No candidates were included in this snapshot.\n")
+		}
 		for _, c := range v.Candidates {
-			fmt.Fprintf(&b, "- %s (key %d, offset %d ms, included: %t)\n", c.Reason, c.Key, c.OffsetMS, c.Included)
+			if b.Len() > 300<<10 {
+				b.WriteString("Additional candidates are in viewer.json.\n")
+				break
+			}
+			fmt.Fprintf(&b, "- %s (key %d, offset %s, included: %t)\n", reportCell(c.Reason), c.Key, reportDuration(c.OffsetMS), c.Included)
 			if c.Title != "" {
 				fmt.Fprintf(&b, "  - item: %s\n", strconv.Quote(c.Title))
 			}
 		}
 	}
-	b.WriteString("\n## Recorded requests in order\n\n")
+	b.WriteString("\n## Response details\n\n")
 	for _, row := range rows {
 		if b.Len() > 400<<10 {
-			b.WriteString("\nReport shortened; see events.jsonl for the remaining records.\n")
+			b.WriteString("\nReport shortened; see events.jsonl for remaining details.\n")
 			break
 		}
 		e := row.event
-		if e.Kind != KindRequest {
+		if e.Kind != KindRequest || e.Response == nil {
 			continue
 		}
-		fmt.Fprintf(&b, "- Line %d, %s: %s %s", row.line, e.At.UTC().Format("15:04:05.000"), e.Method, e.Route)
-		if e.Query != "" {
-			fmt.Fprintf(&b, "?%s", e.Query)
-		}
-		fmt.Fprintf(&b, " → HTTP %d, %d ms, %d bytes, %d database statements in %d ms.\n", e.Status, e.DurationMS, e.Bytes, e.DBQueries, e.DBTimeMS)
-		if e.Protocol != "" || e.Product != "" || e.Platform != "" || e.DeviceType != "" || e.Model != "" || e.AppVersion != "" {
-			fmt.Fprintf(&b, "  - Client: protocol %s, product %s, version %s, platform %s, device %s, model %s.\n", strconv.Quote(e.Protocol), strconv.Quote(e.Product), strconv.Quote(e.AppVersion), strconv.Quote(e.Platform), strconv.Quote(e.DeviceType), strconv.Quote(e.Model))
-		}
-		if e.Response == nil {
-			continue
-		}
+		fmt.Fprintf(&b, "- Request #%d: %s %s, HTTP %d, %s, %s; %d database statements in %s.\n", row.line, reportCell(e.Method), reportCell(e.Route), e.Status, reportDuration(e.DurationMS), reportBytes(e.Bytes), e.DBQueries, reportDuration(e.DBTimeMS))
 		if e.Response.Decision != "" {
 			fmt.Fprintf(&b, "  - Playback decision: %s.\n", strconv.Quote(e.Response.Decision))
 		}
@@ -242,31 +269,49 @@ func reportMarkdown(rows []reportRow, findings []Finding, extra []archived) []by
 		}
 	}
 	for _, file := range extra {
-		if file.name != "logs/capture.log" {
-			continue
-		}
-		printed := 0
-		for i, line := range bytes.Split(file.body, []byte("\n")) {
-			var entry exportLog
-			if json.Unmarshal(line, &entry) != nil || (!strings.EqualFold(entry.Level, "WARN") && !strings.EqualFold(entry.Level, "ERROR")) {
-				continue
+		switch file.name {
+		case "server.json":
+			var server struct {
+				Version     string `json:"version"`
+				Commit      string `json:"commit"`
+				BuildDate   string `json:"buildDate"`
+				Platform    string `json:"platform"`
+				Container   string `json:"container"`
+				InstallType string `json:"installType"`
+				Uptime      int64  `json:"uptimeSeconds"`
 			}
-			if printed == 0 {
-				b.WriteString("\n## Server warnings and errors\n\n")
+			if json.Unmarshal(file.body, &server) == nil {
+				fmt.Fprintf(&b, "\n## Server\n\nVersion %s, commit %s, build date %s, platform %s, install type %s, container %s, uptime %s. Empty values were not available.\n", strconv.Quote(server.Version), strconv.Quote(server.Commit), strconv.Quote(server.BuildDate), strconv.Quote(server.Platform), strconv.Quote(server.InstallType), strconv.Quote(server.Container), reportUptime(server.Uptime))
 			}
-			if printed == 64 {
-				b.WriteString("Additional log records are in logs/capture.log.\n")
-				break
+		case "storage.json":
+			var storage StorageFact
+			if json.Unmarshal(file.body, &storage) == nil {
+				fmt.Fprintf(&b, "\n## Storage\n\nDatabase %s; WAL %s; filesystem %s; free space %s.\nCache filesystem %s; free space %s; configured budget %s.\n", reportOptionalBytes(storage.DatabaseBytes, storage.DatabaseKnown), reportOptionalBytes(storage.WALBytes, storage.WALKnown), strconv.Quote(storage.Filesystem), reportOptionalBytes(storage.DiskFreeBytes, storage.DiskFreeKnown), strconv.Quote(storage.CacheFilesystem), reportOptionalBytes(storage.CacheFreeBytes, storage.CacheFreeKnown), reportBytes(storage.CacheBudgetBytes))
 			}
-			fmt.Fprintf(&b, "- %s: %s", entry.At.UTC().Format("15:04:05.000"), strconv.Quote(entry.Msg))
-			if entry.Route != "" {
-				fmt.Fprintf(&b, " on %s", strconv.Quote(entry.Route))
+		case "logs/capture.log":
+			printed := 0
+			for i, line := range bytes.Split(file.body, []byte("\n")) {
+				var entry exportLog
+				if json.Unmarshal(line, &entry) != nil || (!strings.EqualFold(entry.Level, "WARN") && !strings.EqualFold(entry.Level, "ERROR")) {
+					continue
+				}
+				if printed == 0 {
+					b.WriteString("\n## Server warnings and errors\n\n")
+				}
+				if printed == 64 {
+					b.WriteString("Additional log records are in logs/capture.log.\n")
+					break
+				}
+				fmt.Fprintf(&b, "- %s: %s", entry.At.UTC().Format("15:04:05.000"), strconv.Quote(entry.Msg))
+				if entry.Route != "" {
+					fmt.Fprintf(&b, " on %s", strconv.Quote(entry.Route))
+				}
+				if entry.Dur != "" {
+					fmt.Fprintf(&b, " (%s)", strconv.Quote(entry.Dur))
+				}
+				fmt.Fprintf(&b, " (logs/capture.log line %d).\n", i+1)
+				printed++
 			}
-			if entry.Dur != "" {
-				fmt.Fprintf(&b, " (%s)", strconv.Quote(entry.Dur))
-			}
-			fmt.Fprintf(&b, " (logs/capture.log line %d).\n", i+1)
-			printed++
 		}
 	}
 	return b.Bytes()
