@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { invalidateRegistry } from "../lib/extend";
 import LiveTV from "../pages/livetv/LiveTV";
 import { calls as fakeCalls } from "./harness";
 import { renderAppWith } from "./routes";
@@ -553,6 +554,96 @@ describe("Live TV source sign-in", () => {
     const saved = body(sent(calls, "PUT", /\/livetv\/channels\/c1$/)[0]);
     expect(saved.streamSources[0].authSourceId).toBeUndefined();
     expect(saved.streamSources[1]).toMatchObject({ id: "bk", authSourceId: "b" });
+  });
+});
+
+describe("Live TV Stremio add-ons", () => {
+  const kind = "plugin:addon.abc/channels";
+  const addonDescriptor = {
+    kind: "liveTVSource",
+    id: kind,
+    owner: "addon.abc",
+    label: { resolved: "Sports TV" },
+    hint: { source: "Live channels from a Stremio add-on." },
+    meta: { editor: "addon", yieldsChannels: true, yieldsGuide: true },
+  };
+
+  it("shows an add-on source's add-on and Plugins link, never a link field", async () => {
+    invalidateRegistry();
+    backend([], (url, init) => {
+      if (url.includes("/extend/registry")) return { version: 1, descriptors: [addonDescriptor] };
+      if (url.endsWith("/livetv/sources") && (init?.method ?? "GET") === "GET")
+        return [
+          {
+            id: "a1",
+            name: "My sports",
+            kind,
+            playlistUrl: kind,
+            hasPlaylist: true,
+            updatedAt: "2026-10-19T00:00:00Z",
+          },
+        ];
+      return undefined;
+    });
+    renderLiveTV("/livetv?source=a1");
+    expect(await screen.findByText("Channels come from Sports TV.", {}, WAIT)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Manage in Plugins" })).toHaveAttribute(
+      "href",
+      "/plugins/installed",
+    );
+    expect(screen.queryByLabelText("M3U playlist")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sign-in")).not.toBeInTheDocument();
+  });
+
+  it("adds an add-on through the shared drawer, then imports its channels", async () => {
+    invalidateRegistry();
+    let sources: unknown[] = [];
+    const calls = backend([], (url, init) => {
+      const method = init?.method ?? "GET";
+      if (url.includes("/extend/registry")) return { version: 1, descriptors: [addonDescriptor] };
+      if (url.endsWith("/plugins/addons/preview"))
+        return {
+          id: "addon.abc",
+          name: "Sports TV",
+          host: "tv.example",
+          roles: [{ role: "livetv_channels", on: false }],
+        };
+      if (url.endsWith("/plugins/addons") && method === "POST")
+        return {
+          id: "addon.abc",
+          name: "Sports TV",
+          version: "1.0.0",
+          enabled: true,
+          stremioOnly: true,
+          roles: [{ role: "livetv_channels", on: true }],
+        };
+      if (url.endsWith("/livetv/sources") && method === "POST") {
+        const saved = { ...body({ url, init }), id: "a1", updatedAt: "2026-10-19T00:00:00Z" };
+        sources = [saved];
+        return saved;
+      }
+      if (url.endsWith("/livetv/sources") && method === "GET") return sources;
+      return undefined;
+    });
+    renderLiveTV("/livetv");
+    fireEvent.click(await screen.findByRole("button", { name: "Add" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Stremio add-on/ }));
+    fireEvent.change(await screen.findByPlaceholderText("https://… /manifest.json"), {
+      target: { value: "https://tv.example/cfg/manifest.json" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add add-on" }, WAIT));
+    await waitFor(() => expect(sent(calls, "POST", /\/livetv\/sources$/)).toHaveLength(1), WAIT);
+    expect(body(sent(calls, "POST", /\/livetv\/sources$/)[0])).toMatchObject({
+      name: "Sports TV",
+      kind,
+      playlistUrl: kind,
+    });
+    expect(body(sent(calls, "POST", /\/plugins\/addons$/)[0])).toEqual({
+      url: "https://tv.example/cfg/manifest.json",
+      roles: ["livetv_channels"],
+    });
+    expect(await screen.findByText("Channels come from Sports TV.", {}, WAIT)).toBeInTheDocument();
   });
 });
 

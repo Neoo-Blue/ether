@@ -15,10 +15,12 @@ describe("Stremio built-ins", () => {
     expect(await screen.findByLabelText("Add-on URL")).toBeInTheDocument();
   });
 
-  it("offers the Stremio source in Live TV", async () => {
+  it("adds a Live TV add-on through the shared add-on drawer", async () => {
     renderApp("/livetv");
     fireEvent.click(await screen.findByRole("button", { name: "Add" }));
     fireEvent.click(await screen.findByRole("menuitem", { name: /Stremio add-on/ }));
-    expect(await screen.findByLabelText("Add-on URL")).toBeInTheDocument();
+    expect(await screen.findByText("Install link")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("https://… /manifest.json")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Add-on URL")).not.toBeInTheDocument();
   });
 });

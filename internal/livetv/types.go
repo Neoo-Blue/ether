@@ -120,7 +120,7 @@ type Channel struct {
 type Source struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
-	Kind        string `json:"kind,omitempty"` // stremio for a Stremio tv add-on
+	Kind        string `json:"kind,omitempty"` // a source kind id, e.g. plugin:<id>/channels
 	PlaylistURL string `json:"playlistUrl,omitempty"`
 	GuideURL    string `json:"guideUrl,omitempty"`
 	// Inline uploads are supplied on import and are not returned by GET.
