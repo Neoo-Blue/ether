@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-
 func TestNormalizeURL(t *testing.T) {
 	for raw, want := range map[string]string{
 		"https://addon.example/manifest.json":                           "https://addon.example",

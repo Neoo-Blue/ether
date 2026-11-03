@@ -90,8 +90,8 @@ type Manager struct {
 	// failing caches which plugins last recorded an error, so a successful
 	// call clears it without a health read on every call (nil = not loaded).
 	failing map[string]bool
-	pickMu   sync.Mutex
-	picks    map[string]subtitlePick
+	pickMu  sync.Mutex
+	picks   map[string]subtitlePick
 	// warming holds plugin ids whose runtime is loading in the background
 	// (guarded by mu), so the hot path never waits for a load.
 	warming map[string]bool

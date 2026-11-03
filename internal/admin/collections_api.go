@@ -100,7 +100,6 @@ func viewOf(s core.CollectionSpec) collectionView {
 	return v
 }
 
-
 // encodableRules drops rules whose stored value is not valid JSON, so one
 // damaged rule cannot fail the whole collection list. Each dropped rule is
 // reported as a warning on its collection.

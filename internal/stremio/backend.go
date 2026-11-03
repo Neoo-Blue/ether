@@ -1,8 +1,8 @@
 package stremio
 
 import (
-	"encoding/json"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
