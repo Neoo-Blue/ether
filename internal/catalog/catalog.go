@@ -161,6 +161,7 @@ CREATE INDEX IF NOT EXISTS catalog_titles_season_key ON catalog_titles(key ASC) 
 CREATE INDEX IF NOT EXISTS catalog_titles_season_updated ON catalog_titles(fetched_at DESC, key ASC) WHERE type='season' AND adult=0;
 CREATE INDEX IF NOT EXISTS catalog_titles_season_released ON catalog_titles(released_ts DESC, key ASC) WHERE type='season' AND release_known=1 AND adult=0;
 `)
+	store.Register("catalog", 27, `CREATE INDEX catalog_countries_lower_country ON catalog_countries(LOWER(country), key);`)
 	store.Register("catalog", 7, `
 CREATE INDEX catalog_titles_type_browse_sort ON catalog_titles(type, browsable, adult, sort_title ASC, key ASC);
 CREATE INDEX catalog_titles_browse_warm ON catalog_titles(browsable, detail, adult, popularity DESC, vote_count DESC);
