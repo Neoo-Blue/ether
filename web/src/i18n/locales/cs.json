@@ -697,6 +697,7 @@
   },
   "m_033386ef5bff4a": "{provider} se již nebude používat ke streamování. Jeho klíč API se z Etheru smaže.",
   "m_0333aa20d30835": "Připojte každý telefon, tablet nebo počítač zvlášť.",
+  "m_0334f84e255398": "Problém jsem zopakoval(a)",
   "m_03367b30427991": "Čtyři nebo šest plakátů členů s názvem kolekce.",
   "m_0338301a1b31c2": {
     "one": "{count} titul ve vašem katalogu",
@@ -1616,6 +1617,7 @@
   "m_07b39bebc47cb3": "Datum zahájení pro {title}",
   "m_07b698dcb5873c": "Uložit a znovu načíst",
   "m_07b6cd867232f5": "Konzole se otevře sama, jakmile bude Ether připraven.",
+  "m_07b7ec72959f6b": "Nyní na zařízení problém zopakujte. Nahrávejte, dokud se neprojeví.",
   "m_07b80d86ed6696": {
     "few": "{count} vydání na NAS",
     "many": "{count} vydání na NAS",
@@ -4356,6 +4358,7 @@
   "m_14dfa59554e5a1": "Dokončení nastavení uzamkne tuto správcovskou stránku k účtu vlastníka. Nastavení můžete později znovu otevřít v Obecné.",
   "m_14e062f3ce291a": "Nahradí rodičovskou kontrolu, omezení přehrávání a povolené časy níže.",
   "m_14e1550fd79a4e": "Poskytovat testovací soubory",
+  "m_14e260232e9666": "Nahrávání se automaticky ukončí po 10 minutách.",
   "m_14e36c2465b9d0": "Adresa vyhledávání a klíč API. Výsledky Torznab potřebují k přehrání účet debrid.",
   "m_14e44c993d1561": "Zobrazit nadcházející díly v řadách, které už běží.",
   "m_14e861b571863d": "Nastavit Simkl",
@@ -5666,6 +5669,7 @@
   "m_1b1de6988c0b6a": "Zkusit neúspěšné položky znovu",
   "m_1b1e06ec3511c4": "Pozice konzole",
   "m_1b1f0a85783523": "Zdroj aktualizací",
+  "m_1b203178c12c1b": "Před dokončením počkejte alespoň 30 sekund.",
   "m_1b20efbd0f7a36": "Hodin zhlédnuto",
   "m_1b23999841ed8a": "Obsah",
   "m_1b27db7066dc29": {

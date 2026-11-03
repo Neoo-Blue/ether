@@ -661,6 +661,7 @@
   },
   "m_033386ef5bff4a": "{provider} will no longer be used for streaming. Its API key is deleted from Ether.",
   "m_0333aa20d30835": "Connect each phone, tablet or computer separately.",
+  "m_0334f84e255398": "I have reproduced the problem",
   "m_03367b30427991": "Four or six member posters, with the collection name.",
   "m_0338301a1b31c2": {
     "one": "{count} title in your catalog",
@@ -1543,6 +1544,7 @@
   "m_07b39bebc47cb3": "Start date for {title}",
   "m_07b698dcb5873c": "Save and reload",
   "m_07b6cd867232f5": "The console opens by itself as soon as Ether is ready.",
+  "m_07b7ec72959f6b": "On your device, reproduce the problem now. Keep recording until it happens.",
   "m_07b80d86ed6696": {
     "one": "{count} release on the NAS",
     "other": "{count} releases on the NAS"
@@ -4155,6 +4157,7 @@
   "m_14dfa59554e5a1": "Finishing setup locks this admin page to your owner account. You can reopen setup later from General.",
   "m_14e062f3ce291a": "Replaces the parental controls, playback restrictions and allowed times below.",
   "m_14e1550fd79a4e": "Serve test files",
+  "m_14e260232e9666": "Recording ends automatically after 10 minutes.",
   "m_14e36c2465b9d0": "A search address and API key. Torznab results need a debrid account to play.",
   "m_14e44c993d1561": "List upcoming episodes in seasons that are already airing.",
   "m_14e861b571863d": "Set up Simkl",
@@ -5411,6 +5414,7 @@
   "m_1b1de6988c0b6a": "Retry failed items",
   "m_1b1e06ec3511c4": "Console slot",
   "m_1b1f0a85783523": "Update feed",
+  "m_1b203178c12c1b": "Wait at least 30 seconds before finishing.",
   "m_1b20efbd0f7a36": "Hours watched",
   "m_1b23999841ed8a": "Contents",
   "m_1b27db7066dc29": {

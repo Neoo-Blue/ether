@@ -661,6 +661,7 @@
   },
   "m_033386ef5bff4a": "{provider} artık akış için kullanılmayacak. API anahtarı Ether'den silinir.",
   "m_0333aa20d30835": "Her telefonu, tableti veya bilgisayarı ayrı bağlayın.",
+  "m_0334f84e255398": "Sorunu yeniden oluşturdum",
   "m_03367b30427991": "Koleksiyon adıyla birlikte dört veya altı üye posteri.",
   "m_0338301a1b31c2": {
     "one": "Katalogunuzda {count} başlık",
@@ -1540,6 +1541,7 @@
   "m_07b39bebc47cb3": "{title} için başlangıç tarihi",
   "m_07b698dcb5873c": "Kaydet ve yeniden yükle",
   "m_07b6cd867232f5": "Ether hazır olur olmaz konsol kendiliğinden açılır.",
+  "m_07b7ec72959f6b": "Sorunu şimdi cihazınızda yeniden oluşturun. Sorun oluşana kadar kaydetmeye devam edin.",
   "m_07b80d86ed6696": {
     "one": "NAS'ta {count} sürüm",
     "other": "NAS'ta {count} sürüm"
@@ -4146,6 +4148,7 @@
   "m_14dfa59554e5a1": "Kurulumu bitirmek bu yönetim sayfasını sahip hesabınıza kilitler. Kurulumu daha sonra Genel'den yeniden açabilirsiniz.",
   "m_14e062f3ce291a": "Aşağıdaki ebeveyn denetimlerini, oynatma kısıtlamalarını ve izin verilen saatleri değiştirir.",
   "m_14e1550fd79a4e": "Test dosyalarını sun",
+  "m_14e260232e9666": "Kayıt 10 dakika sonra otomatik olarak sona erer.",
   "m_14e36c2465b9d0": "Bir arama adresi ve API anahtarı. Torznab sonuçlarının oynatılması için bir debrid hesabı gerekir.",
   "m_14e44c993d1561": "Yayını süren sezonlardaki gelecek bölümleri listele.",
   "m_14e861b571863d": "Simkl'ı kur",
@@ -5396,6 +5399,7 @@
   "m_1b1de6988c0b6a": "Başarısız öğeleri yeniden dene",
   "m_1b1e06ec3511c4": "Konsol alanı",
   "m_1b1f0a85783523": "Güncelleme akışı",
+  "m_1b203178c12c1b": "Bitirmeden önce en az 30 saniye bekleyin.",
   "m_1b20efbd0f7a36": "İzlenen saatler",
   "m_1b23999841ed8a": "İçerik",
   "m_1b27db7066dc29": {

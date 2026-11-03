@@ -16,6 +16,7 @@ export function RecordProblem({ open, onClose }: { open: boolean; onClose: () =>
   const [usernames, setUsernames] = useState(false);
   const [addresses, setAddresses] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [reproduced, setReproduced] = useState(false);
   const [error, setError] = useState("");
   const [now, setNow] = useState(() => Date.now());
 
@@ -62,6 +63,7 @@ export function RecordProblem({ open, onClose }: { open: boolean; onClose: () =>
     }
     setCapture(null);
     setNote("");
+    setReproduced(false);
     setError("");
     onClose();
   };
@@ -75,6 +77,8 @@ export function RecordProblem({ open, onClose }: { open: boolean; onClose: () =>
         category,
         note,
       });
+      setNow(Date.now());
+      setReproduced(false);
       setCapture(next);
     } catch (e) {
       setError(errorMessage(e));
@@ -135,10 +139,11 @@ export function RecordProblem({ open, onClose }: { open: boolean; onClose: () =>
   };
 
   const elapsed = capture
-    ? Math.max(0, Math.round((now - Date.parse(capture.startedAt)) / 1000))
+    ? Math.max(0, Math.floor((now - Date.parse(capture.startedAt)) / 1000))
     : 0;
   const recording = capture?.state === "recording";
   const finished = capture?.state === "finished";
+  const sealed = (capture?.preview?.files?.length ?? 0) > 0;
 
   return (
     <Drawer
@@ -161,12 +166,17 @@ export function RecordProblem({ open, onClose }: { open: boolean; onClose: () =>
             <Button
               size="sm"
               onClick={() => void finish()}
-              disabled={busy || !capture.deviceConfirmed}
+              disabled={busy || !capture.deviceConfirmed || elapsed < 30 || !reproduced}
             >
               {t("Finish")}
             </Button>
           )}
-          {finished && (
+          {finished && !sealed && (
+            <Button size="sm" onClick={() => void finish()} disabled={busy}>
+              {t("Finish")}
+            </Button>
+          )}
+          {finished && sealed && (
             <Button size="sm" onClick={() => void download()} disabled={busy}>
               {t("Download support ZIP")}
             </Button>
@@ -223,6 +233,23 @@ export function RecordProblem({ open, onClose }: { open: boolean; onClose: () =>
                 ? t("Recording. {seconds}s elapsed.", { seconds: String(elapsed) })
                 : t("Recording finished.")}
             </p>
+            {recording && (
+              <div className="space-y-2 text-sm">
+                <p>
+                  {t("On your device, reproduce the problem now. Keep recording until it happens.")}
+                </p>
+                <p>{t("Recording ends automatically after 10 minutes.")}</p>
+                {elapsed < 30 && <p>{t("Wait at least 30 seconds before finishing.")}</p>}
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={reproduced}
+                    onChange={(e) => setReproduced(e.currentTarget.checked)}
+                  />
+                  {t("I have reproduced the problem")}
+                </label>
+              </div>
+            )}
             {!capture.deviceConfirmed && (
               <div className="space-y-2">
                 <p className="text-sm">
@@ -238,7 +265,7 @@ export function RecordProblem({ open, onClose }: { open: boolean; onClose: () =>
                     disabled={busy}
                     onClick={() => void choose(d.id)}
                   >
-                    {d.name || d.id}
+                    {[d.name, d.model, d.product, d.version].filter(Boolean).join(" · ") || d.id}
                   </Button>
                 ))}
               </div>
@@ -265,7 +292,7 @@ export function RecordProblem({ open, onClose }: { open: boolean; onClose: () =>
                 ))}
               </ul>
             </div>
-            {recording && (
+            {(recording || (finished && !sealed)) && (
               <div className="space-y-2 text-sm">
                 <p>
                   {t(

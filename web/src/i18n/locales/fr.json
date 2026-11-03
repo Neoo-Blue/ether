@@ -679,6 +679,7 @@
   },
   "m_033386ef5bff4a": "{provider} ne sera plus utilisé pour la diffusion. Sa clé API est supprimée d’Ether.",
   "m_0333aa20d30835": "Connectez chaque téléphone, tablette ou ordinateur séparément.",
+  "m_0334f84e255398": "J’ai reproduit le problème",
   "m_03367b30427991": "Quatre ou six affiches de membres, avec le nom de la collection.",
   "m_0338301a1b31c2": {
     "one": "{count} titre dans votre catalogue",
@@ -1578,6 +1579,7 @@
   "m_07b39bebc47cb3": "Date de début pour {title}",
   "m_07b698dcb5873c": "Enregistrer et recharger",
   "m_07b6cd867232f5": "La console s’ouvre toute seule dès qu’Ether est prêt.",
+  "m_07b7ec72959f6b": "Sur votre appareil, reproduisez maintenant le problème. Continuez l’enregistrement jusqu’à ce qu’il se produise.",
   "m_07b80d86ed6696": {
     "many": "{count} de releases sur le NAS",
     "one": "{count} release sur le NAS",
@@ -4251,6 +4253,7 @@
   "m_14dfa59554e5a1": "Terminer le réglage réserve cette page d'administration à votre compte propriétaire. Vous pourrez rouvrir le réglage plus tard dans Général.",
   "m_14e062f3ce291a": "Remplace le contrôle parental, les restrictions de lecture et les plages autorisées ci-dessous.",
   "m_14e1550fd79a4e": "Servir des fichiers de test",
+  "m_14e260232e9666": "L’enregistrement s’arrête automatiquement après 10 minutes.",
   "m_14e36c2465b9d0": "Une adresse de recherche et une clé API. Les résultats Torznab ont besoin d’un compte debrid pour être lus.",
   "m_14e44c993d1561": "Lister les épisodes à venir dans les saisons déjà en cours.",
   "m_14e861b571863d": "Configurer Simkl",
@@ -5531,6 +5534,7 @@
   "m_1b1de6988c0b6a": "Réessayer les éléments en échec",
   "m_1b1e06ec3511c4": "Emplacement de la console",
   "m_1b1f0a85783523": "Flux de mises à jour",
+  "m_1b203178c12c1b": "Attendez au moins 30 secondes avant de terminer.",
   "m_1b20efbd0f7a36": "Heures visionnées",
   "m_1b23999841ed8a": "Contenu",
   "m_1b27db7066dc29": {

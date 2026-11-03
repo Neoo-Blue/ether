@@ -661,6 +661,7 @@
   },
   "m_033386ef5bff4a": "{provider} bruges ikke længere til streaming. Dens API-nøgle slettes fra Ether.",
   "m_0333aa20d30835": "Forbind hver telefon, tablet eller computer for sig.",
+  "m_0334f84e255398": "Jeg har genskabt problemet",
   "m_03367b30427991": "Fire eller seks medlemsplakater med samlingens navn.",
   "m_0338301a1b31c2": {
     "one": "{count} titel i dit katalog",
@@ -1540,6 +1541,7 @@
   "m_07b39bebc47cb3": "Startdato for {title}",
   "m_07b698dcb5873c": "Gem og genindlæs",
   "m_07b6cd867232f5": "Konsollen åbner af sig selv, så snart Ether er klar.",
+  "m_07b7ec72959f6b": "Genskab problemet på din enhed nu. Fortsæt optagelsen, indtil det sker.",
   "m_07b80d86ed6696": {
     "one": "{count} udgivelse på NAS’en",
     "other": "{count} udgivelser på NAS’en"
@@ -4146,6 +4148,7 @@
   "m_14dfa59554e5a1": "Når du afslutter, låses denne administratorside til din ejerkonto. Du kan åbne opsætningen igen senere under Generelt.",
   "m_14e062f3ce291a": "Erstatter børnesikring, afspilningsbegrænsninger og tilladte tidspunkter nedenfor.",
   "m_14e1550fd79a4e": "Lever testfiler",
+  "m_14e260232e9666": "Optagelsen stopper automatisk efter 10 minutter.",
   "m_14e36c2465b9d0": "En søgeadresse og en API-nøgle. Torznab-resultater kræver en debrid-konto for at blive afspillet.",
   "m_14e44c993d1561": "Vis kommende afsnit i sæsoner, der allerede sendes.",
   "m_14e861b571863d": "Opsæt Simkl",
@@ -5396,6 +5399,7 @@
   "m_1b1de6988c0b6a": "Prøv mislykkede elementer igen",
   "m_1b1e06ec3511c4": "Konsolplads",
   "m_1b1f0a85783523": "Opdateringsfeed",
+  "m_1b203178c12c1b": "Vent mindst 30 sekunder, før du afslutter.",
   "m_1b20efbd0f7a36": "Timer set",
   "m_1b23999841ed8a": "Indhold",
   "m_1b27db7066dc29": {

@@ -679,6 +679,7 @@
   },
   "m_033386ef5bff4a": "{provider} non verrà più usato per lo streaming. La sua chiave API viene eliminata da Ether.",
   "m_0333aa20d30835": "Collega ogni telefono, tablet o computer separatamente.",
+  "m_0334f84e255398": "Ho riprodotto il problema",
   "m_03367b30427991": "Quattro o sei locandine dei membri, con il nome della raccolta.",
   "m_0338301a1b31c2": {
     "one": "{count} titolo nel tuo catalogo",
@@ -1578,6 +1579,7 @@
   "m_07b39bebc47cb3": "Data di inizio per {title}",
   "m_07b698dcb5873c": "Salva e ricarica",
   "m_07b6cd867232f5": "La console si apre da sola appena Ether è pronto.",
+  "m_07b7ec72959f6b": "Riproduci ora il problema sul tuo dispositivo. Continua a registrare finché non si verifica.",
   "m_07b80d86ed6696": {
     "many": "{count} release sul NAS",
     "one": "{count} release sul NAS",
@@ -4251,6 +4253,7 @@
   "m_14dfa59554e5a1": "Finire la configurazione riserva questa pagina di amministrazione al tuo account proprietario. Puoi riaprire la configurazione più tardi da Generale.",
   "m_14e062f3ce291a": "Sostituisce il controllo parentale, le restrizioni di riproduzione e gli orari consentiti qui sotto.",
   "m_14e1550fd79a4e": "Fornisci i file di prova",
+  "m_14e260232e9666": "La registrazione termina automaticamente dopo 10 minuti.",
   "m_14e36c2465b9d0": "Un indirizzo di ricerca e una chiave API. I risultati Torznab hanno bisogno di un account debrid per essere riprodotti.",
   "m_14e44c993d1561": "Elenca gli episodi in arrivo nelle stagioni già in onda.",
   "m_14e861b571863d": "Configura Simkl",
@@ -5531,6 +5534,7 @@
   "m_1b1de6988c0b6a": "Riprova gli elementi non riusciti",
   "m_1b1e06ec3511c4": "Spazio della console",
   "m_1b1f0a85783523": "Feed degli aggiornamenti",
+  "m_1b203178c12c1b": "Attendi almeno 30 secondi prima di terminare.",
   "m_1b20efbd0f7a36": "Ore di visione",
   "m_1b23999841ed8a": "Contenuto",
   "m_1b27db7066dc29": {
