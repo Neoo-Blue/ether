@@ -4,9 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/braedonsaunders/ether/internal/stremio"
 	"net/http"
-	"net/url"
-	"sort"
 	"strings"
 )
 
@@ -48,30 +47,15 @@ func (m *Manager) StremioResource(ctx context.Context, plugin, resource, typ, id
 		if cat == nil {
 			return Response{}, &ValidationError{[]FieldError{{"catalog", "This catalogue is not declared by the add-on."}}}
 		}
-		var fields []StremioExtra
-		_ = json.Unmarshal(cat.Extra, &fields)
-		declared := map[string]bool{}
-		for _, field := range fields {
-			declared[field.Name] = true
-			if field.Required && strings.TrimSpace(extra[field.Name]) == "" {
-				return Response{}, &ValidationError{[]FieldError{{field.Name, "is required by the add-on"}}}
-			}
-			if value := extra[field.Name]; value != "" && len(field.Options) > 0 {
-				found := false
-				for _, option := range field.Options {
-					if value == option {
-						found = true
-					}
-				}
-				if !found {
-					return Response{}, &ValidationError{[]FieldError{{field.Name, "must be one of the add-on's declared options"}}}
-				}
+		check := make(map[string]string, len(extra))
+		for k, v := range extra {
+			if k != "skip" {
+				check[k] = v
 			}
 		}
-		for key := range extra {
-			if !declared[key] {
-				return Response{}, &ValidationError{[]FieldError{{key, "is not declared by the add-on"}}}
-			}
+		if err := cat.ValidateExtras(check); err != nil {
+			name, msg, _ := strings.Cut(err.Error(), " ")
+			return Response{}, &ValidationError{[]FieldError{{name, msg}}}
 		}
 	} else if len(extra) > 0 {
 		return Response{}, &ValidationError{[]FieldError{{"extra", "Metadata requests do not accept catalogue filters."}}}
@@ -79,22 +63,7 @@ func (m *Manager) StremioResource(ctx context.Context, plugin, resource, typ, id
 	if typ == "" || id == "" || len(id) > 2048 {
 		return Response{}, &ValidationError{[]FieldError{{"id", "A type and identifier are required."}}}
 	}
-	route := "/" + resource + "/" + url.PathEscape(typ) + "/" + url.PathEscape(id)
-	keys := make([]string, 0, len(extra))
-	for key, value := range extra {
-		if value != "" {
-			keys = append(keys, key)
-		}
-	}
-	sort.Strings(keys)
-	var parts []string
-	for _, key := range keys {
-		parts = append(parts, url.QueryEscape(key)+"="+url.QueryEscape(extra[key]))
-	}
-	if len(parts) > 0 {
-		route += "/" + strings.Join(parts, "&")
-	}
-	route += ".json"
+	route := stremio.Route(resource, typ, id, extra)
 	resp, err := m.Call(ctx, plugin, Request{Method: http.MethodGet, Path: route})
 	if err != nil {
 		return Response{}, err

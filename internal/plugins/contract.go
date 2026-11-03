@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/braedonsaunders/ether/internal/stremio"
 	"net/http"
 	"time"
 )
@@ -60,32 +61,53 @@ var ReservedCapabilities = map[Capability]bool{
 	"stats_export": true, "sign_in": true,
 }
 
-// Manifest is a plugin's manifest.json: the Stremio fields keep their
-// Stremio meaning and Ether fields live under Ether (SPEC §5.1.1). A
-// manifest with a nil Ether is a plain Stremio add-on.
+// Manifest is a plugin's manifest.json: the Stremio manifest fields, typed
+// by the one Stremio model (internal/stremio), plus Ether's fields under
+// Ether (SPEC §5.1.1). A manifest with a nil Ether is a plain Stremio
+// add-on. Every Stremio rule (resources, ids, catalogs, extras) is the
+// library's, reached through Stremio().
 type Manifest struct {
-	ID            string          `json:"id"`
-	Version       string          `json:"version"`
-	Name          string          `json:"name"`
-	Description   string          `json:"description,omitempty"`
-	Logo          string          `json:"logo,omitempty"`
-	Background    string          `json:"background,omitempty"`
-	Types         []string        `json:"types,omitempty"`
-	AddonCatalogs []StremioCat    `json:"addonCatalogs,omitempty"`
-	Catalogs      []StremioCat    `json:"catalogs,omitempty"`
-	Resources     json.RawMessage `json:"resources,omitempty"`
-	IDPrefixes    []string        `json:"idPrefixes,omitempty"`
-	BehaviorHints json.RawMessage `json:"behaviorHints,omitempty"`
-	Ether         *EtherBlock     `json:"ether,omitempty"`
+	ID            string                `json:"id"`
+	Version       string                `json:"version"`
+	Name          string                `json:"name"`
+	Description   string                `json:"description,omitempty"`
+	Logo          string                `json:"logo,omitempty"`
+	Background    string                `json:"background,omitempty"`
+	Types         []string              `json:"types,omitempty"`
+	AddonCatalogs []StremioCat          `json:"addonCatalogs,omitempty"`
+	Catalogs      []StremioCat          `json:"catalogs,omitempty"`
+	Resources     stremio.Resources     `json:"resources,omitempty"`
+	IDPrefixes    []string              `json:"idPrefixes,omitempty"`
+	BehaviorHints stremio.BehaviorHints `json:"behaviorHints,omitzero"`
+	Ether         *EtherBlock           `json:"ether,omitempty"`
+	// rolesOff are capabilities the owner switched off on the installed
+	// record (Record.RolesOff); EffectiveEther leaves them out.
+	rolesOff []Capability
 }
 
-// StremioCat is one Stremio catalog declaration.
-type StremioCat struct {
-	Type  string          `json:"type"`
-	ID    string          `json:"id"`
-	Name  string          `json:"name,omitempty"`
-	Extra json.RawMessage `json:"extra,omitempty"`
+// Stremio is the manifest's Stremio part.
+func (m Manifest) Stremio() stremio.Manifest {
+	return stremio.Manifest{
+		ID: m.ID, Version: m.Version, Name: m.Name, Description: m.Description, Logo: m.Logo,
+		Background: m.Background, Types: m.Types, IDPrefixes: m.IDPrefixes, Resources: m.Resources,
+		Catalogs: m.Catalogs, AddonCatalogs: m.AddonCatalogs, BehaviorHints: m.BehaviorHints,
+	}
 }
+
+// HasResource reports whether the manifest declares the named resource.
+func (m Manifest) HasResource(name string) bool { return m.Stremio().HasResource(name) }
+
+// Serves reports whether the named resource answers content type typ.
+func (m Manifest) Serves(name, typ string) bool { return m.Stremio().Serves(name, typ) }
+
+// CatalogsOfType returns the catalogs of one content type.
+func (m Manifest) CatalogsOfType(typ string) []StremioCat { return m.Stremio().CatalogsOfType(typ) }
+
+// StremioCat is one Stremio catalog declaration.
+type StremioCat = stremio.Catalog
+
+// StremioExtra is one catalog extra declaration.
+type StremioExtra = stremio.Extra
 
 // EtherBlock is the `ether` object of a manifest.
 type EtherBlock struct {

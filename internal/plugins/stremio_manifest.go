@@ -1,106 +1,91 @@
 package plugins
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"strings"
+
+	"github.com/braedonsaunders/ether/internal/stremio"
 )
 
-// StremioResource preserves the resource-local filters. An object without
-// idPrefixes accepts every ID; it must not inherit the manifest's prefixes.
-type StremioResource struct {
-	Name       string   `json:"name"`
-	Types      []string `json:"types,omitempty"`
-	IDPrefixes []string `json:"idPrefixes,omitempty"`
-}
-
-type StremioExtra struct {
-	Name         string   `json:"name"`
-	Required     bool     `json:"isRequired,omitempty"`
-	Options      []string `json:"options,omitempty"`
-	OptionsLimit int      `json:"optionsLimit,omitempty"`
-}
-
-func (m Manifest) StremioResources() []StremioResource {
-	var raw []json.RawMessage
-	if json.Unmarshal(m.Resources, &raw) != nil {
-		return nil
-	}
-	var out []StremioResource
-	for _, value := range raw {
-		var name string
-		if json.Unmarshal(value, &name) == nil {
-			out = append(out, StremioResource{name, m.Types, m.IDPrefixes})
-			continue
-		}
-		var r StremioResource
-		if json.Unmarshal(value, &r) == nil && r.Name != "" {
-			out = append(out, r)
-		}
-	}
-	return out
-}
-func (m Manifest) HasResource(name string) bool {
-	for _, r := range m.StremioResources() {
-		if r.Name == name {
-			return true
-		}
-	}
-	return false
-}
+// AcceptsResource reports whether the add-on serves resource for typ and
+// id (internal/stremio.Manifest.TakesID).
 func (m Manifest) AcceptsResource(name, typ, id string) bool {
-	for _, r := range m.StremioResources() {
-		if r.Name != name {
-			continue
-		}
-		if name == "catalog" || name == "addon_catalog" {
-			cats := m.Catalogs
-			if name == "addon_catalog" {
-				cats = m.AddonCatalogs
-			}
-			for _, c := range cats {
-				if c.Type == typ && c.ID == id {
-					return true
-				}
-			}
-			continue
-		}
-		typeOK := len(r.Types) == 0
-		for _, t := range r.Types {
-			if t == typ {
-				typeOK = true
-			}
-		}
-		if !typeOK {
-			continue
-		}
-		if len(r.IDPrefixes) == 0 {
-			return true
-		}
-		for _, p := range r.IDPrefixes {
-			if strings.HasPrefix(id, p) {
-				return true
-			}
-		}
-	}
-	return false
+	return m.Stremio().TakesID(name, typ, id)
 }
+
+// ConfigurationRequired reports an add-on installed from its unconfigured
+// link.
 func (m Manifest) ConfigurationRequired() bool {
-	var hints struct {
-		Required bool `json:"configurationRequired"`
-	}
-	_ = json.Unmarshal(m.BehaviorHints, &hints)
-	return hints.Required
+	return m.BehaviorHints.ConfigurationRequired
 }
-func StremioCatalogKey(c StremioCat) string {
-	hash := sha256.Sum256([]byte(c.Type + "\x00" + c.ID))
-	return "catalog-" + hex.EncodeToString(hash[:8])
+
+// StremioCatalogKey is the list-source key of a Stremio catalog.
+func StremioCatalogKey(c StremioCat) string { return c.Key() }
+
+// StremioChannelsKey is the channel-source key of a `tv` add-on.
+const StremioChannelsKey = "channels"
+
+// ServesTV reports whether a plain Stremio add-on is a Live TV source: it
+// lists `tv` catalogs and answers `tv` streams.
+func (m Manifest) ServesTV() bool {
+	return m.HasResource(stremio.ResourceCatalog) && len(m.CatalogsOfType(stremio.TypeTV)) > 0 &&
+		m.Serves(stremio.ResourceStream, stremio.TypeTV)
 }
 
 // EffectiveEther describes native adapters without modifying the foreign
 // manifest stored on disk or inventing permissions for a third-party add-on.
 func (m Manifest) EffectiveEther() *EtherBlock {
+	e := m.derivedEther()
+	if len(m.rolesOff) == 0 {
+		return e
+	}
+	return withoutRoles(e, m.rolesOff)
+}
+
+// withoutRoles copies e without the switched-off capabilities and their
+// contributions.
+func withoutRoles(e *EtherBlock, off []Capability) *EtherBlock {
+	cp := *e
+	cp.Capabilities = nil
+	isOff := map[Capability]bool{}
+	for _, c := range off {
+		isOff[c] = true
+	}
+	for _, c := range e.Capabilities {
+		if !isOff[c] {
+			cp.Capabilities = append(cp.Capabilities, c)
+		}
+	}
+	c := e.Contributes
+	if isOff[CapListSource] {
+		c.ListSources = nil
+	}
+	if isOff[CapPluginDirectory] {
+		c.Directories = nil
+	}
+	if isOff[CapMetadata] {
+		c.Metadata = nil
+	}
+	if isOff[CapLiveTV] {
+		c.Channels = nil
+	}
+	if isOff[CapStreamSource] {
+		c.Source = nil
+	}
+	if isOff[CapSubtitles] {
+		c.Subtitles = nil
+	}
+	cp.Contributes = c
+	return &cp
+}
+
+// AddonRoles are the roles a plain Stremio add-on can play, derived from
+// its manifest, whether or not the owner switched them off.
+func (m Manifest) AddonRoles() []Capability {
+	return m.derivedEther().Capabilities
+}
+
+func (m Manifest) derivedEther() *EtherBlock {
 	if m.Ether != nil {
 		return m.Ether
 	}
@@ -114,14 +99,12 @@ func (m Manifest) EffectiveEther() *EtherBlock {
 			if c.Type != "movie" && c.Type != "series" {
 				continue
 			}
-			var extras []StremioExtra
-			_ = json.Unmarshal(c.Extra, &extras)
 			var fields []ListParamField
-			for _, x := range extras {
+			for _, x := range c.Extras() {
 				if x.Name == "skip" {
 					continue
 				}
-				field := ListParamField{Key: x.Name, Label: stremioExtraLabel(x.Name), Required: x.Required, Kind: "text"}
+				field := ListParamField{Key: x.Name, Label: stremioExtraLabel(x.Name), Required: x.IsRequired, Kind: "text"}
 				for _, o := range x.Options {
 					field.Options = append(field.Options, struct {
 						Value string `json:"value"`
@@ -158,20 +141,8 @@ func (m Manifest) EffectiveEther() *EtherBlock {
 			if typ == "show" {
 				protocolType = "series"
 			}
-			for _, r := range m.StremioResources() {
-				if r.Name != "meta" {
-					continue
-				}
-				accepts := len(r.Types) == 0
-				for _, t := range r.Types {
-					if t == protocolType {
-						accepts = true
-					}
-				}
-				if accepts {
-					types = append(types, typ)
-					break
-				}
+			if m.Serves(stremio.ResourceMeta, protocolType) {
+				types = append(types, typ)
 			}
 		}
 		if len(types) > 0 {
@@ -179,7 +150,11 @@ func (m Manifest) EffectiveEther() *EtherBlock {
 			e.Contributes.Metadata = &MetadataMeta{Types: types}
 		}
 	}
-	if m.HasResource("stream") {
+	if m.ServesTV() {
+		e.Capabilities = append(e.Capabilities, CapLiveTV)
+		e.Contributes.Channels = &ChannelsMeta{Refresh: "6h"}
+	}
+	if m.Serves(stremio.ResourceStream, stremio.TypeMovie) || m.Serves(stremio.ResourceStream, stremio.TypeSeries) {
 		e.Kind = KindSource
 		e.Capabilities = append(e.Capabilities, CapStreamSource)
 		e.Contributes.Source = &SourceMeta{Class: "indexer", Abilities: []string{"search"}}

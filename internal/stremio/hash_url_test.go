@@ -43,24 +43,24 @@ func TestStreamHashFromLabeledSources(t *testing.T) {
 	magnetB := "magnet:?xt=urn:btih:" + hashB
 	for _, tc := range []struct {
 		name      string
-		s         stream
+		s         Stream
 		want      string
 		ambiguous bool
 	}{
-		{"dht source", stream{Sources: []string{"tracker:udp://tracker.example:1337/announce", "dht:" + hashA}}, hashA, false},
-		{"dht source uppercase", stream{Sources: []string{"dht:" + strings.ToUpper(hashA)}}, hashA, false},
-		{"magnet source", stream{Sources: []string{magnetB}}, hashB, false},
-		{"dht and magnet agree", stream{Sources: []string{"dht:" + hashA, magnetA}}, hashA, false},
-		{"dht and magnet conflict", stream{Sources: []string{"dht:" + hashA, magnetB}}, "", true},
-		{"infoHash válido + URL internamente conflitante", stream{InfoHash: hashA, URL: "https://addon.test/play?info_hash=" + hashA + "&info_hash=" + hashB}, "", true},
-		{"sources internamente conflitantes + topo válido", stream{InfoHash: hashA, Sources: []string{"dht:" + hashA, magnetB}}, "", true},
-		{"inválido é ausência: infoHash inválido + URL válida", stream{InfoHash: "não-é-hash", URL: "https://addon.test/play?info_hash=lixo&info_hash=" + hashA}, hashA, false},
-		{"inválido é ausência: dht inválido + dht válido", stream{Sources: []string{"dht:lixo", "dht:" + hashA}}, hashA, false},
-		{"magnet URL and dht agree", stream{URL: magnetA, Sources: []string{"dht:" + hashA}}, hashA, false},
-		{"magnet URL and dht conflict", stream{URL: magnetA, Sources: []string{"dht:" + hashB}}, "", true},
-		{"infoHash and magnet URL conflict", stream{InfoHash: hashB, URL: magnetA}, "", true},
-		{"query magnet and dht conflict", stream{URL: "https://addon.test/play?magnet=" + url.QueryEscape(magnetA), Sources: []string{"dht:" + hashB}}, "", true},
-		{"no labeled hash in text fields", stream{Name: hashA, Title: hashA, Description: hashA, BehaviorHints: behaviorHints{Filename: hashA + ".mkv"}}, "", false},
+		{"dht source", Stream{Sources: []string{"tracker:udp://tracker.example:1337/announce", "dht:" + hashA}}, hashA, false},
+		{"dht source uppercase", Stream{Sources: []string{"dht:" + strings.ToUpper(hashA)}}, hashA, false},
+		{"magnet source", Stream{Sources: []string{magnetB}}, hashB, false},
+		{"dht and magnet agree", Stream{Sources: []string{"dht:" + hashA, magnetA}}, hashA, false},
+		{"dht and magnet conflict", Stream{Sources: []string{"dht:" + hashA, magnetB}}, "", true},
+		{"infoHash válido + URL internamente conflitante", Stream{InfoHash: hashA, URL: "https://addon.test/play?info_hash=" + hashA + "&info_hash=" + hashB}, "", true},
+		{"sources internamente conflitantes + topo válido", Stream{InfoHash: hashA, Sources: []string{"dht:" + hashA, magnetB}}, "", true},
+		{"inválido é ausência: infoHash inválido + URL válida", Stream{InfoHash: "não-é-hash", URL: "https://addon.test/play?info_hash=lixo&info_hash=" + hashA}, hashA, false},
+		{"inválido é ausência: dht inválido + dht válido", Stream{Sources: []string{"dht:lixo", "dht:" + hashA}}, hashA, false},
+		{"magnet URL and dht agree", Stream{URL: magnetA, Sources: []string{"dht:" + hashA}}, hashA, false},
+		{"magnet URL and dht conflict", Stream{URL: magnetA, Sources: []string{"dht:" + hashB}}, "", true},
+		{"infoHash and magnet URL conflict", Stream{InfoHash: hashB, URL: magnetA}, "", true},
+		{"query magnet and dht conflict", Stream{URL: "https://addon.test/play?magnet=" + url.QueryEscape(magnetA), Sources: []string{"dht:" + hashB}}, "", true},
+		{"no labeled hash in text fields", Stream{Name: hashA, Title: hashA, Description: hashA, BehaviorHints: StreamHints{Filename: hashA + ".mkv"}}, "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got, ambiguous := streamHash(&tc.s); got != tc.want || ambiguous != tc.ambiguous {

@@ -19,6 +19,8 @@ import (
 )
 
 func init() {
+	// v2: the roles an owner switched off on an installed add-on.
+	store.Register("plugins", 2, `ALTER TABLE plugins_installed ADD COLUMN roles_off TEXT NOT NULL DEFAULT '';`)
 	store.Register("plugins", 1, `
 CREATE TABLE plugins_installed(id TEXT PRIMARY KEY,name TEXT NOT NULL,version TEXT NOT NULL,kind TEXT NOT NULL DEFAULT '',manifest TEXT NOT NULL,source_kind TEXT NOT NULL DEFAULT '',source_url TEXT NOT NULL DEFAULT '',enabled INTEGER NOT NULL DEFAULT 1,verified INTEGER NOT NULL DEFAULT 0,shadow INTEGER NOT NULL DEFAULT 0,auto_update INTEGER NOT NULL DEFAULT 0,update_version TEXT NOT NULL DEFAULT '',update_manifest TEXT NOT NULL DEFAULT '',update_files TEXT NOT NULL DEFAULT '',prev_version TEXT NOT NULL DEFAULT '',installed_at INTEGER NOT NULL,updated_at INTEGER NOT NULL);
 CREATE TABLE plugins_artifacts(plugin TEXT NOT NULL,version TEXT NOT NULL,path TEXT NOT NULL,content BLOB NOT NULL,digest TEXT NOT NULL DEFAULT '',created INTEGER NOT NULL,PRIMARY KEY(plugin,version,path));
@@ -99,6 +101,10 @@ type Record struct {
 	PrevVersion    string
 	InstalledAt    time.Time
 	UpdatedAt      time.Time
+	// RolesOff are the capabilities the owner switched off (a Stremio
+	// add-on's catalogs, streams, subtitles…). Manifest already reflects
+	// them: EffectiveEther leaves them out.
+	RolesOff []Capability
 }
 
 // Health is one plugin's health and impact record.
@@ -153,8 +159,9 @@ func (s *storage) record(ctx context.Context, id string) (Record, error) {
 	var man, updMan, updFiles string
 	var en, ver, sh, au int
 	var inst, upd int64
-	err := s.db.QueryRowContext(ctx, `SELECT id,name,version,kind,manifest,source_kind,source_url,enabled,verified,shadow,auto_update,update_version,update_manifest,update_files,prev_version,installed_at,updated_at FROM plugins_installed WHERE id=?`, id).
-		Scan(&r.ID, &r.Name, &r.Version, &r.Kind, &man, &r.SourceKind, &r.SourceURL, &en, &ver, &sh, &au, &r.UpdateVersion, &updMan, &updFiles, &r.PrevVersion, &inst, &upd)
+	var rolesOff string
+	err := s.db.QueryRowContext(ctx, `SELECT id,name,version,kind,manifest,source_kind,source_url,enabled,verified,shadow,auto_update,update_version,update_manifest,update_files,prev_version,installed_at,updated_at,roles_off FROM plugins_installed WHERE id=?`, id).
+		Scan(&r.ID, &r.Name, &r.Version, &r.Kind, &man, &r.SourceKind, &r.SourceURL, &en, &ver, &sh, &au, &r.UpdateVersion, &updMan, &updFiles, &r.PrevVersion, &inst, &upd, &rolesOff)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Record{}, ErrNotFound
 	}
@@ -183,6 +190,15 @@ func (s *storage) record(ctx context.Context, id string) (Record, error) {
 	if err := json.Unmarshal([]byte(man), &r.Manifest); err != nil {
 		return Record{}, fmt.Errorf("plugins: stored manifest for %s: %w", id, err)
 	}
+	// A record's manifest id is its record id: a Stremio add-on keeps its
+	// own id in the stored document but is installed per configuration.
+	r.Manifest.ID = r.ID
+	for _, c := range strings.Split(rolesOff, ",") {
+		if c = strings.TrimSpace(c); c != "" {
+			r.RolesOff = append(r.RolesOff, Capability(c))
+		}
+	}
+	r.Manifest.rolesOff = r.RolesOff
 	r.Enabled, r.Verified, r.Shadow, r.AutoUpdate = en == 1, ver == 1, sh == 1, au == 1
 	r.updateManifest, r.updateFiles = updMan, updFiles
 	r.InstalledAt, r.UpdatedAt = time.Unix(inst, 0).UTC(), time.Unix(upd, 0).UTC()
@@ -228,6 +244,22 @@ ON CONFLICT(id) DO UPDATE SET name=excluded.name,version=excluded.version,kind=e
 		r.ID, r.Name, r.Version, r.Kind, string(r.ManifestRaw), r.SourceKind, sealedURL,
 		bi(r.Enabled), bi(r.Verified), bi(r.Shadow), bi(r.AutoUpdate), r.UpdateVersion, r.updateManifest, r.updateFiles, r.PrevVersion, timeOr(r.InstalledAt, now), now)
 	return err
+}
+
+func (s *storage) setRolesOff(ctx context.Context, id string, off []Capability) error {
+	names := make([]string, 0, len(off))
+	for _, c := range off {
+		names = append(names, string(c))
+	}
+	sort.Strings(names)
+	res, err := s.db.ExecContext(ctx, `UPDATE plugins_installed SET roles_off=?, updated_at=? WHERE id=?`, strings.Join(names, ","), s.now().Unix(), id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func timeOr(t time.Time, unix int64) int64 {

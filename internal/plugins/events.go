@@ -243,6 +243,10 @@ func (m *Manager) Run(ctx context.Context) {
 }
 
 // runOnce is one scheduler pass; tests drive it directly.
+// stremioManifestRefresh is how often an installed Stremio add-on's
+// manifest is re-read.
+const stremioManifestRefresh = time.Hour
+
 func (m *Manager) runOnce(ctx context.Context, lastHealth map[string]time.Time) {
 	recs, err := m.store.list(ctx)
 	if err != nil {
@@ -250,6 +254,21 @@ func (m *Manager) runOnce(ctx context.Context, lastHealth map[string]time.Time) 
 	}
 	now := m.now()
 	for _, r := range recs {
+		if r.Enabled && r.Manifest.IsStremioOnly() && r.SourceKind == "url" && m.isLeader() {
+			// Stremio add-ons change catalogs and resources without a
+			// version bump; re-read the manifest hourly (cluster leader).
+			key := "stremio-manifest|" + r.ID
+			if last, seen := lastHealth[key]; !seen || now.Sub(last) >= stremioManifestRefresh {
+				lastHealth[key] = now
+				if seen {
+					go func(id string) {
+						rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+						defer cancel()
+						_, _, _ = m.CheckUpdate(rctx, id)
+					}(r.ID)
+				}
+			}
+		}
 		if !r.Enabled || r.Manifest.Ether == nil {
 			continue
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/braedonsaunders/ether/internal/stremio"
 	"testing"
 	"time"
 
@@ -27,7 +28,7 @@ func TestMetadataNativeAndStremioUseSharedCollectionPath(t *testing.T) {
 			h.mgr.RegisterRuntime("remote", func(plugins.Installed) (plugins.Runtime, error) { return h.rt, nil })
 			adapters.AttachMetadata(h.mgr, h.cat)
 			cat := plugins.StremioCat{Type: "movie", ID: "classics", Name: "Classics"}
-			man := plugins.Manifest{ID: "community.metadata." + name, Version: "1.0.0", Name: "Classic titles", Types: []string{"movie"}, Resources: json.RawMessage(`["catalog","meta"]`), Catalogs: []plugins.StremioCat{cat}}
+			man := plugins.Manifest{ID: "community.metadata." + name, Version: "1.0.0", Name: "Classic titles", Types: []string{"movie"}, Resources: stremio.ParseResources(`["catalog","meta"]`), Catalogs: []plugins.StremioCat{cat}}
 			listKey := plugins.StremioCatalogKey(cat)
 			if !foreign {
 				listKey = "classics"

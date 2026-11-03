@@ -1,12 +1,13 @@
-// Package stremio searches Stremio stream addons for torrent releases.
+// Package stremio is the Stremio add-on protocol, and the only model of it
+// in Ether: manifests, routes and ids, and decoding every resource
+// (streams into releases, catalogs, metas, subtitles, `tv` channels and
+// their guide).
 //
-// A stream addon answers GET {base}/stream/{type}/{id}.json with streams
-// for an IMDb title (type "movie", id "tt0816692") or episode (type
-// "series", id "tt0903747:1:2"). Ether reads each stream's info hash, file
-// name, size, seeders and any debrid cached marker, and streams the torrent
-// through the owner's own debrid accounts; it never calls an addon's
-// playback links. Ether ships no addon URLs: the owner pastes the install
-// URL of an addon they chose, with or without the addon's own settings.
+// It owns no network client. An Addon reads routes through a Fetcher; in
+// the server that is the plugin manager's remote runtime, which guards,
+// meters, redacts and health-checks every call to an installed add-on
+// (internal/plugins). Ether ships no add-on URLs: the owner pastes the
+// install link of an add-on they chose.
 package stremio
 
 import (
@@ -14,320 +15,376 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
 
-// userAgent identifies Ether honestly. An addon that serves only the
-// Stremio app may refuse it; Ether never poses as a browser or as Stremio.
-const userAgent = "Ether (+https://github.com/braedonsaunders/ether)"
-
+// Response size limits per route.
 const (
-	defaultTimeout = 20 * time.Second
-	maxManifest    = 1 << 20
-	maxStreams     = 8 << 20
+	MaxManifestBytes  = 1 << 20
+	MaxStreamsBytes   = 8 << 20
+	MaxCatalogBytes   = 8 << 20
+	MaxMetaBytes      = 4 << 20
+	MaxSubtitlesBytes = 2 << 20
+	// MaxCatalogItems bounds one catalog read.
+	MaxCatalogItems = 2000
 )
 
-// BaseURL returns an addon's base URL from its install URL: a stremio://
-// link becomes https://, and a trailing /manifest.json or /configure is
-// removed. The path keeps the addon's settings segment, if any.
-func BaseURL(raw string) (*url.URL, error) {
-	raw = strings.TrimSpace(raw)
-	if rest, ok := strings.CutPrefix(raw, "stremio://"); ok {
-		raw = "https://" + rest
-	}
-	u, err := url.Parse(raw)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return nil, errors.New("stremio: the addon URL must be an http(s) or stremio:// install link")
-	}
-	u.RawQuery, u.Fragment, u.User = "", "", nil
-	p := strings.TrimRight(u.EscapedPath(), "/")
-	for _, suffix := range []string{"/manifest.json", "/configure"} {
-		p = strings.TrimSuffix(p, suffix)
-	}
-	u.RawPath, u.Path = "", ""
-	if p != "" {
-		if u.Path, err = url.PathUnescape(p); err != nil {
-			return nil, errors.New("stremio: the addon URL path is not valid")
-		}
-		u.RawPath = p
-	}
-	return u, nil
+// Fetcher reads one route of an add-on ("/stream/movie/tt1.json"). A
+// non-2xx answer is an *HTTPError. limit bounds the body.
+type Fetcher interface {
+	Fetch(ctx context.Context, route string, limit int64) ([]byte, error)
 }
 
-// Manifest is the part of an addon manifest Ether reads.
-type Manifest struct {
-	ID            string            `json:"id"`
-	Name          string            `json:"name"`
-	Description   string            `json:"description,omitempty"`
-	Logo          string            `json:"logo,omitempty"`
-	Version       string            `json:"version"`
-	Types         []string          `json:"types"`
-	IDPrefixes    []string          `json:"idPrefixes"`
-	Resources     []json.RawMessage `json:"resources"`
-	Catalogs      []CatalogDef      `json:"catalogs,omitempty"`
-	BehaviorHints BehaviorHints     `json:"behaviorHints"`
+// HTTPError is a non-2xx add-on answer. It names no URL: add-on links
+// carry the owner's configuration, often a debrid key.
+type HTTPError struct {
+	Status     int
+	RetryAfter string
 }
 
-// BehaviorHints is the part of a manifest's behaviorHints Ether reads.
-// EPGProvider opts into dated native guide catalogs. EpgURL is an
-// optional XMLTV extension used by some add-ons.
-type BehaviorHints struct {
-	ConfigurationRequired bool   `json:"configurationRequired"`
-	Configurable          bool   `json:"configurable,omitempty"`
-	EpgURL                string `json:"epgUrl,omitempty"`
-	EPGProvider           bool   `json:"epgProvider,omitempty"`
-}
-
-// GuideURL returns the add-on's native guide URL, if it declares one.
-func (m Manifest) GuideURL() string {
-	if m.BehaviorHints.EpgURL != "" {
-		return m.BehaviorHints.EpgURL
+func (e *HTTPError) Error() string {
+	if e.Status == http.StatusForbidden || e.Status == http.StatusUnauthorized {
+		return fmt.Sprintf("the add-on refused Ether (HTTP %d); some public add-on instances serve only the Stremio app, so use an instance that allows servers or host the add-on yourself", e.Status)
 	}
-	return ""
+	return fmt.Sprintf("the add-on answered HTTP %d", e.Status)
 }
 
-// CatalogDef is one catalog an add-on offers (manifest "catalogs").
-type CatalogDef struct {
-	Type   string      `json:"type"`
-	ID     string      `json:"id"`
-	Name   string      `json:"name,omitempty"`
-	Genres []string    `json:"genres,omitempty"`
-	Extra  []ExtraProp `json:"extra,omitempty"`
+// RateLimited reports an answer that asks Ether to slow down.
+func (e *HTTPError) RateLimited() bool {
+	return e.Status == http.StatusTooManyRequests || e.Status == http.StatusServiceUnavailable && e.RetryAfter != ""
 }
 
-// ExtraProp is one extra property of a catalog (search, genre, skip, …).
-type ExtraProp struct {
-	Name         string   `json:"name"`
-	IsRequired   bool     `json:"isRequired,omitempty"`
-	Options      []string `json:"options,omitempty"`
-	OptionsLimit int      `json:"optionsLimit,omitempty"`
+// Addon is one installed add-on: its manifest and how to reach it.
+type Addon struct {
+	Manifest Manifest
+	Fetcher  Fetcher
 }
 
-// SupportsSkip reports whether the catalog can be paged with skip.
-func (c CatalogDef) SupportsSkip() bool {
-	for _, e := range c.Extra {
-		if e.Name == "skip" {
-			return true
-		}
+func (a Addon) get(ctx context.Context, route string, limit int64, out any) error {
+	if a.Fetcher == nil {
+		return errors.New("stremio: the add-on is not reachable")
 	}
-	return c.Type == "tv"
-}
-
-// resource is a manifest resource given as an object; a plain string
-// resource inherits the manifest's types and id prefixes.
-type resource struct {
-	Name       string   `json:"name"`
-	Types      []string `json:"types"`
-	IDPrefixes []string `json:"idPrefixes"`
-}
-
-// resourceNamed returns the addon's named resource, if it has one.
-func (m Manifest) resourceNamed(want string) (resource, bool) {
-	for _, raw := range m.Resources {
-		var name string
-		if json.Unmarshal(raw, &name) == nil {
-			if name == want {
-				return resource{Name: name, Types: m.Types, IDPrefixes: m.IDPrefixes}, true
-			}
-			continue
-		}
-		var r resource
-		if json.Unmarshal(raw, &r) == nil && r.Name == want {
-			if r.Types == nil {
-				r.Types = m.Types
-			}
-			if r.IDPrefixes == nil {
-				r.IDPrefixes = m.IDPrefixes
-			}
-			return r, true
-		}
+	body, err := a.Fetcher.Fetch(ctx, route, limit)
+	if err != nil {
+		return err
 	}
-	return resource{}, false
-}
-
-// Check reports why Ether cannot search the addon, or nil.
-func (m Manifest) Check() error {
-	if m.BehaviorHints.ConfigurationRequired {
-		return errors.New("the addon must be configured first: open its configure page and paste the install link it gives you")
-	}
-	r, ok := m.resourceNamed("stream")
-	if !ok {
-		return errors.New("the addon does not provide streams")
-	}
-	if !contains(r.Types, "movie") && !contains(r.Types, "series") {
-		return errors.New("the addon does not provide movie or series streams")
-	}
-	if !m.takesIDs("tt") && !m.takesIDs("tmdb") {
-		anime := false
-		for _, db := range animeDatabases {
-			anime = anime || m.takesIDs(db)
-		}
-		if !anime {
-			return errors.New("the addon does not look titles up by IMDb, TMDB, Kitsu, MyAnimeList, AniList or AniDB id")
-		}
+	if err := json.Unmarshal(body, out); err != nil {
+		return errors.New("stremio: the add-on answered with invalid JSON")
 	}
 	return nil
 }
 
-// takesIDs reports whether the addon's streams are looked up by ids with
-// prefix ("tt", "tmdb", "kitsu"). An addon that lists no prefixes is
-// asked by IMDb id only, as before prefixes were read.
-func (m Manifest) takesIDs(prefix string) bool {
-	r, ok := m.resourceNamed("stream")
-	if !ok {
-		return false
-	}
-	if len(r.IDPrefixes) == 0 {
-		return prefix == "tt"
-	}
-	for _, p := range r.IDPrefixes {
-		if strings.EqualFold(strings.TrimSuffix(strings.TrimSpace(p), ":"), prefix) {
-			return true
-		}
-	}
-	return false
-}
-
-// serves reports whether the addon answers stream requests of a type.
-func (m Manifest) serves(kind string) bool {
-	r, ok := m.resourceNamed("stream")
-	return ok && (len(r.Types) == 0 || contains(r.Types, kind))
-}
-
-func contains(list []string, want string) bool {
-	for _, v := range list {
-		if v == want {
-			return true
-		}
-	}
-	return false
-}
-
-// HasResource reports whether the add-on serves resource name for type
-// typ (typ "" accepts any type).
-func (m Manifest) HasResource(name, typ string) bool {
-	r, ok := m.resourceNamed(name)
-	return ok && (typ == "" || len(r.Types) == 0 || contains(r.Types, typ))
-}
-
-// CatalogsOfType returns the manifest catalogs of one type.
-func (m Manifest) CatalogsOfType(typ string) []CatalogDef {
-	var out []CatalogDef
-	for _, c := range m.Catalogs {
-		if c.Type == typ {
-			out = append(out, c)
-		}
-	}
-	return out
-}
-
-// FetchManifestAny reads the manifest without the stream-indexer check,
-// for catalog, tv and subtitle roles.
-func FetchManifestAny(ctx context.Context, client *http.Client, rawURL string) (Manifest, error) {
-	base, err := BaseURL(rawURL)
-	if err != nil {
-		return Manifest{}, err
-	}
+// DecodeManifest parses a manifest document.
+func DecodeManifest(body []byte) (Manifest, error) {
 	var m Manifest
-	if err := getJSON(ctx, client, base, "/manifest.json", maxManifest, &m); err != nil {
-		return Manifest{}, err
+	if err := json.Unmarshal(body, &m); err != nil {
+		return Manifest{}, errors.New("stremio: the add-on manifest is not valid JSON")
 	}
-	if m.ID == "" && len(m.Resources) == 0 && len(m.Catalogs) == 0 {
-		return Manifest{}, fmt.Errorf("stremio: %s did not answer with an addon manifest", base.Host)
-	}
-	if m.BehaviorHints.ConfigurationRequired {
-		return m, errors.New("the addon must be configured first: open its configure page and paste the install link it gives you")
+	if !m.Valid() {
+		return Manifest{}, errors.New("stremio: the link did not answer with an add-on manifest")
 	}
 	return m, nil
 }
 
-// FetchManifest reads and checks the manifest of the addon at rawURL.
-func FetchManifest(ctx context.Context, client *http.Client, rawURL string) (Manifest, error) {
-	base, err := BaseURL(rawURL)
-	if err != nil {
-		return Manifest{}, err
-	}
-	var m Manifest
-	if err := getJSON(ctx, client, base, "/manifest.json", maxManifest, &m); err != nil {
-		return Manifest{}, err
-	}
-	if m.ID == "" && len(m.Resources) == 0 {
-		return Manifest{}, fmt.Errorf("stremio: %s did not answer with an addon manifest", base.Host)
-	}
-	return m, m.Check()
-}
-
-// httpError is a non-2xx addon answer.
-type httpError struct {
-	host   string
-	status int
-	retry  string
-}
-
-func (e *httpError) Error() string {
-	if e.status == http.StatusForbidden || e.status == http.StatusUnauthorized {
-		return fmt.Sprintf("stremio: %s refused Ether (HTTP %d); some public addon instances serve only the Stremio app, so use an instance that allows servers or host the addon yourself", e.host, e.status)
-	}
-	return fmt.Sprintf("stremio: %s answered HTTP %d", e.host, e.status)
-}
-
-// withoutReferer keeps credential-bearing URLs out of redirect headers.
-func withoutReferer(client *http.Client) *http.Client {
-	safeClient := *client
-	priorRedirect := safeClient.CheckRedirect
-	safeClient.CheckRedirect = func(next *http.Request, via []*http.Request) error {
-		next.Header.Del("Referer")
-		if priorRedirect != nil {
-			return priorRedirect(next, via)
+// Route builds a resource route: /{resource}/{type}/{id}[/{extra}].json.
+// Extras are sorted and query-escaped, as the Stremio SDK writes them.
+func Route(resource, typ, id string, extra map[string]string) string {
+	r := "/" + resource + "/" + url.PathEscape(typ) + "/" + escapeID(id)
+	keys := make([]string, 0, len(extra))
+	for k, v := range extra {
+		if k != "" && v != "" {
+			keys = append(keys, k)
 		}
-		if len(via) >= 10 {
-			return errors.New("stremio: too many redirects")
-		}
-		return nil
 	}
-	return &safeClient
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, url.QueryEscape(k)+"="+url.QueryEscape(extra[k]))
+	}
+	if len(parts) > 0 {
+		r += "/" + strings.Join(parts, "&")
+	}
+	return r + ".json"
 }
 
-// getJSON decodes base+suffix into out. Errors name only the addon host:
-// an addon URL may carry the owner's settings, including keys.
-func getJSON(ctx context.Context, client *http.Client, base *url.URL, suffix string, limit int64, out any) error {
-	u := *base
-	u.Path += suffix
-	if u.RawPath != "" {
-		u.RawPath += suffix
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if err != nil {
-		return fmt.Errorf("stremio: %s: invalid request", base.Host)
-	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", userAgent)
-	resp, err := withoutReferer(client).Do(req)
-	if err != nil {
-		if ctx.Err() != nil {
-			return ctx.Err()
+func escapeID(id string) string { return url.PathEscape(id) }
+
+// ValidateExtras checks catalog extras against the declaration: required
+// extras present, options respected, nothing undeclared. skip is the
+// paging extra the reader adds itself.
+func (c Catalog) ValidateExtras(extra map[string]string) error {
+	declared := map[string]Extra{}
+	for _, e := range c.Extras() {
+		declared[e.Name] = e
+		if e.IsRequired && e.Name != "skip" && strings.TrimSpace(extra[e.Name]) == "" {
+			return fmt.Errorf("%s is required by the add-on", e.Name)
 		}
-		return fmt.Errorf("stremio: %s: request failed", base.Host)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
-		return &httpError{host: base.Host, status: resp.StatusCode, retry: resp.Header.Get("Retry-After")}
-	}
-	body := io.LimitReader(resp.Body, limit+1)
-	data, err := io.ReadAll(body)
-	if err != nil {
-		return fmt.Errorf("stremio: %s: response read failed", base.Host)
-	}
-	if int64(len(data)) > limit {
-		return fmt.Errorf("stremio: %s answered with more than %d bytes", base.Host, limit)
-	}
-	if err := json.Unmarshal(data, out); err != nil {
-		return fmt.Errorf("stremio: %s did not answer with JSON", base.Host)
+	for k, v := range extra {
+		if v == "" {
+			continue
+		}
+		e, ok := declared[k]
+		if !ok {
+			return fmt.Errorf("%s is not declared by the add-on", k)
+		}
+		if len(e.Options) > 0 && !contains(e.Options, v) {
+			return fmt.Errorf("%s must be one of the add-on's declared options", k)
+		}
 	}
 	return nil
+}
+
+// Streams reads the streams for a lookup.
+func (a Addon) Streams(ctx context.Context, look Lookup) ([]Stream, error) {
+	return a.StreamsFor(ctx, look.Type, look.ID)
+}
+
+// StreamsFor reads stream/{type}/{id}.json.
+func (a Addon) StreamsFor(ctx context.Context, typ, id string) ([]Stream, error) {
+	var ans struct {
+		Streams []Stream `json:"streams"`
+	}
+	if err := a.get(ctx, Route(ResourceStream, typ, id, nil), MaxStreamsBytes, &ans); err != nil {
+		return nil, err
+	}
+	return ans.Streams, nil
+}
+
+// MetaPreview is one catalog entry.
+type MetaPreview struct {
+	ID            string   `json:"id"`
+	Type          string   `json:"type"`
+	Name          string   `json:"name"`
+	Poster        string   `json:"poster,omitempty"`
+	Logo          string   `json:"logo,omitempty"`
+	Description   string   `json:"description,omitempty"`
+	Genres        []string `json:"genres,omitempty"`
+	ReleaseInfo   string   `json:"releaseInfo,omitempty"`
+	IMDBRating    string   `json:"imdbRating,omitempty"`
+	IMDbID        string   `json:"imdb_id,omitempty"`
+	TMDBID        any      `json:"tmdb_id,omitempty"`
+	BehaviorHints struct {
+		DefaultVideoID     string `json:"defaultVideoId,omitempty"`
+		HasScheduledVideos bool   `json:"hasScheduledVideos,omitempty"`
+	} `json:"behaviorHints,omitzero"`
+}
+
+// CatalogPage reads one catalog page. hasMore is the add-on's own hint
+// (nil when absent).
+func (a Addon) CatalogPage(ctx context.Context, typ, id string, extra map[string]string) (metas []MetaPreview, hasMore *bool, err error) {
+	var ans struct {
+		Metas   []MetaPreview `json:"metas"`
+		HasMore *bool         `json:"hasMore"`
+	}
+	if err := a.get(ctx, Route(ResourceCatalog, typ, id, extra), MaxCatalogBytes, &ans); err != nil {
+		return nil, nil, err
+	}
+	return ans.Metas, ans.HasMore, nil
+}
+
+// Catalog reads a whole catalog, paging with skip when the catalog
+// declares it, until an empty page, a page of only duplicates (an add-on
+// ignoring skip), hasMore false, a 404 after the first page, or maxItems
+// (clamped to MaxCatalogItems). Duplicate ids keep their first place.
+func (a Addon) Catalog(ctx context.Context, c Catalog, extra map[string]string, maxItems int) ([]MetaPreview, error) {
+	if maxItems <= 0 || maxItems > MaxCatalogItems {
+		maxItems = MaxCatalogItems
+	}
+	var out []MetaPreview
+	seen := map[string]bool{}
+	skip := 0
+	for len(out) < maxItems {
+		ex := make(map[string]string, len(extra)+1)
+		for k, v := range extra {
+			ex[k] = v
+		}
+		if skip > 0 {
+			ex["skip"] = strconv.Itoa(skip)
+		}
+		page, more, err := a.CatalogPage(ctx, c.Type, c.ID, ex)
+		if err != nil {
+			var he *HTTPError
+			if skip > 0 && errors.As(err, &he) && he.Status == http.StatusNotFound {
+				break
+			}
+			return out, err
+		}
+		added := 0
+		for _, m := range page {
+			if m.ID == "" || seen[m.ID] {
+				continue
+			}
+			seen[m.ID] = true
+			out = append(out, m)
+			added++
+			if len(out) >= maxItems {
+				break
+			}
+		}
+		skip += len(page)
+		if added == 0 || !c.SupportsSkip() || (more != nil && !*more) {
+			break
+		}
+	}
+	return out, nil
+}
+
+// Video is one entry of a meta's videos list. `tv` add-ons publish their
+// schedule as videos with timestamps.
+type Video struct {
+	ID        string    `json:"id"`
+	Title     string    `json:"title"`
+	Name      string    `json:"name,omitempty"`
+	Overview  string    `json:"overview,omitempty"`
+	Season    int       `json:"season,omitempty"`
+	Episode   int       `json:"episode,omitempty"`
+	Released  time.Time `json:"released,omitzero"`
+	StartTime time.Time `json:"startTime,omitzero"`
+	EndTime   time.Time `json:"endTime,omitzero"`
+	Thumbnail string    `json:"thumbnail,omitempty"`
+}
+
+// Meta is a meta document.
+type Meta struct {
+	MetaPreview
+	Background string   `json:"background,omitempty"`
+	Runtime    string   `json:"runtime,omitempty"`
+	Released   string   `json:"released,omitempty"`
+	Year       any      `json:"year,omitempty"`
+	Cast       []string `json:"cast,omitempty"`
+	Director   []string `json:"director,omitempty"`
+	Writer     []string `json:"writer,omitempty"`
+	Country    string   `json:"country,omitempty"`
+	Language   string   `json:"language,omitempty"`
+	Website    string   `json:"website,omitempty"`
+	Videos     []Video  `json:"videos,omitempty"`
+}
+
+// Meta reads meta/{type}/{id}.json.
+func (a Addon) Meta(ctx context.Context, typ, id string) (Meta, error) {
+	var ans struct {
+		Meta Meta `json:"meta"`
+	}
+	if err := a.get(ctx, Route(ResourceMeta, typ, id, nil), MaxMetaBytes, &ans); err != nil {
+		return Meta{}, err
+	}
+	return ans.Meta, nil
+}
+
+// GuideCatalog reads a `tv` catalog's dated guide pages (the epgProvider
+// extension), which answer detailed metas instead of previews.
+func (a Addon) GuideCatalog(ctx context.Context, id, date string) ([]Meta, error) {
+	var out []Meta
+	seen := map[string]bool{}
+	for skip := 0; len(out) < MaxCatalogItems; {
+		extra := map[string]string{"date": date}
+		if skip > 0 {
+			extra["skip"] = strconv.Itoa(skip)
+		}
+		var page struct {
+			MetasDetailed []Meta `json:"metasDetailed"`
+		}
+		if err := a.get(ctx, Route(ResourceCatalog, TypeTV, id, extra), MaxCatalogBytes, &page); err != nil {
+			var he *HTTPError
+			if skip > 0 && errors.As(err, &he) && he.Status == http.StatusNotFound {
+				break
+			}
+			return nil, err
+		}
+		added := 0
+		for _, m := range page.MetasDetailed {
+			if m.ID == "" || seen[m.ID] {
+				continue
+			}
+			seen[m.ID] = true
+			out = append(out, m)
+			added++
+			if len(out) == MaxCatalogItems {
+				break
+			}
+		}
+		if added == 0 {
+			break
+		}
+		skip += len(page.MetasDetailed)
+	}
+	return out, nil
+}
+
+// Subtitle is one subtitle an add-on offers.
+type Subtitle struct {
+	ID          string `json:"id,omitempty"`
+	URL         string `json:"url"`
+	Lang        string `json:"lang"`
+	Filename    string `json:"filename,omitempty"`
+	SubFileName string `json:"SubFileName,omitempty"`
+	HashMatch   bool   `json:"hashMatch,omitempty"`
+	Format      string `json:"format,omitempty"`
+	Name        string `json:"name,omitempty"`
+}
+
+// Subtitles lists subtitles/{type}/{id}[/extra].json. Listing only:
+// nothing is downloaded here.
+func (a Addon) Subtitles(ctx context.Context, typ, id string, extra map[string]string) ([]Subtitle, error) {
+	var ans struct {
+		Subtitles []Subtitle `json:"subtitles"`
+	}
+	if err := a.get(ctx, Route(ResourceSubtitles, typ, id, extra), MaxSubtitlesBytes, &ans); err != nil {
+		return nil, err
+	}
+	return ans.Subtitles, nil
+}
+
+// ParseCatalogRef reads an external identity from a catalog id: "tt…" or
+// "imdb:tt…" → IMDb; "tmdb:550", "tmdb:movie:550" → TMDB; "tvdb:N" → TVDB.
+// Series ids may carry ":season:episode"; the show id leads.
+func ParseCatalogRef(id string) (imdb string, tmdb, tvdb int64) {
+	id = strings.TrimSpace(id)
+	if v := IMDbID(strings.SplitN(id, ":", 2)[0]); v != "" {
+		return v, 0, 0
+	}
+	lower := strings.ToLower(id)
+	if rest, ok := strings.CutPrefix(lower, "imdb:"); ok {
+		return IMDbID(strings.SplitN(rest, ":", 2)[0]), 0, 0
+	}
+	num := func(rest string) int64 {
+		for _, p := range strings.Split(rest, ":") {
+			if n, err := strconv.ParseInt(p, 10, 64); err == nil && n > 0 {
+				return n
+			}
+			if p != "movie" && p != "series" && p != "tv" && p != "show" {
+				return 0
+			}
+		}
+		return 0
+	}
+	if rest, ok := strings.CutPrefix(lower, "tmdb:"); ok {
+		return "", num(rest), 0
+	}
+	if rest, ok := strings.CutPrefix(lower, "tvdb:"); ok {
+		return "", 0, num(rest)
+	}
+	return "", 0, 0
+}
+
+// Ref reads a catalog entry's identity: its id, else explicit imdb_id or
+// tmdb_id fields some add-ons add.
+func (m MetaPreview) Ref() (imdb string, tmdb, tvdb int64) {
+	imdb, tmdb, tvdb = ParseCatalogRef(m.ID)
+	if imdb == "" && tmdb == 0 && tvdb == 0 {
+		imdb = IMDbID(m.IMDbID)
+		switch v := m.TMDBID.(type) {
+		case float64:
+			tmdb = int64(v)
+		case string:
+			tmdb, _ = strconv.ParseInt(v, 10, 64)
+		}
+	}
+	return imdb, tmdb, tvdb
 }

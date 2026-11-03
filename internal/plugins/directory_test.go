@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/braedonsaunders/ether/internal/extend"
+	"github.com/braedonsaunders/ether/internal/stremio"
 	"testing"
 )
 
@@ -23,7 +24,7 @@ func TestDirectoryNativeAndOrdinarySharedLifecycle(t *testing.T) {
 			body := json.RawMessage(`{"entries":[{"id":"org.example.films","name":"Film sources","manifestURL":"https://example.test/manifest.json"},{"id":"org.example.bad","name":"Bad transport","manifestURL":"file:///tmp/manifest.json"}]}`)
 			if foreign {
 				c := StremioCat{ID: "official", Type: "all", Name: "Official"}
-				man.Resources = json.RawMessage(`["addon_catalog"]`)
+				man.Resources = stremio.ParseResources(`["addon_catalog"]`)
 				man.AddonCatalogs = []StremioCat{c}
 				key = "directory-" + StremioCatalogKey(c)[len("catalog-"):]
 				route = "/addon_catalog/all/official.json"

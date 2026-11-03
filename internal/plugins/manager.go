@@ -433,6 +433,21 @@ func (m *Manager) closeRuntime(id string) {
 	}
 }
 
+// stremioDeadline is the per-route deadline for a third-party Stremio
+// add-on. Their stream searches routinely take seconds (they search
+// trackers and debrid caches live); the caller's own deadline (the
+// resolver's search budget) still bounds every call.
+func stremioDeadline(path string) time.Duration {
+	switch {
+	case strings.HasPrefix(path, "/stream/"), strings.HasPrefix(path, "/catalog/"), strings.HasPrefix(path, "/manifest.json"):
+		return 20 * time.Second
+	case strings.HasPrefix(path, "/meta/"), strings.HasPrefix(path, "/subtitles/"):
+		return 10 * time.Second
+	default:
+		return 30 * time.Second
+	}
+}
+
 // DeadlineFor returns the per-route deadline from SPEC §5.1.2.
 func DeadlineFor(path string) time.Duration {
 	switch {
@@ -479,6 +494,9 @@ func (m *Manager) Call(ctx context.Context, pluginID string, req Request) (Respo
 	req.PluginID = pluginID
 	start := m.now()
 	deadline := DeadlineFor(req.Path)
+	if r.Manifest.IsStremioOnly() {
+		deadline = stremioDeadline(req.Path)
+	}
 	cctx, cancel := context.WithTimeout(ctx, deadline)
 	defer cancel()
 	if req.Headers == nil {
@@ -504,6 +522,13 @@ func (m *Manager) Call(ctx context.Context, pluginID string, req Request) (Respo
 	if req.Path == "/ether/notify" || req.Path == "/ether/configure" || strings.HasPrefix(req.Path, "/subtitles/") || req.Path == "/ether/subtitles/download" {
 		rec.Request = ""
 		rec.Response = ""
+	}
+	if err != nil && ctx.Err() != nil {
+		// The caller gave up (a search that already had its answer, a
+		// viewer who left): not the plugin's failure.
+		rec.Error = "cancelled by Ether"
+		m.store.addCall(ctx, rec)
+		return Response{}, ctx.Err()
 	}
 	if err != nil {
 		if req.Path == "/ether/notify" || req.Path == "/ether/configure" {
@@ -648,7 +673,9 @@ func (m *Manager) recordFailure(ctx context.Context, pluginID, reason string, re
 	m.failing[pluginID] = true
 	_ = m.store.putHealth(ctx, pluginID, h)
 	if len(kept) >= 5 {
-		if r, err := m.store.record(ctx, pluginID); err == nil && r.Enabled {
+		// A Stremio add-on is one of the owner's sources: an outage backs
+		// it off and shows on its health, but never removes it.
+		if r, err := m.store.record(ctx, pluginID); err == nil && r.Enabled && !r.Manifest.IsStremioOnly() {
 			r.Enabled = false
 			_ = m.store.upsert(ctx, r)
 			h.Status = "disabled"
@@ -774,6 +801,42 @@ func (m *Manager) SetEnabled(ctx context.Context, id string, enabled bool) error
 	m.syncDescriptors(ctx, r)
 	m.broadcast(ctx)
 	return nil
+}
+
+// SetRoles switches an installed add-on's roles on or off: off lists the
+// capabilities it should stop playing (its catalogs, streams, subtitles,
+// Live TV channels…). Only roles its manifest offers can be named.
+func (m *Manager) SetRoles(ctx context.Context, id string, off []Capability) (Record, error) {
+	r, err := m.store.record(ctx, id)
+	if err != nil {
+		return Record{}, err
+	}
+	offered := map[Capability]bool{}
+	for _, c := range r.Manifest.AddonRoles() {
+		offered[c] = true
+	}
+	seen := map[Capability]bool{}
+	var clean []Capability
+	for _, c := range off {
+		if !offered[c] {
+			return Record{}, &ValidationError{[]FieldError{{"roles", fmt.Sprintf("%s is not a role this add-on offers", c)}}}
+		}
+		if !seen[c] {
+			seen[c] = true
+			clean = append(clean, c)
+		}
+	}
+	if err := m.store.setRolesOff(ctx, id, clean); err != nil {
+		return Record{}, err
+	}
+	saved, err := m.store.record(ctx, id)
+	if err != nil {
+		return Record{}, err
+	}
+	m.closeRuntime(id)
+	m.syncDescriptors(ctx, saved)
+	m.broadcast(ctx)
+	return saved, nil
 }
 
 // SetShadow turns shadow mode on or off.

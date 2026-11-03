@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -34,6 +35,7 @@ func (m *Manager) Handler() http.Handler {
 	mux.HandleFunc("PUT /{id}/grants", m.handleGrants)
 	mux.HandleFunc("GET /{id}/auto-update", m.handleGetAutoUpdate)
 	mux.HandleFunc("PUT /{id}/auto-update", m.handlePutAutoUpdate)
+	mux.HandleFunc("PUT /{id}/roles", m.handlePutRoles)
 	mux.HandleFunc("POST /{id}/shadow", m.handleShadow)
 	mux.HandleFunc("GET /{id}/shadow", m.handleShadowReport)
 	mux.HandleFunc("GET /{id}/journal", m.handleJournal)
@@ -78,6 +80,11 @@ type Summary struct {
 	SourceKind    string   `json:"sourceKind,omitempty"`
 	StremioOnly   bool     `json:"stremioOnly,omitempty"`
 	InstalledAt   int64    `json:"installedAt"`
+	// Roles and Host describe a Stremio add-on: what it can do, which of
+	// that is switched on, and the host it is reached at (never the link,
+	// which carries the owner's configuration).
+	Roles []RoleState `json:"roles,omitempty"`
+	Host  string      `json:"host,omitempty"`
 }
 
 func (m *Manager) summary(r Record, health string) Summary {
@@ -87,6 +94,13 @@ func (m *Manager) summary(r Record, health string) Summary {
 		StremioOnly: r.Manifest.IsStremioOnly(), InstalledAt: r.InstalledAt.Unix()}
 	if r.Manifest.IsStremioOnly() {
 		s.Summary, s.Icon = r.Manifest.Description, r.Manifest.Logo
+		s.Roles = roleState(r)["roles"].([]RoleState)
+		if u, err := url.Parse(r.SourceURL); err == nil {
+			s.Host = u.Hostname()
+		}
+		for _, c := range r.Manifest.EffectiveEther().Capabilities {
+			s.Capabilities = append(s.Capabilities, string(c))
+		}
 	}
 	if r.Manifest.Ether != nil {
 		s.Summary = r.Manifest.Ether.Summary
@@ -381,6 +395,41 @@ func (m *Manager) handlePutAutoUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	m.broadcast(r.Context())
 	writeJSON(w, http.StatusOK, map[string]any{"autoUpdate": rec.AutoUpdate})
+}
+
+// handlePutRoles switches an add-on's roles: {"off":["stream_source"]}.
+func (m *Manager) handlePutRoles(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Off []Capability `json:"off"`
+	}
+	if err := decode(r, &body); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid", "The request was not understood.", nil)
+		return
+	}
+	rec, err := m.SetRoles(r.Context(), r.PathValue("id"), body.Off)
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, roleState(rec))
+}
+
+// RoleState is one role of an add-on for the console.
+type RoleState struct {
+	Role Capability `json:"role"`
+	On   bool       `json:"on"`
+}
+
+func roleState(rec Record) map[string]any {
+	off := map[Capability]bool{}
+	for _, c := range rec.RolesOff {
+		off[c] = true
+	}
+	roles := []RoleState{}
+	for _, c := range rec.Manifest.AddonRoles() {
+		roles = append(roles, RoleState{Role: c, On: !off[c]})
+	}
+	return map[string]any{"roles": roles}
 }
 
 func (m *Manager) handleGetSettings(w http.ResponseWriter, r *http.Request) {
