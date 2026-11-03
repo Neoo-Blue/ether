@@ -33,7 +33,10 @@ func (s *Session) swapInput(ctx context.Context, inputURL string, info core.Medi
 	}
 	// Decode a tiny bounded sample outside the session lock. Only proven
 	// embedded side bars matching the existing picture are removed.
-	before := s.RecoveryBuffer()
+	s.mu.Lock()
+	before := s.recoveryBufferLocked()
+	previousInput := s.input
+	s.mu.Unlock()
 	sampleAt := at
 	if preserve {
 		if before.ReadyUntil > sampleAt && before.ReadyUntil < info.Duration {
@@ -52,7 +55,7 @@ func (s *Session) swapInput(ctx context.Context, inputURL string, info core.Medi
 	if s.closed {
 		return errors.New("transcode: session closed")
 	}
-	if s.recoverySeekAt != before.SeekAt {
+	if s.recoverySeekAt != before.SeekAt || s.input != previousInput {
 		return core.ErrReplacementSuperseded
 	}
 	// The caller verifies identity alignment, including the buffered boundary.

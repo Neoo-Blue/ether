@@ -124,3 +124,36 @@ func TestPicturePreparationFailureAndReuse(t *testing.T) {
 		t.Fatalf("prepared crop=%+v err=%v calls=%d", crop, err, calls)
 	}
 }
+
+func TestInputChangeSupersedesInFlightPicturePreparation(t *testing.T) {
+	orig, repl := yellowstone()
+	orig.Video().Width, orig.Video().Height = 1440, 1080
+	repl.Video().Width, repl.Video().Height = 1280, 720
+	contract, _ := contractOf(orig, copyMKV())
+	entered, release := make(chan struct{}), make(chan struct{})
+	fr := &fakeRunner{}
+	fr.runFunc = func(ctx context.Context, cmd Command) error {
+		close(entered)
+		select {
+		case <-release:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		_, err := cmd.Stdout.Write(make([]byte, 320*180*8))
+		return err
+	}
+	s := &Session{m: &Manager{runner: fr, ffmpeg: "ffmpeg"}, sessionInput: sessionInput{contract: contract, input: "original"}, log: testLogger(t)}
+	done := make(chan error, 1)
+	go func() { done <- s.SwapInput(t.Context(), "replacement", repl, 0) }()
+	<-entered
+	s.mu.Lock()
+	s.input = "newer"
+	s.mu.Unlock()
+	close(release)
+	if err := <-done; err != core.ErrReplacementSuperseded {
+		t.Fatalf("stale input swap returned %v", err)
+	}
+	if got := s.CurrentSwapInput(); got != "newer" {
+		t.Fatalf("stale swap replaced newer input: %q", got)
+	}
+}
