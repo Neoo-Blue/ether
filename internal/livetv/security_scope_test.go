@@ -76,3 +76,24 @@ func TestPlaylistForeignResourceDoesNotReceiveSourceHeaders(t *testing.T) {
 		t.Fatalf("segment: %d %s", segment.Code, segment.Body.String())
 	}
 }
+
+func TestPublicCDNHTTPRedirectStillWorks(t *testing.T) {
+	cdn := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "" || r.Header.Get("X-Provider-Secret") != "" {
+			t.Error("source headers reached HTTP CDN")
+		}
+		_, _ = w.Write([]byte("public"))
+	}))
+	defer cdn.Close()
+	origin := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, cdn.URL, http.StatusFound) }))
+	defer origin.Close()
+	s := testService(t, Options{HTTPClient: origin.Client()})
+	res, err := s.upstreamWithHeaders(context.Background(), origin.URL, httptest.NewRequest("GET", "/", nil), http.Header{"Authorization": {"secret"}, "X-Provider-Secret": {"secret"}}, origin.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("status %d", res.StatusCode)
+	}
+}

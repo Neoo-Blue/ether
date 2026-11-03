@@ -419,7 +419,9 @@ func (s *Service) serveRelayManifest(w http.ResponseWriter, g *inputGrant, base 
 }
 
 // scopeInputRedirects confines every configured source header to its origin.
-func scopeInputRedirects(client *http.Client, origin string, headers http.Header, ua string) {
+// The ffmpeg relay rejects HTTPS downgrades; the client resource proxy preserves
+// its existing public-CDN behavior while stripping headers across origins.
+func scopeInputRedirects(client *http.Client, origin string, headers http.Header, ua string, allowDowngrade bool) {
 	checkRedirect := client.CheckRedirect
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if checkRedirect != nil {
@@ -429,7 +431,7 @@ func scopeInputRedirects(client *http.Client, origin string, headers http.Header
 		} else if len(via) >= 10 {
 			return errors.New("too many redirects")
 		}
-		if via[len(via)-1].URL.Scheme == "https" && req.URL.Scheme != "https" {
+		if !allowDowngrade && via[len(via)-1].URL.Scheme == "https" && req.URL.Scheme != "https" {
 			return errRelayDowngrade
 		}
 		if relayOrigin(req.URL) != origin {
@@ -451,7 +453,7 @@ func (s *Service) relayFetch(ctx context.Context, cancel context.CancelFunc, g *
 	client := *s.o.HTTPClient
 	client.Timeout = 0 // a live input is endless; idle time is bounded instead
 	ua := in.Header.Get("User-Agent")
-	scopeInputRedirects(&client, g.origin, g.headers, ua)
+	scopeInputRedirects(&client, g.origin, g.headers, ua, false)
 	u, err := url.Parse(raw)
 	if err != nil {
 		return nil, errRelayUnsupported

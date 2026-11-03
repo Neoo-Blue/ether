@@ -72,7 +72,7 @@ func (s *Service) upstreamWithHeaders(ctx context.Context, raw string, r *http.R
 	}
 	origin := relayOrigin(originURL)
 	client := *s.o.HTTPClient
-	scopeInputRedirects(&client, origin, headers, r.Header.Get("User-Agent"))
+	scopeInputRedirects(&client, origin, headers, r.Header.Get("User-Agent"), true)
 	var last error
 	for attempt := 0; attempt < 3; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, raw, nil)
