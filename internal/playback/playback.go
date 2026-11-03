@@ -754,7 +754,7 @@ func (m *Manager) prepareOwnedEntry(ctx context.Context, user *core.User, key co
 		}
 		m.lastCaps[user.ID] = caps
 		if s := m.byIdent[id]; s != nil {
-			if s.exact == exact && (prefer == "" || s.current().releaseID() == prefer) {
+			if s.exact == exact && (prefer == "" || s.current().releaseID() == prefer || (!exact && s.prefer == prefer)) {
 				now := m.now()
 				if !m.sessionCountsForLimit(s, now) {
 					cfg := m.config()
@@ -915,7 +915,7 @@ func (m *Manager) prepare(ctx context.Context, id identity, user *core.User, cap
 		// Concurrent flights with different exactness must never let an exact
 		// caller inherit a fallback-enabled session, even for the same release.
 		current := existing.current()
-		if existing.exact != exact || (exact && (current == nil || current.releaseID() != prefer)) {
+		if existing.exact != exact || (prefer != "" && (current == nil || (current.releaseID() != prefer && (exact || existing.prefer != prefer)))) {
 			return nil, core.ErrNotAvailable
 		}
 		return existing, nil
