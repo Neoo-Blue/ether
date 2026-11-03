@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -67,6 +68,7 @@ func runReal(ctx context.Context, args []string) (int, error) {
 	background := f.Bool("background", true, "run a phase beside a catalogue-shaped background writer")
 	only := f.String("clients", "", "comma-separated client names (default all)")
 	stepNames := f.String("steps", "", "comma-separated substrings of step names to replay (default all)")
+	casesFile := f.String("plex-cases", "", "JSON file of named local Plex metadata/postplay paths to replay")
 	strict := f.Bool("strict", false, "exit 1 when any gated endpoint misses its budget or errors")
 	_ = f.Parse(args)
 	if *source == "" {
@@ -114,6 +116,37 @@ func runReal(ctx context.Context, args []string) (int, error) {
 	cs := perfharness.Only(perfharness.Clients(), names)
 	if *stepNames != "" {
 		cs = perfharness.OnlySteps(cs, strings.Split(*stepNames, ","))
+	}
+	if *casesFile != "" {
+		b, err := os.ReadFile(*casesFile)
+		if err != nil {
+			return 2, err
+		}
+		var cases []struct {
+			Name string `json:"name"`
+			Path string `json:"path"`
+		}
+		if err := json.Unmarshal(b, &cases); err != nil {
+			return 2, err
+		}
+		if len(cases) > 100 {
+			return 2, fmt.Errorf("too many Plex cases")
+		}
+		valid := regexp.MustCompile(`^/(?:library/metadata/[0-9]+|hubs/metadata/[0-9]+/postplay)$`)
+		for _, c := range cases {
+			if c.Name == "" || len(c.Name) > 80 || !valid.MatchString(c.Path) {
+				return 2, fmt.Errorf("invalid Plex case")
+			}
+			path := c.Path
+			if strings.HasPrefix(path, "/library/") {
+				path += "?includeExtras=1&includeRelated=1&includeOnDeck=1&includeChapters=1&includeGuids=1&includeMarkers=1&includeConcerts=1&includePreferences=1&includeReviews=1&asyncAugmentMetadata=1"
+			}
+			for i := range cs {
+				if cs[i].Surface == "plex" {
+					cs[i].Steps = append(cs[i].Steps, perfharness.Step{Name: c.Name, Class: "detail", Path: path})
+				}
+			}
+		}
 	}
 	trace := filepath.Join(dir, "trace.jsonl")
 	log("starting server on 127.0.0.1:%d (outbound network blocked)", *port)
