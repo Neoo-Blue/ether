@@ -643,6 +643,7 @@ func (s *Service) resolve(ctx context.Context, req core.ResolveRequest, profile 
 			trace.Discovery = append(trace.Discovery, DiscoveryTrace{Path: "feed", Count: len(discovered)})
 		}
 		early.arrived(discovered)
+		early.startFeed()
 
 		// A locally verified feed answer can avoid a search. A slow feed
 		// gets only 100ms head start, then keeps checking alongside search.

@@ -103,7 +103,21 @@ func (p *searchPreparation) arrived(batch []core.Release) {
 		return
 	}
 	p.ranked = p.svc.orderCandidates(p.ranked, p.profile, p.req.Title, nil)
-	p.pumpLocked()
+	// Allow concurrent indexers to contribute before spending probe budget.
+	// A completed search proceeds directly to normal ranked validation.
+	if time.Since(p.first) >= discoveryWindow {
+		p.pumpLocked()
+	}
+}
+
+// startFeed checks the complete feed batch immediately, preserving the
+// feed-only fast path without probing it in input order.
+func (p *searchPreparation) startFeed() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.disabled {
+		p.pumpLocked()
+	}
 }
 
 // Four in flight, twelve total, with the next ranked candidate replacing a
