@@ -160,7 +160,7 @@ func TestExactKeyDoesNotDeriveEpisodeFromShow(t *testing.T) {
 		t.Fatalf("episode %v %v", k, err)
 	}
 	other := core.EpisodeKey(1396, 1, 2)
-	if _, err := db.ExecContext(ctx, `INSERT INTO plexguid_mappings(rating_key,guid,checked_at) VALUES(?,?,?)`, int64(other), epGUID, time.Now().Unix()); err != nil {
+	if err := pg.storeMapping(ctx, other, epGUID, time.Now().Unix()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := pg.ExactKey(ctx, epGUID); !errors.Is(err, ErrAmbiguous) {
