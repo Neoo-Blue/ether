@@ -481,7 +481,7 @@ func (m *Manager) handleAddonPreview(w http.ResponseWriter, r *http.Request) {
 	}
 	p, err := m.PreviewInstall(r.Context(), Source{Kind: "url", URL: base, LAN: privateHost(base)})
 	if err != nil {
-		m.fail(w, err)
+		m.failAddon(w, err)
 		return
 	}
 	if !p.Manifest.IsStremioOnly() {
@@ -512,11 +512,23 @@ func (m *Manager) handleAddonInstall(w http.ResponseWriter, r *http.Request) {
 	}
 	rec, err := m.InstallAddon(r.Context(), AddonInstall{Link: body.URL, Roles: body.Roles, Exclusive: len(body.Roles) > 0})
 	if err != nil {
-		m.fail(w, err)
+		m.failAddon(w, err)
 		return
 	}
 	h, _ := m.store.health(r.Context(), rec.ID)
 	writeJSON(w, http.StatusOK, m.summary(rec, h.Status))
+}
+
+// failAddon reports an add-on link that could not be read in the owner's
+// terms: the add-on is unreachable or did not answer with a manifest.
+func (m *Manager) failAddon(w http.ResponseWriter, err error) {
+	var ve *ValidationError
+	if errors.As(err, &ve) || errors.Is(err, ErrNotFound) {
+		m.fail(w, err)
+		return
+	}
+	m.log.Info("add-on link not read", "err", err)
+	writeErr(w, http.StatusBadGateway, "unreachable", "Ether couldn't read an add-on at that link. Check the link, and that the add-on is online and allows servers.", nil)
 }
 
 // RoleState is one role of an add-on for the console.

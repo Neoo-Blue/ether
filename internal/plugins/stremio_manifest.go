@@ -94,7 +94,6 @@ func (m Manifest) derivedEther() *EtherBlock {
 		return e
 	}
 	if m.HasResource("catalog") {
-		e.Capabilities = append(e.Capabilities, CapListSource)
 		for _, c := range m.Catalogs {
 			if c.Type != "movie" && c.Type != "series" {
 				continue
@@ -123,6 +122,9 @@ func (m Manifest) derivedEther() *EtherBlock {
 			}
 			e.Contributes.ListSources = append(e.Contributes.ListSources, ListSourceMeta{Key: StremioCatalogKey(c), Label: label + " · " + c.Type, Catalog: c.Type + "/" + c.ID, Params: params, Refresh: "1h"})
 		}
+	}
+	if len(e.Contributes.ListSources) > 0 {
+		e.Capabilities = append(e.Capabilities, CapListSource)
 	}
 	if m.HasResource("addon_catalog") && len(m.AddonCatalogs) > 0 {
 		e.Capabilities = append(e.Capabilities, CapPluginDirectory)
