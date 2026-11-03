@@ -474,8 +474,11 @@ func (s *Server) handleDecision(w http.ResponseWriter, r *http.Request) {
 		if ctx.Err() != nil {
 			return
 		}
-		s.log.Info("playback decision deferred", "user", pr.User.Username, "reason", playbackMessage(err), "err", err)
+		s.log.Info("playback decision failed before admission", "user", pr.User.Username, "reason", playbackMessage(err), "err", err)
 		p, _ := s.parsePlayRequest(r)
+		// start.m3u8/start.mpd follow a failed decision for the same session:
+		// answer them with this error rather than a second full resolve.
+		s.transcodes.fail(p.sessionID, pr.User.ID, pr.ClientID, p.key, err, s.now())
 		s.write(w, r, s.decisionError(ctx, pr, t, err, p))
 		return
 	}
@@ -557,10 +560,12 @@ func (s *Server) awaitSource(ctx context.Context, r *http.Request, pr *Request) 
 	if p.caps.ClientID == "" {
 		p.caps.ClientID = pr.ClientID
 	}
-	if _, err := pw.PrepareWithin(ctx, decisionSourceWait, pr.User, p.key, p.caps, "", false); errors.Is(err, core.ErrPrepareSlow) {
+	// A slow search answers "still finding a source" and keeps running; any
+	// other failure is answered now, so the gated path does not repeat the
+	// whole search (the flight does not remember failures).
+	if _, err := pw.PrepareWithin(ctx, decisionSourceWait, pr.User, p.key, p.caps, "", false); err != nil {
 		return t, err
 	}
-	// Any other outcome is the gated path's to report as it does today.
 	return nil, nil
 }
 
