@@ -1,6 +1,6 @@
 import { Badge, Button, Input, Switch, toast } from "@braedonsaunders/appkit-ui";
 import { AlertTriangle, ArrowLeft, Link2, Upload } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Artwork } from "../../components/Artwork";
 import { Drawer } from "../../components/Drawer";
 import { MutationError } from "../../components/feedback";
@@ -20,14 +20,20 @@ import {
 
 export function InstallDrawer({
   open,
+  initialUrl = "",
   onClose,
   onInstalled,
 }: {
   open: boolean;
+  /** Prefills the address, for entries picked in a plugin directory. */
+  initialUrl?: string;
   onClose: () => void;
   onInstalled: (pluginId: string) => void;
 }) {
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(initialUrl);
+  useEffect(() => {
+    if (open && initialUrl) setUrl(initialUrl);
+  }, [open, initialUrl]);
   const [lan, setLan] = useState(false);
   const [pkgFile, setPkgFile] = useState<{ name: string; bytes: ArrayBuffer } | null>(null);
   const [preview, setPreview] = useState<InstallPreview | null>(null);

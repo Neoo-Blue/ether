@@ -58,7 +58,7 @@ describe("Server › Plugins (WS10a)", () => {
 
     expect(screen.getByText("Update v1.3.0")).toBeTruthy();
     expect(screen.getByText("Unverified")).toBeTruthy();
-    expect(screen.getByText("Shadow mode")).toBeTruthy();
+    expect(screen.getByText("Trying out", { selector: "span *, span" })).toBeTruthy();
 
     const plutoSwitch = screen.getByRole("switch", { name: "Enable Pluto TV" }) as HTMLInputElement;
     expect(plutoSwitch.checked).toBe(true);
@@ -74,7 +74,7 @@ describe("Server › Plugins (WS10a)", () => {
     });
   });
 
-  it("renders the Installed empty state explaining plugins in one sentence and offering Install from a link", async () => {
+  it("renders the Installed empty state explaining plugins in one sentence and offering the marketplace and Studio", async () => {
     customIntercept = (url, init) => {
       if (url.pathname === "/ether/api/plugins" && (!init?.method || init.method === "GET")) {
         return new Response(JSON.stringify({ plugins: [] }), {
@@ -94,8 +94,9 @@ describe("Server › Plugins (WS10a)", () => {
       ),
     ).toBeTruthy();
 
-    const emptyActionButtons = screen.getAllByRole("button", { name: /Install from a link/i });
-    expect(emptyActionButtons.length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByRole("button", { name: "Open the marketplace" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Install from a link/i })).toBeTruthy();
+    expect(screen.getAllByRole("link", { name: /Build a plugin/i }).length).toBeGreaterThanOrEqual(2);
   });
 
   it("opens the plugin drawer and covers Overview, Settings (with validation & Test), Permissions, Health, Activity, Logs, Updates, and Remove", async () => {
@@ -235,8 +236,8 @@ describe("Server › Plugins (WS10a)", () => {
     expect(screen.getAllByText("Preview plugin").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("browses, filters, and installs from the Catalogue tab, and shows 'The catalogue is not available yet' when empty", async () => {
-    renderPlugins("/plugins/catalogue");
+  it("browses, filters, and installs from the Marketplace tab, and shows 'The catalogue is not available yet' when empty", async () => {
+    renderPlugins("/plugins/marketplace");
 
     expect(await screen.findByText("SubDL Subtitles")).toBeTruthy();
     expect(screen.getByText("Local folders")).toBeTruthy();
@@ -300,7 +301,7 @@ describe("Server › Plugins (WS10a)", () => {
       return null;
     };
 
-    renderPlugins("/plugins/catalogue");
+    renderPlugins("/plugins/marketplace");
 
     expect(await screen.findByText("The catalogue is not available yet")).toBeTruthy();
   });

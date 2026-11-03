@@ -66,6 +66,9 @@ export interface PluginManifest {
   name: string;
   description?: string;
   logo?: string;
+  /** Stremio add-on manifests declare resources and catalogues directly. */
+  resources?: (string | { name: string })[];
+  catalogs?: { id: string; type: string; name?: string }[];
   ether?: {
     protocol?: number;
     kind?: string;

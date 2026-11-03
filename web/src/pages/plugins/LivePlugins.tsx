@@ -1,472 +1,305 @@
-import {
-  Badge,
-  Button,
-  Dialog,
-  Input,
-  SubtabNav,
-  Switch,
-  buttonVariants,
-} from "@braedonsaunders/appkit-ui";
-import { Plus, Sparkles } from "lucide-react";
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { ActionMenu } from "../../components/ActionMenu";
-import { Drawer } from "../../components/Drawer";
-import { DomainPage } from "../../components/layout";
+import { Badge, Button, EmptyState, Switch, buttonVariants } from "@braedonsaunders/appkit-ui";
+import { ArrowUpCircle, Eye, FolderSearch, Link2, Puzzle, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { Artwork } from "../../components/Artwork";
+import { ErrorPanel } from "../../components/feedback";
+import { DomainPage, useRouteTab, type PageTab } from "../../components/layout";
+import { LevelBadge } from "../../components/status";
 import { t } from "../../i18n";
-import { apiFetch, ApiError } from "../../lib/api";
-import { useRegistry, type DescriptorKind } from "../../lib/extend";
+import { useLocale } from "../../i18n/react";
+import { apiFetch } from "../../lib/api";
+import { invalidateRegistry } from "../../lib/extend";
+import { useStreamEvent } from "../../lib/stream";
+import { CatalogueTab } from "./CatalogueTab";
 import { DirectoryBrowser } from "./DirectoryBrowser";
-import { PluginMark } from "./marks";
+import { InstallDrawer } from "./InstallDrawer";
+import { InstalledPluginDrawer } from "./InstalledPluginDrawer";
+import { kindIcon, kindLabel, pluginHealthLevel, type PluginSummary } from "./types";
 
-interface Manifest {
-  id: string;
-  name: string;
-  version: string;
-  description?: string;
-  types?: string[];
-  resources?: (string | { name: string })[];
-  catalogs?: { id: string; type: string; name?: string }[];
-}
-interface Detail {
-  id: string;
-  name: string;
-  version: string;
-  enabled: boolean;
-  installedAt: number;
-  manifest: Manifest;
-  permissions: { lines: string[] };
-  impact: { calls: number; errors: number };
-}
-const resourceNames = (m: Manifest) =>
-  (m.resources ?? []).map((r) => (typeof r === "string" ? r : r.name));
-const category = (m: Manifest) =>
-  resourceNames(m).includes("subtitles")
-    ? ("subtitles" as const)
-    : resourceNames(m).includes("stream")
-      ? ("sources" as const)
-      : ("home" as const);
-const reason = (e: unknown) =>
-  e instanceof ApiError && e.fields?.length
-    ? e.fields.map((f) => `${f.field}: ${f.message}`).join(" · ")
-    : e instanceof Error
-      ? e.message
-      : String(e);
-const request = <T,>(path: string, body: unknown) =>
-  apiFetch<T>(path, { method: "POST", body: JSON.stringify(body) });
+type TabKey = "installed" | "marketplace";
 
-/** Production API transport, kept separate from the explicitly selected mock prototype. */
+/** Installed plugins, the marketplace and imports, on the real plugin API. */
 export default function LivePlugins() {
-  const registry = useRegistry();
-  const [items, setItems] = useState<Detail[]>([]);
-  const [error, setError] = useState("");
+  const navigate = useNavigate();
+  const { locale } = useLocale();
+  const [plugins, setPlugins] = useState<PluginSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [toggling, setToggling] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
-  const [tab, setTab] = useState("overview");
-  const [adding, setAdding] = useState(false);
+  const [installUrl, setInstallUrl] = useState<string | null>(null);
   const [browsing, setBrowsing] = useState(false);
-  const [url, setURL] = useState("");
-  const [preview, setPreview] = useState<{ manifest: Manifest; permissions: string[] } | null>(
-    null,
-  );
-  const [importError, setImportError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const load = async () => {
+  const [logRevision, setLogRevision] = useState(0);
+  const [liveLogs, setLiveLogs] = useState<Record<string, string[]>>({});
+
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true);
     try {
-      const list = await apiFetch<{ plugins: { id: string }[] }>("/plugins/");
-      setItems(
-        await Promise.all(
-          list.plugins.map((p) => apiFetch<Detail>(`/plugins/${encodeURIComponent(p.id)}`)),
-        ),
-      );
-      setError("");
+      const res = await apiFetch<{ plugins?: PluginSummary[] }>("/plugins");
+      setPlugins(Array.isArray(res?.plugins) ? res.plugins : []);
+      setLoadError(null);
     } catch (e) {
-      setError(reason(e));
+      setLoadError(e);
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
-  };
+  }, []);
   useEffect(() => {
     void load();
-  }, []);
-  const selected = items.find((p) => p.id === open);
-  const inspect = async () => {
-    setBusy(true);
-    setImportError("");
-    setPreview(null);
+  }, [load]);
+  useStreamEvent("plugins.changed", () => {
+    void load(true);
+    invalidateRegistry();
+    setLogRevision((n) => n + 1);
+  });
+  useStreamEvent<{ plugin?: string; id?: string; line?: string }>("plugins.log", (ev) => {
+    const id = ev.data?.plugin ?? ev.data?.id;
+    const line = ev.data?.line;
+    if (!id || !line) return;
+    setLiveLogs((prev) => ({ ...prev, [id]: [...(prev[id] ?? []), line].slice(-200) }));
+    setLogRevision((n) => n + 1);
+  });
+
+  const tabs: readonly (PageTab & { key: TabKey })[] = useMemo(
+    () => [
+      {
+        key: "installed",
+        label: t("Installed"),
+        count: plugins.length > 0 ? plugins.length : undefined,
+      },
+      { key: "marketplace", label: t("Marketplace") },
+    ],
+    [plugins.length, locale],
+  );
+  const active = useRouteTab(tabs, "installed");
+  const installedIds = useMemo(() => new Set(plugins.map((p) => p.id)), [plugins]);
+
+  const toggle = async (p: PluginSummary, on: boolean) => {
+    setToggling(p.id);
+    setPlugins((list) => list.map((x) => (x.id === p.id ? { ...x, enabled: on } : x)));
     try {
-      setPreview(await request("/plugins/install/preview", { kind: "url", url }));
+      await apiFetch(`/plugins/${encodeURIComponent(p.id)}/${on ? "enable" : "disable"}`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      invalidateRegistry();
     } catch (e) {
-      setImportError(reason(e));
+      setLoadError(e);
     } finally {
-      setBusy(false);
+      await load(true);
+      setToggling(null);
     }
   };
-  const install = async () => {
-    setBusy(true);
-    setImportError("");
-    try {
-      await request("/plugins/install", { kind: "url", url });
-      await load();
-      setOpen(preview!.manifest.id);
-      setTab("overview");
-      setAdding(false);
-    } catch (e) {
-      setImportError(reason(e));
-    } finally {
-      setBusy(false);
-    }
+  const installed = async (id: string) => {
+    setInstallUrl(null);
+    await load(true);
+    invalidateRegistry();
+    if (active !== "installed") navigate("/plugins/installed");
+    setOpen(id);
   };
+
+  const on = plugins.filter((p) => p.enabled).length;
+  const trying = plugins.filter((p) => p.enabled && p.shadow).length;
+  const attention = plugins.filter((p) => {
+    const level = pluginHealthLevel(p.health, p.enabled);
+    return level === "warn" || level === "error";
+  }).length;
+
   return (
     <DomainPage
       title={t("Plugins")}
       base="/plugins"
+      tabs={tabs}
+      active={active}
       actions={
         <>
           <Button variant="outline" onClick={() => setBrowsing(true)}>
-            {t("Browse plugins")}
+            <FolderSearch size={15} /> {t("Browse directories")}
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setAdding(true);
-              setPreview(null);
-              setImportError("");
-            }}
-          >
-            <Plus size={15} />
-            {t("Import add-on")}
+          <Button variant="outline" onClick={() => setInstallUrl("")}>
+            <Link2 size={15} /> {t("Install from a link")}
           </Button>
           <Link to="/plugins/studio" className={buttonVariants()}>
-            <Sparkles size={15} />
-            {t("Build a plugin")}
+            <Sparkles size={15} /> {t("Build a plugin")}
           </Link>
         </>
       }
     >
-      <div className="grid grid-cols-3 gap-2 sm:gap-3">
-        {[
-          { label: t("Installed manifests"), value: items.length },
-          { label: t("Enabled"), value: items.filter((p) => p.enabled).length },
-          { label: t("Resource support"), value: t("Partial") },
-        ].map((x) => (
-          <div
-            key={x.label}
-            className="rounded-xl border border-border bg-surface px-3 py-2.5 sm:px-4 sm:py-3.5"
-          >
-            <p className="text-xs text-fg-muted">{x.label}</p>
-            <p className="mt-1 text-sm font-semibold text-fg sm:text-2xl">{x.value}</p>
+      {active === "installed" ? (
+        <>
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            <Tile label={t("Plugins on")} value={String(on)} />
+            <Tile label={t("Trying out")} value={String(trying)} />
+            <Tile
+              label={t("Health")}
+              value={
+                attention ? (
+                  <LevelBadge
+                    level="warn"
+                    label={t("{count} need attention", { count: attention })}
+                  />
+                ) : (
+                  <LevelBadge level="ok" label={t("All working")} />
+                )
+              }
+            />
           </div>
-        ))}
-      </div>
-      <p className="text-sm text-fg-muted">
-        {t(
-          "Installed plugins contribute through Ether’s shared catalogue, source and subtitle interfaces. See each plugin’s support details; installation alone does not verify every function.",
-        )}
-      </p>
-      {error ? (
-        <p role="alert" className="text-danger">
-          {error}
-        </p>
-      ) : null}
-      {loading ? <p>{t("Loading")}</p> : null}
-      <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" aria-label={t("Installed plugins")}>
-        {items.map((p) => (
-          <li key={p.id}>
-            <button
-              onClick={() => {
-                setOpen(p.id);
-                setTab("overview");
-              }}
-              className="flex h-full w-full flex-col gap-4 rounded-xl border border-border bg-surface p-5 text-left"
-            >
-              <div className="flex items-center gap-3">
-                <PluginMark category={category(p.manifest)} size="lg" />
-                <div>
-                  <h2 className="font-semibold text-fg">{p.name}</h2>
-                  <span className="text-xs text-fg-muted">{p.version}</span>
+          {loadError ? <ErrorPanel error={loadError} onRetry={() => void load()} /> : null}
+          {loading ? (
+            <p className="text-xs text-fg-muted">{t("Loading plugins…")}</p>
+          ) : plugins.length === 0 && !loadError ? (
+            <EmptyState
+              icon={<Puzzle size={18} />}
+              title={t("No plugins installed")}
+              description={t(
+                "Plugins add sources, channels, subtitle providers and custom pages to Ether.",
+              )}
+              action={
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => navigate("/plugins/marketplace")}
+                  >
+                    {t("Open the marketplace")}
+                  </Button>
+                  <Link to="/plugins/studio" className={buttonVariants({ size: "sm" })}>
+                    <Sparkles size={14} /> {t("Build a plugin")}
+                  </Link>
                 </div>
-                <Badge variant="secondary">{t("Imported")}</Badge>
-              </div>
-              <p className="text-sm text-fg-muted">{p.manifest.description}</p>
-              <div className="flex flex-wrap gap-2">
-                {resourceNames(p.manifest).map((r) => (
-                  <Badge key={r} variant="secondary">
-                    {r}
-                  </Badge>
-                ))}
-              </div>
-              <p className="mt-auto text-xs text-fg-muted">
-                {p.manifest.catalogs?.length
-                  ? t("{count} declared catalogues", { count: p.manifest.catalogs.length })
-                  : t("No catalogues declared")}
-              </p>
-            </button>
-          </li>
-        ))}
-      </ul>
-      {selected ? (
-        <Drawer
-          open
-          onClose={() => setOpen(null)}
-          title={selected.name}
-          size="lg"
-          headerActions={
-            <ActionMenu
-              label={t("More actions")}
-              items={[
-                {
-                  key: "remove",
-                  label: t("Uninstall"),
-                  danger: true,
-                  onSelect: () => {
-                    void apiFetch(`/plugins/${encodeURIComponent(selected.id)}`, {
-                      method: "DELETE",
-                    })
-                      .then(() => {
-                        setOpen(null);
-                        return load();
-                      })
-                      .catch((e) => setError(reason(e)));
-                  },
-                },
-              ]}
+              }
             />
-          }
-          subtabs={
-            <SubtabNav
-              ariaLabel={t("Plugin sections")}
-              active={tab}
-              onSelect={setTab}
-              tabs={[
-                { key: "overview", label: t("Overview") },
-                { key: "permissions", label: t("Permissions") },
-                { key: "resources", label: t("Resources") },
-              ]}
-            />
-          }
-        >
-          <div className="space-y-5">
-            <div className="flex items-center gap-4 rounded-xl border border-border bg-surface p-5">
-              <PluginMark category={category(selected.manifest)} size="lg" />
-              <p className="flex-1 text-sm text-fg">{selected.manifest.description}</p>
-              <Switch
-                aria-label={t("Enable add-on")}
-                checked={selected.enabled}
-                onChange={(e) => {
-                  void request(
-                    `/plugins/${encodeURIComponent(selected.id)}/${e.currentTarget.checked ? "enable" : "disable"}`,
-                    {},
-                  )
-                    .then(load)
-                    .catch((e) => setError(reason(e)));
-                }}
-              />
-            </div>
-            {tab === "overview" ? (
-              <>
-                <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-3 text-sm">
-                  <dt>{t("Version")}</dt>
-                  <dd>{selected.version}</dd>
-                  <dt>{t("Identifier")}</dt>
-                  <dd className="break-all font-mono text-xs">{selected.id}</dd>
-                  <dt>{t("Imported")}</dt>
-                  <dd>{new Date(selected.installedAt * 1000).toLocaleString()}</dd>
-                  <dt>{t("Resource calls")}</dt>
-                  <dd>{selected.impact.calls}</dd>
-                </dl>
-                <p className="rounded-xl border border-border bg-bg-subtle p-4 text-sm text-fg-muted">
-                  {t(
-                    "The manifest is installed. Supported contributions use Ether’s native interfaces; upstream availability and playback must be checked separately.",
-                  )}
-                </p>
-              </>
-            ) : null}
-            {tab === "permissions" ? (
-              <ul className="space-y-3 text-sm text-fg">
-                {selected.permissions.lines.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
-            ) : null}
-            {tab === "resources" ? (
-              <>
-                <p className="text-sm text-fg-muted">
-                  {t("Declared capabilities and their current native support.")}
-                </p>
-                <ul className="space-y-3">
-                  {resourceNames(selected.manifest).map((resource) => {
-                    const support = resourceSupport(resource);
-                    const active =
-                      selected.enabled &&
-                      support.kind &&
-                      registry.descriptors.some(
-                        (d) => d.owner === selected.id && d.kind === support.kind,
-                      );
-                    return (
-                      <li key={resource} className="rounded-xl border border-border p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <h3 className="font-medium">{support.label}</h3>
-                          <Badge variant="secondary">
-                            {!selected.enabled
-                              ? t("Disabled")
-                              : active
-                                ? t("Connected")
-                                : t("Unsupported")}
-                          </Badge>
-                        </div>
-                        <p className="mt-2 text-sm text-fg-muted">{support.detail}</p>
-                        {active && support.href ? (
-                          <Link
-                            className="mt-2 inline-block text-sm text-primary underline"
-                            to={support.href}
-                          >
-                            {t("Open in Ether")}
-                          </Link>
-                        ) : null}
-                      </li>
-                    );
-                  })}
-                </ul>
-                <ul className="divide-y divide-border">
-                  {selected.manifest.catalogs?.map((c, i) => (
-                    <li key={i} className="flex justify-between py-3 text-sm">
-                      <span>{c.name ?? c.id}</span>
-                      <span className="text-fg-muted">
-                        {c.type} · {c.id}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : null}
-          </div>
-        </Drawer>
-      ) : null}
+          ) : (
+            <ul
+              className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+              aria-label={t("Installed plugins")}
+            >
+              {plugins.map((p) => (
+                <li key={p.id}>
+                  <PluginCard
+                    plugin={p}
+                    busy={toggling === p.id}
+                    onOpen={() => setOpen(p.id)}
+                    onToggle={(next) => void toggle(p, next)}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      ) : (
+        <CatalogueTab
+          installedIds={installedIds}
+          onInstalled={(id) => void installed(id)}
+          onSelectInstalled={(id) => {
+            navigate("/plugins/installed");
+            setOpen(id);
+          }}
+          onOpenInstall={() => setInstallUrl("")}
+        />
+      )}
+
+      <InstalledPluginDrawer
+        pluginId={open}
+        onClose={() => setOpen(null)}
+        onChanged={() => void load(true)}
+        onRemoved={() => {
+          setOpen(null);
+          void load(true);
+        }}
+        logRevision={logRevision}
+        liveLogLines={open ? (liveLogs[open] ?? []) : []}
+      />
+      <InstallDrawer
+        open={installUrl !== null}
+        initialUrl={installUrl ?? ""}
+        onClose={() => setInstallUrl(null)}
+        onInstalled={(id) => void installed(id)}
+      />
       {browsing ? (
         <DirectoryBrowser
           onClose={() => setBrowsing(false)}
           onImport={(address) => {
             setBrowsing(false);
-            setURL(address);
-            setPreview(null);
-            setImportError("");
-            setAdding(true);
+            setInstallUrl(address);
           }}
         />
-      ) : null}
-      {adding ? (
-        <Dialog
-          open
-          onClose={() => setAdding(false)}
-          title={t("Import plugin")}
-          footer={
-            <>
-              <Button variant="ghost" onClick={() => setAdding(false)}>
-                {t("Cancel")}
-              </Button>
-              <Button
-                disabled={busy || !url.trim()}
-                onClick={() => void (preview ? install() : inspect())}
-              >
-                {busy ? t("Working…") : preview ? t("Install") : t("Read manifest")}
-              </Button>
-            </>
-          }
-        >
-          <div className="space-y-4">
-            <Input
-              aria-label={t("Manifest URL")}
-              value={url}
-              onChange={(e) => {
-                setURL(e.target.value);
-                setPreview(null);
-              }}
-              placeholder="https://example.com/manifest.json"
-            />
-            {importError ? (
-              <p
-                role="alert"
-                className="rounded-lg border border-danger/30 bg-danger/5 p-3 text-sm text-danger"
-              >
-                {importError}
-              </p>
-            ) : null}
-            {preview ? (
-              <>
-                <h3 className="font-semibold">
-                  {preview.manifest.name} · {preview.manifest.version}
-                </h3>
-                <p className="text-sm text-fg-muted">{preview.manifest.description}</p>
-                <p className="text-sm text-fg-muted">
-                  {t(
-                    "Installation saves the manifest and registers supported native contributions. Some resource types and identities are still unsupported.",
-                  )}
-                </p>
-              </>
-            ) : null}
-          </div>
-        </Dialog>
       ) : null}
     </DomainPage>
   );
 }
 
-function resourceSupport(resource: string): {
-  label: string;
-  kind?: DescriptorKind;
-  detail: string;
-  href?: string;
-} {
-  switch (resource) {
-    case "catalog":
-      return {
-        label: t("Catalogues"),
-        kind: "collectionSource",
-        detail: t(
-          "Available to collections and Home rows. Titles need a supported catalogue identity; shared visibility rules still apply.",
-        ),
-        href: "/collections",
-      };
-    case "meta":
-      return {
-        label: t("Metadata"),
-        kind: "metadataProvider",
-        detail: t(
-          "Movie and show metadata is stored during collection builds. Provider-only identities and full episode mapping are not supported yet.",
-        ),
-        href: "/collections",
-      };
-    case "subtitles":
-      return {
-        label: t("Subtitles"),
-        kind: "subtitleProvider",
-        detail: t(
-          "Uses the shared subtitle broker for search and explicit download. Provider checks validate timed text; they do not verify playback rendering.",
-        ),
-        href: "/playback/subtitles",
-      };
-    case "stream":
-      return {
-        label: t("Sources"),
-        kind: "sourceKind",
-        detail: t(
-          "Mapped into native source search. Playback depends on the returned stream format, upstream access and configured transports.",
-        ),
-        href: "/sources/indexers",
-      };
-    case "addon_catalog":
-      return {
-        label: t("Plugin directories"),
-        kind: "pluginDirectory",
-        detail: t(
-          "Available through Browse plugins. Each entry is fetched and reviewed before installation.",
-        ),
-      };
-    default:
-      return {
-        label: resource,
-        detail: t("This declared resource does not have a native adapter yet."),
-      };
-  }
+function Tile({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-border bg-surface px-3 py-2.5 sm:px-4 sm:py-3.5">
+      <p className="text-xs text-fg-muted">{label}</p>
+      <div className="mt-1 text-sm font-semibold tabular-nums text-fg sm:text-2xl">{value}</div>
+    </div>
+  );
+}
+
+function PluginCard({
+  plugin,
+  busy,
+  onOpen,
+  onToggle,
+}: {
+  plugin: PluginSummary;
+  busy: boolean;
+  onOpen: () => void;
+  onToggle: (on: boolean) => void;
+}) {
+  const level = pluginHealthLevel(plugin.health, plugin.enabled);
+  return (
+    <article
+      aria-label={plugin.name}
+      className="flex h-full flex-col rounded-xl border border-border bg-surface p-5"
+    >
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex items-start gap-3 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      >
+        <Artwork
+          src={plugin.icon}
+          alt={plugin.name}
+          icon={kindIcon(plugin.kind, 20)}
+          className="size-11 shrink-0 rounded-lg"
+        />
+        <div className="min-w-0 flex-1 space-y-1">
+          <h3 className="truncate font-semibold text-fg">{plugin.name}</h3>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {!plugin.enabled ? (
+              <Badge variant="secondary">{t("Off")}</Badge>
+            ) : plugin.shadow ? (
+              <Badge variant="info">
+                <Eye size={12} aria-hidden /> {t("Trying out")}
+              </Badge>
+            ) : (
+              <LevelBadge level={level} />
+            )}
+            <Badge variant="secondary">{kindLabel(plugin.kind, plugin.stremioOnly)}</Badge>
+            {plugin.updateVersion ? (
+              <Badge variant="info">
+                <ArrowUpCircle size={11} aria-hidden />{" "}
+                {t("Update v{version}", { version: plugin.updateVersion })}
+              </Badge>
+            ) : null}
+            {!plugin.verified ? <Badge variant="warning">{t("Unverified")}</Badge> : null}
+          </div>
+        </div>
+      </button>
+      <p className="mt-3 line-clamp-2 min-h-10 text-sm text-fg-muted">{plugin.summary}</p>
+      <div className="mt-auto flex items-center justify-between gap-3 pt-4">
+        <span className="font-mono text-xs text-fg-subtle">v{plugin.version}</span>
+        <Switch
+          aria-label={t("Enable {name}", { name: plugin.name })}
+          checked={plugin.enabled}
+          disabled={busy}
+          onChange={(e) => onToggle(e.currentTarget.checked)}
+        />
+      </div>
+    </article>
+  );
 }
