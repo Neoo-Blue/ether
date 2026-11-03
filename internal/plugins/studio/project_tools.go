@@ -29,7 +29,7 @@ func ProjectTools(s *Studio) []tools.Tool {
 		}
 		return tools.Result{Data: map[string]any{"project": p}}, nil
 	}
-	create := tools.Tool{Name: "studio_project_create", Title: "Create Studio draft", Description: "Create a saved plugin draft from template page, list, channels, localfiles, notify, ranking, tool or stremio-remix. Returns an approval proposal. Read the saved source before editing it.", Audience: tools.AudienceOwner, Owner: "builtin", InputSchema: json.RawMessage(`{"type":"object","required":["template","name"],"properties":{"template":{"type":"string"},"name":{"type":"string"},"pluginId":{"type":"string"}},"additionalProperties":false}`)}
+	create := tools.Tool{Name: "studio_project_create", Title: "Create Studio draft", Description: "Create a saved plugin draft from template page, list, channels, local_files, notification, ranking, tool or stremio_remix. Returns an approval proposal. Read the saved source before editing it.", Audience: tools.AudienceOwner, Owner: "builtin", InputSchema: json.RawMessage(`{"type":"object","required":["template","name"],"properties":{"template":{"type":"string"},"name":{"type":"string"},"pluginId":{"type":"string"}},"additionalProperties":false}`)}
 	create.Execute = func(ctx context.Context, _ tools.Principal, input map[string]any) (tools.Result, error) {
 		template, err := reqString(input, "template", 64)
 		if err != nil {
