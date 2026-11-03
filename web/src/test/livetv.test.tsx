@@ -188,7 +188,7 @@ describe("Live TV studio", () => {
     });
     renderLiveTV("/livetv?channel=c1");
     fireEvent.click(await screen.findByRole("tab", { name: "Viewers" }, WAIT));
-    expect(await screen.findByRole("switch", { name: "Sam" })).toBeChecked();
+    expect(await screen.findByRole("switch", { name: "Sam" }, WAIT)).toBeChecked();
     expect(screen.getByRole("switch", { name: "Kim" })).not.toBeChecked();
     expect(screen.getByRole("switch", { name: "Lee" })).toBeDisabled();
     expect(screen.getByText("Live TV is off")).toBeInTheDocument();
@@ -225,7 +225,7 @@ describe("Live TV studio", () => {
     });
     renderLiveTV("/livetv?channel=c1");
     fireEvent.click(await screen.findByRole("tab", { name: "Viewers" }, WAIT));
-    expect(await screen.findByRole("switch", { name: "Sam" })).toBeChecked();
+    expect(await screen.findByRole("switch", { name: "Sam" }, WAIT)).toBeChecked();
     fireEvent.click(screen.getByRole("switch", { name: "Private" }));
     // Private hides it from everyone not given it.
     expect(screen.getByRole("switch", { name: "Sam" })).not.toBeChecked();

@@ -85,8 +85,8 @@ func (s *source) kickPlayAhead() {
 
 func (s *source) playAheadLoop() {
 	defer s.raWG.Done()
-	s.e.playAheaders.Add(1)
-	defer s.e.playAheaders.Add(-1)
+	s.e.playSources.Store(s, struct{}{})
+	defer s.e.playSources.Delete(s)
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -134,10 +134,26 @@ func (s *source) playAheadBytes() int64 {
 		case limit == 0:
 			return 0
 		case limit > 0:
-			want = min(want, limit/(playCacheShare*max(1, s.e.playAheaders.Load())))
+			want = min(want, limit/(playCacheShare*max(1, s.e.activePlayers())))
 		}
 	}
 	return want
+}
+
+// activePlayers counts the sources sharing the read-ahead allowance: those
+// with a demand read within playIdle. A paused viewer's source keeps its loop
+// (and its session) but stops shrinking the depth of viewers still playing,
+// and counts again as soon as it reads.
+func (e *Engine) activePlayers() int64 {
+	cutoff := time.Now().Add(-playIdle).UnixNano()
+	var n int64
+	e.playSources.Range(func(k, _ any) bool {
+		if k.(*source).lastRead.Load() > cutoff {
+			n++
+		}
+		return true
+	})
+	return n
 }
 
 // playPlan picks the reader to read ahead of (the most recently active one
