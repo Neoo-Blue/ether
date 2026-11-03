@@ -186,6 +186,10 @@ func newListTestHarness(t *testing.T) *listTestHarness {
 	mgr.RegisterRuntime("hosted", func(_ plugins.Installed) (plugins.Runtime, error) {
 		return rt, nil
 	})
+	// Plain Stremio add-ons run on the remote runtime.
+	mgr.RegisterRuntime("remote", func(_ plugins.Installed) (plugins.Runtime, error) {
+		return rt, nil
+	})
 	adapters.Attach(mgr, cols, pers, nil)
 
 	return &listTestHarness{
@@ -312,8 +316,8 @@ func TestListSourceLifecycleAndMatching(t *testing.T) {
 			Status: 200,
 			Body: json.RawMessage(`{
 				"metas": [
-					{"imdb_id": "tt9999999", "type": "movie", "name": "Unmatched Future Film", "year": 2029},
-					{"tmdb_id": 103, "type": "movie", "name": "The Matrix Revolutions"}
+					{"id": "curated:future", "imdb_id": "tt9999999", "type": "movie", "name": "Unmatched Future Film", "year": 2029},
+					{"id": "curated:103", "tmdb_id": 103, "type": "movie", "name": "The Matrix Revolutions"}
 				],
 				"hasMore": false
 			}`),
@@ -349,7 +353,11 @@ func TestListSourceLifecycleAndMatching(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSpec failed: %v", err)
 	}
-	if !strings.Contains(strings.Join(created.Warnings, " "), "1 of 4") {
+	// A remote list builds in the background; wait for that build.
+	if created, err = h.cols.Rebuild(ctx, created.ID); err != nil {
+		t.Fatalf("Rebuild failed: %v", err)
+	}
+	if !strings.Contains(strings.Join(created.Warnings, " "), "1 of 4 items in Staff picks could not be matched to the catalogue") {
 		t.Fatalf("expected unmatched warning from build, got %v", created.Warnings)
 	}
 	h.rt.resetCalls()
@@ -508,25 +516,28 @@ func TestPreviewReportsTimeout(t *testing.T) {
 	}
 }
 
-func TestLiveCollectionViewerUsesSnapshot(t *testing.T) {
+func TestCollectionViewerUsesSnapshot(t *testing.T) {
 	h := newListTestHarness(t)
 	ctx := context.Background()
 	rec := installListPlugin(t, h.mgr, 50)
 	h.rt.routes["/catalog/movie/staff_picks/genre=scifi.json"] = func(plugins.Request) (plugins.Response, error) {
 		return plugins.Response{Status: 200, Body: json.RawMessage(`{"metas":[{"id":"tmdb:101"}],"hasMore":false}`)}, nil
 	}
-	_, err := h.cols.CreateSpec(ctx, core.CollectionSpec{Name: "Live", MediaType: "movie", Refresh: "live", Enabled: true, Sources: []core.CollectionSource{{Kind: extend.PluginID(rec.ID, "staff_picks"), Params: map[string]string{"genre": "scifi"}}}, Targets: core.CollectionTargets{CollectionsTab: true, HomeRow: true, Users: core.AllUsers()}})
+	created, err := h.cols.CreateSpec(ctx, core.CollectionSpec{Name: "Snapshot", MediaType: "movie", Refresh: "daily", Enabled: true, Sources: []core.CollectionSource{{Kind: extend.PluginID(rec.ID, "staff_picks"), Params: map[string]string{"genre": "scifi"}}}, Targets: core.CollectionTargets{CollectionsTab: true, HomeRow: true, Users: core.AllUsers()}})
 	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.cols.Rebuild(ctx, created.ID); err != nil {
 		t.Fatal(err)
 	}
 	h.rt.resetCalls()
 	got, err := h.cols.List(ctx, &core.User{ID: 1, IsOwner: true}, core.TypeMovie)
 	if err != nil || len(got) != 1 {
-		t.Fatalf("browse live snapshot: %+v %v", got, err)
+		t.Fatalf("browse snapshot: %+v %v", got, err)
 	}
 	rows, err := h.cols.HomeRowsFor(ctx, &core.User{ID: 1, IsOwner: true}, core.HubContext{Now: time.Now()})
 	if err != nil || len(rows) != 1 {
-		t.Fatalf("home live snapshot: %+v %v", rows, err)
+		t.Fatalf("home snapshot: %+v %v", rows, err)
 	}
 	if calls := h.rt.paths(); len(calls) != 0 {
 		t.Fatalf("viewer path called plugin: %v", calls)
@@ -537,7 +548,7 @@ func TestMalformedCatalogRecordsHealth(t *testing.T) {
 	h := newListTestHarness(t)
 	rec := installListPlugin(t, h.mgr, 10)
 	h.rt.routes["/catalog/movie/staff_picks/genre=bad.json"] = func(plugins.Request) (plugins.Response, error) {
-		return plugins.Response{Status: 200, Body: json.RawMessage(`{}`)}, nil
+		return plugins.Response{Status: 200, Body: []byte(`<html>not a catalog</html>`)}, nil
 	}
 	_, err := h.cols.Preview(context.Background(), core.CollectionSpec{Name: "Bad", MediaType: "movie", Sources: []core.CollectionSource{{Kind: extend.PluginID(rec.ID, "staff_picks"), Params: map[string]string{"genre": "bad"}}}}, 20)
 	if err != nil {

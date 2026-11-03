@@ -125,13 +125,6 @@ export type Source =
   | { kind: "letterboxdList"; url: string }
   | { kind: "mdblist"; url: string }
   | { kind: "anilistList"; url: string }
-  | {
-      kind: "stremioCatalog";
-      url: string;
-      list: string;
-      mediaType: "movie" | "show";
-      maxItems?: number;
-    }
   | { kind: "stevenlu"; list: StevenLuList }
   | { kind: "titles"; keys: string[] };
 

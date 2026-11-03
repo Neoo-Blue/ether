@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -161,4 +162,27 @@ func decodeStremioMetadata(body json.RawMessage, req core.MetadataRequest) (*cor
 		title.Directors = append(title.Directors, core.Person{Name: name})
 	}
 	return title, nil
+}
+
+var yearPrefixRe = regexp.MustCompile(`^(\d{4})`)
+
+func parseAnyInt64(v any) int64 {
+	switch val := v.(type) {
+	case float64:
+		return int64(val)
+	case int64:
+		return val
+	case int:
+		return int64(val)
+	case json.Number:
+		n, _ := val.Int64()
+		return n
+	case string:
+		s := strings.TrimSpace(val)
+		s = strings.TrimPrefix(strings.ToLower(s), "tmdb:")
+		n, _ := strconv.ParseInt(s, 10, 64)
+		return n
+	default:
+		return 0
+	}
 }

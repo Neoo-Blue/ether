@@ -57,7 +57,7 @@ type CollectionSpec struct {
 //	traktList | letterboxdList | mdblist      URL
 //	anilistList                               URL (an AniList anime list; optionally one named list)
 //	stevenlu                                  List: movies (default) or a score-filtered variant
-//	stremioCatalog  URL, List, MediaType, MaxItems, Params  a Stremio add-on catalog
+//	plugin:<id>/<key>  Params, MaxItems       a plugin's or Stremio add-on's list (catalog)
 //	titles          Keys                      hand-picked rating keys
 //
 // When ID is 0 the Label is resolved to a TMDB id by name.
@@ -74,8 +74,8 @@ type CollectionSource struct {
 	// Role narrows tmdbPerson credits: "cast", "director", "writer",
 	// "crew" or "" (every credit). Additive to the contract.
 	Role string `json:"role,omitempty"`
-	// MaxItems caps how many items a stremioCatalog source pulls per refresh
-	// (1..2000). Additive to the contract.
+	// MaxItems caps how many items a plugin or add-on list source pulls per
+	// refresh (1..2000). Additive to the contract.
 	MaxItems int `json:"maxItems,omitempty"`
 }
 
