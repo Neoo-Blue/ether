@@ -221,7 +221,7 @@ func (p *searchPreparation) readyResultsAfter(window time.Duration) []core.Relea
 			leadUncachedTorrent := lead >= 0 &&
 				protocolOf(p.ranked[lead].rel) == core.ProtocolTorrent &&
 				!p.svc.knownCached(p.ranked[lead].rel)
-			if lead >= 0 && !(leadUncachedTorrent && c.rel.Score == p.ranked[lead].rel.Score && p.svc.knownCached(c.rel)) && (!equivalentHedge(p.ranked[lead], c, margin) || time.Since(p.first) < rankedSourceGrace) {
+			if lead >= 0 && !(leadUncachedTorrent && p.svc.knownCached(c.rel)) && (!equivalentHedge(p.ranked[lead], c, margin) || time.Since(p.first) < rankedSourceGrace) {
 				continue
 			}
 			preference := p.svc.resolverCfg().SourcePreference

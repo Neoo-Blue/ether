@@ -196,7 +196,7 @@ func (s *Service) validateRanked(ctx context.Context, cands []candidate, tr *Tra
 				continue
 			}
 			switch {
-			case leadUncachedTorrent && s.knownCached(cands[k].rel) && cands[k].rel.Score == cands[lead].rel.Score && cands[k].policy.Fallback <= cands[lead].policy.Fallback:
+			case leadUncachedTorrent && s.knownCached(cands[k].rel) && cands[k].policy.Fallback <= cands[lead].policy.Fallback:
 				return win(*v, lead)
 			case equivalentHedge(cands[lead], cands[k], margin):
 				if age >= rankedSourceGrace {
