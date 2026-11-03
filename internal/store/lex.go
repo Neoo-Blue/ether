@@ -171,11 +171,17 @@ func Rebind(q string) (string, int) {
 				b.WriteString(s[:d])
 				n = max(n, num)
 				s = s[d:]
+				if comparedToInteger(s) {
+					b.WriteString("::bigint")
+				}
 				continue
 			}
 			n++
 			b.WriteByte('$')
 			b.WriteString(strconv.Itoa(n))
+			if comparedToInteger(s) {
+				b.WriteString("::bigint")
+			}
 		}
 	}
 	if n == 0 {
@@ -211,4 +217,40 @@ func (c *rebindCache) get(q string) string {
 	c.m[q] = r
 	c.mu.Unlock()
 	return r
+}
+
+// comparedToInteger reports whether the text after a placeholder compares it
+// with an integer literal, as in `?<>0` or `? = 1`. PostgreSQL infers such a
+// parameter as int4 from the literal, so a 64-bit value such as a pre-1902
+// Unix timestamp fails to encode; the caller types it as bigint instead, which
+// keeps the comparison's meaning on both engines.
+func comparedToInteger(s string) bool {
+	i := 0
+	for i < len(s) && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r') {
+		i++
+	}
+	op := 0
+	switch {
+	case strings.HasPrefix(s[i:], "<>"), strings.HasPrefix(s[i:], "!="), strings.HasPrefix(s[i:], "<="), strings.HasPrefix(s[i:], ">="):
+		op = 2
+	case i < len(s) && (s[i] == '=' || s[i] == '<' || s[i] == '>'):
+		op = 1
+	default:
+		return false
+	}
+	i += op
+	for i < len(s) && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r') {
+		i++
+	}
+	if i < len(s) && s[i] == '-' {
+		i++
+	}
+	digits := i
+	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+		i++
+	}
+	if i == digits {
+		return false
+	}
+	return i == len(s) || !(isIdentByte(s[i]) || s[i] == '.')
 }
