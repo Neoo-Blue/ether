@@ -1,6 +1,7 @@
 {
   "m_00014734347949": "Torrent (Torznab)",
   "m_00017bdb2a0915": "Afficher le mot de passe",
+  "m_0001e5e9211466": "Toute application",
   "m_0003c2d2aba069": "Impossible d’enregistrer les fichiers.",
   "m_0003c8ed437167": "À la maison",
   "m_000492b4f38eca": "Dolby Vision",
@@ -680,6 +681,7 @@
   "m_0333aa20d30835": "Connectez chaque téléphone, tablette ou ordinateur séparément.",
   "m_0334f84e255398": "J’ai reproduit le problème",
   "m_03367b30427991": "Quatre ou six affiches de membres, avec le nom de la collection.",
+  "m_0337d07b97899f": "Film ou épisode (facultatif)",
   "m_0338301a1b31c2": {
     "one": "{count} titre dans votre catalogue",
     "many": "{count} de titres dans votre catalogue",
@@ -2826,6 +2828,7 @@
   "m_0dabee3bf5db65": "URL de serveur personnalisées",
   "m_0dac2d2cd017fb": "Exemplaires supplémentaires de même qualité, après Auto.",
   "m_0dae67d1ac7c4c": "Soirée de week-end",
+  "m_0daeb1d4328fc0": "Les limites de qualité s’appliquent à ce titre ; les versions disponibles peuvent varier.",
   "m_0daf3fb77a5809": "Lier un compte Plex",
   "m_0db284d0f8a678": "Indexeur supprimé",
   "m_0db4976738273d": "MDBList connecté",
@@ -4206,6 +4209,7 @@
   "m_1458e49bacd177": "p. ex. Programmes régionaux",
   "m_145964ea0592aa": "Les instantanés contiennent vos paramètres et une copie cohérente de la base de données.",
   "m_145a941fe03cb3": "Activer ou désactiver un plugin",
+  "m_145f661838d3dd": "Définir une limite",
   "m_145ffb7ff6ffcb": "Supprimer le fournisseur",
   "m_14617a1162622b": "Prêt",
   "m_1462e0224499e8": "Un résumé de ce que chacun a regardé au cours des sept derniers jours.",

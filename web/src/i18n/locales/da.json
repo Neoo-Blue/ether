@@ -1,6 +1,7 @@
 {
   "m_00014734347949": "Torrent (Torznab)",
   "m_00017bdb2a0915": "Vis adgangskode",
+  "m_0001e5e9211466": "Enhver app",
   "m_0003c2d2aba069": "Kunne ikke gemme filerne.",
   "m_0003c8ed437167": "Hjemme",
   "m_000492b4f38eca": "Dolby Vision",
@@ -663,6 +664,7 @@
   "m_0333aa20d30835": "Forbind hver telefon, tablet eller computer for sig.",
   "m_0334f84e255398": "Jeg har genskabt problemet",
   "m_03367b30427991": "Fire eller seks medlemsplakater med samlingens navn.",
+  "m_0337d07b97899f": "Film eller episode (valgfrit)",
   "m_0338301a1b31c2": {
     "one": "{count} titel i dit katalog",
     "other": "{count} titler i dit katalog"
@@ -2762,6 +2764,7 @@
   "m_0dabee3bf5db65": "Brugerdefinerede server-URL’er",
   "m_0dac2d2cd017fb": "Ekstra kopier i samme kvalitet efter Auto.",
   "m_0dae67d1ac7c4c": "Weekendaften",
+  "m_0daeb1d4328fc0": "Kvalitetsgrænser gælder for denne titel; tilgængelige udgivelser kan variere.",
   "m_0daf3fb77a5809": "Link Plex-konto",
   "m_0db284d0f8a678": "Indexer fjernet",
   "m_0db4976738273d": "MDBList er tilsluttet",
@@ -4101,6 +4104,7 @@
   "m_1458e49bacd177": "f.eks. Regionale programmer",
   "m_145964ea0592aa": "Snapshots indeholder dine indstillinger og en konsistent kopi af databasen.",
   "m_145a941fe03cb3": "Slå et plugin til eller fra",
+  "m_145f661838d3dd": "Angiv grænse",
   "m_145ffb7ff6ffcb": "Fjern udbyder",
   "m_14617a1162622b": "Klar",
   "m_1462e0224499e8": "Et resumé af, hvad alle har set de seneste syv dage.",

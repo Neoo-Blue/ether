@@ -1,6 +1,7 @@
 {
   "m_00014734347949": "Torrent (Torznab)",
   "m_00017bdb2a0915": "Vis passord",
+  "m_0001e5e9211466": "Alle apper",
   "m_0003c2d2aba069": "Kunne ikke lagre filene.",
   "m_0003c8ed437167": "Hjemme",
   "m_000492b4f38eca": "Dolby Vision",
@@ -663,6 +664,7 @@
   "m_0333aa20d30835": "Koble til hver telefon, nettbrett eller datamaskin for seg.",
   "m_0334f84e255398": "Jeg har gjenskapt problemet",
   "m_03367b30427991": "Fire eller seks medlemsplakater, med samlingsnavnet.",
+  "m_0337d07b97899f": "Film eller episode (valgfritt)",
   "m_0338301a1b31c2": {
     "one": "{count} tittel i katalogen din",
     "other": "{count} titler i katalogen din"
@@ -2762,6 +2764,7 @@
   "m_0dabee3bf5db65": "Egendefinerte server-URL-er",
   "m_0dac2d2cd017fb": "Ekstra kopier med samme kvalitet, etter Auto.",
   "m_0dae67d1ac7c4c": "Helgekveld",
+  "m_0daeb1d4328fc0": "Kvalitetsgrenser gjelder for denne tittelen; tilgjengelige utgivelser kan variere.",
   "m_0daf3fb77a5809": "Koble til Plex-konto",
   "m_0db284d0f8a678": "Indekserer fjernet",
   "m_0db4976738273d": "MDBList tilkoblet",
@@ -4101,6 +4104,7 @@
   "m_1458e49bacd177": "f.eks. Regionale programoppføringer",
   "m_145964ea0592aa": "Øyeblikksbilder inneholder innstillingene dine og en konsistent kopi av databasen.",
   "m_145a941fe03cb3": "Slå en utvidelse på eller av",
+  "m_145f661838d3dd": "Angi grense",
   "m_145ffb7ff6ffcb": "Fjern leverandør",
   "m_14617a1162622b": "Klar",
   "m_1462e0224499e8": "Et sammendrag av hva alle har sett de siste sju dagene.",

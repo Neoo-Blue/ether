@@ -6,6 +6,7 @@ import { useViewers, viewerName } from "../../components/pickers";
 import { MonitorCheck, ShieldCheck, CheckCircle2, ChevronRight } from "lucide-react";
 import { t } from "../../i18n";
 import { searchSelectLabels } from "../../i18n/appkit-labels";
+import { TitlePicker } from "./Search";
 import { api } from "../../lib/api";
 import { formatNumber } from "../../lib/format";
 import { useAsync } from "../../lib/hooks";
@@ -147,6 +148,7 @@ function Answer({ answer, viewer }: { answer: QualityAnswer; viewer: string }) {
                 />
               )}
               {l.edited ? <Badge variant="secondary">{t("Edited")}</Badge> : null}
+              <div><a className="text-sm text-primary underline" href={l.kind === "device" ? "/playback/devices/apps" : l.kind === "viewer-cap" || l.kind === "remote-blocked" ? "/viewers" : l.kind === "remote-cap" ? "/quality/profiles" : l.kind === "profile" && l.source !== "rule" ? "/quality/profiles" : "/quality/rules"}>{l.decisive ? t("Edit") : t("Set limit")}</a></div>
             </li>
           );
         })}
@@ -170,16 +172,17 @@ export function WhoGetsWhat({ refreshKey }: { refreshKey?: unknown }) {
   const [pickedViewer, setViewer] = useState(0);
   const [pickedClient, setClient] = useState("");
   const [where, setWhere] = useState<Where>("home");
+  const [title, setTitle] = useState<{key:string; name:string} | null>(null);
 
   const viewerId = pickedViewer || viewers?.find((v) => v.isOwner)?.id || viewers?.[0]?.id || 0;
   const clientId = pickedClient || clients.data?.[0]?.id || "";
   const remote = where === "away";
   const answer = useAsync<QualityAnswer | null>(
     (signal) =>
-      viewerId && clientId
-        ? api.explainQuality({ userId: viewerId, clientId, remote }, signal)
+      viewerId
+        ? api.explainQuality({ userId: viewerId, ...(clientId ? { clientId } : {}), ...(title ? { titleKey: title.key } : {}), remote }, signal)
         : Promise.resolve(null),
-    [viewerId, clientId, remote, refreshKey],
+    [viewerId, clientId, remote, title?.key, refreshKey],
   );
   const viewer = viewers?.find((v) => v.id === viewerId);
 
@@ -215,7 +218,7 @@ export function WhoGetsWhat({ refreshKey }: { refreshKey?: unknown }) {
                   {...searchSelectLabels()}
                   value={clientId}
                   onChange={setClient}
-                  options={clients.data.map((c) => ({ value: c.id, label: c.name }))}
+                  options={[{ value: "any", label: t("Any app") }, ...clients.data.map((c) => ({ value: c.id, label: c.name }))]}
                   ariaLabel={t("App")}
                 />
               </div>
@@ -233,6 +236,11 @@ export function WhoGetsWhat({ refreshKey }: { refreshKey?: unknown }) {
                 ]}
               />
             </div>
+          </div>
+          <div className="px-5 pb-4 space-y-2">
+            <p className="text-xs font-medium text-fg-muted">{t("Movie or episode (optional)")}</p>
+            {title ? <div className="flex items-center gap-2 text-sm"><span>{title.name}</span><button type="button" className="text-primary underline" onClick={() => setTitle(null)}>{t("Clear")}</button></div> : <TitlePicker onPick={(key, name) => setTitle({key, name})} />}
+            {title && <p className="text-xs text-fg-muted">{t("Quality limits apply to this title; available releases may differ.")}</p>}
           </div>
           {answer.error ? (
             <ErrorPanel error={answer.error} onRetry={() => void answer.reload()} />

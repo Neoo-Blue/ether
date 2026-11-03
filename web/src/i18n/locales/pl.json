@@ -1,6 +1,7 @@
 {
   "m_00014734347949": "Torrent (Torznab)",
   "m_00017bdb2a0915": "Pokaż hasło",
+  "m_0001e5e9211466": "Dowolna aplikacja",
   "m_0003c2d2aba069": "Nie udało się zapisać plików.",
   "m_0003c8ed437167": "W domu",
   "m_000492b4f38eca": "Dolby Vision",
@@ -697,6 +698,7 @@
   "m_0333aa20d30835": "Połącz każdy telefon, tablet i komputer osobno.",
   "m_0334f84e255398": "Problem został przeze mnie odtworzony",
   "m_03367b30427991": "Cztery lub sześć plakatów tytułów wraz z nazwą kolekcji.",
+  "m_0337d07b97899f": "Film lub odcinek (opcjonalnie)",
   "m_0338301a1b31c2": {
     "one": "{count} tytuł w Twoim katalogu",
     "few": "{count} tytuły w Twoim katalogu",
@@ -2890,6 +2892,7 @@
   "m_0dabee3bf5db65": "Własne adresy URL serwera",
   "m_0dac2d2cd017fb": "Dodatkowe kopie tej samej jakości po opcji Auto.",
   "m_0dae67d1ac7c4c": "Weekendowa noc",
+  "m_0daeb1d4328fc0": "Limity jakości dotyczą tego tytułu; dostępne wydania mogą się różnić.",
   "m_0daf3fb77a5809": "Połącz konto Plex",
   "m_0db284d0f8a678": "Indeksator usunięty",
   "m_0db4976738273d": "MDBList połączony",
@@ -4311,6 +4314,7 @@
   "m_1458e49bacd177": "np. Program regionalny",
   "m_145964ea0592aa": "Migawki zawierają Twoje ustawienia i spójną kopię bazy danych.",
   "m_145a941fe03cb3": "Włącz lub wyłącz wtyczkę",
+  "m_145f661838d3dd": "Ustaw limit",
   "m_145ffb7ff6ffcb": "Usuń dostawcę",
   "m_14617a1162622b": "Gotowe",
   "m_1462e0224499e8": "Podsumowanie tego, co wszyscy oglądali w ciągu ostatnich siedmiu dni.",

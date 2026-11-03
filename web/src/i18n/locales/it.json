@@ -1,6 +1,7 @@
 {
   "m_00014734347949": "Torrent (Torznab)",
   "m_00017bdb2a0915": "Mostra password",
+  "m_0001e5e9211466": "Qualsiasi app",
   "m_0003c2d2aba069": "Impossibile salvare i file.",
   "m_0003c8ed437167": "A casa",
   "m_000492b4f38eca": "Dolby Vision",
@@ -680,6 +681,7 @@
   "m_0333aa20d30835": "Collega ogni telefono, tablet o computer separatamente.",
   "m_0334f84e255398": "Ho riprodotto il problema",
   "m_03367b30427991": "Quattro o sei locandine dei membri, con il nome della raccolta.",
+  "m_0337d07b97899f": "Film o episodio (facoltativo)",
   "m_0338301a1b31c2": {
     "one": "{count} titolo nel tuo catalogo",
     "many": "{count} di titoli nel tuo catalogo",
@@ -2826,6 +2828,7 @@
   "m_0dabee3bf5db65": "URL del server personalizzati",
   "m_0dac2d2cd017fb": "Copie aggiuntive della stessa qualità, dopo Auto.",
   "m_0dae67d1ac7c4c": "Notte del weekend",
+  "m_0daeb1d4328fc0": "I limiti di qualità si applicano a questo titolo; le versioni disponibili possono variare.",
   "m_0daf3fb77a5809": "Collega l'account Plex",
   "m_0db284d0f8a678": "Indexer rimosso",
   "m_0db4976738273d": "MDBList connesso",
@@ -4206,6 +4209,7 @@
   "m_1458e49bacd177": "ad es. Programmi regionali",
   "m_145964ea0592aa": "Gli snapshot contengono le tue impostazioni e una copia coerente del database.",
   "m_145a941fe03cb3": "Attiva o disattiva un plugin",
+  "m_145f661838d3dd": "Imposta limite",
   "m_145ffb7ff6ffcb": "Rimuovi il provider",
   "m_14617a1162622b": "Pronto",
   "m_1462e0224499e8": "Un riepilogo di ciò che tutti hanno guardato negli ultimi sette giorni.",

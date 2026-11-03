@@ -1,6 +1,7 @@
 {
   "m_00014734347949": "Torrent (Torznab)",
   "m_00017bdb2a0915": "Mostrar senha",
+  "m_0001e5e9211466": "Qualquer aplicativo",
   "m_0003c2d2aba069": "Não foi possível salvar os arquivos.",
   "m_0003c8ed437167": "Em casa",
   "m_000492b4f38eca": "Dolby Vision",
@@ -680,6 +681,7 @@
   "m_0333aa20d30835": "Conecte cada telefone, tablet ou computador separadamente.",
   "m_0334f84e255398": "Reproduzi o problema",
   "m_03367b30427991": "Quatro ou seis pôsteres de membros, com o nome da coleção.",
+  "m_0337d07b97899f": "Filme ou episódio (opcional)",
   "m_0338301a1b31c2": {
     "one": "{count} título no seu catálogo",
     "many": "{count} de títulos no seu catálogo",
@@ -2826,6 +2828,7 @@
   "m_0dabee3bf5db65": "URLs personalizadas do servidor",
   "m_0dac2d2cd017fb": "Cópias extras da mesma qualidade, após Auto.",
   "m_0dae67d1ac7c4c": "Noite de fim de semana",
+  "m_0daeb1d4328fc0": "Os limites de qualidade se aplicam a este título; os lançamentos disponíveis podem variar.",
   "m_0daf3fb77a5809": "Vincular conta Plex",
   "m_0db284d0f8a678": "Indexador removido",
   "m_0db4976738273d": "MDBList conectado",
@@ -4206,6 +4209,7 @@
   "m_1458e49bacd177": "ex.: Programação regional",
   "m_145964ea0592aa": "Os instantâneos guardam suas configurações e uma cópia consistente do banco de dados.",
   "m_145a941fe03cb3": "Ativar ou desativar um plugin",
+  "m_145f661838d3dd": "Definir limite",
   "m_145ffb7ff6ffcb": "Remover provedor",
   "m_14617a1162622b": "Pronto",
   "m_1462e0224499e8": "Um resumo do que todos assistiram nos últimos sete dias.",

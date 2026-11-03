@@ -1,6 +1,7 @@
 {
   "m_00014734347949": "Torrent (Torznab)",
   "m_00017bdb2a0915": "Show password",
+  "m_0001e5e9211466": "Any app",
   "m_0003c2d2aba069": "Could not save files.",
   "m_0003c8ed437167": "At home",
   "m_000492b4f38eca": "Dolby Vision",
@@ -663,6 +664,7 @@
   "m_0333aa20d30835": "Connect each phone, tablet or computer separately.",
   "m_0334f84e255398": "I have reproduced the problem",
   "m_03367b30427991": "Four or six member posters, with the collection name.",
+  "m_0337d07b97899f": "Movie or episode (optional)",
   "m_0338301a1b31c2": {
     "one": "{count} title in your catalog",
     "other": "{count} titles in your catalog"
@@ -2771,6 +2773,7 @@
   "m_0dabee3bf5db65": "Custom server URLs",
   "m_0dac2d2cd017fb": "Extra copies of the same picture, after Auto.",
   "m_0dae67d1ac7c4c": "Weekend Night",
+  "m_0daeb1d4328fc0": "Quality limits apply to this title; available releases may differ.",
   "m_0daf3fb77a5809": "Link Plex account",
   "m_0db284d0f8a678": "Indexer removed",
   "m_0db4976738273d": "MDBList connected",
@@ -4110,6 +4113,7 @@
   "m_1458e49bacd177": "e.g. Regional listings",
   "m_145964ea0592aa": "Snapshots hold your settings and a consistent copy of the database.",
   "m_145a941fe03cb3": "Turn a plugin on or off",
+  "m_145f661838d3dd": "Set limit",
   "m_145ffb7ff6ffcb": "Remove provider",
   "m_14617a1162622b": "Ready",
   "m_1462e0224499e8": "A summary of what everyone watched over the last seven days.",

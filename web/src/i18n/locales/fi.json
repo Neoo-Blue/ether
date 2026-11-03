@@ -1,6 +1,7 @@
 {
   "m_00014734347949": "Torrent (Torznab)",
   "m_00017bdb2a0915": "Näytä salasana",
+  "m_0001e5e9211466": "Mikä tahansa sovellus",
   "m_0003c2d2aba069": "Tiedostoja ei voitu tallentaa.",
   "m_0003c8ed437167": "Kotona",
   "m_000492b4f38eca": "Dolby Vision",
@@ -663,6 +664,7 @@
   "m_0333aa20d30835": "Yhdistä jokainen puhelin, tabletti tai tietokone erikseen.",
   "m_0334f84e255398": "Olen toistanut ongelman",
   "m_03367b30427991": "Neljä tai kuusi jäsenen julistetta ja kokoelman nimi.",
+  "m_0337d07b97899f": "Elokuva tai jakso (valinnainen)",
   "m_0338301a1b31c2": {
     "one": "{count} nimike katalogissasi",
     "other": "{count} nimikettä katalogissasi"
@@ -2762,6 +2764,7 @@
   "m_0dabee3bf5db65": "Omat palvelimen URL-osoitteet",
   "m_0dac2d2cd017fb": "Lisäkopiot samalla laadulla Auto-valinnan jälkeen.",
   "m_0dae67d1ac7c4c": "Viikonlopun ilta",
+  "m_0daeb1d4328fc0": "Laaturajat koskevat tätä nimikettä; saatavilla olevat julkaisut voivat vaihdella.",
   "m_0daf3fb77a5809": "Linkitä Plex-tili",
   "m_0db284d0f8a678": "Indeksoija poistettu",
   "m_0db4976738273d": "MDBList yhdistetty",
@@ -4101,6 +4104,7 @@
   "m_1458e49bacd177": "esim. Alueelliset ohjelmatiedot",
   "m_145964ea0592aa": "Tilannekuvat sisältävät asetuksesi ja yhtenäisen kopion tietokannasta.",
   "m_145a941fe03cb3": "Ota liitännäinen käyttöön tai poista se käytöstä",
+  "m_145f661838d3dd": "Aseta raja",
   "m_145ffb7ff6ffcb": "Poista palveluntarjoaja",
   "m_14617a1162622b": "Valmis",
   "m_1462e0224499e8": "Yhteenveto siitä, mitä kaikki katsoivat viimeisten seitsemän päivän aikana.",

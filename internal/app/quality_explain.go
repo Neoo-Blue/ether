@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/braedonsaunders/ether/internal/core"
+	"github.com/braedonsaunders/ether/internal/frontend/kit/caps"
 	"github.com/braedonsaunders/ether/internal/plex"
 	"github.com/braedonsaunders/ether/internal/resolver"
 )
@@ -13,11 +15,12 @@ import (
 // The identities are what each official app sends, so the capability
 // registry and quality rules match them exactly as they match playback.
 type qualityClient struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Product  string `json:"product"`
-	Platform string `json:"platform"`
-	Device   string `json:"device,omitempty"`
+	ID       string        `json:"id"`
+	Name     string        `json:"name"`
+	Product  string        `json:"product"`
+	Platform string        `json:"platform"`
+	Device   string        `json:"device,omitempty"`
+	Protocol core.Protocol `json:"protocol,omitempty"`
 }
 
 func qualityClients() []qualityClient {
@@ -37,6 +40,8 @@ func qualityClients() []qualityClient {
 		{ID: "plex-web-safari", Name: "Plex Web in Safari", Product: "Plex Web", Platform: "Safari"},
 		{ID: "plex-htpc", Name: "Plex HTPC", Product: "Plex HTPC", Platform: "Windows"},
 		{ID: "plex-desktop", Name: "Plex for Windows and Mac", Product: "Plex for Windows", Platform: "Windows"},
+		{ID: "jellyfin", Name: "Jellyfin", Product: "Jellyfin", Protocol: "jellyfin"},
+		{ID: "emby", Name: "Emby", Product: "Emby", Protocol: "emby"},
 	}
 }
 
@@ -45,6 +50,7 @@ type qualityExplainIn struct {
 	ClientID string         `json:"clientId,omitempty"`
 	Client   *qualityClient `json:"client,omitempty"`
 	Remote   bool           `json:"remote"`
+	TitleKey string         `json:"titleKey,omitempty"`
 }
 
 // qualityHandler serves the Quality page's "Who gets what" checker.
@@ -65,6 +71,8 @@ func (a *App) handleQualityExplain(w http.ResponseWriter, r *http.Request) {
 	}
 	var client qualityClient
 	switch {
+	case in.ClientID == "any":
+		// Explicitly ask for a generic client with no assumed app.
 	case in.ClientID != "":
 		found := false
 		for _, c := range qualityClients() {
@@ -92,12 +100,37 @@ func (a *App) handleQualityExplain(w http.ResponseWriter, r *http.Request) {
 		writeQualityError(w, http.StatusNotFound, "unknown_viewer", "no such viewer")
 		return
 	}
+	if in.TitleKey != "" {
+		key, err := core.ParseRatingKey(in.TitleKey)
+		if err != nil {
+			writeQualityError(w, http.StatusBadRequest, "bad_title", "invalid title")
+			return
+		}
+		title, err := a.catalog.CachedGet(r.Context(), key)
+		if err != nil || title == nil || (title.Type != core.TypeMovie && title.Type != core.TypeEpisode) {
+			writeQualityError(w, http.StatusNotFound, "unknown_title", "no such movie or episode")
+			return
+		}
+	}
 	cfg := a.cfg.Read()
 	// The Plex request path: registry, owner App compatibility edits, the
 	// request's headers and the remote bitrate cap (plex.Request.ClientCapsWith).
 	pr := &plex.Request{Product: client.Product, Platform: client.Platform, Device: client.Device, DeviceName: client.Device, Remote: in.Remote, User: u}
 	declared := pr.ClientCapsWith(cfg.Transcode.RemoteMaxBitrateKbps, cfg.Clients.Overrides)
 	builtin := pr.ClientCapsWith(cfg.Transcode.RemoteMaxBitrateKbps, nil)
+	if client.Protocol == "jellyfin" || client.Protocol == "emby" {
+		info := caps.DeviceInfo{Protocol: client.Protocol, Product: client.Product, Platform: client.Platform, Device: client.Device, Remote: in.Remote}
+		neutral, err := (caps.Builder{}).Build(r.Context(), info, caps.DeviceProfile{}, nil, "")
+		if err != nil {
+			writeQualityError(w, http.StatusBadRequest, "bad_client", "cannot evaluate app")
+			return
+		}
+		builtin = playbackFloor(neutral, nil)
+		declared = playbackFloor(neutral, cfg.Clients.Overrides)
+	} else if client.Product == "" {
+		declared, builtin = core.ClientCaps{Remote: in.Remote}, core.ClientCaps{Remote: in.Remote}
+	}
+
 	q := resolver.QualityQuestion{Quality: cfg.Quality, Caps: declared, Builtin: &builtin, User: u, RemoteMaxBitrateKbps: cfg.Transcode.RemoteMaxBitrateKbps}
 	if a.safety != nil {
 		policy := a.safety.ForUser(u)
