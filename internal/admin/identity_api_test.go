@@ -592,24 +592,28 @@ func TestLoginStalledBodyDeadline(t *testing.T) {
 	h := admin.New(admin.Deps{Config: newStore(t, nil), LocalIdentity: local, IdentityGrants: grants, IdentityLimiter: limiter})
 	server := httptest.NewServer(h)
 	defer server.Close()
-	conn, err := net.Dial("tcp", server.Listener.Addr().String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer conn.Close()
-	if err := conn.SetDeadline(time.Now().Add(12 * time.Second)); err != nil {
-		t.Fatal(err)
-	}
-	_, err = fmt.Fprintf(conn, "POST /ether/api/auth/local HTTP/1.1\r\nHost: localhost\r\nX-Ether-Request: 1\r\nContent-Type: application/json\r\nContent-Length: 80\r\n\r\n{\"username\":")
-	if err != nil {
-		t.Fatal(err)
-	}
-	response, err := http.ReadResponse(bufio.NewReader(conn), nil)
-	if err != nil {
-		t.Fatalf("stalled request did not receive server response: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status %d", response.StatusCode)
+	for _, prefix := range []string{`{"username":`, `{"username":"alice","password":"secret-pass1"}}`} {
+		t.Run(prefix, func(t *testing.T) {
+			conn, err := net.Dial("tcp", server.Listener.Addr().String())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer conn.Close()
+			if err := conn.SetDeadline(time.Now().Add(12 * time.Second)); err != nil {
+				t.Fatal(err)
+			}
+			_, err = fmt.Fprintf(conn, "POST /ether/api/auth/local HTTP/1.1\r\nHost: localhost\r\nX-Ether-Request: 1\r\nContent-Type: application/json\r\nContent-Length: 80\r\n\r\n%s", prefix)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response, err := http.ReadResponse(bufio.NewReader(conn), nil)
+			if err != nil {
+				t.Fatalf("stalled request did not receive server response: %v", err)
+			}
+			defer response.Body.Close()
+			if response.StatusCode != http.StatusBadRequest {
+				t.Fatalf("status %d", response.StatusCode)
+			}
+		})
 	}
 }

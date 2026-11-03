@@ -27,6 +27,8 @@ type localLogin struct {
 }
 
 func (h *Handler) localLogin(w http.ResponseWriter, r *http.Request, surface string) {
+	controller := http.NewResponseController(w)
+	_ = controller.SetReadDeadline(time.Now().Add(5 * time.Second))
 	select {
 	case h.loginBodySlots <- struct{}{}:
 		defer func() { <-h.loginBodySlots }()
@@ -34,8 +36,6 @@ func (h *Handler) localLogin(w http.ResponseWriter, r *http.Request, surface str
 		writeError(w, 503, "unavailable", "sign in unavailable")
 		return
 	}
-	controller := http.NewResponseController(w)
-	_ = controller.SetReadDeadline(time.Now().Add(5 * time.Second))
 	if !csrfOK(r) {
 		writeError(w, 403, "csrf", "request rejected")
 		return
@@ -45,7 +45,7 @@ func (h *Handler) localLogin(w http.ResponseWriter, r *http.Request, surface str
 		return
 	}
 	var body localLogin
-	if decodeJSON(r, &body) != nil {
+	if decodeLoginJSON(w, r, &body) != nil {
 		writeError(w, 400, "invalid", "invalid request")
 		return
 	}
