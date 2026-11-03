@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
+import { PrerollDrawer } from "./PrerollDrawer";
 import { PrerollSimulation } from "./PrerollSimulation";
 import { t, tx } from "../../i18n";
 import { prerollsApi, type Preroll, type Selection } from "./prerolls-api";
 
 export function Prerolls() {
+  const [editing, setEditing] = useState<Preroll | "new" | null>(null);
   const [items, setItems] = useState<Preroll[]>([]);
   const [selection, setSelection] = useState<Selection>("priority");
   const [error, setError] = useState("");
@@ -38,7 +40,12 @@ export function Prerolls() {
           <h2 className="text-xl font-semibold">{t("Pre-rolls")}</h2>
           <p className="text-fg-muted">{t("Play your own videos before the feature.")}</p>
         </div>
-        <button className="rounded bg-primary px-4 py-2 text-white">{t("Add pre-roll")}</button>
+        <button
+          onClick={() => setEditing("new")}
+          className="rounded bg-primary px-4 py-2 text-white"
+        >
+          {t("Add pre-roll")}
+        </button>
       </div>
       <PrerollSimulation />
       {error && (
@@ -87,7 +94,9 @@ export function Prerolls() {
               {items.map((p) => (
                 <tr key={p.id} className="border-t border-border">
                   <td className="py-3">
-                    <div className="font-medium">{p.name}</div>
+                    <button className="font-medium" onClick={() => setEditing(p)}>
+                      {p.name}
+                    </button>
                     <div>
                       {tx("{seconds} seconds", { seconds: Math.round(p.video.durationMs / 1000) })}
                     </div>
@@ -124,7 +133,7 @@ export function Prerolls() {
                   <td>
                     <input
                       type="checkbox"
-                      aria-label={tx("Enable {name}", { name: p.name })}
+                      aria-label={t("Enable {name}", { name: p.name })}
                       checked={p.enabled}
                       onChange={() => void toggle(p)}
                     />
@@ -134,6 +143,13 @@ export function Prerolls() {
             </tbody>
           </table>
         </div>
+      )}
+      {editing && (
+        <PrerollDrawer
+          entry={editing === "new" ? undefined : editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => void reload()}
+        />
       )}
     </section>
   );
