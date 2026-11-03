@@ -34,6 +34,7 @@ type Settings struct {
 	APIKey     string `json:"apiKey"`
 	Critic     string `json:"critic"`
 	Audience   string `json:"audience"`
+	Missing    string `json:"missing"`
 	CacheHours int    `json:"cacheHours"`
 }
 type Badge struct {
@@ -236,8 +237,11 @@ func (s *Service) SaveSettings(ctx context.Context, v Settings) error {
 		}
 		v.APIKey = old.APIKey
 	}
+	if v.Missing != "" && v.Missing != "none" && v.Missing != "tmdb" {
+		return errors.New("invalid missing rating behavior")
+	}
 	for _, src := range []string{v.Critic, v.Audience} {
-		if src != "" && src != "imdb" && src != "tomatoes" && src != "popcorn" {
+		if src != "" && src != "none" && src != "imdb" && src != "tomatoes" && src != "popcorn" {
 			return errors.New("Plex rating slots support imdb, tomatoes or popcorn; other ratings are poster badges")
 		}
 	}

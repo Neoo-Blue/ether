@@ -109,7 +109,11 @@ func (s *Service) presentation(ctx context.Context, u *core.User, t *core.Title,
 			if bs, e := s.o.Ratings.Cached(ctx, t); e == nil {
 				for _, b := range bs {
 					if b.Scale > 0 && b.Value > 0 && b.Value <= b.Scale && !math.IsNaN(b.Value) && !math.IsInf(b.Value, 0) && !math.IsInf(b.Scale, 0) {
-						scores = append(scores, fmt.Sprintf("%s %.1f/%.0f", strings.ToUpper(b.Source), b.Value, b.Scale))
+						label := fmt.Sprintf("%s %.1f", strings.ToUpper(b.Source), b.Value)
+						if !cfg.HideDenominator {
+							label += fmt.Sprintf("/%.0f", b.Scale)
+						}
+						scores = append(scores, label)
 					}
 					if len(scores) == 2 {
 						break
@@ -120,7 +124,11 @@ func (s *Service) presentation(ctx context.Context, u *core.User, t *core.Title,
 		// TMDB scores are already in the catalogue. They need no extra provider,
 		// network request or invented IMDb identity.
 		if len(scores) == 0 && t.VoteCount > 0 && t.Rating > 0 && t.Rating <= 10 && !math.IsNaN(t.Rating) {
-			scores = append(scores, fmt.Sprintf("TMDB %.1f/10", t.Rating))
+			label := fmt.Sprintf("TMDB %.1f", t.Rating)
+			if !cfg.HideDenominator {
+				label += "/10"
+			}
+			scores = append(scores, label)
 		}
 	}
 	add("ratings", cfg.Ratings, scores, "Source-labelled catalogue or cached provider scores", "No rated votes yet; optional rating providers can add more sources")

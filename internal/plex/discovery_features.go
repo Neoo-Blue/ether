@@ -10,6 +10,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/experience"
 	"github.com/braedonsaunders/ether/internal/plex/model"
 	"github.com/go-chi/chi/v5"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -120,6 +121,15 @@ func (s *Server) decorateDiscoveryMetadata(ctx context.Context, pr *Request, t *
 		cfg, ce := d.Ratings.Settings(ctx)
 		if e == nil && ce == nil && cfg.Enabled {
 			d.Ratings.Queue(*t)
+			if cfg.Audience == "none" || (cfg.Audience != "" && cfg.Missing == "none") {
+				m.AudienceRating, m.AudienceRatingImage = 0, ""
+			}
+			if cfg.Critic != "" && cfg.Critic != "none" && cfg.Missing == "tmdb" && t.VoteCount > 0 && t.Rating > 0 && t.Rating <= 10 {
+				m.Rating, m.RatingImage = math.Round(t.Rating*10)/10, "themoviedb://image.rating"
+			}
+			if cfg.Critic == "none" || (cfg.Critic != "" && cfg.Missing == "none") {
+				m.Rating, m.RatingImage = 0, ""
+			}
 			for _, b := range bs {
 				if b.Source == cfg.Critic && b.PlexImage() != "" {
 					m.Rating = b.PlexValue()
@@ -131,7 +141,7 @@ func (s *Server) decorateDiscoveryMetadata(ctx context.Context, pr *Request, t *
 				}
 			}
 		}
-		if len(bs) > 0 && len(m.Rating_) > 0 {
+		if e == nil && ce == nil && cfg.Enabled && (len(bs) > 0 || cfg.Audience == "none" || cfg.Missing != "") && len(m.Rating_) > 0 {
 			m.Rating_ = nil
 			if m.RatingImage != "" {
 				m.Rating_ = append(m.Rating_, model.RatingTag{Type: "critic", Image: m.RatingImage, Value: m.Rating})

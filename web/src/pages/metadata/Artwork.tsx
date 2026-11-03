@@ -259,9 +259,18 @@ export function ArtworkSettings() {
                     <option value="small">{t("Small")}</option>
                     <option value="medium">{t("Medium")}</option>
                     <option value="large">{t("Large")}</option>
+                    <option value="extra-large">{t("Extra large")}</option>
                   </select>
                 </label>
               </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={!draft.hideDenominator} onChange={(e) => set({ hideDenominator: !e.currentTarget.checked })} />
+                {t("Show rating denominator")}
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={!draft.hideDot} onChange={(e) => set({ hideDot: !e.currentTarget.checked })} />
+                {t("Show leading dot")}
+              </label>
               <div className="metadata-field">
                 <span>{t("Accent colour")}</span>
                 <div className="metadata-swatches">

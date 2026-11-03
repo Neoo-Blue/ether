@@ -47,7 +47,7 @@ func validateSettings(v Settings) error {
 		return errors.New("position must be bottom or top")
 	}
 	switch v.Size {
-	case "small", "medium", "large":
+	case "small", "medium", "large", "extra-large":
 	default:
 		return errors.New("size must be small, medium, or large")
 	}
@@ -97,6 +97,8 @@ func (s *Service) paintBadges(dst *image.RGBA, labels []string, cfg Settings) er
 		size = 15
 	case "large":
 		size = 22
+	case "extra-large":
+		size = 26
 	}
 	face, err := s.renderFace(size)
 	if err != nil {
@@ -159,16 +161,24 @@ func (s *Service) paintBadges(dst *image.RGBA, labels []string, cfg Settings) er
 		case "solid":
 			rounded(dst, rect, 10, accent)
 			ink = readableInk(accent)
-			rounded(dst, image.Rect(b.x+padding, y+height/2-3, b.x+padding+6, y+height/2+3), 3, ink)
+			if !cfg.HideDot {
+				rounded(dst, image.Rect(b.x+padding, y+height/2-3, b.x+padding+6, y+height/2+3), 3, ink)
+			}
 		case "minimal":
 			// An unboxed label with an accent rule; the scrim supplies contrast.
 			draw.Draw(dst, image.Rect(b.x+padding, y+10, b.x+padding+2, y+height-10), image.NewUniform(accent), image.Point{}, draw.Src)
 		default:
 			rounded(dst, rect, 11, color.NRGBA{R: 255, G: 255, B: 255, A: 75})
 			rounded(dst, rect.Inset(1), 10, color.NRGBA{R: 18, G: 24, B: 34, A: 215})
-			rounded(dst, image.Rect(b.x+padding, y+height/2-3, b.x+padding+6, y+height/2+3), 3, accent)
+			if !cfg.HideDot {
+				rounded(dst, image.Rect(b.x+padding, y+height/2-3, b.x+padding+6, y+height/2+3), 3, accent)
+			}
 		}
-		dot := fixed.P(b.x+padding+12, y+(height-face.Metrics().Height.Ceil())/2+face.Metrics().Ascent.Ceil())
+		textOffset := 12
+		if cfg.HideDot && cfg.Style != "minimal" {
+			textOffset = 0
+		}
+		dot := fixed.P(b.x+padding+textOffset, y+(height-face.Metrics().Height.Ceil())/2+face.Metrics().Ascent.Ceil())
 		if cfg.Style == "minimal" {
 			shadow := font.Drawer{Dst: dst, Src: image.NewUniform(color.NRGBA{A: 200}), Face: face, Dot: dot.Add(fixed.P(0, 1))}
 			shadow.DrawString(b.text)

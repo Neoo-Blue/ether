@@ -24,6 +24,7 @@ export type RatingSettings = {
   apiKey: string;
   critic: string;
   audience: string;
+  missing: string;
   cacheHours: number;
 };
 type RatingBadge = { source: string; value: number; scale: number };
@@ -309,6 +310,7 @@ export function RatingSources({
                       value={draft[key]}
                       onChange={(e) => set({ [key]: e.currentTarget.value })}
                     >
+                      {key === "audience" && <option value="none">{t("None")}</option>}
                       {SCORE_CHOICES.map((c) => (
                         <option key={c.value} value={c.value}>
                           {c.label}
@@ -318,6 +320,11 @@ export function RatingSources({
                   }
                 />
               ))}
+              <SettingsRow stacked title={<label htmlFor="ratings-missing">{t("When a rating is missing")}</label>}
+                control={<select id="ratings-missing" className={`${nativeSelect} sm:w-64`} value={draft.missing || "tmdb"} onChange={(e) => set({ missing: e.currentTarget.value })}>
+                  <option value="tmdb">{t("Use catalogue rating")}</option>
+                  <option value="none">{t("Show no rating")}</option>
+                </select>} />
               <SettingsRow
                 stacked
                 title={<label htmlFor="ratings-cache">{t("Keep scores for")}</label>}
