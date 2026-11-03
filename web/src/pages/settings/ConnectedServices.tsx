@@ -1,3 +1,4 @@
+import { IntegrationSetupFooter } from "../../components/IntegrationSetupFooter";
 import { Badge, Button, SettingsSection, Spinner, toast } from "@braedonsaunders/appkit-ui";
 import {
   Children,
@@ -770,10 +771,16 @@ export function ConnectedServices({
           reset();
         }}
         title={t("Set up {app}", { app: "TMDB" })}
+        description={t("Save and enable turns this on. Cancel leaves it off.")}
         footer={
-          <Button onClick={() => void save()} disabled={locked}>
-            {t("Save and enable")}
-          </Button>
+          <IntegrationSetupFooter
+            disabled={locked}
+            onCancel={() => {
+              setTmdbSetup(false);
+              reset();
+            }}
+            onSave={() => void save()}
+          />
         }
       >
         {tmdbForm}
@@ -782,7 +789,15 @@ export function ConnectedServices({
       <Drawer
         open={ratingsSetup}
         onClose={() => setRatingsSetup(false)}
-        title={t("OMDb and MDBList")}
+        title={t("Set up {app}", { app: t("OMDb and MDBList") })}
+        description={t("Save and enable turns this on. Cancel leaves it off.")}
+        footer={
+          <IntegrationSetupFooter
+            disabled={locked}
+            onCancel={() => setRatingsSetup(false)}
+            form="ratings-integration-setup"
+          />
+        }
       >
         <RatingSources
           setup
@@ -804,20 +819,11 @@ export function ConnectedServices({
         title={t("Set up {app}", { app: setupService?.label ?? "" })}
         description={t("Save and enable turns this on. Cancel leaves it off.")}
         footer={
-          <div className="flex w-full flex-wrap items-center gap-2">
-            <span className="flex-1" />
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setSectionSetup(null)}
-              disabled={busyId !== null}
-            >
-              {t("Cancel")}
-            </Button>
-            <Button size="sm" onClick={saveSectionSetup} disabled={busyId !== null || locked}>
-              {busyId ? t("Saving…") : t("Save and enable")}
-            </Button>
-          </div>
+          <IntegrationSetupFooter
+            disabled={busyId !== null || locked}
+            onCancel={() => setSectionSetup(null)}
+            onSave={() => void saveSectionSetup()}
+          />
         }
       >
         {sectionSetup && setupService ? (
@@ -1129,7 +1135,9 @@ function ServiceOverview({
             enabled={secretConfigured(ratings?.apiKey)}
             onToggle={onRatingsSetup}
             configureHref="/services/ratings"
-            configureLabel={t("Manage")}
+            configureLabel={t(secretConfigured(ratings?.apiKey) ? "Manage {app}" : "Set up {app}", {
+              app: t("OMDb and MDBList"),
+            })}
           />
         </IntegrationGroup>
       </>
@@ -1159,7 +1167,7 @@ function ServiceOverview({
           onToggle={(next) => onToggle(service("introdb"), next)}
           disabled={switchesHeld}
           configureHref="/services/introdb"
-          configureLabel={t("Manage")}
+          configureLabel={t(on("introdb") ? "Manage {app}" : "Set up {app}", { app: "TheIntroDB" })}
         />
       </IntegrationGroup>
       <IntegrationGroup title={t("Smart features")}>
@@ -1174,7 +1182,9 @@ function ServiceOverview({
           disabled={switchesHeld}
           onToggle={(next) => onToggle(service("llm"), next)}
           configureHref="/services/llm"
-          configureLabel={on("llm") ? t("Manage language model") : t("Set up a language model")}
+          configureLabel={t(on("llm") ? "Manage {app}" : "Set up {app}", {
+            app: t("Language model"),
+          })}
         />
       </IntegrationGroup>
     </>

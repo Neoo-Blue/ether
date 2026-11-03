@@ -1,4 +1,5 @@
-import { Badge, Button, Input, SettingsSection, toast } from "@braedonsaunders/appkit-ui";
+import { IntegrationSetupFooter } from "../../components/IntegrationSetupFooter";
+import { Badge, Input, SettingsSection, toast } from "@braedonsaunders/appkit-ui";
 import { useEffect, useState, type ReactNode } from "react";
 import { Drawer } from "../../components/Drawer";
 import { MutationError } from "../../components/feedback";
@@ -197,7 +198,10 @@ export function PosterAccounts({
         if (on) setDraft(value);
         else void save(value);
       }}
-      configureHref={config.data?.accounts?.[s.id]?.enabled ? "/services/" + s.id : undefined}
+      configureHref={"/services/" + s.id}
+      configureLabel={t(config.data?.accounts?.[s.id]?.enabled ? "Manage {app}" : "Set up {app}", {
+        app: s.name,
+      })}
     />
   ));
   return (
@@ -236,10 +240,15 @@ export function PosterAccounts({
         title={t("Set up {app}", {
           app: POSTER_SERVICES.find((s) => s.id === draft?.source)?.name ?? "",
         })}
+        description={t("Save and enable turns this on. Cancel leaves it off.")}
         footer={
-          <Button disabled={saving} onClick={() => draft && void save(draft)}>
-            {t("Save and enable")}
-          </Button>
+          <IntegrationSetupFooter
+            disabled={saving}
+            onCancel={() => setDraft(null)}
+            onSave={() => {
+              if (draft) void save(draft);
+            }}
+          />
         }
       >
         {error ? <MutationError error={error} /> : null}

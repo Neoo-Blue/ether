@@ -98,7 +98,7 @@ describe("Settings", () => {
       expect(screen.queryByRole("link", { name })).toBeNull();
     for (const [name, href] of [
       [/Set up Trakt/, "/services/trakt"],
-      [/Manage language model/, "/services/llm"],
+      [/Manage Language model/, "/services/llm"],
       [/Set up OpenSubtitles/, "/services/opensubtitles"],
     ] as const)
       expect(screen.getByRole("link", { name })).toHaveAttribute("href", href);
@@ -108,7 +108,9 @@ describe("Settings", () => {
       ["TheIntroDB", "/services/introdb"],
     ] as const) {
       const item = screen.getByRole("listitem", { name: card });
-      expect(within(item).getByRole("link", { name: "Manage" })).toHaveAttribute("href", href);
+      expect(
+        within(item).getByRole("link", { name: new RegExp(`^(Manage|Set up) ${card}$`) }),
+      ).toHaveAttribute("href", href);
       expect(within(item).getByRole("switch")).toBeInTheDocument();
     }
     expect(within(posters).getByRole("switch")).toBeInTheDocument();

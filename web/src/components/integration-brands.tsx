@@ -81,7 +81,18 @@ export function IntegrationMark({ id }: { id: string }) {
   if (id === "simkl") return <SimklMark />;
   const posters: Record<string, string> = { postersplus, xrdb, betterposters, rpdb };
   if (posters[id])
-    return <img src={posters[id]} alt="" aria-hidden className="block size-8 object-contain" />;
+    return (
+      <img
+        src={posters[id]}
+        alt=""
+        aria-hidden
+        className={
+          id === "xrdb" || id === "postersplus"
+            ? "block size-8 rounded bg-fg dark:bg-bg-subtle p-1 object-contain"
+            : "block size-8 object-contain"
+        }
+      />
+    );
   return (
     <svg
       aria-hidden

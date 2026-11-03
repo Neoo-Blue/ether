@@ -1,4 +1,5 @@
-import { PageContainer, PageHeader, SubtabNav, cn } from "@braedonsaunders/appkit-ui";
+import { PageContainer, PageHeader, cn } from "@braedonsaunders/appkit-ui";
+import { OverflowTabs } from "./OverflowTabs";
 import type { ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { t } from "../i18n";
@@ -53,7 +54,7 @@ export function DomainPage({
       {status}
       {tabs && tabs.length > 1 ? (
         <div className="border-b border-border">
-          <SubtabNav
+          <OverflowTabs
             ariaLabel={t("{page} sections", { page: title })}
             active={active ?? tabs[0]!.key}
             onSelect={(key) => navigate(`${base}/${key}`)}

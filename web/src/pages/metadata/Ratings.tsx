@@ -228,9 +228,13 @@ export function RatingSources({
           {keyRow}
         </SettingsSection>
         {setup ? (
-          <Button disabled={saving || disabled} onClick={() => void save()}>
-            {t("Save and enable")}
-          </Button>
+          <form
+            id="ratings-integration-setup"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!saving && !disabled) void save();
+            }}
+          />
         ) : (
           saveBar
         )}

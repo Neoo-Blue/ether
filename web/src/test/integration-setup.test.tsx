@@ -31,6 +31,7 @@ it.each([
   await waitFor(() => expect(toggle).toBeEnabled());
   fireEvent.click(toggle);
   const dialog = await screen.findByRole("dialog");
+  expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeInTheDocument();
   expect(within(dialog).getByRole("button", { name: "Save and enable" })).toBeInTheDocument();
   expect(
     dialog.querySelectorAll('input,select,button[aria-haspopup="listbox"]').length,
