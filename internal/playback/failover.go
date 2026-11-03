@@ -808,12 +808,6 @@ func (m *Manager) failoverWith(ctx context.Context, s *session, observed *genera
 		tried = append(tried, failed...)
 	}
 	var copySearchCtx context.Context
-	var cancelCopySearch context.CancelFunc
-	defer func() {
-		if cancelCopySearch != nil {
-			cancelCopySearch()
-		}
-	}()
 	for attempt := 0; g == nil && attempt < m.opts.MaxAttempts; attempt++ {
 		attemptCtx := ctx
 		if copySearchCtx != nil {
@@ -877,7 +871,9 @@ func (m *Manager) failoverWith(ctx context.Context, s *session, observed *genera
 		if err == nil && preferCopy != nil && !preferCopy(g) {
 			if fallbackGen == nil {
 				fallbackGen = g
-				copySearchCtx, cancelCopySearch = context.WithTimeout(ctx, 500*time.Millisecond)
+				var cancel context.CancelFunc
+				copySearchCtx, cancel = context.WithTimeout(ctx, 500*time.Millisecond)
+				defer cancel()
 			} else {
 				m.dropGeneration(g)
 			}
