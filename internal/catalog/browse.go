@@ -50,7 +50,7 @@ func (c *Catalog) Browse(ctx context.Context, q core.BrowseQuery) (core.Page, er
 	ckey := browseFilterKey(q.Filter) + fmt.Sprintf("|rules:%s:%#v:%s", q.Filter.RuleVisibility, q.Filter.PreviewRules, q.Filter.PreviewFallback)
 	bkey := fmt.Sprintf("%s|%s|%v|%v|%d|%d|%v", ckey, q.Sort, q.Desc, q.SecondarySorts, offset, limit, q.NoTotal)
 	c.cacheMu.RLock()
-	if ent, ok := c.browseCache[bkey]; ok && ent.gen == gen && ent.minute == minBucket {
+	if ent, ok := c.browseCache[bkey]; q.Filter.Group == nil && ok && ent.gen == gen && ent.minute == minBucket {
 		items := make([]core.Title, len(ent.page.Items))
 		for i := range ent.page.Items {
 			items[i] = cloneTitle(ent.page.Items[i])
@@ -60,6 +60,9 @@ func (c *Catalog) Browse(ctx context.Context, q core.BrowseQuery) (core.Page, er
 		return core.Page{Items: items, Total: ent.page.Total}, nil
 	}
 	cntEnt, hasCnt := c.countCache[ckey]
+	if q.Filter.Group != nil {
+		hasCnt = false
+	}
 	c.cacheMu.RUnlock()
 
 	where, args, err := c.browseWhere(q.Filter)
@@ -89,13 +92,18 @@ func (c *Catalog) Browse(ctx context.Context, q core.BrowseQuery) (core.Page, er
 			})
 		}
 	default:
-		if total, err = c.countBrowse(ctx, ckey, where, args); err != nil {
+		if q.Filter.Group != nil {
+			err = c.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM catalog_titles t WHERE `+where, args...).Scan(&total)
+		} else {
+			total, err = c.countBrowse(ctx, ckey, where, args)
+		}
+		if err != nil {
 			return core.Page{}, err
 		}
 	}
 	if total == 0 || offset >= total {
 		page := core.Page{Items: []core.Title{}, Total: total}
-		if c.writeGen.Load() == gen && !staleTotal {
+		if q.Filter.Group == nil && c.writeGen.Load() == gen && !staleTotal {
 			c.cacheMu.Lock()
 			if len(c.browseCache) >= 512 {
 				c.browseCache = map[string]cachedBrowse{}
@@ -193,7 +201,7 @@ func (c *Catalog) Browse(ctx context.Context, q core.BrowseQuery) (core.Page, er
 	if q.NoTotal {
 		total = offset + len(items)
 	}
-	if c.writeGen.Load() == gen && !staleTotal {
+	if q.Filter.Group == nil && c.writeGen.Load() == gen && !staleTotal {
 		cachedItems := make([]core.Title, len(items))
 		for i := range items {
 			cachedItems[i] = cloneTitle(items[i])
@@ -340,6 +348,9 @@ func browseFilterKey(f core.Filter) string {
 	groupKey = func(g *core.FilterGroup) string {
 		if g == nil {
 			return ""
+		}
+		if g.Unwatched != nil || g.InProgress != nil {
+			return fmt.Sprintf("state:%d:%v:%v", g.UserID, g.Unwatched, g.InProgress)
 		}
 		if g.Filter != nil {
 			return "leaf(" + browseFilterKey(*g.Filter) + ")"
@@ -757,31 +768,7 @@ func (c *Catalog) browseWhere(f core.Filter) (string, []any, error) {
 		args = append(args, nowTS)
 	}
 	if f.Group != nil {
-		var compile func(*core.FilterGroup) (string, []any, error)
-		compile = func(g *core.FilterGroup) (string, []any, error) {
-			if g.Filter != nil {
-				return c.browseWhere(*g.Filter)
-			}
-			parts := make([]string, 0, len(g.Children))
-			var vals []any
-			for i := range g.Children {
-				sql, a, err := compile(&g.Children[i])
-				if err != nil {
-					return "", nil, err
-				}
-				parts = append(parts, "("+sql+")")
-				vals = append(vals, a...)
-			}
-			if len(parts) == 0 {
-				return "1=1", nil, nil
-			}
-			op := " AND "
-			if g.Operator == "or" {
-				op = " OR "
-			}
-			return strings.Join(parts, op), vals, nil
-		}
-		clause, values, err := compile(f.Group)
+		clause, values, err := c.compileBrowseGroup(f.Group, "t", 0)
 		if err != nil {
 			return "", nil, err
 		}

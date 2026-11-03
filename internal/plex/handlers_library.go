@@ -574,8 +574,15 @@ func (s *Server) parseBrowse(ctx context.Context, sec Section, t core.MediaType,
 				return nil
 			}
 			key := rule.Field + strings.TrimSuffix(rule.Operator, "=")
-			leaf := s.parseBrowse(ctx, sec, t, nil, url.Values{key: []string{*rule.Value}}).q.Filter
-			return &core.FilterGroup{Filter: &leaf}
+			parsed := s.parseBrowse(ctx, sec, t, nil, url.Values{key: []string{*rule.Value}})
+			if parsed.unwatched != nil || parsed.inProgress != nil {
+				var id int64
+				if u != nil && s.d.State != nil {
+					id = u.ID
+				}
+				return &core.FilterGroup{Unwatched: parsed.unwatched, InProgress: parsed.inProgress, UserID: id}
+			}
+			return &core.FilterGroup{Filter: &parsed.q.Filter}
 		}
 		group = convert(tree.Rule)
 		// Keep response-shaping arguments, but rules are represented by the tree.
