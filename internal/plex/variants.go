@@ -266,6 +266,7 @@ func (s *Server) mediaForVariants(ctx context.Context, pr *Request, t *core.Titl
 	vs, err := s.d.Variants.Variants(vctx, core.ResolveRequest{Title: t, Client: caps, User: pr.User, PlayedRelease: probedRelease}, core.MaxVariants)
 	if err != nil {
 		s.log.Debug("variants unavailable", "key", t.Key, "err", err)
+		s.watchVariants(pr, t)
 		return nil, ""
 	}
 	if len(vs) < 2 {

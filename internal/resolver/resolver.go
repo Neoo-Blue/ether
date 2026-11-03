@@ -658,6 +658,12 @@ func (s *Service) resolve(ctx context.Context, req core.ResolveRequest, profile 
 						if checkErr == nil && idx >= 0 {
 							deadline.Stop()
 							tick.Stop()
+							// A feed hit bypasses the ordinary search. For an admitted
+							// warm-up, use the same bounded cache refill as a reused
+							// remembered source so the detail picker can find versions.
+							if core.IndexerPurpose(ctx) == core.IndexerPurposeWarmup {
+								s.RefillSearchCache(t)
+							}
 							trace.Winner = candidates[idx].rel.ID
 							s.setAvailability(ctx, int64(t.Key), true, s.searchTTL())
 							return s.resolution(t.Key, candidates, idx, payload, &trace), nil
