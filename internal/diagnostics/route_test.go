@@ -50,8 +50,8 @@ func TestCaptureKeepsRequestRoutes(t *testing.T) {
 }
 
 // A capture is useful without the owner changing the log level: each line
-// keeps its message, and with titles included its error, minus URL queries
-// where addon and debrid keys live (#238, #262).
+// keeps its message, and with titles included its error, with network
+// addresses and credential-bearing URLs removed.
 func TestCaptureKeepsMessagesAndErrors(t *testing.T) {
 	now := time.Date(2026, 11, 2, 17, 38, 22, 0, time.UTC)
 	q := LogQuery{From: now.Add(-time.Minute), Until: now.Add(time.Minute), DeviceKey: "dev-1", MaxLines: 10}
@@ -61,13 +61,13 @@ func TestCaptureKeepsMessagesAndErrors(t *testing.T) {
 	}}
 	body, _, _, _ := projectLogs([]LogRecord{rec}, q, [3]bool{true, false, false}, nil)
 	line := string(body)
-	for _, want := range []string{`"msg":"release failed to open"`, `"err":"open Sleepers.S01E01: stream from https://comet.example/abc/playback is 433923 bytes"`} {
+	for _, want := range []string{`"msg":"release failed to open"`, `"err":"open Sleepers.S01E01: stream from [redacted] is 433923 bytes"`} {
 		if !strings.Contains(line, want) {
 			t.Errorf("titles on: %s lacks %s", line, want)
 		}
 	}
-	if strings.Contains(line, "s3cret") {
-		t.Fatalf("URL query leaked: %s", line)
+	if strings.Contains(line, "s3cret") || strings.Contains(line, "comet.example") {
+		t.Fatalf("URL or credential leaked: %s", line)
 	}
 	body, _, _, _ = projectLogs([]LogRecord{rec}, q, [3]bool{}, nil)
 	if line = string(body); !strings.Contains(line, `"msg":"release failed to open"`) || strings.Contains(line, "Sleepers") {

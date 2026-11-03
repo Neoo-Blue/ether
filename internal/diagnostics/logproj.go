@@ -3,19 +3,20 @@ package diagnostics
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"regexp"
 	"strings"
 	"time"
 )
 
 // LogQuery selects log records for one confirmed capture.
 type LogQuery struct {
-	From        time.Time
-	Until       time.Time
-	DeviceKey   string
-	SessionKeys []string
-	AttemptKeys []string
-	MaxLines    int
+	From            time.Time
+	Until           time.Time
+	DeviceKey       string
+	SessionKeys     []string
+	AttemptKeys     []string
+	MaxLines        int
+	IncludeWarnings bool
+	WarningFrom     time.Time
 }
 
 // LogRecord is one structured log row. Message is free text and is not exported.
@@ -45,6 +46,9 @@ func Alias(scope, raw string) string {
 func LogCorrelated(rec LogRecord, q LogQuery) bool {
 	if rec.Time.IsZero() || rec.Time.Before(q.From) || rec.Time.After(q.Until) {
 		return false
+	}
+	if q.IncludeWarnings && !rec.Time.Before(q.WarningFrom) && (strings.EqualFold(rec.Level, "WARN") || strings.EqualFold(rec.Level, "ERROR")) {
+		return true
 	}
 	if exactAttr(rec.Attrs, deviceAttrNames, q.DeviceKey) {
 		return true
@@ -218,6 +222,26 @@ func projectLogs(records []LogRecord, q LogQuery, flags [3]bool, uses []secretUs
 			truncated = true
 			break
 		}
+		// Uncorrelated warnings have no device identity. Retain only a known
+		// performance phrase and safe numeric fields, never their free text.
+		onlyCorrelated := q
+		onlyCorrelated.IncludeWarnings = false
+		if !LogCorrelated(rec, onlyCorrelated) {
+			row := exportLog{At: rec.Time.UTC(), Level: boundToken(rec.Level), Msg: "server warning or error (details omitted)"}
+			if rec.Message == "request over performance budget" {
+				row.Msg = "request over performance budget"
+				row.Route = redactNetworkText(requestRoute(attrFold(rec.Attrs, "route")))
+				row.Method = boundToken(attrFold(rec.Attrs, "method"))
+				row.Dur = boundToken(attrFold(rec.Attrs, "duration"))
+			}
+			line, err := marshalChecked(row, uses)
+			if err == nil && b.Len()+len(line)+1 <= maxLogBytes {
+				b.Write(line)
+				b.WriteByte('\n')
+				n++
+			}
+			continue
+		}
 		row := exportLog{At: rec.Time.UTC(), Level: boundToken(rec.Level)}
 		if key := exactValue(rec.Attrs, deviceAttrNames, q.DeviceKey); key != "" {
 			row.Device = Alias("device", key)
@@ -230,22 +254,24 @@ func projectLogs(records []LogRecord, q LogQuery, flags [3]bool, uses []secretUs
 		}
 		row.Status = boundToken(attrFold(rec.Attrs, "status"))
 		row.Kind = boundToken(attrFold(rec.Attrs, "kind"))
-		row.Msg = plainMessage(redactString(rec.Message, uses))
+		if len(rec.Message) <= 120 {
+			row.Msg = plainMessage(clipNetwork(rec.Message, 120, uses))
+		}
 		if flags[0] {
 			if e := firstPresent(rec.Attrs, "err", "error", "reason"); e != "" {
-				row.Err = boundText(stripURLQueries(redactString(e, uses)), 400)
+				row.Err = clipNetwork(e, 400, uses)
 			}
 		}
 		if rec.Message == "request" || rec.Message == "hls request" {
 			row.Method = boundToken(attrFold(rec.Attrs, "method"))
-			row.Route = requestRoute(attrFold(rec.Attrs, "path"))
+			row.Route = redactNetworkText(requestRoute(attrFold(rec.Attrs, "path")))
 			row.Dur = boundToken(attrFold(rec.Attrs, "dur"))
 			row.PageStart = digitsOnly(attrFold(rec.Attrs, "pageStart"))
 			row.PageSize = digitsOnly(attrFold(rec.Attrs, "pageSize"))
 		}
 		if flags[1] {
 			if u := firstPresent(rec.Attrs, "user", "username"); u != "" {
-				u = redactString(u, uses)
+				u = clipNetwork(u, 80, uses)
 				row.Username = u
 				ident.users = append(ident.users, u)
 			}
@@ -259,7 +285,7 @@ func projectLogs(records []LogRecord, q LogQuery, flags [3]bool, uses []secretUs
 		}
 		if flags[0] {
 			if title := firstPresent(rec.Attrs, "title", "release", "source"); title != "" {
-				title = redactString(title, uses)
+				title = clipNetwork(title, maxString, uses)
 				row.Title = title
 				ident.titles = append(ident.titles, title)
 			}
@@ -290,19 +316,6 @@ func plainMessage(m string) string {
 		return ""
 	}
 	return m
-}
-
-var urlQuery = regexp.MustCompile(`(https?://[^\s"'?#]+)[?#][^\s"']*`)
-
-// stripURLQueries drops query strings and fragments from URLs, where
-// addon and debrid links carry their keys.
-func stripURLQueries(s string) string { return urlQuery.ReplaceAllString(s, "$1") }
-
-func boundText(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "…"
 }
 
 // requestRoute keeps the shape of an HTTP request path, such as
@@ -392,10 +405,12 @@ func firstPresent(attrs map[string]string, names ...string) string {
 
 func logQuery(snap finishSnap) LogQuery {
 	q := LogQuery{
-		From:      snap.started.Add(-preRoll),
-		Until:     snap.finished,
-		DeviceKey: snap.deviceKey,
-		MaxLines:  maxLogLines,
+		From:            snap.started.Add(-preRoll),
+		Until:           snap.finished,
+		DeviceKey:       snap.deviceKey,
+		MaxLines:        maxLogLines,
+		IncludeWarnings: true,
+		WarningFrom:     snap.started,
 	}
 	seenS := map[string]struct{}{}
 	seenA := map[string]struct{}{}

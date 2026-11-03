@@ -30,6 +30,7 @@ type Recorder struct {
 	sessions map[string]string
 	sesOrder []string
 	captures map[string]*capture
+	samples  int
 	// testArchiveLimit, when set, replaces the archive byte caps. Production
 	// leaves it zero. Tests use it to force a budget drop.
 	testArchiveLimit int
@@ -95,6 +96,39 @@ func New(deps Deps) *Recorder {
 }
 
 func (r *Recorder) now() time.Time { return r.deps.Now().UTC() }
+
+// Recording reports whether request capture is needed. No response bodies are
+// sampled while there is no owner-initiated recording.
+func (r *Recorder) Recording() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, c := range r.captures {
+		if c.state == "recording" && r.now().Before(c.deadline) {
+			return true
+		}
+	}
+	return false
+}
+
+// BeginSample bounds concurrent response buffers and restricts them to the
+// selected device, or to discovery while no device has been selected.
+func (r *Recorder) BeginSample(key string) bool {
+	key, _ = boundKey(key)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if key == "" || r.samples >= 8 {
+		return false
+	}
+	for _, c := range r.captures {
+		if c.state == "recording" && r.now().Before(c.deadline) && (!c.confirmed || c.deviceKey == key) {
+			r.samples++
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Recorder) EndSample() { r.mu.Lock(); r.samples--; r.mu.Unlock() }
 
 func (r *Recorder) secretUses() []secretUse {
 	if r.deps.Secrets == nil {
@@ -561,6 +595,8 @@ func (r *Recorder) coverageLocked(c *capture) []Gap {
 		{Collector: "compose", Status: "unavailable", Detail: "VPS host Compose mappings are not visible from this process."},
 		{Collector: "dns", Status: "unavailable", Detail: "Remote DNS vantage is not observed."},
 		{Collector: "cluster", Status: "unavailable", Detail: "Other cluster nodes' events are not included."},
+		{Collector: "protocols", Status: "partial", Detail: "Non-Plex requests require an authenticated, device-bound identity; unrecognized response shapes are not summarized."},
+		{Collector: "query", Status: "omitted", Detail: "Unknown query parameter names and values are masked because they may contain credentials or addresses."},
 	}
 	if !c.confirmed {
 		gaps = append(gaps, Gap{Collector: "device", Status: "unconfirmed", Detail: "No device is confirmed. Playback from other devices is not retained."})
@@ -748,6 +784,9 @@ func (c *capture) evidenceCopy(from, end time.Time) []Event {
 	}
 	var out []Event
 	c.eachEv(func(e Event) {
+		if e.Kind == KindRequest && e.Time.Before(c.started) {
+			return
+		}
 		until := e.Until
 		if until.IsZero() {
 			until = e.Time

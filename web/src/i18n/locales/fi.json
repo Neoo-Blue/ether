@@ -659,6 +659,7 @@
   },
   "m_033386ef5bff4a": "{provider}a ei enää käytetä toistoon. Sen API-avain poistetaan Etheristä.",
   "m_0333aa20d30835": "Yhdistä jokainen puhelin, tabletti tai tietokone erikseen.",
+  "m_0334f84e255398": "Olen toistanut ongelman",
   "m_03367b30427991": "Neljä tai kuusi jäsenen julistetta ja kokoelman nimi.",
   "m_0338301a1b31c2": {
     "one": "{count} nimike katalogissasi",
@@ -1545,6 +1546,7 @@
   "m_07b39bebc47cb3": "Alkupäivämäärä: {title}",
   "m_07b698dcb5873c": "Tallenna ja lataa uudelleen",
   "m_07b6cd867232f5": "Konsoli avautuu itsestään heti, kun Ether on valmis.",
+  "m_07b7ec72959f6b": "Toista ongelma nyt laitteellasi. Jatka tallennusta, kunnes ongelma ilmenee.",
   "m_07b80d86ed6696": {
     "one": "{count} julkaisu NAS:lla",
     "other": "{count} julkaisua NAS:lla"
@@ -2008,7 +2010,6 @@
   "m_0a047d973d6e39": "Ohjaaja",
   "m_0a0569b726b225": "Tallennettu",
   "m_0a05e691579a3a": "tuntematon",
-  "m_0a06766cb7d6e1": "Muistiinpano tallennetaan datana, ei ohjeena. Polut ja linkit ovat sallittuja.",
   "m_0a07688f0a525a": "Siirry kuukauden päivien välillä",
   "m_0a08abbde4f56f": "Versio {version} — {state}",
   "m_0a08fc6ffce6da": "Kopioi kansion polku",
@@ -3109,6 +3110,7 @@
   "m_0f82acf03eb935": "Kanavalääkäri",
   "m_0f83721a7f9721": "Julkaisukalenteri",
   "m_0f8867481ce04f": "Nimi Plexissä. Uudelleennimeäminen Plexissä ei jää voimaan.",
+  "m_0f8ba0bc05e6ee": "Muistiinpano tallennetaan tietona, ei ohjeena. Linkit ja osoitteet peitetään.",
   "m_0f8edfd5434ec0": "Valintoja ei voitu ladata: {error}",
   "m_0f90618417a9de": "Esilämmitys ja esilataus",
   "m_0f920e347229a1": "Tälle katsojalle seurattavat teokset. Kukin näkyy etusivulla, kun sen voi toistaa.",
@@ -4173,6 +4175,7 @@
   "m_14dfa59554e5a1": "Viimeistely lukitsee tämän hallintasivun omistajatiliin. Asennuksen voi avata myöhemmin uudelleen kohdasta Yleiset.",
   "m_14e062f3ce291a": "Korvaa alla olevat lapsilukon, toistorajoitusten ja sallittujen aikojen asetukset.",
   "m_14e1550fd79a4e": "Toimita testitiedostoja",
+  "m_14e260232e9666": "Tallennus päättyy automaattisesti 10 minuutin kuluttua.",
   "m_14e36c2465b9d0": "Hakuosoite ja API-avain. Torznab-tulokset tarvitsevat debrid-tilin toistuakseen.",
   "m_14e44c993d1561": "Näytä tulevat jaksot tuotantokausilla, jotka ovat jo käynnissä.",
   "m_14e861b571863d": "Määritä Simkl",
@@ -5432,6 +5435,7 @@
   "m_1b1de6988c0b6a": "Yritä epäonnistuneita kohteita uudelleen",
   "m_1b1e06ec3511c4": "Konsolin paikka",
   "m_1b1f0a85783523": "Päivityssyöte",
+  "m_1b203178c12c1b": "Odota vähintään 30 sekuntia ennen lopettamista.",
   "m_1b20efbd0f7a36": "Katseluaika tunteina",
   "m_1b23999841ed8a": "Sisältö",
   "m_1b27db7066dc29": {

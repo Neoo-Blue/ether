@@ -13,12 +13,55 @@ func (r *Recorder) collect(snap finishSnap, uses []secretUse) ([]archived, []Gap
 		}
 		files = append(files, archived{name: name, body: body})
 	}
+	server := map[string]any{
+		"version":     redactString(r.deps.Version, uses),
+		"commit":      redactString(r.deps.Commit, uses),
+		"buildDate":   redactString(r.deps.BuildDate, uses),
+		"platform":    redactString(r.deps.Platform, uses),
+		"container":   redactString(r.deps.Container, uses),
+		"installType": redactString(r.deps.InstallType, uses),
+	}
+	if r.deps.Uptime != nil {
+		server["uptimeSeconds"] = int64(r.deps.Uptime().Seconds())
+	}
+	put("server.json", server)
+	if snap.viewerAmbiguous {
+		gaps = append(gaps, Gap{Collector: "viewer", Status: "unavailable", Detail: "Multiple viewers used this device during the recording; viewer state was not selected."})
+	} else if snap.viewerID == 0 || r.deps.Viewer == nil {
+		gaps = append(gaps, Gap{Collector: "viewer", Status: "unavailable", Detail: "No authenticated viewer was observed for this device."})
+	} else if v, err := r.deps.Viewer(snap.viewerID); err != nil {
+		gaps = append(gaps, Gap{Collector: "viewer", Status: "failed", Detail: "Viewer state could not be collected."})
+	} else {
+		for i := range v.Sections {
+			if !snap.flags[0] {
+				v.Sections[i].Title = ""
+			} else {
+				v.Sections[i].Title = clipNetwork(v.Sections[i].Title, maxString, uses)
+			}
+			v.Sections[i].Type = clipFree(v.Sections[i].Type, 40, uses)
+		}
+		for i := range v.Candidates {
+			if !snap.flags[0] {
+				v.Candidates[i].Title = ""
+			} else {
+				v.Candidates[i].Title = clipNetwork(v.Candidates[i].Title, maxString, uses)
+			}
+			v.Candidates[i].Reason = clipFree(v.Candidates[i].Reason, maxString, uses)
+		}
+		for i := range v.Layout {
+			v.Layout[i].Layer = clipFree(v.Layout[i].Layer, 40, uses)
+			v.Layout[i].Section = clipFree(v.Layout[i].Section, 40, uses)
+			v.Layout[i].Row = clipNetwork(v.Layout[i].Row, maxString, uses)
+			v.Layout[i].Status = clipFree(v.Layout[i].Status, 40, uses)
+		}
+		put("viewer.json", v)
+	}
 	if r.deps.Settings == nil {
 		gaps = append(gaps, Gap{Collector: "settings", Status: "unavailable", Detail: "Settings were not collected."})
 	} else if s, err := r.deps.Settings(); err != nil {
 		gaps = append(gaps, Gap{Collector: "settings", Status: "failed", Detail: "Settings could not be collected."})
 	} else {
-		put("settings.json", redactSettings(s, uses))
+		put("settings.json", redactSettings(s, snap.flags[0], uses))
 	}
 	if r.deps.Sessions == nil {
 		gaps = append(gaps, Gap{Collector: "sessions", Status: "unavailable", Detail: "Sessions were not collected."})
@@ -41,6 +84,8 @@ func (r *Recorder) collect(snap finishSnap, uses []secretUse) ([]archived, []Gap
 	} else if s, err := r.deps.Storage(); err != nil {
 		gaps = append(gaps, Gap{Collector: "storage", Status: "failed", Detail: "Storage could not be collected."})
 	} else {
+		s.Filesystem = clipFree(s.Filesystem, 40, uses)
+		s.CacheFilesystem = clipFree(s.CacheFilesystem, 40, uses)
 		put("storage.json", s)
 	}
 	if r.deps.Connectivity == nil {
@@ -74,14 +119,36 @@ func (r *Recorder) collect(snap finishSnap, uses []secretUse) ([]archived, []Gap
 	return files, gaps
 }
 
-func redactSettings(s Settings, uses []secretUse) Settings {
+func redactSettings(s Settings, titles bool, uses []secretUse) Settings {
 	s.LogLevel = redactString(s.LogLevel, uses)
-	s.FriendlyName = redactString(s.FriendlyName, uses)
+	s.FriendlyName = clipNetwork(s.FriendlyName, maxString, uses)
 	s.QualityDefault = redactString(s.QualityDefault, uses)
 	s.QualityRemote = redactString(s.QualityRemote, uses)
-	s.ProfileName = redactString(s.ProfileName, uses)
+	s.ProfileName = clipNetwork(s.ProfileName, maxString, uses)
 	s.HWAccel = redactString(s.HWAccel, uses)
 	s.SecureConnections = redactString(s.SecureConnections, uses)
+	s.ReleaseMode = clipFree(s.ReleaseMode, 40, uses)
+	s.VisibilityDefault = clipFree(s.VisibilityDefault, 40, uses)
+	for i := range s.CatalogRules {
+		r := &s.CatalogRules[i]
+		r.Action = clipNetwork(r.Action, 40, uses)
+		r.MediaType = clipNetwork(r.MediaType, 40, uses)
+		r.Match = clipNetwork(r.Match, 40, uses)
+		r.Scope = clipNetwork(r.Scope, 40, uses)
+		for j := range r.Conditions {
+			c := &r.Conditions[j]
+			c.Field = clipNetwork(c.Field, 80, uses)
+			c.Op = clipNetwork(c.Op, 40, uses)
+			if titles {
+				if len(c.Value) > maxString {
+					s.CatalogRulesTruncated = true
+				}
+				c.Value = clipNetwork(c.Value, maxString, uses)
+			} else {
+				c.Value = ""
+			}
+		}
+	}
 	return s
 }
 
@@ -103,7 +170,7 @@ func sessionDoc(rows []SessionFact, omitted int, titles bool, uses []secretUse) 
 			Bytes:    row.Bytes,
 		}
 		if titles {
-			item.Title = redactString(row.Title, uses)
+			item.Title = clipNetwork(row.Title, maxString, uses)
 		}
 		out = append(out, item)
 	}

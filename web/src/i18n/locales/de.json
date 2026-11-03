@@ -659,6 +659,7 @@
   },
   "m_033386ef5bff4a": "{provider} wird nicht mehr zum Streamen verwendet. Sein API-Schlüssel wird aus Ether gelöscht.",
   "m_0333aa20d30835": "Verbinde jedes Telefon, Tablet oder jeden Computer einzeln.",
+  "m_0334f84e255398": "Ich habe das Problem reproduziert",
   "m_03367b30427991": "Vier oder sechs Poster der enthaltenen Titel, mit dem Sammlungsnamen.",
   "m_0338301a1b31c2": {
     "one": "{count} Titel in deinem Katalog",
@@ -1545,6 +1546,7 @@
   "m_07b39bebc47cb3": "Startdatum für {title}",
   "m_07b698dcb5873c": "Speichern und neu laden",
   "m_07b6cd867232f5": "Die Konsole öffnet sich von selbst, sobald Ether bereit ist.",
+  "m_07b7ec72959f6b": "Reproduziere das Problem jetzt auf deinem Gerät. Zeichne weiter auf, bis es auftritt.",
   "m_07b80d86ed6696": {
     "one": "{count} Release auf dem NAS",
     "other": "{count} Releases auf dem NAS"
@@ -2008,7 +2010,6 @@
   "m_0a047d973d6e39": "Regie",
   "m_0a0569b726b225": "Gespeichert",
   "m_0a05e691579a3a": "unbekannt",
-  "m_0a06766cb7d6e1": "Die Notiz wird als Daten gespeichert, nicht als Anweisung. Pfade und Links sind erlaubt.",
   "m_0a07688f0a525a": "Zwischen Tagen im Monat wechseln",
   "m_0a08abbde4f56f": "Version {version} – {state}",
   "m_0a08fc6ffce6da": "Ordnerpfad kopieren",
@@ -3109,6 +3110,7 @@
   "m_0f82acf03eb935": "Kanalarzt",
   "m_0f83721a7f9721": "Veröffentlichungskalender",
   "m_0f8867481ce04f": "Name in Plex. Ein Umbenennen in Plex bleibt nicht.",
+  "m_0f8ba0bc05e6ee": "Die Notiz wird als Daten gespeichert, nicht als Anweisung. Links und Adressen werden unkenntlich gemacht.",
   "m_0f8edfd5434ec0": "Optionen konnten nicht geladen werden: {error}",
   "m_0f90618417a9de": "Vorwärmen und Prefetch",
   "m_0f920e347229a1": "Titel, die für diesen Zuschauer beobachtet werden. Jeder erscheint auf der Startseite, sobald er abspielbar ist.",
@@ -4173,6 +4175,7 @@
   "m_14dfa59554e5a1": "Mit dem Abschluss ist diese Verwaltungsseite an Ihr Eigentümerkonto gebunden. Die Einrichtung können Sie später unter Allgemein wieder öffnen.",
   "m_14e062f3ce291a": "Ersetzt den Jugendschutz, die Wiedergabebeschränkungen und die erlaubten Zeiten unten.",
   "m_14e1550fd79a4e": "Testdateien bereitstellen",
+  "m_14e260232e9666": "Die Aufzeichnung endet automatisch nach 10 Minuten.",
   "m_14e36c2465b9d0": "Eine Suchadresse und ein API-Schlüssel. Torznab-Ergebnisse brauchen ein Debrid-Konto zur Wiedergabe.",
   "m_14e44c993d1561": "Kommende Folgen in Staffeln auflisten, die bereits laufen.",
   "m_14e861b571863d": "Simkl einrichten",
@@ -5432,6 +5435,7 @@
   "m_1b1de6988c0b6a": "Fehlgeschlagene Einträge wiederholen",
   "m_1b1e06ec3511c4": "Konsolenbereich",
   "m_1b1f0a85783523": "Update-Feed",
+  "m_1b203178c12c1b": "Warte mindestens 30 Sekunden, bevor du fertigstellst.",
   "m_1b20efbd0f7a36": "Gesehene Stunden",
   "m_1b23999841ed8a": "Inhalt",
   "m_1b27db7066dc29": {

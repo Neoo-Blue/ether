@@ -659,6 +659,7 @@
   },
   "m_033386ef5bff4a": "{provider} wordt niet meer gebruikt voor streaming. De API-sleutel wordt uit Ether verwijderd.",
   "m_0333aa20d30835": "Verbind elke telefoon, tablet of computer apart.",
+  "m_0334f84e255398": "Ik heb het probleem gereproduceerd",
   "m_03367b30427991": "Vier of zes posters van leden, met de collectienaam.",
   "m_0338301a1b31c2": {
     "one": "{count} titel in je catalogus",
@@ -1545,6 +1546,7 @@
   "m_07b39bebc47cb3": "Startdatum voor {title}",
   "m_07b698dcb5873c": "Opslaan en opnieuw laden",
   "m_07b6cd867232f5": "De console opent vanzelf zodra Ether klaar is.",
+  "m_07b7ec72959f6b": "Reproduceer het probleem nu op je apparaat. Blijf opnemen totdat het gebeurt.",
   "m_07b80d86ed6696": {
     "one": "{count} release op de NAS",
     "other": "{count} releases op de NAS"
@@ -2008,7 +2010,6 @@
   "m_0a047d973d6e39": "Geregisseerd door",
   "m_0a0569b726b225": "Opgeslagen",
   "m_0a05e691579a3a": "onbekend",
-  "m_0a06766cb7d6e1": "De notitie wordt als gegevens bewaard, niet als opdracht. Paden en links zijn toegestaan.",
   "m_0a07688f0a525a": "Tussen dagen in de maand bewegen",
   "m_0a08abbde4f56f": "Versie {version} — {state}",
   "m_0a08fc6ffce6da": "Mappad kopiëren",
@@ -3109,6 +3110,7 @@
   "m_0f82acf03eb935": "Zenderdokter",
   "m_0f83721a7f9721": "Releasekalender",
   "m_0f8867481ce04f": "Naam in Plex. Hernoemen in Plex blijft niet.",
+  "m_0f8ba0bc05e6ee": "De notitie wordt als gegevens opgeslagen, niet als instructies. Links en adressen worden afgeschermd.",
   "m_0f8edfd5434ec0": "Keuzes konden niet worden geladen: {error}",
   "m_0f90618417a9de": "Opwarmen en prefetch",
   "m_0f920e347229a1": "Titels die voor deze kijker in de gaten worden gehouden. Elk verschijnt op Home zodra het afspeelbaar is.",
@@ -4173,6 +4175,7 @@
   "m_14dfa59554e5a1": "Afronden koppelt deze beheerpagina aan je eigenaarsaccount. Je kunt de installatie later opnieuw openen via Algemeen.",
   "m_14e062f3ce291a": "Vervangt het ouderlijk toezicht, de afspeelbeperkingen en de toegestane tijden hieronder.",
   "m_14e1550fd79a4e": "Testbestanden aanbieden",
+  "m_14e260232e9666": "De opname stopt automatisch na 10 minuten.",
   "m_14e36c2465b9d0": "Een zoekadres en een API-sleutel. Torznab-resultaten hebben een debrid-account nodig om af te spelen.",
   "m_14e44c993d1561": "Toon komende afleveringen in seizoenen die al lopen.",
   "m_14e861b571863d": "Simkl instellen",
@@ -5432,6 +5435,7 @@
   "m_1b1de6988c0b6a": "Mislukte items opnieuw proberen",
   "m_1b1e06ec3511c4": "Consoleplek",
   "m_1b1f0a85783523": "Updatefeed",
+  "m_1b203178c12c1b": "Wacht minstens 30 seconden voordat je afrondt.",
   "m_1b20efbd0f7a36": "Uren bekeken",
   "m_1b23999841ed8a": "Inhoud",
   "m_1b27db7066dc29": {

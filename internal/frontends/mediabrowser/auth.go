@@ -17,6 +17,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/frontend/kit/authhdr"
 	"github.com/braedonsaunders/ether/internal/frontend/kit/ids"
 	"github.com/braedonsaunders/ether/internal/frontend/kit/route"
+	"github.com/braedonsaunders/ether/internal/frontend/kit/support"
 )
 
 // errViewerScope means the request named a viewer other than the grant holder.
@@ -119,6 +120,9 @@ func (i *instance) viewer(r *http.Request) (*frontend.Viewer, string, error) {
 	}
 	if err == nil && v != nil && i.host.ClientSeen != nil {
 		i.host.ClientSeen(device(r).ID)
+	}
+	if _, ok := i.host.Identity.(frontend.GrantDeviceIdentity); ok && err == nil && v != nil {
+		support.Seen(r, i.host.Support, string(i.protocol), v, device(r))
 	}
 	return v, token, err
 }

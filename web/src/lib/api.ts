@@ -80,6 +80,7 @@ export interface SupportCapture {
   hypotheses: { code: string; text: string }[];
   coverage: { collector: string; status: string; detail: string }[];
   preview?: {
+    files?: string[];
     identity: {
       usernamesIncluded: boolean;
       addressesIncluded: boolean;

@@ -8,6 +8,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -54,10 +56,10 @@ func (r *Recorder) Finish(token, id string, in FinishIn) (CaptureView, error) {
 		r.mu.Unlock()
 		return CaptureView{}, ErrNotRecording
 	}
+	if in.SetFlags && len(c.zip) == 0 {
+		c.titles, c.users, c.addrs = in.IncludeTitles, in.IncludeUsernames, in.IncludeAddresses
+	}
 	if c.state == "recording" {
-		if in.SetFlags {
-			c.titles, c.users, c.addrs = in.IncludeTitles, in.IncludeUsernames, in.IncludeAddresses
-		}
 		r.finishLocked(c, r.now())
 	}
 	if c.state != "finished" {
@@ -78,8 +80,19 @@ func (r *Recorder) Finish(token, id string, in FinishIn) (CaptureView, error) {
 		events: c.evidenceCopy(c.started.Add(-preRoll), c.finished), uncorr: c.uncorrelated,
 		view: r.viewLocked(c), limit: r.testArchiveLimit,
 	}
+	for _, e := range snap.events {
+		if e.Kind != KindRequest || e.ViewerID == 0 {
+			continue
+		}
+		if snap.viewerID == 0 {
+			snap.viewerID = e.ViewerID
+		} else if snap.viewerID != e.ViewerID {
+			snap.viewerAmbiguous = true
+		}
+	}
 	r.mu.Unlock()
 
+	sort.SliceStable(snap.events, func(i, j int) bool { return snap.events[i].Time.Before(snap.events[j].Time) })
 	uses := r.secretUses()
 	extra, gaps := r.collect(snap, uses)
 	blob, names, ident, built := buildZip(snap, extra, append(snap.view.Coverage, gaps...), uses)
@@ -119,16 +132,19 @@ func (r *Recorder) Archive(token, id string) ([]byte, error) {
 }
 
 type finishSnap struct {
-	id        string
-	started   time.Time
-	finished  time.Time
-	note      string
-	deviceKey string
-	flags     [3]bool
-	events    []Event
-	uncorr    int
-	view      CaptureView
-	limit     int
+	id              string
+	started         time.Time
+	finished        time.Time
+	note            string
+	deviceKey       string
+	flags           [3]bool
+	events          []Event
+	uncorr          int
+	view            CaptureView
+	limit           int
+	viewerID        int64
+	viewerAmbiguous bool
+	findings        []Finding
 }
 
 func buildZip(snap finishSnap, extra []archived, coverage []Gap, uses []secretUse) ([]byte, []string, IdentityPreview, []Gap) {
@@ -155,7 +171,10 @@ func buildZip(snap finishSnap, extra []archived, coverage []Gap, uses []secretUs
 		files = append(files, archived{name: name, body: body})
 	}
 	add("README.md", readme)
-	eventsBody, skipped := eventsJSONL(snap.events, snap.flags, snap.id, uses)
+	eventsBody, skipped, truncated := eventsJSONL(snap.events, snap.flags, snap.id, uses)
+	if truncated > 0 {
+		pre = append(pre, Gap{Collector: "events.jsonl", Status: "truncated", Detail: fmt.Sprintf("Omitted %d events to stay within the journal byte budget; newest events are preferred.", truncated)})
+	}
 	if skipped > 0 {
 		pre = append(pre, Gap{Collector: "events.jsonl", Status: "omitted", Detail: "Some events were omitted because the redaction check did not accept them."})
 	}
@@ -166,6 +185,9 @@ func buildZip(snap finishSnap, extra []archived, coverage []Gap, uses []secretUs
 	} else {
 		add("events.jsonl", []byte(eventsBody))
 	}
+	rows, findings := analyzeJournal(eventsBody)
+	snap.findings = findings
+	add("REPORT.md", reportMarkdown(rows, findings, extra))
 	files = append(files, extra...)
 	base := append(append([]Gap{}, coverage...), pre...)
 	packed, added := sealArchive(files, base, snap, uses)
@@ -198,9 +220,14 @@ func sealKnown(snap finishSnap, content []archived, known []Gap, extra Gap, pre,
 }
 
 func summaryBytes(snap finishSnap, ident IdentityPreview, uses []secretUse) []byte {
+	observed := append([]Observation(nil), snap.view.Observations...)
+	for _, finding := range snap.findings {
+		observed = append(observed, Observation{At: snap.finished, Kind: Kind("finding"), Code: finding.Code, Text: finding.Text, JournalLines: finding.Lines})
+	}
 	return mustMarshal(map[string]any{
-		"observations": snap.view.Observations,
+		"observations": observed,
 		"hypotheses":   snap.view.Hypotheses,
+		"findings":     snap.findings,
 		"identity":     ident,
 		"uncorrelated": snap.uncorr,
 	}, uses)
@@ -279,6 +306,15 @@ func retainedIdentity(files []archived, flags [3]bool) IdentityPreview {
 	for _, f := range files {
 		body[f.name] = f.body
 	}
+	if b, ok := body["REPORT.md"]; ok && flags[0] {
+		for _, line := range strings.Split(string(b), "\n") {
+			if strings.HasPrefix(line, "  - item: ") {
+				if title, err := strconv.Unquote(strings.TrimPrefix(line, "  - item: ")); err == nil {
+					p.Titles = append(p.Titles, title)
+				}
+			}
+		}
+	}
 	if b, ok := body["events.jsonl"]; ok {
 		collectJSONLIdentity(b, flags, &p)
 	}
@@ -286,10 +322,34 @@ func retainedIdentity(files []archived, flags [3]bool) IdentityPreview {
 		collectJSONLIdentity(b, flags, &p)
 	}
 	if flags[0] {
+		if b, ok := body["settings.json"]; ok {
+			var settings Settings
+			if json.Unmarshal(b, &settings) == nil {
+				for _, rule := range settings.CatalogRules {
+					for _, condition := range rule.Conditions {
+						p.Titles = append(p.Titles, condition.Value)
+					}
+				}
+			}
+		}
 		if b, ok := body["sessions.json"]; ok {
 			collectSessionTitles(b, &p)
 		}
+		if b, ok := body["viewer.json"]; ok {
+			var v ViewerFacts
+			if json.Unmarshal(b, &v) == nil {
+				for _, x := range v.Sections {
+					p.Titles = append(p.Titles, x.Title)
+				}
+				for _, x := range v.Candidates {
+					p.Titles = append(p.Titles, x.Title)
+				}
+			}
+		}
 	}
+	p.Usernames = mergeStrings(p.Usernames)
+	p.Addresses = mergeStrings(p.Addresses)
+	p.Titles = mergeStrings(p.Titles)
 	return p
 }
 
@@ -300,22 +360,30 @@ func collectJSONLIdentity(b []byte, flags [3]bool, p *IdentityPreview) {
 			continue
 		}
 		var row struct {
-			Username   string `json:"username"`
-			Peer       string `json:"peer"`
-			Title      string `json:"title"`
-			SourceName string `json:"sourceName"`
+			Username   string           `json:"username"`
+			Peer       string           `json:"peer"`
+			Title      string           `json:"title"`
+			SourceName string           `json:"sourceName"`
+			Response   *ResponseSummary `json:"response"`
 		}
 		if json.Unmarshal(line, &row) != nil {
 			continue
 		}
 		if flags[1] && row.Username != "" {
-			p.Usernames = mergeStrings(p.Usernames, []string{row.Username})
+			p.Usernames = append(p.Usernames, row.Username)
 		}
 		if flags[2] && row.Peer != "" {
-			p.Addresses = mergeStrings(p.Addresses, []string{row.Peer})
+			p.Addresses = append(p.Addresses, row.Peer)
 		}
 		if flags[0] {
-			p.Titles = mergeStrings(p.Titles, []string{row.Title, row.SourceName})
+			p.Titles = append(p.Titles, row.Title, row.SourceName)
+			if row.Response != nil {
+				p.Titles = append(p.Titles, row.Response.Items...)
+				for _, h := range row.Response.Hubs {
+					p.Titles = append(p.Titles, h.Title)
+					p.Titles = append(p.Titles, h.Items...)
+				}
+			}
 		}
 	}
 }
@@ -331,7 +399,7 @@ func collectSessionTitles(b []byte, p *IdentityPreview) {
 	}
 	for _, row := range doc.Sessions {
 		if row.Title != "" {
-			p.Titles = mergeStrings(p.Titles, []string{row.Title})
+			p.Titles = append(p.Titles, row.Title)
 		}
 	}
 }
@@ -502,6 +570,17 @@ type exportEvent struct {
 	Protocol      string            `json:"protocol,omitempty"`
 	Method        string            `json:"method,omitempty"`
 	Route         string            `json:"route,omitempty"`
+	Query         string            `json:"query,omitempty"`
+	DurationMS    int64             `json:"durationMs,omitempty"`
+	DBQueries     int64             `json:"dbQueries"`
+	Cancelled     bool              `json:"cancelled,omitempty"`
+	DBTimeMS      int64             `json:"dbTimeMs"`
+	Product       string            `json:"product,omitempty"`
+	Platform      string            `json:"platform,omitempty"`
+	Model         string            `json:"model,omitempty"`
+	DeviceType    string            `json:"clientDevice,omitempty"`
+	AppVersion    string            `json:"appVersion,omitempty"`
+	Response      *ResponseSummary  `json:"response,omitempty"`
 	Status        int               `json:"status,omitempty"`
 	Bytes         int64             `json:"bytes,omitempty"`
 	Repeat        int               `json:"repeat,omitempty"`
@@ -520,24 +599,42 @@ type exportEvent struct {
 	Playback      *PlaybackDecision `json:"playback,omitempty"`
 }
 
-func eventsJSONL(events []Event, flags [3]bool, captureID string, uses []secretUse) (string, int) {
-	var b strings.Builder
-	skipped := 0
+func eventsJSONL(events []Event, flags [3]bool, captureID string, uses []secretUse) (string, int, int) {
+	const journalLimit = 768 << 10
+	var lines [][]byte
+	start, size, skipped, truncated := 0, 0, 0, 0
 	for _, e := range events {
 		row := exportEvent{
 			At: e.Time, Until: e.Until, Kind: e.Kind, Status: e.Status, Bytes: e.Bytes, Repeat: e.Repeat,
-			Uncorrelated:  e.Uncorrelated,
-			Device:        Alias("device", e.DeviceKey),
-			Session:       Alias("session", e.SessionKey),
-			Attempt:       Alias("attempt", e.AttemptKey),
-			Protocol:      redactString(e.Protocol, uses),
-			Method:        redactString(e.Method, uses),
-			Route:         redactString(e.Route, uses),
+			Uncorrelated: e.Uncorrelated,
+			Device:       Alias("device", e.DeviceKey),
+			Session:      Alias("session", e.SessionKey),
+			Attempt:      Alias("attempt", e.AttemptKey),
+			Protocol:     redactString(e.Protocol, uses),
+			Method:       redactString(e.Method, uses),
+			Route:        redactString(e.Route, uses),
+			Query:        redactString(e.Query, uses),
+			Cancelled:    e.Cancelled,
+			DurationMS:   e.Duration.Milliseconds(), DBQueries: e.DBQueries, DBTimeMS: e.DBTime.Milliseconds(),
+			Product: redactString(e.Product, uses), Platform: redactString(e.Platform, uses), Model: redactString(e.Model, uses), DeviceType: redactString(e.Device, uses), AppVersion: redactString(e.AppVersion, uses),
 			Decision:      redactString(e.Decision, uses),
 			Reason:        redactString(e.Reason, uses),
 			Rejection:     redactString(e.Rejection, uses),
 			ErrorExcerpt:  redactString(e.ErrorExcerpt, uses),
 			FFmpegExcerpt: redactString(e.FFmpegExcerpt, uses),
+		}
+		if e.Response != nil {
+			v := *e.Response
+			v.Hubs = append([]HubSummary(nil), v.Hubs...)
+			if !flags[0] {
+				v.Items = nil
+				v.Error = ""
+				for i := range v.Hubs {
+					v.Hubs[i].Title = ""
+					v.Hubs[i].Items = nil
+				}
+			}
+			row.Response = &v
 		}
 		if e.Media != nil {
 			m := *e.Media
@@ -572,10 +669,27 @@ func eventsJSONL(events []Event, flags [3]bool, captureID string, uses []secretU
 			skipped++
 			continue
 		}
-		b.Write(bytes.TrimSpace(line))
+		line = bytes.TrimSpace(line)
+		if len(line)+1 > journalLimit {
+			truncated++
+			continue
+		}
+		for size+len(line)+1 > journalLimit && start < len(lines) {
+			size -= len(lines[start]) + 1
+			lines[start] = nil
+			start++
+			truncated++
+		}
+		lines = append(lines, line)
+		size += len(line) + 1
+	}
+	var b strings.Builder
+	b.Grow(size)
+	for _, line := range lines[start:] {
+		b.Write(line)
 		b.WriteByte('\n')
 	}
-	return b.String(), skipped
+	return b.String(), skipped, truncated
 }
 
 // marshalChecked encodes a value whose string fields were already redacted.

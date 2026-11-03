@@ -12,6 +12,7 @@ import (
 
 	"github.com/braedonsaunders/ether/internal/frontend"
 	"github.com/braedonsaunders/ether/internal/frontend/kit/route"
+	"github.com/braedonsaunders/ether/internal/frontend/kit/support"
 )
 
 // writeJSON encodes before writing the status, so an unencodable value is a
@@ -102,6 +103,23 @@ type catalogPage struct {
 }
 
 func (i *instance) Handler() http.Handler {
+	next := support.Wrap(i.host.Support, "stremio", func(r *http.Request) (*frontend.Viewer, frontend.Device) {
+		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/"), "/")
+		if len(parts) < 2 || parts[0] == "image" || parts[0] == "sessions" {
+			return nil, frontend.Device{}
+		}
+		v, err := i.host.Identity.Resolve(r.Context(), parts[0])
+		if err != nil || v == nil {
+			return nil, frontend.Device{}
+		}
+		return v, deviceFor(parts[0])
+	}, func(path string) string {
+		parts := strings.Split(path, "/")
+		if len(parts) > 1 {
+			parts[1] = "*"
+		}
+		return strings.Join(parts, "/")
+	}, i.router)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
@@ -118,7 +136,7 @@ func (i *instance) Handler() http.Handler {
 			u.Path = strings.TrimPrefix(u.Path, "/stremio")
 			r.URL = &u
 		}
-		i.router.ServeHTTP(w, r)
+		next.ServeHTTP(w, r)
 	})
 }
 func (*instance) Listeners() []frontend.ListenerSpec {
@@ -131,10 +149,11 @@ func (*instance) Status(context.Context) frontend.Status {
 func (*instance) Close(context.Context) error { return nil }
 func (i *instance) Routes() []route.Route     { return i.router.Routes() }
 
-func (i *instance) observeClient(credential string) {
+func (i *instance) observeClient(r *http.Request, credential string, viewer *frontend.Viewer) {
 	if i.host.ClientSeen != nil {
 		i.host.ClientSeen(deviceFor(credential).ID)
 	}
+	support.Seen(r, i.host.Support, "stremio", viewer, deviceFor(credential))
 }
 
 func (i *instance) manifest(w http.ResponseWriter, r *http.Request) {
@@ -144,7 +163,7 @@ func (i *instance) manifest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	i.observeClient(credential)
+	i.observeClient(r, credential, viewer)
 	catalogs := []any{
 		map[string]any{"type": "movie", "id": "ether-movies", "name": "Ether Movies", "extra": []any{map[string]any{"name": "search"}, map[string]any{"name": "skip"}, map[string]any{"name": "genre"}}},
 		map[string]any{"type": "series", "id": "ether-series", "name": "Ether Series", "extra": []any{map[string]any{"name": "search"}, map[string]any{"name": "skip"}, map[string]any{"name": "genre"}}},

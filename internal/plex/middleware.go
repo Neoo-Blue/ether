@@ -99,8 +99,11 @@ func (s *Server) recoverer(next http.Handler) http.Handler {
 // statusRecorder captures the status code for logging.
 type statusRecorder struct {
 	http.ResponseWriter
-	status  int
-	written int64
+	status    int
+	written   int64
+	sample    []byte
+	sampling  bool
+	truncated bool
 }
 
 func (sr *statusRecorder) WriteHeader(code int) {
@@ -116,6 +119,19 @@ func (sr *statusRecorder) Write(b []byte) (int, error) {
 	}
 	n, err := sr.ResponseWriter.Write(b)
 	sr.written += int64(n)
+	if sr.sampling {
+		const maxSample = 1 << 20
+		remaining := maxSample - len(sr.sample)
+		if remaining < n {
+			sr.truncated = true
+		}
+		if remaining > 0 {
+			if n < remaining {
+				remaining = n
+			}
+			sr.sample = append(sr.sample, b[:remaining]...)
+		}
+	}
 	return n, err
 }
 
@@ -143,8 +159,14 @@ func (s *Server) requestLog(next http.Handler) http.Handler {
 	failures := faillog.New(log.With("frontend", "plex"), "authentication")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		sr := &statusRecorder{ResponseWriter: w}
+		samplePath := supportDocumentPath(r.URL.Path)
+		sample := s.d.Support != nil && samplePath && s.d.Support.BeginSample(FromContext(r.Context()).ClientID)
+		if sample {
+			defer s.d.Support.EndSample()
+		}
+		sr := &statusRecorder{ResponseWriter: w, sampling: sample}
 		next.ServeHTTP(sr, r)
+		s.observeRequest(r, sr, time.Since(start))
 		if sr.status == http.StatusUnauthorized {
 			failures.Fail(errors.New("unauthorized"))
 			return
@@ -163,7 +185,6 @@ func (s *Server) requestLog(next http.Handler) http.Handler {
 			"range", r.Header.Get("Range"), "contentRange", sr.Header().Get("Content-Range"),
 			"pageStart", pr.Start, "pageSize", pr.Size, "paged", pr.HasPage, "format", pr.Format, "includeChildren", r.URL.Query().Get("includeChildren"),
 			"model", pr.Model, "device", pr.Device, "version", pr.Version, "platformVersion", pr.PlatformVersion, "peer", pr.RemoteIP.String())
-		s.observeRequest(r, sr)
 	})
 }
 

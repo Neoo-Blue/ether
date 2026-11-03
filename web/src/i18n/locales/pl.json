@@ -693,6 +693,7 @@
   },
   "m_033386ef5bff4a": "{provider} nie będzie już używany do streamingu. Jego klucz API zostanie usunięty z Ether.",
   "m_0333aa20d30835": "Połącz każdy telefon, tablet i komputer osobno.",
+  "m_0334f84e255398": "Problem został przeze mnie odtworzony",
   "m_03367b30427991": "Cztery lub sześć plakatów tytułów wraz z nazwą kolekcji.",
   "m_0338301a1b31c2": {
     "one": "{count} tytuł w Twoim katalogu",
@@ -1621,6 +1622,7 @@
   "m_07b39bebc47cb3": "Data rozpoczęcia dla: {title}",
   "m_07b698dcb5873c": "Zapisz i odśwież",
   "m_07b6cd867232f5": "Konsola otworzy się sama, gdy tylko Ether będzie gotowy.",
+  "m_07b7ec72959f6b": "Odtwórz teraz problem na swoim urządzeniu. Nagrywaj, aż wystąpi.",
   "m_07b80d86ed6696": {
     "few": "{count} wydania na NAS",
     "many": "{count} wydań na NAS",
@@ -2102,7 +2104,6 @@
   "m_0a047d973d6e39": "Reżyseria",
   "m_0a0569b726b225": "Zapisano",
   "m_0a05e691579a3a": "nieznane",
-  "m_0a06766cb7d6e1": "Notatka jest zapisywana jako dane, nie jako polecenie. Ścieżki i linki są dozwolone.",
   "m_0a07688f0a525a": "Przechodź między dniami miesiąca",
   "m_0a08abbde4f56f": "Wersja {version} — {state}",
   "m_0a08fc6ffce6da": "Kopiuj ścieżkę folderu",
@@ -3253,6 +3254,7 @@
   "m_0f82acf03eb935": "Lekarz kanałów",
   "m_0f83721a7f9721": "Kalendarz premier",
   "m_0f8867481ce04f": "Nazwa w Plex. Zmiana nazwy w Plexie nie zostaje.",
+  "m_0f8ba0bc05e6ee": "Notatka jest zapisywana jako dane, a nie instrukcje. Łącza i adresy są ukrywane.",
   "m_0f8edfd5434ec0": "Nie udało się wczytać opcji: {error}",
   "m_0f90618417a9de": "Przygotowywanie i wstępne pobieranie",
   "m_0f920e347229a1": "Tytuły obserwowane dla tego widza. Każdy pojawia się na stronie głównej, gdy da się go odtworzyć.",
@@ -4385,6 +4387,7 @@
   "m_14dfa59554e5a1": "Zakończenie konfiguracji przypisuje tę stronę administracji do konta właściciela. Konfigurację możesz później otworzyć ponownie w Ogólne.",
   "m_14e062f3ce291a": "Zastępuje kontrolę rodzicielską, ograniczenia odtwarzania i dozwolone godziny poniżej.",
   "m_14e1550fd79a4e": "Udostępniaj pliki testowe",
+  "m_14e260232e9666": "Nagrywanie zakończy się automatycznie po 10 minutach.",
   "m_14e36c2465b9d0": "Adres wyszukiwania i klucz API. Wyniki Torznab potrzebują konta debrid, aby je odtworzyć.",
   "m_14e44c993d1561": "Pokaż nadchodzące odcinki w sezonach, które już się ukazują.",
   "m_14e861b571863d": "Skonfiguruj Simkl",
@@ -5704,6 +5707,7 @@
   "m_1b1de6988c0b6a": "Ponów nieudane elementy",
   "m_1b1e06ec3511c4": "Miejsce w konsoli",
   "m_1b1f0a85783523": "Kanał aktualizacji",
+  "m_1b203178c12c1b": "Odczekaj co najmniej 30 sekund przed zakończeniem.",
   "m_1b20efbd0f7a36": "Obejrzane godziny",
   "m_1b23999841ed8a": "Zawartość",
   "m_1b27db7066dc29": {

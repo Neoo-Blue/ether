@@ -15,9 +15,9 @@ func boundPlayback(p *PlaybackDecision, uses []secretUse) *PlaybackDecision {
 		return nil
 	}
 	out := *p
-	out.Profile = clipFree(out.Profile, 80, uses)
+	out.Profile = clipNetwork(out.Profile, 80, uses)
 	out.Chooser = clipFree(out.Chooser, 16, uses)
-	out.ChosenRelease = clipFree(out.ChosenRelease, maxString, uses)
+	out.ChosenRelease = clipNetwork(out.ChosenRelease, maxString, uses)
 	if len(out.Candidates) > maxPlaybackCandidates {
 		out.Candidates = append([]PlaybackCandidate(nil), out.Candidates[:maxPlaybackCandidates]...)
 	} else if len(out.Candidates) > 0 {
@@ -25,8 +25,8 @@ func boundPlayback(p *PlaybackDecision, uses []secretUse) *PlaybackDecision {
 	}
 	for i := range out.Candidates {
 		c := &out.Candidates[i]
-		c.Name = clipFree(c.Name, maxString, uses)
-		c.Reason = clipFree(c.Reason, maxString, uses)
+		c.Name = clipNetwork(c.Name, maxString, uses)
+		c.Reason = clipNetwork(c.Reason, maxString, uses)
 	}
 	if len(out.Variants) > maxPlaybackCandidates {
 		out.Variants = append([]PlaybackVariant(nil), out.Variants[:maxPlaybackCandidates]...)
@@ -35,7 +35,7 @@ func boundPlayback(p *PlaybackDecision, uses []secretUse) *PlaybackDecision {
 	}
 	for i := range out.Variants {
 		v := &out.Variants[i]
-		v.Release = clipFree(v.Release, maxString, uses)
+		v.Release = clipNetwork(v.Release, maxString, uses)
 	}
 	return &out
 }

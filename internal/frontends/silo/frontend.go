@@ -14,6 +14,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/frontend"
 	"github.com/braedonsaunders/ether/internal/frontend/kit/conformance"
 	"github.com/braedonsaunders/ether/internal/frontend/kit/route"
+	"github.com/braedonsaunders/ether/internal/frontend/kit/support"
 )
 
 // Frontend is the independent Silo surface.
@@ -90,16 +91,23 @@ type instance struct {
 }
 
 func (i *instance) Handler() http.Handler {
+	next := support.Wrap(i.host.Support, "silo", func(r *http.Request) (*frontend.Viewer, frontend.Device) {
+		v, _, err := i.deviceViewer(r)
+		if err != nil {
+			return nil, frontend.Device{}
+		}
+		return v, device(r)
+	}, func(path string) string { return path }, i.router)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/silo/") {
 			r2 := r.Clone(context.WithValue(r.Context(), sharedPrefix{}, true))
 			u := *r.URL
 			u.Path = strings.TrimPrefix(u.Path, "/silo")
 			r2.URL = &u
-			i.router.ServeHTTP(w, r2)
+			next.ServeHTTP(w, r2)
 			return
 		}
-		i.router.ServeHTTP(w, r)
+		next.ServeHTTP(w, r)
 	})
 }
 func (i *instance) Listeners() []frontend.ListenerSpec {

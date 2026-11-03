@@ -659,6 +659,7 @@
   },
   "m_033386ef5bff4a": "{provider} används inte längre för streaming. Dess API-nyckel tas bort från Ether.",
   "m_0333aa20d30835": "Anslut varje telefon, surfplatta eller dator för sig.",
+  "m_0334f84e255398": "Jag har återskapat problemet",
   "m_03367b30427991": "Fyra eller sex medlemsaffischer, med samlingens namn.",
   "m_0338301a1b31c2": {
     "one": "{count} titel i din katalog",
@@ -1545,6 +1546,7 @@
   "m_07b39bebc47cb3": "Startdatum för {title}",
   "m_07b698dcb5873c": "Spara och läs in igen",
   "m_07b6cd867232f5": "Konsolen öppnas av sig själv så snart Ether är redo.",
+  "m_07b7ec72959f6b": "Återskapa problemet på din enhet nu. Fortsätt spela in tills det inträffar.",
   "m_07b80d86ed6696": {
     "one": "{count} release på NAS:en",
     "other": "{count} releaser på NAS:en"
@@ -2008,7 +2010,6 @@
   "m_0a047d973d6e39": "Regi",
   "m_0a0569b726b225": "Sparad",
   "m_0a05e691579a3a": "okänt",
-  "m_0a06766cb7d6e1": "Anteckningen sparas som data, inte som en instruktion. Sökvägar och länkar är tillåtna.",
   "m_0a07688f0a525a": "Flytta mellan dagar i månaden",
   "m_0a08abbde4f56f": "Version {version} — {state}",
   "m_0a08fc6ffce6da": "Kopiera mappens sökväg",
@@ -3109,6 +3110,7 @@
   "m_0f82acf03eb935": "Kanaldoktor",
   "m_0f83721a7f9721": "Releasekalender",
   "m_0f8867481ce04f": "Namn som visas i Plex. Ett namnbyte i Plex stannar inte.",
+  "m_0f8ba0bc05e6ee": "Anteckningen sparas som data, inte som instruktioner. Länkar och adresser döljs.",
   "m_0f8edfd5434ec0": "Kunde inte läsa in alternativen: {error}",
   "m_0f90618417a9de": "Uppvärmning och förhämtning",
   "m_0f920e347229a1": "Titlar som bevakas för den här tittaren. Var och en visas på Hem när den kan spelas.",
@@ -4173,6 +4175,7 @@
   "m_14dfa59554e5a1": "När du slutför låses den här administrationssidan till ditt ägarkonto. Du kan öppna installationen igen senare under Allmänt.",
   "m_14e062f3ce291a": "Ersätter föräldrakontrollen, uppspelningsbegränsningarna och tillåtna tider nedan.",
   "m_14e1550fd79a4e": "Servera testfiler",
+  "m_14e260232e9666": "Inspelningen avslutas automatiskt efter 10 minuter.",
   "m_14e36c2465b9d0": "En sökadress och en API-nyckel. Torznab-resultat behöver ett debrid-konto för att spelas.",
   "m_14e44c993d1561": "Lista kommande avsnitt i säsonger som redan sänds.",
   "m_14e861b571863d": "Konfigurera Simkl",
@@ -5432,6 +5435,7 @@
   "m_1b1de6988c0b6a": "Försök igen med misslyckade objekt",
   "m_1b1e06ec3511c4": "Konsolplats",
   "m_1b1f0a85783523": "Uppdateringsflöde",
+  "m_1b203178c12c1b": "Vänta minst 30 sekunder innan du avslutar.",
   "m_1b20efbd0f7a36": "Timmar tittade",
   "m_1b23999841ed8a": "Innehåll",
   "m_1b27db7066dc29": {

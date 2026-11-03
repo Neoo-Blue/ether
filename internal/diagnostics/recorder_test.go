@@ -283,7 +283,7 @@ func TestArchiveRedactsEncodedSecretAndHidesOtherViewer(t *testing.T) {
 	if strings.Contains(text, secret) || strings.Contains(strings.ToLower(text), "%6a") || strings.Contains(text, "Ada") || strings.Contains(text, "203.0.113.9") {
 		t.Fatalf("leaked\n%s", text)
 	}
-	if !strings.Contains(text, "untrusted data") || !strings.Contains(text, "https://example.test/help") {
+	if !strings.Contains(text, "untrusted data") || !strings.Contains(text, "see [redacted]") || strings.Contains(text, "https://example.test/help") {
 		t.Fatalf("note missing\n%s", text)
 	}
 }

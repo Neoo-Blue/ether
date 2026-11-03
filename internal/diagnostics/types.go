@@ -21,7 +21,7 @@ const (
 	maxNoteRunes          = 500
 	maxCandidates         = 8
 	maxPlaybackCandidates = 24
-	maxDuration           = 3 * time.Minute
+	maxDuration           = 10 * time.Minute
 	preRoll               = 90 * time.Second
 	retainFor             = 15 * time.Minute
 	coalesceWindow        = 2 * time.Second
@@ -56,6 +56,7 @@ const (
 	KindPoll              Kind = "client.poll"
 	KindTranscodeDecision Kind = "transcode.decision"
 	KindPlaybackDecision  Kind = "playback.decision"
+	KindRequest           Kind = "request"
 )
 
 // Event is one neutral observation. String fields are clipped before the
@@ -74,6 +75,11 @@ type Event struct {
 	Route            string
 	Status           int
 	Duration         time.Duration
+	Query            string
+	Cancelled        bool
+	DBQueries        int64
+	DBTime           time.Duration
+	Response         *ResponseSummary
 	Bytes            int64
 	Range            string
 	Repeat           int
@@ -81,6 +87,7 @@ type Event struct {
 	Platform         string
 	Model            string
 	DeviceName       string
+	Device           string
 	AppVersion       string
 	QualityRequested string
 	QualitySelected  string
@@ -93,6 +100,7 @@ type Event struct {
 	Title            string
 	SourceName       string
 	Username         string
+	ViewerID         int64 // correlation only; never exported
 	Peer             string
 	// Uncorrelated is set when a correlation id was too long to retain.
 	// The id is not stored, so it cannot be merged with another id.
@@ -103,6 +111,30 @@ type Event struct {
 	// Release names stay only when the titles flag is on. It must not carry
 	// a username or address.
 	Playback *PlaybackDecision
+}
+
+type ResponseSummary struct {
+	Size      int          `json:"size"`
+	ItemCount int          `json:"itemCount,omitempty"`
+	Decision  string       `json:"decision,omitempty"`
+	ErrorCode string       `json:"errorCode,omitempty"`
+	Error     string       `json:"error,omitempty"`
+	TotalSize *int         `json:"totalSize,omitempty"`
+	More      *bool        `json:"more,omitempty"`
+	Items     []string     `json:"items,omitempty"`
+	Hubs      []HubSummary `json:"hubs,omitempty"`
+	Truncated bool         `json:"truncated,omitempty"`
+}
+
+type HubSummary struct {
+	Identifier string   `json:"identifier"`
+	Title      string   `json:"title,omitempty"`
+	Style      string   `json:"style,omitempty"`
+	Type       string   `json:"type,omitempty"`
+	Size       int      `json:"size"`
+	More       bool     `json:"more"`
+	ItemCount  int      `json:"itemCount"`
+	Items      []string `json:"items,omitempty"`
 }
 
 // Candidate is a bounded, URL-free source fact.
@@ -184,20 +216,39 @@ type DeviceInfo struct {
 // Settings is an explicit safe projection. Callers must not put secrets,
 // filesystem paths, or URLs in it.
 type Settings struct {
-	LogLevel              string `json:"logLevel,omitempty"`
-	FriendlyName          string `json:"friendlyName,omitempty"`
-	QualityDefault        string `json:"qualityDefault,omitempty"`
-	QualityRemote         string `json:"qualityRemote,omitempty"`
-	ProfileName           string `json:"profileName,omitempty"`
-	ProfileMaxHeight      int    `json:"profileMaxHeight,omitempty"`
-	ProfileAllowHDR       bool   `json:"profileAllowHdr,omitempty"`
-	HWAccel               string `json:"hwAccel,omitempty"`
-	MaxTranscodes         int    `json:"maxTranscodes,omitempty"`
-	RemoteMaxBitrateKbps  int    `json:"remoteMaxBitrateKbps,omitempty"`
-	SecureConnections     string `json:"secureConnections,omitempty"`
-	RemoteAccess          bool   `json:"remoteAccess,omitempty"`
-	CertificateConfigured bool   `json:"certificateConfigured,omitempty"`
-	CacheBudgetBytes      int64  `json:"cacheBudgetBytes,omitempty"`
+	LogLevel              string            `json:"logLevel,omitempty"`
+	FriendlyName          string            `json:"friendlyName,omitempty"`
+	QualityDefault        string            `json:"qualityDefault,omitempty"`
+	QualityRemote         string            `json:"qualityRemote,omitempty"`
+	ProfileName           string            `json:"profileName,omitempty"`
+	ProfileMaxHeight      int               `json:"profileMaxHeight,omitempty"`
+	ProfileAllowHDR       bool              `json:"profileAllowHdr,omitempty"`
+	HWAccel               string            `json:"hwAccel,omitempty"`
+	MaxTranscodes         int               `json:"maxTranscodes,omitempty"`
+	RemoteMaxBitrateKbps  int               `json:"remoteMaxBitrateKbps,omitempty"`
+	SecureConnections     string            `json:"secureConnections,omitempty"`
+	RemoteAccess          bool              `json:"remoteAccess,omitempty"`
+	CertificateConfigured bool              `json:"certificateConfigured,omitempty"`
+	CacheBudgetBytes      int64             `json:"cacheBudgetBytes,omitempty"`
+	ReleaseMode           string            `json:"releaseMode,omitempty"`
+	ShowUpcomingEpisodes  bool              `json:"showUpcomingEpisodes"`
+	ShowUpcomingMovies    bool              `json:"showUpcomingMovies"`
+	VisibilityDefault     string            `json:"visibilityDefault,omitempty"`
+	CatalogRules          []CatalogRuleFact `json:"catalogRules,omitempty"`
+	CatalogRulesTruncated bool              `json:"catalogRulesTruncated,omitempty"`
+}
+
+type CatalogRuleFact struct {
+	Action     string                 `json:"action"`
+	MediaType  string                 `json:"mediaType"`
+	Match      string                 `json:"match"`
+	Scope      string                 `json:"scope"`
+	Conditions []CatalogConditionFact `json:"conditions"`
+}
+type CatalogConditionFact struct {
+	Field string `json:"field"`
+	Op    string `json:"op"`
+	Value string `json:"value,omitempty"`
 }
 
 // SessionFact is one playback session before projection. DeviceKey selects
@@ -224,9 +275,17 @@ type HardwareFact struct {
 
 // StorageFact has no cache directory.
 type StorageFact struct {
-	CacheBudgetBytes int64 `json:"cacheBudgetBytes,omitempty"`
-	DiskFreeBytes    int64 `json:"diskFreeBytes,omitempty"`
-	DiskFreeKnown    bool  `json:"diskFreeKnown"`
+	CacheBudgetBytes int64  `json:"cacheBudgetBytes,omitempty"`
+	DiskFreeBytes    int64  `json:"diskFreeBytes,omitempty"`
+	DiskFreeKnown    bool   `json:"diskFreeKnown"`
+	DatabaseBytes    int64  `json:"databaseBytes,omitempty"`
+	WALBytes         int64  `json:"walBytes,omitempty"`
+	DatabaseKnown    bool   `json:"databaseKnown"`
+	WALKnown         bool   `json:"walKnown"`
+	Filesystem       string `json:"filesystem,omitempty"`
+	CacheFreeBytes   int64  `json:"cacheFreeBytes,omitempty"`
+	CacheFreeKnown   bool   `json:"cacheFreeKnown"`
+	CacheFilesystem  string `json:"cacheFilesystem,omitempty"`
 }
 
 // ConnectivityFact has no public host, custom URL, or certificate path.
@@ -237,21 +296,58 @@ type ConnectivityFact struct {
 	PublicPort            int    `json:"publicPort,omitempty"`
 }
 
+type ViewerSection struct {
+	ID    int    `json:"id"`
+	Type  string `json:"type"`
+	Title string `json:"title,omitempty"`
+}
+type ViewerCandidate struct {
+	Key      int64  `json:"key"`
+	Title    string `json:"title,omitempty"`
+	OffsetMS int64  `json:"offsetMs"`
+	Reason   string `json:"reason"`
+	Included bool   `json:"included"`
+}
+type ViewerLayoutRow struct {
+	Layer   string `json:"layer"`
+	Section string `json:"section"`
+	Row     string `json:"row"`
+	Status  string `json:"status"`
+	Slot    int    `json:"slot,omitempty"`
+}
+type ViewerFacts struct {
+	Sections             []ViewerSection   `json:"sections"`
+	Candidates           []ViewerCandidate `json:"candidates"`
+	Layout               []ViewerLayoutRow `json:"layout"`
+	WatchSample          int               `json:"watchSample"`
+	InProgress           int               `json:"inProgress"`
+	Watched              int               `json:"watched"`
+	WatchSampleTruncated bool              `json:"watchSampleTruncated"`
+	CandidatesTruncated  bool              `json:"candidatesTruncated"`
+	SectionsTruncated    bool              `json:"sectionsTruncated"`
+	LayoutTruncated      bool              `json:"layoutTruncated"`
+	Notes                []string          `json:"notes,omitempty"`
+}
+
 // Deps are the only inputs the archive collectors may use.
 type Deps struct {
-	Now       func() time.Time
-	Version   string
-	Commit    string
-	Platform  string
-	Container string // "yes", "no", or "" when the caller could not tell
-	Secrets   func() []string
-	Settings  func() (Settings, error)
+	Now         func() time.Time
+	Version     string
+	Commit      string
+	BuildDate   string
+	Platform    string
+	Container   string // "yes", "no", or "" when the caller could not tell
+	InstallType string
+	Uptime      func() time.Duration
+	Secrets     func() []string
+	Settings    func() (Settings, error)
 	// Sessions returns facts for deviceKey and a count of sessions that
 	// belonged to someone else and were not copied into the slice.
 	Sessions     func(deviceKey string) (matched []SessionFact, omitted int, err error)
 	Hardware     func() (HardwareFact, error)
 	Storage      func() (StorageFact, error)
 	Connectivity func() (ConnectivityFact, error)
+	Viewer       func(userID int64) (ViewerFacts, error)
 	// LogExtract returns structured records. Callers correlate on exact
 	// fields inside [From, Until] and must not match substrings.
 	LogExtract func(q LogQuery) (records []LogRecord, truncated bool, err error)
