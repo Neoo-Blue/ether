@@ -2,6 +2,7 @@ package studio
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -44,5 +45,31 @@ func TestProjectToolsApplyDraftsAndRejectStaleWrites(t *testing.T) {
 	final, _ := s.GetProject(ctx, p.ID)
 	if final.Files["notes.txt"] != "human edit" || final.Files["src/plugin.ts"] != after.Files["src/plugin.ts"] {
 		t.Fatal("rejected edit changed source")
+	}
+}
+
+// A draft that compiles but renders a literal "${...}" is reported back to
+// the model, so it fixes what the owner would see.
+func TestProjectSaveReportsRenderedProblems(t *testing.T) {
+	s, _, _ := newTestStudio(t)
+	ctx := context.Background()
+	ts := ProjectTools(s)
+	principal := tools.Principal{IsOwner: true, Surface: "console"}
+	created, err := ts[1].Execute(ctx, principal, map[string]any{"template": "page", "name": "Preview check"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := created.Data["project"].(*Project)
+	src := strings.Replace(p.Files["src/plugin.ts"], `label: "$t:featured_picks"`, `label: "${count} picks"`, 1)
+	if src == p.Files["src/plugin.ts"] {
+		t.Fatal("template title not found")
+	}
+	saved, err := ts[2].Execute(ctx, principal, map[string]any{"id": p.ID, "updatedAt": p.UpdatedAt.Format(time.RFC3339Nano), "files": map[string]any{"src/plugin.ts": src}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prev, _ := saved.Data["preview"].(map[string]any)
+	if prev == nil || prev["ok"] != false || prev["problems"] == nil {
+		t.Fatalf("rendered problem not reported: %v", saved.Data["preview"])
 	}
 }

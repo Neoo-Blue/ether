@@ -11,6 +11,11 @@ import (
 	"github.com/braedonsaunders/ether/internal/llm"
 )
 
+// routeGuidance tunes the agent for console pages built around it.
+var routeGuidance = map[string]string{
+	"/plugins/studio": "This is Studio, where the owner builds plugins by describing them. Build a working draft straight away with sensible placeholder content instead of asking clarifying questions, check that it compiles without diagnostics, then summarise in two or three sentences and offer one or two refinements. The draft preview updates beside the chat.",
+}
+
 // loop runs the bounded tool-calling loop for one turn.
 func (s *Service) loop(ctx context.Context, p tools.Principal, threadID, turnID string, tc TurnContext, extra []llm.StreamMessage, emit func(Chunk) error) (string, error) {
 	visible := s.catalogue.Visible(ctx, p)
@@ -36,6 +41,9 @@ func (s *Service) loop(ctx context.Context, p tools.Principal, threadID, turnID 
 	system := systemPrompt
 	if tc.Route != "" {
 		system += "\n\nThe owner is currently on console route " + tc.Route + "."
+		if g := routeGuidance[tc.Route]; g != "" {
+			system += " " + g
+		}
 		if tc.Record != nil && tc.Record.Type != "" {
 			system += fmt.Sprintf(" They are looking at a %s (id %s).", tc.Record.Type, tc.Record.ID)
 		}

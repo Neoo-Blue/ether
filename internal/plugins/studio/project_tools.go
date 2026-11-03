@@ -3,12 +3,13 @@ package studio
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/braedonsaunders/ether/internal/agent/tools"
 )
 
-// ProjectTools use the same draft service as human editing. Writes return
-// normal agent proposals: no installation or viewer-domain writes occur.
+// ProjectTools use the same draft service as human editing. Drafts are
+// sandboxed, so writes apply directly; nothing installs or touches viewers.
 func ProjectTools(s *Studio) []tools.Tool {
 	if s == nil {
 		return nil
@@ -74,7 +75,45 @@ func ProjectTools(s *Studio) []tools.Tool {
 		if err != nil {
 			return tools.Result{}, err
 		}
-		return tools.Result{Data: map[string]any{"project": p, "compile": comp}}, nil
+		data := map[string]any{"project": p, "compile": comp}
+		if comp.OK && p.DefaultPage != "" {
+			data["preview"] = renderedPreview(ctx, s, p)
+		}
+		return tools.Result{Data: data}, nil
 	}
 	return []tools.Tool{read, create, save}
+}
+
+// renderedPreview runs the saved page the way the owner sees it, so the
+// model can catch output that compiles but renders wrong: literal
+// "${...}" text from a quoted template, or "$t:" keys in view data.
+func renderedPreview(ctx context.Context, s *Studio, p *Project) map[string]any {
+	prev, err := s.PreviewProject(ctx, p.ID, p.DefaultPage, "", nil)
+	if err != nil {
+		return map[string]any{"ok": false, "error": err.Error()}
+	}
+	out := map[string]any{"ok": prev.Valid && len(prev.Errors) == 0, "page": prev.Page}
+	if len(prev.Errors) > 0 {
+		out["errors"] = prev.Errors
+	}
+	var problems []string
+	if strings.Contains(string(prev.Spec), "${") || strings.Contains(string(prev.Data), "${") {
+		problems = append(problems, "Visible text contains a literal ${...}: build that string with a backtick template literal or concatenation.")
+	}
+	if strings.Contains(string(prev.Data), `"$t:`) {
+		problems = append(problems, "View data contains a $t: key, which never resolves there: put plain text in data or move the key into a ViewSpec literal.")
+	}
+	if len(problems) > 0 {
+		out["ok"] = false
+		out["problems"] = problems
+	}
+	spec, data := string(prev.Spec), string(prev.Data)
+	if len(spec) > 6<<10 {
+		spec = spec[:6<<10] + "…"
+	}
+	if len(data) > 4<<10 {
+		data = data[:4<<10] + "…"
+	}
+	out["spec"], out["data"] = spec, data
+	return out
 }
