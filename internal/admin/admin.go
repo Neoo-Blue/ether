@@ -237,6 +237,9 @@ type Deps struct {
 	// PlexWatch is the per-viewer Plex account watch-state integration.
 	// Nil hides the routes.
 	PlexWatch PlexWatch
+
+	// Prerolls backs /api/admin/prerolls*. Nil hides the routes.
+	Prerolls Prerolls
 }
 
 // Handler is the admin HTTP handler. Use NewHandler when you need access
@@ -445,6 +448,7 @@ func (h *Handler) routes() *http.ServeMux {
 	}
 	h.personalizationRoutes(api)
 	h.collectionRoutes(mux, api)
+	h.prerollRoutes(api)
 
 	mux.HandleFunc("/api/", h.requireAuth(func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "no such API endpoint")

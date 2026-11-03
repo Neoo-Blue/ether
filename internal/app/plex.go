@@ -134,6 +134,7 @@ func (a *App) buildPlex(ctx context.Context, cfg config.Config) (http.Handler, e
 	deps.Downloads = a.downloadRemuxer
 	deps.Support = a.support
 	deps.Extras = a.extras
+	deps.Prerolls = a.prerollProvider()
 	deps.Trickplay = a.trickplay.Borrow()
 	a.wirePlexPolicy(&deps)
 	deps.FavoriteShows = a.favoriteShows

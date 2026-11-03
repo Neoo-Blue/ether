@@ -56,6 +56,9 @@ func (a *App) buildIntegrations(ctx context.Context, cfg config.Config) error {
 		return err
 	}
 	a.buildExtras()
+	if err := a.buildPrerolls(); err != nil {
+		return fmt.Errorf("pre-rolls: %w", err)
+	}
 	if err := a.buildExtensibility(ctx, cfg); err != nil {
 		return err
 	}

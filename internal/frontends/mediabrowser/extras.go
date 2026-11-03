@@ -1,6 +1,7 @@
 package mediabrowser
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net"
@@ -71,7 +72,7 @@ func (i *instance) extraItem(parent frontend.ItemDetail, clip frontend.Extra) ma
 		{Index: 1, Type: "audio", Codec: "aac", Channels: 2, Language: clip.Language, Default: true},
 	}}
 	source := i.mediaSourceDTO(id, media)
-	playable := i.host.ExtraStreams != nil
+	playable := i.host.ExtraStreams != nil || (clip.Key.IsPreroll() && i.host.Prerolls != nil)
 	source["SupportsDirectPlay"] = playable
 	source["SupportsDirectStream"] = playable
 	source["SupportsTranscoding"] = false
@@ -106,6 +107,23 @@ func (i *instance) intros(w http.ResponseWriter, r *http.Request) {
 		limit = n
 	}
 	var clips []frontend.Extra
+	var preroll frontend.Extra
+	prerollOrder := ""
+	if i.host.Prerolls != nil && limit > 0 && (detail.Title.Type == "movie" || detail.Title.Type == "episode") {
+		clip, order, ok, err := i.host.Prerolls.Intro(i.identityContext(r), detailViewer(r, i), device(r), detail, i.away(r))
+		if err != nil {
+			if errors.Is(err, frontend.ErrNotFound) {
+				http.NotFound(w, r)
+				return
+			}
+			http.Error(w, "Unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if ok && clip.Key != 0 {
+			preroll, prerollOrder = clip, order
+			limit--
+		}
+	}
 	if i.host.Cinema != nil && limit > 0 && detail.Title.Type == "movie" {
 		var err error
 		clips, err = i.host.Cinema.Trailers(r.Context(), detailViewer(r, i), device(r), detail.Title.Key, limit)
@@ -116,6 +134,13 @@ func (i *instance) intros(w http.ResponseWriter, r *http.Request) {
 			}
 			http.Error(w, "Unavailable", http.StatusServiceUnavailable)
 			return
+		}
+	}
+	if preroll.Key != 0 {
+		if prerollOrder == frontend.PrerollAfterTrailers {
+			clips = append(clips, preroll)
+		} else {
+			clips = append([]frontend.Extra{preroll}, clips...)
 		}
 	}
 	items := make([]any, 0, len(clips))
@@ -166,6 +191,10 @@ func (i *instance) authorizedItem(w http.ResponseWriter, r *http.Request) (front
 }
 
 func (i *instance) extraPlayback(w http.ResponseWriter, r *http.Request, viewer *frontend.Viewer, key frontend.RatingKey, playback bool) bool {
+	if key.IsPreroll() && i.host.Prerolls != nil {
+		i.prerollPlayback(w, r, key, playback)
+		return true
+	}
 	if key.Kind() != frontend.KindExtra || i.host.ExtraStreams == nil {
 		return false
 	}
@@ -206,6 +235,10 @@ func (i *instance) extraPlayback(w http.ResponseWriter, r *http.Request, viewer 
 }
 
 func (i *instance) serveExtra(w http.ResponseWriter, r *http.Request, viewer *frontend.Viewer, key frontend.RatingKey) {
+	if key.IsPreroll() && i.host.Prerolls != nil {
+		i.servePreroll(w, r, viewer, key)
+		return
+	}
 	if i.host.ExtraStreams == nil {
 		http.NotFound(w, r)
 		return
@@ -307,4 +340,58 @@ func newExtraHTTPClient(proxy func(*http.Request) (*url.URL, error)) *http.Clien
 			return nil
 		},
 	}
+}
+
+// away reports whether the client is outside the local network.
+func (i *instance) away(r *http.Request) bool {
+	if i.host.ClientIP == nil {
+		return false
+	}
+	ip, ok := i.host.ClientIP(r)
+	if !ok {
+		return false
+	}
+	ip = ip.Unmap()
+	return !(ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast())
+}
+
+// prerollPlayback answers PlaybackInfo for a pre-roll: a direct-play MP4.
+func (i *instance) prerollPlayback(w http.ResponseWriter, r *http.Request, key frontend.RatingKey, playback bool) {
+	clip, ok := i.host.Prerolls.Lookup(r.Context(), key)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	id := ids.RatingKeyGUID(key)
+	item := i.extraItem(frontend.ItemDetail{Title: frontend.Title{Key: clip.ParentKey}}, clip)
+	sources, _ := item["MediaSources"].([]any)
+	if len(sources) != 1 {
+		http.Error(w, "Playback unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	source := sources[0].(map[string]any)
+	if playback {
+		path := "/Videos/" + id + "/stream.mp4?Static=true"
+		if prefix, ok := r.Context().Value(prefixKey{}).(string); ok && prefix != "" {
+			path = prefix + path
+		}
+		source["Path"] = path
+	}
+	jsonReply(w, map[string]any{"MediaSources": []any{source}, "PlaySessionId": ""})
+}
+
+// servePreroll streams the converted pre-roll with byte ranges and
+// records the play.
+func (i *instance) servePreroll(w http.ResponseWriter, r *http.Request, viewer *frontend.Viewer, key frontend.RatingKey) {
+	file, modified, err := i.host.Prerolls.Open(r.Context(), key)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer file.Close()
+	if r.Method != http.MethodHead {
+		i.host.Prerolls.Started(context.WithoutCancel(r.Context()), viewer, device(r), key)
+	}
+	w.Header().Set("Content-Type", "video/mp4")
+	http.ServeContent(w, r, "", modified, file)
 }

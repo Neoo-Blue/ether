@@ -49,6 +49,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/plextv"
 	"github.com/braedonsaunders/ether/internal/plexwatch"
 	"github.com/braedonsaunders/ether/internal/prefetch"
+	"github.com/braedonsaunders/ether/internal/prerolls"
 	"github.com/braedonsaunders/ether/internal/ratings"
 	"github.com/braedonsaunders/ether/internal/recommend"
 	"github.com/braedonsaunders/ether/internal/remote"
@@ -232,6 +233,7 @@ type App struct {
 	trackprefs        *trackprefs.Service
 	markers           *markers.Service
 	extras            *extras.Service
+	prerolls          *prerolls.Service
 	backups           *backup.Service
 	migration         *migrate.Service
 	safety            *safety.Service
@@ -669,6 +671,9 @@ func (a *App) Run(ctx context.Context) error {
 		background.start(func() { a.cluster.RunAsLeader(ctx, "release calendar", a.calendar.Run) })
 	}
 	background.start(func() { a.ratings.Run(ctx) })
+	if a.prerolls != nil {
+		background.start(func() { a.prerolls.Run(ctx) })
+	}
 	background.start(func() { a.discoveryFeatures.Run(ctx) })
 	background.start(func() {
 		a.cluster.RunAsLeader(ctx, "scheduled backups", func(ctx context.Context) {

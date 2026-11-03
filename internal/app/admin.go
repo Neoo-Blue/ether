@@ -199,6 +199,7 @@ func (a *App) buildAdmin() http.Handler {
 		},
 		Images:    a.images,
 		PlexWatch: a.plexWatchAPI(),
+		Prerolls:  a.prerollAdmin(),
 	}
 	h := admin.NewHandler(deps)
 	if a.streamRT != nil {

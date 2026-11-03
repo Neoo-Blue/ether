@@ -508,6 +508,54 @@ file under these names:
 Preview thumbnails appear while a title plays and fill in as playback
 progresses.
 
+## Pre-rolls
+
+A pre-roll is a short video of your own, such as a cinema sting or a seasonal
+greeting, that plays before a movie or an episode. Add them in the owner
+console's **Pre-rolls** page: upload a video, or give the full path of a video
+file on the server (Ether only reads it). Ether converts each clip in the
+background to an MP4 that every app can play directly (H.264 and stereo AAC, at
+most 1080p) and makes a thumbnail. Clips longer than 3 minutes are refused.
+One file can be up to 500 MB, and converted pre-rolls share a 5 GB folder,
+`prerolls` in the data folder.
+
+At most one pre-roll plays before a title, and never when a viewer resumes
+part-way through. Each pre-roll has rules, and all of them must match:
+
+- **Movies and episodes**: which kinds it plays before.
+- **First episode only**: no pre-roll when the next episode plays by itself.
+  Its **Binge gap** also skips the pre-roll when the same viewer finished or
+  stopped something less than that many minutes ago. With **First episode
+  only** off, the pre-roll plays before every episode.
+- **Genres**, **Excluded genres** and **Collections**: checked against the
+  title (an episode uses its show).
+- **Highest rating**: plays only before titles rated at or below it.
+- **Dates**: a yearly window such as 10-01 to 10-31; 12-15 to 01-05 spans the
+  new year.
+- **Viewers**: everyone, only some viewers, or everyone except some.
+- **At home or away** and **Devices** (TV, mobile, desktop, web).
+- **How often**: every time, once a day, once every few hours, or once per
+  title for each viewer.
+
+When several pre-rolls match, the highest **Priority** wins (a tie is chosen at
+random), or choose **Shuffle** to pick at random among all matches. With Plex
+Cinema Trailers on, **Order** puts the pre-roll before or after the trailers.
+The **Test** panel shows, for a viewer, a title and a device, which pre-roll
+would play and why each other one would not. Each pre-roll lists its recent
+plays; a play counts when the video actually starts.
+
+To bring pre-rolls over from Plex Media Server, paste its
+`CinemaTrailersPrerollID` value (Settings › Extras › Cinema Trailers pre-roll
+video) into **Import from Plex**. Paths separated by commas share a priority,
+so one of them plays at random, as in Plex. Paths separated by semicolons play
+in order in Plex; Ether plays one pre-roll per title, so the first group gets
+the highest priority.
+
+Pre-rolls play in every Plex app, in Jellyfin Web and Jellyfin for Android TV,
+and in the Emby apps. Infuse, Swiftfin, Silo, Stremio and DLNA players do not
+ask the server for intros, so they start the title without a pre-roll. In a
+cluster, a pre-roll plays only on the node that converted it.
+
 ## Subtitles from OpenSubtitles
 
 With OpenSubtitles enabled, Ether adds subtitles in each viewer's preferred

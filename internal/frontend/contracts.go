@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"time"
 
@@ -293,6 +294,26 @@ type ExtraStreams interface {
 // to play before feature. An empty slice means cinema intros are off or none match.
 type CinemaIntros interface {
 	Trailers(context.Context, *core.Viewer, core.Device, core.RatingKey, int) ([]Extra, error)
+}
+
+// Pre-roll placements relative to Cinema Trailers.
+const (
+	PrerollBeforeTrailers = core.PrerollBeforeTrailers
+	PrerollAfterTrailers  = core.PrerollAfterTrailers
+)
+
+// Prerolls are the owner's pre-rolls (#298), served as the first intro of
+// a fresh movie or episode play. Intro reports the pre-roll before an item
+// the front end already authorized (with its placement,
+// PrerollBeforeTrailers or PrerollAfterTrailers), or false. Lookup and
+// Open serve a ready pre-roll; it has no parent, and any signed-in viewer
+// may play it. Started records a play once per viewer, pre-roll and
+// feature.
+type Prerolls interface {
+	Intro(ctx context.Context, viewer *Viewer, device Device, item ItemDetail, away bool) (Extra, string, bool, error)
+	Lookup(ctx context.Context, key RatingKey) (Extra, bool)
+	Open(ctx context.Context, key RatingKey) (io.ReadSeekCloser, time.Time, error)
+	Started(ctx context.Context, viewer *Viewer, device Device, key RatingKey)
 }
 
 // SubtitleOffer is one subtitle search result. ID is the only value a later
