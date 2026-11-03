@@ -166,6 +166,13 @@ func (s *Session) startRunLocked(seg int, bigProbe bool) error {
 	// supersedes it; only the newest transition may start another encoder.
 	s.runSeq++
 	sequence := s.runSeq
+	s.pendingStart, s.pendingSegment, s.pendingTrack = true, seg, s.wantTrack
+	defer func() {
+		if sequence == s.runSeq {
+			s.pendingStart = false
+			s.broadcastLocked()
+		}
+	}()
 	for s.reaping != nil || s.starting != nil {
 		barrier := s.reaping
 		if s.starting != nil {

@@ -80,12 +80,15 @@ type sessionInput struct {
 
 // sessionEncoding owns one aspect of the session. Fields are guarded by Session.mu.
 type sessionEncoding struct {
-	starting <-chan struct{}
-	reaping  <-chan struct{} // previous encoder exit barrier; waited without mu
-	resumeAt int             // segment to restart at after a throttle stop; -1 none
-	cur      *run
-	runSeq   int
-	endSeg   int // last segment of the input once a run hit EOF; -1 unknown
+	starting       <-chan struct{}
+	pendingStart   bool
+	pendingSegment int
+	pendingTrack   int
+	reaping        <-chan struct{} // previous encoder exit barrier; waited without mu
+	resumeAt       int             // segment to restart at after a throttle stop; -1 none
+	cur            *run
+	runSeq         int
+	endSeg         int // last segment of the input once a run hit EOF; -1 unknown
 	// lastReal is the last segment a run actually produced (not a GOP
 	// alias). emptyAt is the startSeg of the last run that published
 	// nothing. emptyRuns counts those in a row so a seek that lands on
