@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/braedonsaunders/ether/internal/frontend/compactids"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -655,7 +656,12 @@ func TestSiloLiveTVSequenceIPTVVirtualAndReplan(t *testing.T) {
 		return frontend.CapabilityResult{Client: c}, e
 	}}
 
+	compact, err := compactids.New(db)
+	if err != nil {
+		t.Fatal(err)
+	}
 	inst, err := (silo.Frontend{MachineID: "silo-live-test"}).Mount(ctx, frontend.Host{
+		IDs:          ids.Codecs{Allocator: compact},
 		Identity:     ident,
 		LiveTV:       liveFacade,
 		Sessions:     sessions.BindSurface(broker, "silo"),

@@ -25,7 +25,7 @@ func TestDeliveredMainMigrationBoundary(t *testing.T) {
 		"capability_headers":     3,
 		"playback":               4,
 		"capability_tickets":     1,
-		"sessions_source_offers": 1,
+		"sessions_source_offers": 2,
 		"handle_reservations":    2,
 		"viewer_alerts":          2,
 		"viewer_push":            2,

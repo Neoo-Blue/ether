@@ -405,8 +405,8 @@ func assertUpgradeBoundary(t *testing.T) {
 	if known["playback"] != 4 {
 		t.Fatalf("playback version=%d want 4", known["playback"])
 	}
-	if known["sessions_source_offers"] != 1 {
-		t.Fatalf("sessions_source_offers version=%d, want1", known["sessions_source_offers"])
+	if known["sessions_source_offers"] != 2 {
+		t.Fatalf("sessions_source_offers version=%d, want2", known["sessions_source_offers"])
 	}
 	if known["capability_headers"] != 3 {
 		t.Fatalf("capability_headers version = %d, want 3", known["capability_headers"])
@@ -927,7 +927,7 @@ func TestSourceOfferMigrationFailureRepair(t *testing.T) {
 	ctx := context.Background()
 	check := func(t *testing.T, db *sql.DB) {
 		t.Helper()
-		if got := maxMigration(t, db, "sessions_source_offers"); got != 1 {
+		if got := maxMigration(t, db, "sessions_source_offers"); got != 2 {
 			t.Fatalf("source offer migration %d", got)
 		}
 		var id int64
