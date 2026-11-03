@@ -243,6 +243,12 @@ func (s *Session) startRunLocked(seg int, bigProbe bool) error {
 		FastStart:    rp.fastStart,
 		Rate:         rp.rate,
 	}
+	if s.container == ContainerFMP4 && !s.isDASH() {
+		_, retained := s.clockLocked(&run{startSeg: seg}, s.wantTrack)
+		if video, ok := retained["vide"]; ok {
+			spec.VideoTimescale = video.scale
+		}
+	}
 	if s.container == ContainerMatroska {
 		spec.InitName = fmt.Sprintf("header-%d.mkv", s.runSeq)
 	}

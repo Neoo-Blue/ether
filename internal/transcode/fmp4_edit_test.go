@@ -118,6 +118,24 @@ func TestRestartRunMovesOntoRetainedClock(t *testing.T) {
 	}
 }
 
+func TestAudioOnlyTailRejectsVideoInAnyFragment(t *testing.T) {
+	dir := t.TempDir()
+	audio := mkBox("moof", mkBox("traf", mkFullBox("tfhd", 0, 0, u32(2))))
+	video := mkBox("moof", mkBox("traf", mkFullBox("tfhd", 0, 0, u32(1))))
+	p := writeFile(t, filepath.Join(dir, "tail.m4s"), audio)
+	if err := requireAbsentTrack(p, 1); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, p, append(audio, video...))
+	if err := requireAbsentTrack(p, 1); err == nil {
+		t.Fatal("accepted a later video fragment under the old init")
+	}
+	writeFile(t, p, append(audio, []byte{0, 0, 0}...))
+	if err := requireAbsentTrack(p, 1); err == nil {
+		t.Fatal("accepted a truncated fragment")
+	}
+}
+
 func TestRetainedClockRefusesOtherTracks(t *testing.T) {
 	// The fragments of a run whose video counts in another timescale, or
 	// sits on another track ID, cannot be read under the retained init

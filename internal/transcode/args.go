@@ -25,12 +25,13 @@ type runSpec struct {
 	Info              core.MediaInfo
 	Decision          core.Decision
 	// Start is the media timestamp of the run's first segment (StartSeg).
-	Start    time.Duration
-	SegDur   time.Duration
-	StartSeg int
-	Dir      string
-	Playlist string // ffmpeg's own playlist file name, in Dir
-	InitName string // fMP4 init segment file name, in Dir
+	Start          time.Duration
+	SegDur         time.Duration
+	StartSeg       int
+	Dir            string
+	Playlist       string // ffmpeg's own playlist file name, in Dir
+	InitName       string // fMP4 init segment file name, in Dir
+	VideoTimescale uint32 // retained fMP4 clock, zero for the first run
 	// Accel is the hardware to use; Name AccelNone (or "") means CPU.
 	Accel    core.HWAccel
 	Features features
@@ -446,8 +447,12 @@ func hlsMuxArgs(s runSpec) []string {
 		// keyframe (HEVC CRA) presents after its leading pictures and
 		// was moved before them. HLS does not use sidx, and the chunked
 		// path already drops it from multi-chunk segments.
+		options := "movflags=+frag_discont+skip_sidx"
+		if s.VideoTimescale != 0 {
+			options += ":video_track_timescale=" + strconv.FormatUint(uint64(s.VideoTimescale), 10)
+		}
 		args = append(args, "-hls_segment_type", "fmp4", "-hls_fmp4_init_filename", s.InitName,
-			"-hls_segment_options", "movflags=+frag_discont+skip_sidx")
+			"-hls_segment_options", options)
 	} else {
 		args = append(args, "-hls_segment_type", "mpegts")
 	}
