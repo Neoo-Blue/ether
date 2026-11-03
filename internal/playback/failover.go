@@ -891,9 +891,98 @@ func (m *Manager) failoverWith(ctx context.Context, s *session, observed *genera
 		remuxSwitch = false
 	}
 
+	// Take the replacement pin before it is handed to the encoder. Stop can
+	// race the handoff; until publication this function owns the extra pin.
+	m.pinLive(g.releaseID())
+	newInfo := g.infoSnapshot()
+	if hasHLS {
+		var seekAt time.Time
+		if source, ok := hls.(core.RecoveryBufferSource); ok {
+			seekAt = source.RecoveryBuffer().SeekAt
+		}
+		if position, ok := hls.(core.PlaybackPosition); ok && fo.followPlayer {
+			// Read only now: the player may have sought while candidates
+			// were being opened.
+			requested := position.RequestedPosition()
+			log.Info("failover follows player", "requested", requested)
+			at = requested
+		}
+		target := m.alignForFailover(ctx, s, cur, g, at)
+		swap := hls.SwapInput
+		if buffered, ok := hls.(core.BufferedInputSwapper); ok && fo.preserveBuffer && target == at {
+			if source, ok := hls.(core.RecoveryBufferSource); ok {
+				boundary := source.RecoveryBuffer().ReadyUntil
+				// Check the handoff itself, not only a zero playhead where PAL
+				// speed corrections and different edits can happen to agree.
+				if boundary > at && boundary < newInfo.Duration && m.alignForFailover(ctx, s, cur, g, boundary) == boundary {
+					swap = buffered.SwapInputBuffered
+				}
+			}
+		}
+		swapCtx, cancelSwap := context.WithCancel(ctx)
+		stopCancel := context.AfterFunc(s.stopCtx, cancelSwap)
+		err := swap(swapCtx, m.urlFor(g), newInfo, target)
+		if err == nil {
+			if ready, ok := hls.(core.ReplacementOutputWaiter); ok {
+				readyCtx, cancelReady := context.WithTimeout(swapCtx, 30*time.Second)
+				err = ready.WaitForReplacementOutput(readyCtx, m.urlFor(g))
+				if err == nil {
+					// One old source stays available briefly after the first
+					// contiguous replacement output, without a second encoder.
+					timer := time.NewTimer(time.Second)
+					select {
+					case <-timer.C:
+					case <-readyCtx.Done():
+						err = readyCtx.Err()
+					}
+					timer.Stop()
+					if err == nil {
+						err = ready.WaitForReplacementOutput(readyCtx, m.urlFor(g))
+					}
+				}
+				cancelReady()
+			}
+		}
+		stopCancel()
+		cancelSwap()
+		if errors.Is(err, core.ErrReplacementSuperseded) {
+			// A seek abandons the old boundary. Do not roll it back.
+			if state, ok := hls.(core.InputSwapState); ok {
+				switch state.CurrentSwapInput() {
+				case m.urlFor(g):
+					err = nil
+				case m.urlFor(cur):
+					m.dropGeneration(g)
+					m.unpinLive(g.releaseID())
+					return cur, nil
+				}
+			}
+		}
+		if err != nil {
+			changed := false
+			if state, ok := hls.(core.InputSwapState); ok {
+				changed = state.CurrentSwapInput() == m.urlFor(g)
+			}
+			rolledBack := changed && m.rollbackHLS(s, hls, cur, g, at, seekAt)
+			m.dropGeneration(g)
+			m.unpinLive(g.releaseID())
+			if rolledBack {
+				s.resetSpeed(m.now(), m.opts.SpeedGrace)
+				if fo.down {
+					m.noteFailedDownFailover(s, tried)
+				}
+				return cur, nil
+			}
+			if changed {
+				m.Stop(s.id) // never leave an encoder pointed at a revoked input
+			}
+			log.Error("hls input swap failed", "err", err)
+			return cur, fmt.Errorf("playback: swap hls input: %w", err)
+		}
+	}
+
 	// Pin before publishing g: a Stop right after the swap unpins s.cur,
 	// and must find this pin rather than leave one taken later behind.
-	m.pinLive(g.releaseID())
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
@@ -930,32 +1019,6 @@ func (m *Manager) failoverWith(ctx context.Context, s *session, observed *genera
 	m.saveResume(ctx, s, g)
 	s.resetSpeed(m.now(), m.opts.SpeedGrace)
 
-	newInfo := g.infoSnapshot()
-	if hasHLS {
-		if position, ok := hls.(core.PlaybackPosition); ok && fo.followPlayer {
-			// Read only now: the player may have sought while candidates
-			// were being opened.
-			requested := position.RequestedPosition()
-			log.Info("failover follows player", "requested", requested)
-			at = requested
-		}
-		target := m.alignForFailover(ctx, s, cur, g, at)
-		swap := hls.SwapInput
-		if buffered, ok := hls.(core.BufferedInputSwapper); ok && fo.preserveBuffer && target == at {
-			if source, ok := hls.(core.RecoveryBufferSource); ok {
-				boundary := source.RecoveryBuffer().ReadyUntil
-				// Check the handoff itself, not only a zero playhead where PAL
-				// speed corrections and different edits can happen to agree.
-				if boundary > at && boundary < newInfo.Duration && m.alignForFailover(ctx, s, cur, g, boundary) == boundary {
-					swap = buffered.SwapInputBuffered
-				}
-			}
-		}
-		if err := swap(ctx, m.urlFor(g), newInfo, target); err != nil {
-			log.Error("hls input swap failed", "err", err)
-			return g, fmt.Errorf("playback: swap hls input: %w", err)
-		}
-	}
 	if fo.down {
 		m.emitEvent("downfailover", s, nil)
 	} else {
@@ -966,6 +1029,52 @@ func (m *Manager) failoverWith(ctx context.Context, s *session, observed *genera
 		return g, errRequireRemux
 	}
 	return g, nil
+}
+
+// rollbackHLS only returns to a source that is still open, compatible and
+// responds at the current playback window. It never revives a failed source
+// or a timeline abandoned by a seek.
+func (m *Manager) rollbackHLS(s *session, hls core.HLSSession, old, replacement *generation, at time.Duration, seekAt time.Time) bool {
+	if s.isClosed() || s.current() != old || old.sourceFailure() != nil || old.articleMissing.Load() || !old.acquire() {
+		return false
+	}
+	defer old.release()
+	ctx, cancel := context.WithTimeout(s.stopCtx, 3*time.Second)
+	defer cancel()
+	if m.preflightSwap(ctx, s, old) != nil {
+		return false
+	}
+	if buffer, ok := hls.(core.RecoveryBufferSource); ok {
+		b := buffer.RecoveryBuffer()
+		if b.SeekAt != seekAt || m.alignForFailover(ctx, s, replacement, old, b.Position) != b.Position || m.alignForFailover(ctx, s, replacement, old, b.ReadyUntil) != b.ReadyUntil {
+			return false
+		}
+		at = b.Position
+	}
+	tm := old.timeMapSnapshot()
+	off := tm.KeyframeOffsetAt(at)
+	if off < 0 || off >= old.src.Size() {
+		return false
+	}
+	p := make([]byte, min(int64(32<<10), old.src.Size()-off))
+	var n int
+	var err error
+	if reader, ok := old.src.(core.PrefetchReaderAt); ok {
+		n, err = reader.ReadAtPrefetchContext(ctx, p, off)
+	} else if reader, ok := old.src.(core.ContextReaderAt); ok {
+		n, err = reader.ReadAtContext(ctx, p, off)
+	} else {
+		return false
+	}
+	if err != nil || n != len(p) || ctx.Err() != nil || s.isClosed() || s.current() != old {
+		return false
+	}
+	if buffered, ok := hls.(core.BufferedInputSwapper); ok {
+		err = buffered.SwapInputBuffered(ctx, m.urlFor(old), old.infoSnapshot(), at)
+	} else {
+		err = hls.SwapInput(ctx, m.urlFor(old), old.infoSnapshot(), at)
+	}
+	return err == nil
 }
 
 // alignForFailover maps a failover timestamp between releases: through
