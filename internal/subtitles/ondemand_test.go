@@ -3,7 +3,6 @@ package subtitles
 import (
 	"context"
 	"errors"
-	"io"
 	"strings"
 	"testing"
 	"time"
@@ -116,41 +115,6 @@ func TestOnDemandSearchPickAndReuse(t *testing.T) {
 	}
 	if got := svc.CachedSidecars(episode, nil, nil); len(got) != 1 || got[0].ExternalURL != st2.ExternalURL {
 		t.Fatalf("replaced pick: %+v", got)
-	}
-}
-
-func TestOpenFormatAtShiftsToSessionTimeline(t *testing.T) {
-	ctx := context.Background()
-	f := newOSFake(t)
-	f.body = func(int64) []byte {
-		return []byte("1\n00:00:10,000 --> 00:00:12,000\nEarly\n\n2\n00:01:40,500 --> 00:01:42,000\nLate\n\n")
-	}
-	svc := newSvc(t, f, config.OpenSubtitles{}, t.TempDir())
-	if _, err := svc.SearchOnDemand(ctx, episode, "de", ""); err != nil {
-		t.Fatal(err)
-	}
-	picked, err := svc.DownloadOnDemand(ctx, episode, 11)
-	if err != nil {
-		t.Fatal(err)
-	}
-	out := []core.StreamInfo{picked}
-	read := func(format string, offset time.Duration) (string, string) {
-		rc, actual, err := svc.OpenFormatAt(out[0].ExternalURL, format, offset)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer rc.Close()
-		b, _ := io.ReadAll(rc)
-		return string(b), actual
-	}
-	if body, actual := read("srt", time.Minute); actual != "srt" || body != "1\n00:00:40,500 --> 00:00:42,000\nLate\n\n" {
-		t.Fatalf("srt shift: %s %q", actual, body)
-	}
-	if body, actual := read("vtt", time.Minute); actual != "vtt" || !strings.HasPrefix(body, "WEBVTT\n\n00:00:40.500 --> 00:00:42.000\nLate") {
-		t.Fatalf("vtt shift: %s %q", actual, body)
-	}
-	if body, _ := read("srt", 0); !strings.Contains(body, "Early") {
-		t.Fatalf("no offset: %q", body)
 	}
 }
 

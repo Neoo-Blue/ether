@@ -32,7 +32,7 @@ func (e *extractTranscoder) ExtractSubtitle(_ context.Context, _ string, _ int, 
 const sampleVTT = "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nHello world\n"
 
 // A subtitle picked from an embedded track during a transcode session is
-// extracted and served (offset-shifted), instead of an empty container.
+// extracted and served on the title clock, instead of an empty container.
 func TestEmbeddedSubtitleServedFromSession(t *testing.T) {
 	f, _ := newSubtitleFixture(t)
 	const vtt = sampleVTT

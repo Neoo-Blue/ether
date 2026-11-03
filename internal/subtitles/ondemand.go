@@ -14,7 +14,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -292,42 +291,4 @@ func (s *Service) DownloadOnDemand(ctx context.Context, title *core.Title, fileI
 		return core.StreamInfo{}, err
 	}
 	return sidecarStream(0, o.lang, sel), nil
-}
-
-// OpenFormatAt is OpenFormat with the cue times moved back by offset, for
-// a transcode session whose timeline starts offset into the title. Cues
-// that end before the offset are dropped.
-func (s *Service) OpenFormatAt(id, format string, offset time.Duration) (io.ReadCloser, string, error) {
-	return s.OpenFormatAtFrom(id, format, offset, "")
-}
-
-// OpenFormatAtFrom is OpenFormatAt for a known release/source.
-func (s *Service) OpenFormatAtFrom(id, format string, offset time.Duration, source string) (io.ReadCloser, string, error) {
-	if offset <= 0 {
-		return s.OpenFormatFrom(id, format, source)
-	}
-	rc, _, err := s.OpenFormatFrom(id, "srt", source)
-	if err != nil {
-		return nil, "", err
-	}
-	b, err := io.ReadAll(io.LimitReader(rc, 32<<20))
-	rc.Close()
-	if err != nil {
-		return nil, "", err
-	}
-	format = strings.ToLower(strings.TrimPrefix(format, "."))
-	cues, err := ParseCues(string(b))
-	if err == nil {
-		cues, err = Shift(cues, -offset, 1)
-	}
-	if err != nil {
-		return nil, "", err
-	}
-	text := RenderSRT(cues)
-	if format == "vtt" {
-		text = RenderVTT(cues)
-	} else {
-		format = "srt"
-	}
-	return io.NopCloser(strings.NewReader(text)), format, nil
 }

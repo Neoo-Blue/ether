@@ -5,7 +5,6 @@ import (
 	"io"
 	"math"
 	"strings"
-	"time"
 
 	"errors"
 
@@ -55,11 +54,10 @@ func (a *App) enrichSubtitles(ctx context.Context, t *core.Title, u *core.User, 
 type plexSubtitles struct{ a *App }
 
 var (
-	_ plex.SubtitleSource   = plexSubtitles{}
-	_ plex.SubtitleCatalog  = plexSubtitles{}
-	_ plex.SubtitleSearch   = plexSubtitles{}
-	_ plex.SubtitleTimeline = plexSubtitles{}
-	_ plex.SubtitleUpload   = plexSubtitles{}
+	_ plex.SubtitleSource  = plexSubtitles{}
+	_ plex.SubtitleCatalog = plexSubtitles{}
+	_ plex.SubtitleSearch  = plexSubtitles{}
+	_ plex.SubtitleUpload  = plexSubtitles{}
 )
 
 func (p plexSubtitles) OpenFormat(id, format string) (io.ReadCloser, string, error) {
@@ -68,14 +66,6 @@ func (p plexSubtitles) OpenFormat(id, format string) (io.ReadCloser, string, err
 
 func (p plexSubtitles) OpenFormatFrom(id, format, source string) (io.ReadCloser, string, error) {
 	return p.a.subtitles.OpenFormatFrom(id, format, source)
-}
-
-func (p plexSubtitles) OpenFormatAt(id, format string, offset time.Duration) (io.ReadCloser, string, error) {
-	return p.a.subtitles.OpenFormatAt(id, format, offset)
-}
-
-func (p plexSubtitles) OpenFormatAtFrom(id, format string, offset time.Duration, source string) (io.ReadCloser, string, error) {
-	return p.a.subtitles.OpenFormatAtFrom(id, format, offset, source)
 }
 
 func (p plexSubtitles) CachedSidecars(ctx context.Context, t *core.Title, u *core.User, embedded []core.StreamInfo) []core.StreamInfo {
