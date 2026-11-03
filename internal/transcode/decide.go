@@ -409,6 +409,25 @@ func collectIssues(info core.MediaInfo, v, a, sub *core.StreamInfo, ctx issueCon
 	if a != nil && len(caps.AudioCodecs) > 0 && !caps.SupportsAudio(a.Codec) {
 		audioIssues = append(audioIssues, fmt.Sprintf("audio codec %s not supported", a.Codec))
 	}
+	if a != nil {
+		for _, limit := range caps.AudioLimits {
+			if limit.Codec != "" && limit.Codec != "*" && limit.Codec != a.Codec {
+				continue
+			}
+			value := 0
+			switch limit.Name {
+			case "audio.channels":
+				value = a.Channels
+			case "audio.bitrate":
+				value = a.BitrateKbps
+			case "audio.samplingRate":
+				value = a.SampleRate
+			}
+			if value > 0 && ((limit.Type == "upperBound" && value > limit.Value) || (limit.Type == "lowerBound" && value < limit.Value)) {
+				audioIssues = append(audioIssues, fmt.Sprintf("%s violates %s %d", limit.Name, limit.Type, limit.Value))
+			}
+		}
+	}
 	if a != nil && len(ctx.audioFilters) > 0 {
 		audioIssues = append(audioIssues, "audio processing requested")
 	}
@@ -548,6 +567,27 @@ func Decide(info core.MediaInfo, caps core.ClientCaps, opts core.DecideOptions, 
 
 	// Audio plan, shared by remux and transcode.
 	audioCopy, audioCodec, audioKbps, audioNote := planAudio(a, caps, audioIssues, bitrateCap)
+	if !audioCopy && a != nil {
+		for _, limit := range caps.AudioLimits {
+			if limit.Codec != "" && limit.Codec != "*" && limit.Codec != audioCodec {
+				continue
+			}
+			switch {
+			case limit.Name == "audio.channels" && limit.Type == "upperBound":
+				if (d.AudioChannels == 0 && limit.Value < outputChannels(audioCodec, a)) || (d.AudioChannels > 0 && limit.Value < d.AudioChannels) {
+					d.AudioChannels = limit.Value
+				}
+			case limit.Name == "audio.bitrate" && limit.Type == "upperBound":
+				if d.AudioBitrateKbps == 0 || limit.Value < d.AudioBitrateKbps {
+					d.AudioBitrateKbps = limit.Value
+				}
+			case limit.Name == "audio.samplingRate" && limit.Type == "lowerBound":
+				if limit.Value > 48000 {
+					d.AudioSampleRate = limit.Value
+				}
+			}
+		}
+	}
 
 	// 2. Remux: copy video into HLS.
 	videoCopyable := v == nil || (len(videoIssues) == 0 && hlsVideoOK(v.Codec))

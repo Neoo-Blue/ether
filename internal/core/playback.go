@@ -20,6 +20,8 @@ type HLSRequest struct {
 	// LiveInput permits playlist demuxers for owner-configured live sources.
 	// Ordinary resolved media must leave this false, even if duration is unknown.
 	LiveInput bool
+	// CopyTimestamps preserves source timestamps for HTTP Matroska output.
+	CopyTimestamps bool
 	// InputHeaders are optional HTTP headers ffmpeg must send when reading
 	// InputURL (e.g. for resolved trailer URLs). Transcoders that cannot
 	// send headers ignore them; most resolved URLs need none (additive).

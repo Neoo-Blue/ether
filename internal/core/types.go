@@ -213,6 +213,9 @@ type ClientCaps struct {
 	VideoLevels          map[string]int      `json:"videoLevels,omitempty"` // codec level in ffprobe units (H.264 51 = 5.1)
 	Remote               bool                `json:"remote"`                // not on the server's LAN
 
+	// AudioLimits are request-declared limits on source audio and encoded output.
+	AudioLimits []AudioLimit `json:"audioLimits,omitempty"`
+
 	// TranscodeAudioCodecs is the explicit audio target for the current
 	// streaming protocol. It constrains remux/transcode output only; source
 	// selection and direct play continue to use AudioCodecs.
@@ -222,6 +225,12 @@ type ClientCaps struct {
 	// Sync) rather than live playback: the resolver prefers compact,
 	// mobile-native releases and the whole file is remuxed (additive).
 	Download bool `json:"download,omitempty"`
+}
+
+// AudioLimit applies to one audio codec, or all codecs when Codec is "*".
+type AudioLimit struct {
+	Codec, Name, Type string
+	Value             int
 }
 
 func (c ClientCaps) SupportsVideo(codec string) bool  { return contains(c.VideoCodecs, codec) }

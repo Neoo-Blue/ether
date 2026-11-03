@@ -113,17 +113,18 @@ func onlyNotCached(err error) bool {
 
 // playRequest is a parsed decision/start request.
 type playRequest struct {
-	key         core.RatingKey
-	collection  string
-	caps        core.ClientCaps
-	opts        core.DecideOptions
-	sessionID   string // client transcode session id
-	offset      time.Duration
-	protocol    string
-	audioSel    int              // stream position, -1 = default
-	audioStream *core.StreamInfo // selected identity, remapped after probing
-	subSel      int              // stream position, -1 = none/default
-	subSet      bool
+	key            core.RatingKey
+	collection     string
+	caps           core.ClientCaps
+	opts           core.DecideOptions
+	sessionID      string // client transcode session id
+	offset         time.Duration
+	protocol       string
+	copyTimestamps bool
+	audioSel       int              // stream position, -1 = default
+	audioStream    *core.StreamInfo // selected identity, remapped after probing
+	subSel         int              // stream position, -1 = none/default
+	subSet         bool
 	// subStream is the subtitle picked by id (request or stored), to be
 	// found again in the session's MediaInfo (resolvePlaySelection).
 	subStream *core.StreamInfo
@@ -214,7 +215,7 @@ func (s *Server) parsePlayRequest(r *http.Request) (playRequest, error) {
 	if limit := s.cfg().Transcode.RemoteMaxBitrateKbps; caps.Remote && limit > 0 && (caps.MaxBitrateKbps == 0 || limit < caps.MaxBitrateKbps) {
 		caps.MaxBitrateKbps = limit
 	}
-	p := playRequest{key: key, caps: caps, audioSel: -1, subSel: -1, protocol: q.Get("protocol"), mde: q.Get("hasMDE") == "1", partReleaseID: partReleaseID}
+	p := playRequest{copyTimestamps: q.Get("copyts") == "1", key: key, caps: caps, audioSel: -1, subSel: -1, protocol: q.Get("protocol"), mde: q.Get("hasMDE") == "1", partReleaseID: partReleaseID}
 	for _, raw := range []string{q.Get("path"), q.Get("key")} {
 		if partID, ok := partIDFromPath(raw); ok {
 			p.requestedPart = partID
@@ -639,7 +640,8 @@ func (s *Server) decisionContainer(ctx context.Context, pr *Request, t *core.Tit
 	// Ether's own decision must convert a stream for this client, say so
 	// instead of "Direct play OK", whatever directStream says (#246).
 	mustConvert := dec.Kind == core.DecisionTranscode || (dec.Kind != core.DecisionDirectPlay && (!dec.VideoCopy || !dec.AudioCopy))
-	mdeDirect := p.mde && p.opts.DirectPlay && len(p.opts.AudioFilters) == 0 &&
+	pm4k := strings.EqualFold(pr.Product, "PM4K") || strings.EqualFold(pr.Product, "Plex for Kodi")
+	mdeDirect := p.mde && p.opts.DirectPlay && (!pm4k || dec.Kind == core.DecisionDirectPlay) && len(p.opts.AudioFilters) == 0 &&
 		!(onDemandSession(ps) && (mustConvert || (p.opts.DirectStream && dec.Kind != core.DecisionDirectPlay)))
 	shown := dec
 	if mdeDirect {
@@ -685,6 +687,16 @@ func (s *Server) decisionContainer(ctx context.Context, pr *Request, t *core.Tit
 			model.A("transcodeDecisionCode", codeConversionOK),
 			model.A("transcodeDecisionText", textConversionOK),
 		}
+	}
+	if pm4k && mdeDirect {
+		mc.Extra = append(mc.Extra, model.A("directPlayDecisionCode", codeDirectPlayOK), model.A("directPlayDecisionText", textDirectPlayOK), model.A("generalDecisionCode", codeDirectPlayOK), model.A("generalDecisionText", textDirectPlayOK))
+	}
+	if pm4k && p.mde && !mdeDirect {
+		code, text := codeConversionOK, textConversionOK
+		if dec.Kind == core.DecisionDirectPlay {
+			code, text = codeDirectPlayOK, textDirectPlayOK
+		}
+		mc.Extra = append(mc.Extra, model.A("mdeDecisionCode", code), model.A("mdeDecisionText", text))
 	}
 	// PMS echoes the client identifier as the resource session.
 	mc.Extra = append(mc.Extra, model.A("resourceSession", firstNonEmpty(pr.ClientID, p.sessionID)))

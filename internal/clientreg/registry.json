@@ -91,6 +91,17 @@
   },
   "definitions": [
     {
+      "id": "pm4k",
+      "role": "policy",
+      "family": "Kodi",
+      "preset": "image",
+      "dolbyVisionProfiles": [5, 7, 8],
+      "match": {"any": [
+        {"field": "product", "op": "equals", "value": "pm4k"},
+        {"field": "product", "op": "equals", "value": "plex for kodi"}
+      ]}
+    },
+    {
       "id": "apple-tv",
       "role": "policy",
       "family": "Apple TV",
@@ -224,6 +235,16 @@
       "family": "generic",
       "preset": "text",
       "match": {}
+    },
+    {
+      "id": "pm4k",
+      "role": "playback",
+      "preset": "htpc",
+      "dolbyVision": true,
+      "match": {"any": [
+        {"field": "product", "op": "equals", "value": "pm4k"},
+        {"field": "product", "op": "equals", "value": "plex for kodi"}
+      ]}
     },
     {
       "id": "apple-tv",

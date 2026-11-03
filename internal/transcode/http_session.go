@@ -176,15 +176,16 @@ func (s *httpSession) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.proc = nil
 	}
 	spec := runSpec{
-		LiveInput:    s.req.LiveInput,
-		InputHeaders: s.req.InputHeaders,
-		Input:        s.req.InputURL,
-		Info:         s.req.Info,
-		Decision:     s.req.Decision,
-		Start:        s.req.StartOffset,
-		Accel:        s.m.hw,
-		Features:     s.m.feat,
-		Protocol:     core.ProtocolHTTP,
+		LiveInput:      s.req.LiveInput,
+		CopyTimestamps: s.req.CopyTimestamps,
+		InputHeaders:   s.req.InputHeaders,
+		Input:          s.req.InputURL,
+		Info:           s.req.Info,
+		Decision:       s.req.Decision,
+		Start:          s.req.StartOffset,
+		Accel:          s.m.hw,
+		Features:       s.m.feat,
+		Protocol:       core.ProtocolHTTP,
 	}
 	args := buildArgs(spec)
 	pr, pw := io.Pipe()

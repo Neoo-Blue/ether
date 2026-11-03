@@ -15,7 +15,8 @@ import (
 
 // runSpec is everything needed to build one ffmpeg HLS run.
 type runSpec struct {
-	LiveInput bool
+	LiveInput      bool
+	CopyTimestamps bool
 	// RTXTimeline preserves the native session's clock and rendition-local
 	// initialization paths when ordinary FFmpeg takes over.
 	RTXTimeline       bool
@@ -247,9 +248,9 @@ func buildCodecArgs(s runSpec) []string {
 	args = append(args, inputTimestampArgs(s)...)
 	if s.Start > 0 {
 		args = append(args, "-ss", secs(s.Start))
-		if s.Protocol == core.ProtocolHTTP && !s.LiveInput {
-			args = append(args, "-copyts")
-		}
+	}
+	if s.Protocol == core.ProtocolHTTP && !s.LiveInput && (s.Start > 0 || s.CopyTimestamps) {
+		args = append(args, "-copyts")
 	}
 	args = append(args, "-i", s.Input)
 	textSub := matroskaTextSubtitle(s)
@@ -386,8 +387,12 @@ func buildCodecArgs(s runSpec) []string {
 					enc = "opus"
 				}
 			}
+			kbps := audioBitrateKbps(codec, ch)
+			if d.AudioBitrateKbps > 0 && d.AudioBitrateKbps < kbps {
+				kbps = d.AudioBitrateKbps
+			}
 			args = append(args, "-c:a", enc, "-ac", strconv.Itoa(ch), "-ar", strconv.Itoa(decisionAudioRate(d)),
-				"-b:a", fmt.Sprintf("%dk", audioBitrateKbps(codec, ch)))
+				"-b:a", fmt.Sprintf("%dk", kbps))
 			filters := append([]string(nil), d.AudioFilters...)
 			if s.AudioGainDB != 0 {
 				filters = append(filters, fmt.Sprintf("volume=%.1fdB", s.AudioGainDB))
