@@ -19,6 +19,14 @@ type fakePrerolls struct {
 	thumb   string
 	reqs    []core.PrerollRequest
 	started []core.PrerollPlay
+	actives int
+}
+
+func (f *fakePrerolls) Active(context.Context) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.actives++
+	return f.clip != nil
 }
 
 func (f *fakePrerolls) Pick(_ context.Context, req core.PrerollRequest) (core.PrerollClip, bool) {
@@ -77,11 +85,15 @@ func TestPrerollAbsentLeavesPlayQueuesByteIdentical(t *testing.T) {
 	with := run(none)
 	for i := range without {
 		if !bytes.Equal(without[i], with[i]) {
-			j := 0; for j < len(without[i]) && j < len(with[i]) && without[i][j] == with[i][j] { j++ }; t.Fatalf("response %d differs at %d: %q vs %q", i, j, without[i][max(0,j-80):min(len(without[i]),j+80)], with[i][max(0,j-80):min(len(with[i]),j+80)])
+			j := 0
+			for j < len(without[i]) && j < len(with[i]) && without[i][j] == with[i][j] {
+				j++
+			}
+			t.Fatalf("response %d differs at %d: %q vs %q", i, j, without[i][max(0, j-80):min(len(without[i]), j+80)], with[i][max(0, j-80):min(len(with[i]), j+80)])
 		}
 	}
-	if len(none.reqs) == 0 {
-		t.Fatal("pre-roll selection was not consulted")
+	if none.actives == 0 || len(none.reqs) != 0 {
+		t.Fatalf("with no pre-roll: %d activity checks, %d selections", none.actives, len(none.reqs))
 	}
 }
 

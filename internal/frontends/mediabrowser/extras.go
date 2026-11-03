@@ -110,7 +110,7 @@ func (i *instance) intros(w http.ResponseWriter, r *http.Request) {
 	var preroll frontend.Extra
 	prerollOrder := ""
 	if i.host.Prerolls != nil && limit > 0 && (detail.Title.Type == "movie" || detail.Title.Type == "episode") {
-		clip, order, ok, err := i.host.Prerolls.Intro(i.identityContext(r), detailViewer(r, i), device(r), detail.Title.Key, i.away(r))
+		clip, order, ok, err := i.host.Prerolls.Intro(i.identityContext(r), detailViewer(r, i), device(r), detail, i.away(r))
 		if err != nil {
 			if errors.Is(err, frontend.ErrNotFound) {
 				http.NotFound(w, r)

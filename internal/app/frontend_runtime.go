@@ -267,7 +267,7 @@ func newFrontendRuntime(a *App, cfg config.Config) (*frontendRuntime, error) {
 		}
 		var prerollIntros frontend.Prerolls
 		if a.prerolls != nil {
-			prerollIntros = prerollSurface{exp: experience, svc: a.prerolls, state: a.state}
+			prerollIntros = prerollSurface{svc: a.prerolls, state: a.state}
 		}
 		var subtitleCatalog frontend.SubtitleCatalog
 		if a.subtitles != nil {

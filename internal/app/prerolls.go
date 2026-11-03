@@ -60,10 +60,9 @@ func (a *App) prerollAdmin() admin.Prerolls {
 	return a.prerolls
 }
 
-// prerollSurface lists the pre-roll as a Jellyfin/Emby intro. The feature
-// is authorized through the viewer's experience before selection.
+// prerollSurface lists the pre-roll as a Jellyfin/Emby intro for an item
+// the front end already authorized.
 type prerollSurface struct {
-	exp   frontend.Experience
 	svc   *prerolls.Service
 	state core.State
 }
@@ -72,13 +71,10 @@ func prerollExtra(clip core.PrerollClip) frontend.Extra {
 	return frontend.Extra{Key: clip.Key, Title: clip.Name, Kind: "trailer", Official: true, Duration: clip.Duration, Height: clip.Height, PublishedAt: clip.UpdatedAt}
 }
 
-func (s prerollSurface) Intro(ctx context.Context, viewer *core.Viewer, device core.Device, feature core.RatingKey, away bool) (frontend.Extra, string, bool, error) {
-	if s.exp == nil || s.svc == nil || viewer == nil || (feature.Kind() != core.KindMovie && feature.Kind() != core.KindEpisode) {
+func (s prerollSurface) Intro(ctx context.Context, viewer *core.Viewer, device core.Device, detail frontend.ItemDetail, away bool) (frontend.Extra, string, bool, error) {
+	feature := detail.Title.Key
+	if s.svc == nil || viewer == nil || (feature.Kind() != core.KindMovie && feature.Kind() != core.KindEpisode) || !s.svc.Active(ctx) {
 		return frontend.Extra{}, "", false, nil
-	}
-	detail, err := s.exp.Item(ctx, frontend.ItemRequest{Viewer: viewer, Device: device, Key: feature})
-	if err != nil {
-		return frontend.Extra{}, "", false, err
 	}
 	resume := detail.UserData.ViewOffset > 0
 	if !resume && s.state != nil {

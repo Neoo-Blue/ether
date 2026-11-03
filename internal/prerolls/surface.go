@@ -17,6 +17,21 @@ const (
 	maxInMemory = 8192
 )
 
+// Active implements core.Prerolls: whether any pre-roll is enabled and
+// ready, read from the cached list.
+func (s *Service) Active(ctx context.Context) bool {
+	all, err := s.cached(ctx)
+	if err != nil {
+		return false
+	}
+	for _, p := range all {
+		if p.Enabled && p.Video.State == StateReady {
+			return true
+		}
+	}
+	return false
+}
+
 // Pick implements core.Prerolls: it chooses at most one pre-roll for a
 // play. Nothing is recorded until Started.
 func (s *Service) Pick(ctx context.Context, req core.PrerollRequest) (core.PrerollClip, bool) {

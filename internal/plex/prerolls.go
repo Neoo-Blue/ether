@@ -174,7 +174,7 @@ func (s *Server) prerollThumb(w http.ResponseWriter, r *http.Request, key core.R
 // A client that asked for Cinema Trailers (extrasPrefixCount) declared a
 // fresh play; otherwise a saved resume point means a resume.
 func (s *Server) prerollKey(ctx context.Context, pr *Request, feature core.RatingKey, cinema bool) (core.RatingKey, string) {
-	if s.d.Prerolls == nil || pr.User == nil || (feature.Kind() != core.KindMovie && feature.Kind() != core.KindEpisode) {
+	if s.d.Prerolls == nil || pr.User == nil || (feature.Kind() != core.KindMovie && feature.Kind() != core.KindEpisode) || !s.d.Prerolls.Active(ctx) {
 		return 0, ""
 	}
 	t, err := s.metadataTitle(ctx, pr, feature)

@@ -84,6 +84,9 @@ type PrerollPlay struct {
 
 // Prerolls selects and serves owner pre-rolls (internal/prerolls).
 type Prerolls interface {
+	// Active reports, from memory, whether any pre-roll could play. It
+	// lets callers skip all selection work when none is configured.
+	Active(ctx context.Context) bool
 	// Pick returns the pre-roll for a play, or false for none.
 	Pick(ctx context.Context, req PrerollRequest) (PrerollClip, bool)
 	// Clip returns a ready pre-roll by key.

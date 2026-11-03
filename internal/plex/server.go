@@ -122,8 +122,8 @@ type Deps struct {
 	Extras           ExtrasProvider
 	// Prerolls are owner pre-rolls (#298); nil leaves play queues and
 	// extras exactly as without the feature.
-	Prerolls core.Prerolls
-	Trickplay        core.TrickplayProvider
+	Prerolls  core.Prerolls
+	Trickplay core.TrickplayProvider
 
 	// ApplyClientRules adjusts caps for the owner's quality rules. Nil leaves
 	// the request caps unchanged. The app wires resolver.ApplyClientRules so
