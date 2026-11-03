@@ -40,7 +40,6 @@ type playQueue struct {
 	original      []pqItem // order before shuffle
 	selected      int      // index into items
 	shuffled      bool
-	continuous    bool
 	sourceURI     string
 	playlistID    core.RatingKey
 	playlistTitle string
@@ -259,7 +258,6 @@ type storedQueue struct {
 	Original      []storedItem   `json:"original,omitempty"`
 	Selected      int            `json:"selected"`
 	Shuffled      bool           `json:"shuffled,omitempty"`
-	Continuous    bool           `json:"continuous,omitempty"`
 	SourceURI     string         `json:"sourceURI,omitempty"`
 	PlaylistID    core.RatingKey `json:"playlistID,omitempty"`
 	PlaylistTitle string         `json:"playlistTitle,omitempty"`
@@ -288,7 +286,7 @@ func fromStored(items []storedItem) []pqItem {
 
 func encodeQueue(q *playQueue) (string, error) {
 	b, err := json.Marshal(storedQueue{ClientID: q.clientID, Items: toStored(q.items), Original: toStored(q.original),
-		Selected: q.selected, Shuffled: q.shuffled, Continuous: q.continuous, SourceURI: q.sourceURI, PlaylistID: q.playlistID,
+		Selected: q.selected, Shuffled: q.shuffled, SourceURI: q.sourceURI, PlaylistID: q.playlistID,
 		PlaylistTitle: q.playlistTitle, Version: q.version, LiveSession: q.liveSession})
 	return string(b), err
 }
@@ -299,7 +297,7 @@ func decodeQueue(id, userID, rev, updated int64, data string) (*playQueue, error
 		return nil, err
 	}
 	return &playQueue{id: id, userID: userID, clientID: sq.ClientID, items: fromStored(sq.Items),
-		original: fromStored(sq.Original), selected: sq.Selected, shuffled: sq.Shuffled, continuous: sq.Continuous, sourceURI: sq.SourceURI,
+		original: fromStored(sq.Original), selected: sq.Selected, shuffled: sq.Shuffled, sourceURI: sq.SourceURI,
 		playlistID: sq.PlaylistID, playlistTitle: sq.PlaylistTitle, version: sq.Version, liveSession: sq.LiveSession,
 		updatedAt: time.UnixMilli(updated), rev: rev}, nil
 }
@@ -558,7 +556,6 @@ func (s *Server) handlePlayQueueCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	snap, err := s.queues.createWith(pr.User.ID, pr.ClientID, keys, s.now(), func(p *playQueue) {
 		p.sourceURI = uri
-		p.continuous = q.Get("continuous") == "1"
 		p.playlistID, p.playlistTitle = plKey, plTitle
 		if start := keyFromPath(q.Get("key")); start != 0 {
 			for i, it := range p.items {
@@ -892,26 +889,4 @@ func dedupeKeys(ks []core.RatingKey) []core.RatingKey {
 		}
 	}
 	return out
-}
-
-// NextContinuousItem returns the next item of the latest matching device queue.
-func (s *Server) NextContinuousItem(userID int64, clientID string, current core.RatingKey) (core.RatingKey, bool) {
-	if clientID == "" {
-		return 0, false
-	}
-	s.queues.mu.Lock()
-	defer s.queues.mu.Unlock()
-	var best *playQueue
-	for _, q := range s.queues.queues {
-		if q.userID != userID || q.clientID != clientID || !q.continuous || q.liveSession != "" || q.selected < 0 || q.selected >= len(q.items) || q.items[q.selected].key != current {
-			continue
-		}
-		if best == nil || q.updatedAt.After(best.updatedAt) {
-			best = q
-		}
-	}
-	if best == nil || best.selected+1 >= len(best.items) {
-		return 0, false
-	}
-	return best.items[best.selected+1].key, true
 }

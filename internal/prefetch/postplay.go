@@ -231,41 +231,26 @@ func creditsTrigger(ms []markers.Marker, duration time.Duration) (time.Duration,
 // endpoint serves the same #1) and warms its first playable pick.
 func (p *Prefetcher) firePostPlay(ctx context.Context, user *core.User, key core.RatingKey) error {
 	var caps core.ClientCaps
-	var live bool
 	if p.deps.Hints != nil {
-		caps, live, _ = p.deps.Hints.ClientCaps(user.ID, key)
+		caps, _, _ = p.deps.Hints.ClientCaps(user.ID, key)
 	}
-	var playable *core.Title
-	reason := "queue next item"
-	if live && key.Kind() == core.KindEpisode && p.deps.NextQueueItem != nil && caps.ClientID != "" {
-		if next, ok := p.deps.NextQueueItem(user.ID, caps.ClientID, key); ok {
-			var err error
-			playable, err = p.deps.Catalog.Get(ctx, next)
-			if err != nil {
-				return fmt.Errorf("queue next item %s: %w", next, err)
-			}
-		}
+	now := p.now()
+	hc := core.NewHubContext(now, caps.Product, caps.Platform, caps.Device)
+	picks, err := p.deps.PostPlay.PostPlay(ctx, user, key, hc, 12)
+	if err != nil {
+		return fmt.Errorf("postplay picks for %s: %w", key, err)
+	}
+	if len(picks) == 0 {
+		return nil
+	}
+	playable, err := p.playablePick(ctx, user, &picks[0].Title)
+	if err != nil {
+		return err
 	}
 	if playable == nil {
-		now := p.now()
-		hc := core.NewHubContext(now, caps.Product, caps.Platform, caps.Device)
-		picks, err := p.deps.PostPlay.PostPlay(ctx, user, key, hc, 12)
-		if err != nil {
-			return fmt.Errorf("postplay picks for %s: %w", key, err)
-		}
-		if len(picks) == 0 {
-			return nil
-		}
-		playable, err = p.playablePick(ctx, user, &picks[0].Title)
-		if err != nil {
-			return err
-		}
-		if playable == nil {
-			return nil
-		}
-		reason = picks[0].Reason
+		return nil
 	}
-	log := p.log.With("user", user.ID, "after", key, "pick", playable.Key, "reason", reason)
+	log := p.log.With("user", user.ID, "after", key, "pick", playable.Key, "reason", picks[0].Reason)
 	if p.deps.Prewarmer != nil {
 		if p.deps.Prewarmer.Prewarm(ctx, user, playable.Key, caps, core.PrewarmOptions{
 			Reason: core.PrewarmPostPlay, PrefetchBytes: p.opts.PostPlayBytes, DuringPlayback: true,

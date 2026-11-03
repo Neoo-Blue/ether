@@ -22,13 +22,7 @@ func (a *App) buildPrefetch(ctx context.Context, cfg config.Config) error {
 	a.prefetch, err = prefetch.New(prefetch.Deps{
 		Catalog: a.catalog, Resolver: a.resolver, Engine: a.media,
 		State: a.state, Auth: a.users, Hints: a.playback,
-		Logger: log.With("component", "prefetch"),
-		NextQueueItem: func(userID int64, clientID string, current core.RatingKey) (core.RatingKey, bool) {
-			if srv := a.currentPlexServer(); srv != nil {
-				return srv.NextContinuousItem(userID, clientID, current)
-			}
-			return 0, false
-		},
+		Logger:   log.With("component", "prefetch"),
 		PostPlay: a.personalize, Prewarmer: prewarmer, Markers: a.markers,
 		PostPlayEnabled: func() bool {
 			c := a.cfg.Get().Personalize

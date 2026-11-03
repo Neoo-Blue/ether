@@ -54,8 +54,7 @@ type Deps struct {
 	// PostPlay ranks the personalized hook queue (optional; #30). With
 	// it set, the end of a movie or season/series finale pre-buffers the
 	// #1 pick instead of relying on next-episode prefetch.
-	NextQueueItem func(userID int64, clientID string, current core.RatingKey) (core.RatingKey, bool)
-	PostPlay      core.PostPlayer
+	PostPlay core.PostPlayer
 	// Prewarmer warms the pick through the playback manager when it
 	// implements core.Prewarmer; nil falls back to resolve + Engine.Prefetch.
 	Prewarmer core.Prewarmer
@@ -414,44 +413,24 @@ func (p *Prefetcher) waitIdle(ctx context.Context) error {
 // nextEpisode resolves the episode after key for the user's client and
 // pulls its opening bytes.
 func (p *Prefetcher) nextEpisode(ctx context.Context, user *core.User, key core.RatingKey) error {
-	var caps core.ClientCaps
-	var live bool
-	if p.deps.Hints != nil {
-		caps, live, _ = p.deps.Hints.ClientCaps(user.ID, key)
+	next, err := p.deps.Catalog.NextEpisode(ctx, key)
+	if errors.Is(err, core.ErrNotFound) {
+		return nil // season or series finale
 	}
-	var next *core.Title
-	queueNext := false
-	if live && p.deps.NextQueueItem != nil && caps.ClientID != "" {
-		if k, ok := p.deps.NextQueueItem(user.ID, caps.ClientID, key); ok {
-			var err error
-			next, err = p.deps.Catalog.Get(ctx, k)
-			if err != nil {
-				return fmt.Errorf("queue next item %s: %w", k, err)
-			}
-			queueNext = true
-		}
-	}
-	if !queueNext {
-		var err error
-		next, err = p.deps.Catalog.NextEpisode(ctx, key)
-		if errors.Is(err, core.ErrNotFound) {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("next episode of %s: %w", key, err)
-		}
+	if err != nil {
+		return fmt.Errorf("next episode of %s: %w", key, err)
 	}
 	if next == nil || (!next.Released.IsZero() && next.Released.After(p.now())) {
+		return nil // not aired yet; don't spend indexer budget
+	}
+	if p.postplayEnabled() && next.Key.Season() != key.Season() {
+		// Season finale: the post-play hook queue owns the pre-buffer
+		// (its #1 pick may not be next season's opener) — don't warm both.
 		return nil
 	}
-	if p.postplayEnabled() {
-		finale, err := p.isFinale(ctx, key)
-		if err != nil {
-			return err
-		}
-		if finale {
-			return nil
-		} // The post-play job handles finales.
+	var caps core.ClientCaps
+	if p.deps.Hints != nil {
+		caps, _, _ = p.deps.Hints.ClientCaps(user.ID, key)
 	}
 	length := p.config().PrefetchBytes
 	log := p.log.With("user", user.ID, "episode", next.Key)
