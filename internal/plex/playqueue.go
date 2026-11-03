@@ -599,7 +599,9 @@ func (s *Server) continuousKeys(ctx context.Context, pr *Request, uri string, co
 		if e.Key == ep {
 			candidates := make([]core.Title, 0, len(eps)-i)
 			for _, candidate := range eps[i+1:] {
-				if (ep.Season() > 0 && candidate.Key.Season() == 0) || (!candidate.Released.IsZero() && candidate.Released.After(s.now())) {
+				// Presented seasons: an episode order may place a TMDB special
+				// inside a regular season, where it belongs in the queue.
+				if (e.Season > 0 && candidate.Season == 0) || (!candidate.Released.IsZero() && candidate.Released.After(s.now())) {
 					continue
 				}
 				candidates = append(candidates, candidate)

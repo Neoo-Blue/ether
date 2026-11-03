@@ -81,7 +81,9 @@ func regularSeriesEpisodes(eps []Title, series RatingKey) []Title {
 		if ep.Key.Kind() != KindEpisode {
 			continue
 		}
-		if ep.Key.Season() == 0 || (!ep.Released.IsZero() && ep.Released.After(time.Now())) {
+		// Specials are skipped later by their presented season (an episode
+		// order may place one inside a regular season); drop unaired ones here.
+		if !ep.Released.IsZero() && ep.Released.After(time.Now()) {
 			continue
 		}
 		if ep.Type != "" && ep.Type != core.TypeEpisode {
