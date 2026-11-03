@@ -247,13 +247,6 @@ func compareCandidates(a, b candidate, profile core.QualityProfile) bool {
 	if a.policy.Fallback != b.policy.Fallback {
 		return a.policy.Fallback < b.policy.Fallback
 	}
-	// Owner score leads; known-working evidence only breaks an exact tie.
-	if a.rel.Score != b.rel.Score {
-		return a.rel.Score > b.rel.Score
-	}
-	if a.verified != b.verified {
-		return a.verified
-	}
 	ladder := profile.EffectiveRanking()
 	defaultTail := hasDefaultScoreTail(ladder)
 	for _, step := range ladder {
@@ -297,6 +290,14 @@ func compareCandidates(a, b candidate, profile core.QualityProfile) bool {
 		case step == core.RankHDR:
 			if a.quality.hdr != b.quality.hdr {
 				return a.quality.hdr > b.quality.hdr
+			}
+		case step == core.RankVerified:
+			// Evidence breaks score ties; it must not hide the owner's preferred release.
+			if a.rel.Score != b.rel.Score {
+				return a.rel.Score > b.rel.Score
+			}
+			if a.verified != b.verified {
+				return a.verified
 			}
 		case step == core.RankVideoCodec:
 			if !defaultTail && a.quality.codec != b.quality.codec {
