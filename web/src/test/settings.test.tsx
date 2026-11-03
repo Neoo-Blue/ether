@@ -564,7 +564,7 @@ describe("Settings", () => {
   it("keeps Plex account and connection settings inside its enabled app tab", async () => {
     renderApp("/apps/plex");
     expect(await screen.findByRole("button", { name: "Sign out of Plex" }, WAIT)).toBeVisible();
-    expect(screen.getAllByText("Claimed by the Plex account owner.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Claimed by Plex account Braedon").length).toBeGreaterThan(0);
     expect(screen.queryByRole("switch", { name: "Claimed" })).toBeNull();
     expect(screen.queryByLabelText("Owner token")).toBeNull();
     expect(screen.queryByLabelText("Allow remote access")).toBeNull();
@@ -641,13 +641,16 @@ describe("Settings", () => {
     renderApp("/apps/jellyfin", {}, (f) => {
       f.state.config.frontends = { jellyfin: { enabled: true }, silo: { enabled: true } };
     });
-    fireEvent.change(await screen.findByRole("spinbutton", { name: "Port" }, WAIT), {
-      target: { value: "8095" },
-    });
+    const quick = await screen.findByRole("switch", { name: "Quick Connect" }, WAIT);
+    const before = (quick as HTMLInputElement).checked;
+    fireEvent.click(quick);
     fireEvent.click(screen.getByRole("tab", { name: "Silo" }));
-    await screen.findByRole("spinbutton", { name: "Port" }, WAIT);
-    fireEvent.click(screen.getByRole("tab", { name: "Jellyfin" }));
-    expect(await screen.findByRole("spinbutton", { name: "Port" }, WAIT)).toHaveValue(8095);
+    fireEvent.click(await screen.findByRole("tab", { name: "Jellyfin" }, WAIT));
+    expect(
+      ((await screen.findByRole("switch", { name: "Quick Connect" }, WAIT)) as HTMLInputElement)
+        .checked,
+    ).toBe(!before);
+    expect(screen.queryByRole("spinbutton", { name: "Port" })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Server name" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Unsaved changes" })).toBeVisible();
   });

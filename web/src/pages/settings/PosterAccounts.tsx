@@ -1,5 +1,6 @@
 import { IntegrationSetupFooter } from "../../components/IntegrationSetupFooter";
-import { Badge, Input, SettingsSection, toast } from "@braedonsaunders/appkit-ui";
+import { Badge, Button, Input, SettingsSection, toast } from "@braedonsaunders/appkit-ui";
+import { ArrowRight } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Drawer } from "../../components/Drawer";
 import { MutationError } from "../../components/feedback";
@@ -175,6 +176,13 @@ export function PosterAccounts({
       setSaving(false);
     }
   }
+  const accountOf = (id: string) => ({
+    ...emptyPoster,
+    ...config.data?.accounts?.[id],
+    source: id,
+  });
+  // A disabled provider has no tab yet: its setup opens the shared drawer form.
+  const openSetup = (id: string) => setDraft({ ...accountOf(id), enabled: true });
   const cards = POSTER_SERVICES.map((s) => (
     <IntegrationAppCard
       key={s.id}
@@ -188,20 +196,21 @@ export function PosterAccounts({
           {config.data?.accounts?.[s.id]?.enabled ? t("On") : t("Off")}
         </Badge>
       }
-      onToggle={(on) => {
-        const value = {
-          ...emptyPoster,
-          ...config.data?.accounts?.[s.id],
-          source: s.id,
-          enabled: on,
-        };
-        if (on) setDraft(value);
-        else void save(value);
-      }}
-      configureHref={"/services/" + s.id}
-      configureLabel={t(config.data?.accounts?.[s.id]?.enabled ? "Manage {app}" : "Set up {app}", {
-        app: s.name,
-      })}
+      onToggle={(on) => (on ? openSetup(s.id) : void save({ ...accountOf(s.id), enabled: false }))}
+      configureHref={config.data?.accounts?.[s.id]?.enabled ? "/services/" + s.id : undefined}
+      configureLabel={t("Manage {app}", { app: s.name })}
+      action={
+        config.data?.accounts?.[s.id]?.enabled ? undefined : (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={locked || saving || !config.data}
+            onClick={() => openSetup(s.id)}
+          >
+            {t("Set up {app}", { app: s.name })} <ArrowRight size={14} />
+          </Button>
+        )
+      }
     />
   ));
   return (

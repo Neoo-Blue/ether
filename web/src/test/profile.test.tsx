@@ -19,7 +19,8 @@ it("opens the owner's own viewer page from the header, with their sign-in tab", 
   fireEvent.click(await screen.findByRole("tab", { name: "Sign-in & devices" }, WAIT));
   expect(await screen.findByRole("heading", { name: "Connect apps" }, WAIT)).toBeInTheDocument();
   expect(await screen.findByRole("heading", { name: "Sign-in methods" }, WAIT)).toBeInTheDocument();
-  expect(screen.getByLabelText("New password")).toBeInTheDocument();
+  // Passwords are reset from the Actions drawer, not an inline form.
+  expect(screen.queryByLabelText("New password")).not.toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Devices" })).toBeInTheDocument();
 });
 

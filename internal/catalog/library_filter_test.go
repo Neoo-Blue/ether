@@ -110,6 +110,52 @@ func TestLibraryFilterPreviewBrowseAndPolicyAgree(t *testing.T) {
 	}
 }
 
+// TestRuleBrowseAndPreviewMatchTheReleaseGate checks "On digital release":
+// a movie without a digital or physical release is in neither the Rules
+// counts nor the Browse totals, so totals always match the titles served.
+func TestRuleBrowseAndPreviewMatchTheReleaseGate(t *testing.T) {
+	ctx := context.Background()
+	db, err := store.OpenMemory(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	c, err := New(db, nil, config.Catalog{ReleaseMode: config.ModeDigital}, nil, WithNow(func() time.Time { return now }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, home := range []bool{true, false} {
+		key := core.MovieKey(int64(i + 1))
+		if err = c.UpsertTitle(ctx, core.Title{Key: key, Type: core.TypeMovie, Title: "Sample", Year: 2026, Released: now.AddDate(0, -2, 0)}, true); err != nil {
+			t.Fatal(err)
+		}
+		earliest := int64(0)
+		if home {
+			earliest = now.AddDate(0, -1, 0).Unix()
+		}
+		if _, err = db.ExecContext(ctx, `INSERT INTO catalog_home_release(key,checked,earliest_ts,fallback_admitted,attempted_at) VALUES(?,1,?,0,0)`, int64(key), earliest); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw, err := c.PreviewVisibilityPolicy(ctx, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := raw.(VisibilityPreview); p.Total != 1 || p.Visible != 1 || len(p.Shown) != 1 {
+		t.Fatalf("preview counted ungated movies: %+v", p)
+	}
+	for _, visibility := range []string{"shown", "hidden"} {
+		page, err := c.Browse(ctx, core.BrowseQuery{Filter: core.Filter{RuleVisibility: visibility}, Limit: 10})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if page.Total != len(page.Items) {
+			t.Fatalf("rules browse %s total=%d but served %d", visibility, page.Total, len(page.Items))
+		}
+	}
+}
+
 func TestContentRatingNotInAgreesAndExcludesMissing(t *testing.T) {
 	ctx := context.Background()
 	db, err := store.OpenMemory(ctx)

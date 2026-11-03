@@ -30,7 +30,7 @@ release.
 The ready-made Torrentio source looks titles up on torrentio.strem.fun. To keep lookups on a server you run, add a Torznab indexer (Prowlarr, Jackett, or Zilean) instead.
 
 After any install, open the web UI and finish the setup wizard. Choose your
-app integrations, sign in with Plex if selected or create a local Ether owner
+apps, sign in with Plex if selected or create a local Ether owner
 account (password at least 12 characters), add your sources and indexers, and pick a cache folder. Jellyfin,
 Emby, and Silo do not require a Plex account or a separate Plex Media Server.
 Review the
@@ -202,7 +202,8 @@ and fatal crash traces to `<data dir>/logs/crash.log`.
 ## Remote access / port forwarding
 
 Ether's main listener defaults to **TCP 32400**. Other frontends can have
-their own listeners; use the addresses shown on the Apps page. The following
+their own listeners; **Server › General › How apps connect** lists every
+enabled app's port, local address and remote address. The following
 discovery and address-publication instructions apply to the **Plex frontend**
 for remote access outside your LAN:
 
@@ -253,8 +254,10 @@ Stremio apps require an **`https://`** addon URL unless you are connecting to
 Ether can send indexers, Stremio addons, debrid and Usenet through one proxy
 on this computer, and leave Plex, updates, UPnP and remote access on the
 normal connection. The setting is off until you turn it on, under
-**Server › General › How Ether reaches the internet**. A username and password
-are stored with Ether's other secrets and are not put in the address.
+**Server › General › How Ether reaches the internet**. Enter one proxy address,
+or pick a layout from **Common setups**, then choose **Test connection**. A
+username and password, under **More options**, are stored with Ether's other
+secrets and are not put in the address.
 
 Two layouts are common:
 
@@ -671,7 +674,7 @@ chose.
 | Message or log line | Cause and fix |
 | :--- | :--- |
 | `listen tcp :32400: bind: address already in use` | Another server (usually Plex Media Server) is already listening on port `32400`. Set `ETHER_PORT=32450` (or `server.port` in `config.json`) and open `http://localhost:32450/ether/`. |
-| `Another server on this computer is using port 8096; Ether still works at http://...:32400/jellyfin` | Existing Jellyfin server holds port `8096`. Connect Jellyfin clients to the `/jellyfin` path on Ether's main port, or pick a free port under **Server › Apps › Jellyfin**. |
+| `Another server on this computer is using port 8096; Ether still works at http://...:32400/jellyfin` | Existing Jellyfin server holds port `8096`. Connect Jellyfin clients to the `/jellyfin` path on Ether's main port, or pick a free port for Jellyfin under **Server › General › How apps connect**. |
 | `Host not found (DNS lookup failed). Check the hostname.` | The Usenet provider or indexer hostname could not be resolved by this machine's DNS resolver. Check the hostname for typos in **Sources › Usenet** or **Sources › Indexers**, or check container DNS settings. |
 | `Connection refused. Check the host and port.` / `TLS connection failed. Check the port and TLS setting.` | The provider host is reachable, but the port or TLS toggle does not match the provider's NNTP endpoint (typically `563` or `443` with TLS on, `119` with TLS off). |
 | `Login rejected. Check the username and password.` (NNTP `481` / `502`) | The Usenet provider rejected the credentials or account state. Verify the username and password in **Sources › Usenet** and confirm the subscription is active. |

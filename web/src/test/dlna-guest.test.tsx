@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { expect, it, vi } from "vitest";
 import Apps from "../pages/apps/Apps";
@@ -60,5 +60,6 @@ it("creates a restricted guest and stages it as the selected DLNA viewer", async
   expect(screen.queryByRole("option", { name: "Inactive" })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Create a living-room guest" }));
   expect(await screen.findByRole("region", { name: "Unsaved changes" })).toBeInTheDocument();
-  expect(select).toHaveValue("42");
+  // The searchable picker shows the new guest as the selected viewer.
+  await waitFor(() => expect(select).toHaveTextContent("Living-room guest"));
 });

@@ -161,12 +161,6 @@ function defaultConfig(): EtherConfig {
       defaultStreamLimit: 2,
       maxStreams: 0,
     },
-    frontends: {
-      plex: { enabled: true },
-      jellyfin: { enabled: true },
-      emby: { enabled: true },
-      silo: { enabled: true },
-    },
     plex: {
       token: "••••",
       clientIdentifier: "mock-client",

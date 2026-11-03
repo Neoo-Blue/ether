@@ -7,18 +7,19 @@ const WAIT = { timeout: 4000 };
 
 type Route = (method: string, path: string, body: unknown) => unknown;
 
-/** Serve the stream-preference endpoints the shared fake doesn't model. */
+/** Serve this test's stream-preference fixtures ahead of the shared fake. */
 function extraRoutes(route: Route) {
   return (fake: FakeServer) => {
     const base = fake.fetch;
     fake.fetch = async (input, init) => {
-      const res = await base(input, init);
-      if (res.status !== 404) return res;
       const url = new URL(String(input), "http://localhost");
       const path = url.pathname.replace(/^\/ether\/api/, "") + url.search;
       const raw = typeof init?.body === "string" && init.body ? init.body : "";
-      const out = route((init?.method ?? "GET").toUpperCase(), path, raw ? JSON.parse(raw) : null);
-      if (out === undefined) return res;
+      const method = (init?.method ?? "GET").toUpperCase();
+      const body = raw ? JSON.parse(raw) : null;
+      const out = route(method, path, body);
+      if (out === undefined) return base(input, init);
+      fake.state.calls.push({ method, path, body });
       return new Response(JSON.stringify(out), {
         status: 200,
         headers: { "Content-Type": "application/json" },

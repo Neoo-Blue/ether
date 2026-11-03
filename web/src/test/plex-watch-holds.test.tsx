@@ -40,6 +40,30 @@ describe("Plex watch state actions", () => {
     await userEvent.click(screen.getByRole("button", { name: "Export current state" }));
     await waitFor(() => expect(calls).toContain("POST /api/viewers/7/plex-watch/export"));
   });
+  it("offers Resolve and Retry only while sends are held or failed", async () => {
+    const calls: string[] = [];
+    let status = { connected: true, enabled: true, held: 2, heldLegacy: 2, dead: 1 };
+    mockFetch((path, init) => {
+      calls.push(`${init?.method ?? "GET"} ${path}`);
+      if (path.endsWith("/resolve")) status = { ...status, held: 0, heldLegacy: 0 };
+      if (path.endsWith("/retry")) status = { ...status, dead: 0 };
+      return status;
+    });
+    render(<PlexWatchSync viewerId={7} plexId={77} />);
+    const resolve = await screen.findByRole("button", { name: "Resolve 2 held changes" });
+    await userEvent.hover(resolve.parentElement!);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Older changes are held");
+    await userEvent.click(resolve);
+    await waitFor(() => expect(calls).toContain("POST /api/viewers/7/plex-watch/resolve"));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /held change/ })).not.toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Retry failed items" }));
+    await waitFor(() => expect(calls).toContain("POST /api/viewers/7/plex-watch/retry"));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Retry failed items" })).not.toBeInTheDocument(),
+    );
+  });
   it("requires connection before importing or exporting", async () => {
     mockFetch(() => ({ connected: false, enabled: false }));
     render(<PlexWatchSync viewerId={7} plexId={77} />);

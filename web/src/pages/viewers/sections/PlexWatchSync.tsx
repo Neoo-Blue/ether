@@ -9,7 +9,7 @@ import {
 import { useState } from "react";
 import { ErrorPanel } from "../../../components/feedback";
 import { SettingsRow } from "../../../components/SettingsRow";
-import { t } from "../../../i18n";
+import { t, tn } from "../../../i18n";
 import { apiFetch, errorMessage } from "../../../lib/api";
 import { useAsync } from "../../../lib/hooks";
 
@@ -163,6 +163,36 @@ export function PlexWatchSync({ viewerId, plexId }: { viewerId: number; plexId: 
             <span key={path}>{button}</span>
           );
         })}
+        {/* Recovery actions appear only while something is stuck. Legacy holds
+            have no Plex id, so only a manual Resolve can release them. */}
+        {st.held > 0 ? (
+          <Tooltip
+            content={
+              st.heldLegacy > 0
+                ? t("Older changes are held until they are checked against Plex.")
+                : t("Unconfirmed changes are held until they are checked against Plex.")
+            }
+          >
+            <span tabIndex={0}>
+              <Button
+                variant="outline"
+                disabled={busy || !st.connected}
+                onClick={() => void run("/resolve", "POST")}
+              >
+                {tn(st.held, "Resolve {count} held change", "Resolve {count} held changes")}
+              </Button>
+            </span>
+          </Tooltip>
+        ) : null}
+        {st.pending > 0 || st.dead > 0 || st.skipped > 0 ? (
+          <Button
+            variant="outline"
+            disabled={busy || !st.connected}
+            onClick={() => void run("/retry", "POST")}
+          >
+            {t("Retry failed items")}
+          </Button>
+        ) : null}
       </div>
     </SettingsSection>
   );

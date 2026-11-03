@@ -192,8 +192,8 @@ type Engine struct {
 
 	fetches, fetchedBytes, hotHits, cacheHits, missing, coalesced, active atomic.Int64
 
-	playAhead    atomic.Int64 // time.Duration of playback read-ahead; 0 = off
-	playAheaders atomic.Int64 // sources running a playback read-ahead loop
+	playAhead   atomic.Int64 // time.Duration of playback read-ahead; 0 = off
+	playSources sync.Map     // *source -> struct{}: sources running a playback read-ahead loop
 
 	par2Loaded, par2Failed, par2Skipped, par2Named, par2Saved, par2Verified, par2Mismatches atomic.Int64
 }

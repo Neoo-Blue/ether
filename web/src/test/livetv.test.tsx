@@ -188,7 +188,7 @@ describe("Live TV studio", () => {
     });
     renderLiveTV("/livetv?channel=c1");
     fireEvent.click(await screen.findByRole("tab", { name: "Viewers" }, WAIT));
-    expect(await screen.findByRole("switch", { name: "Sam" })).toBeChecked();
+    expect(await screen.findByRole("switch", { name: "Sam" }, WAIT)).toBeChecked();
     expect(screen.getByRole("switch", { name: "Kim" })).not.toBeChecked();
     expect(screen.getByRole("switch", { name: "Lee" })).toBeDisabled();
     expect(screen.getByText("Live TV is off")).toBeInTheDocument();
@@ -225,7 +225,7 @@ describe("Live TV studio", () => {
     });
     renderLiveTV("/livetv?channel=c1");
     fireEvent.click(await screen.findByRole("tab", { name: "Viewers" }, WAIT));
-    expect(await screen.findByRole("switch", { name: "Sam" })).toBeChecked();
+    expect(await screen.findByRole("switch", { name: "Sam" }, WAIT)).toBeChecked();
     fireEvent.click(screen.getByRole("switch", { name: "Private" }));
     // Private hides it from everyone not given it.
     expect(screen.getByRole("switch", { name: "Sam" })).not.toBeChecked();
@@ -557,49 +557,12 @@ describe("Live TV source sign-in", () => {
 });
 
 describe("Live TV access on the viewer profile", () => {
-  it("gives a private channel to a viewer on all channels without restricting them", async () => {
-    let policy = { userId: 2, disabled: false, restricted: false, favorites: [], maxRating: "" };
-    const { fake } = renderAppWith("/viewers/2/limits", (method, path, body) => {
-      if (path === "/livetv/channels")
-        return [
-          { id: "c1", number: "1", name: "Movie night", kind: "virtual", enabled: true },
-          {
-            id: "c2",
-            number: "2",
-            name: "Late show",
-            kind: "virtual",
-            enabled: true,
-            private: true,
-          },
-        ];
-      if (path === "/livetv/policies/2") {
-        if (method === "PUT") policy = body as typeof policy;
-        return policy;
-      }
-      return undefined;
-    });
-    const late = await screen.findByLabelText("Allow Late show", {}, WAIT);
-    expect(late).not.toBeChecked();
-    expect(screen.getByLabelText("Allow Movie night")).toBeChecked();
-    expect(
-      screen.getByText("All channels, including new ones. Private channels only when turned on."),
-    ).toBeInTheDocument();
-    fireEvent.click(late);
-    fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
-    await waitFor(() =>
-      expect(fakeCalls(fake, "PUT", "/livetv/policies/2").at(-1)?.body).toMatchObject({
-        restricted: false,
-        granted: ["c2"],
-      }),
-    );
-  });
-
-  it("edits one viewer's Live TV policy in place on their Access tab", async () => {
+  it("only switches Live TV on or off for the viewer; channels are managed on each channel", async () => {
     let policy = {
       userId: 2,
       disabled: false,
-      restricted: false,
-      channels: [] as string[],
+      restricted: true,
+      channels: ["c1"],
       favorites: [],
       maxRating: "",
     };
@@ -616,40 +579,15 @@ describe("Live TV access on the viewer profile", () => {
       return undefined;
     });
     fireEvent.click(await screen.findByLabelText("Disable Live TV for this viewer", {}, WAIT));
-    fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
-    await waitFor(() =>
-      expect(
-        fakeCalls(fake, "PUT", "/livetv/policies/2").some(
-          (c) => (c.body as { disabled: boolean }).disabled,
-        ),
-      ).toBe(true),
-    );
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull());
-    fireEvent.click(screen.getByLabelText("Disable Live TV for this viewer"));
-    // "All channels" shows every switch on; turning one off keeps the others.
-    expect(screen.getByLabelText("Allow Movie night")).toBeChecked();
-    expect(screen.getByText("All channels, including new ones.")).toBeInTheDocument();
-    fireEvent.click(screen.getByLabelText("Allow Cartoons"));
-    expect(screen.getByText("Only the channel selected below.")).toBeInTheDocument();
+    // Thousands of channels never list here; access lives on each channel.
+    expect(screen.queryByLabelText("Allow Movie night")).not.toBeInTheDocument();
+    expect(screen.queryByText("Allowed channels")).not.toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
     await waitFor(() =>
       expect(fakeCalls(fake, "PUT", "/livetv/policies/2").at(-1)?.body).toMatchObject({
-        disabled: false,
+        disabled: true,
         restricted: true,
         channels: ["c1"],
-      }),
-    );
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull());
-    // Switching off the last channel leaves none, not all.
-    fireEvent.click(screen.getByLabelText("Allow Movie night"));
-    expect(screen.getByText("No channels.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Allow all channels" }));
-    expect(screen.getByLabelText("Allow Cartoons")).toBeChecked();
-    fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
-    await waitFor(() =>
-      expect(fakeCalls(fake, "PUT", "/livetv/policies/2").at(-1)?.body).toMatchObject({
-        restricted: false,
-        channels: [],
       }),
     );
   });

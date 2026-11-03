@@ -380,7 +380,9 @@ func (c *Catalog) browseWhere(f core.Filter) (string, []any, error) {
 		conds = append(conds, "NOT ("+q+")")
 		args = append(args, a...)
 	}
-	if (c.config().ReleaseMode == config.ModeDigital) && f.IncludeKeys == nil && f.RuleVisibility == "" {
+	// Rule browsing gates like everything else: its totals must match the
+	// titles queryTitles hands back, which never include ungated movies.
+	if (c.config().ReleaseMode == config.ModeDigital) && f.IncludeKeys == nil {
 		gateSQL := homeReleaseSQL("t")
 		if c.config().ShowUpcomingMovies {
 			gateSQL = "(t.type='movie' AND t.release_known=1 AND t.released_ts>? OR (" + gateSQL + "))"
