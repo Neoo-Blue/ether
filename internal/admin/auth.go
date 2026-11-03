@@ -170,15 +170,16 @@ func (h *Handler) handleBootstrap(w http.ResponseWriter, r *http.Request) {
 		signInMethods = append(signInMethods, "plex")
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"ok":              true,
-		"version":         h.version,
-		"setupComplete":   cfg.SetupComplete,
-		"ownerConfigured": h.deps.OwnerConfigured != nil && h.deps.OwnerConfigured(r.Context()),
-		"authenticated":   authed,
-		"authRequired":    authRequired,
-		"signInMethods":   signInMethods,
-		"serverName":      cfg.Server.FriendlyName,
-		"plexEnabled":     cfg.Frontends == nil || cfg.Frontends["plex"].Enabled,
+		"ok":               true,
+		"version":          h.version,
+		"setupComplete":    cfg.SetupComplete,
+		"ownerConfigured":  h.deps.OwnerConfigured != nil && h.deps.OwnerConfigured(r.Context()),
+		"authenticated":    authed,
+		"authRequired":     authRequired,
+		"signInMethods":    signInMethods,
+		"serverName":       cfg.Server.FriendlyName,
+		"startupAnimation": cfg.Server.StartupAnimation,
+		"plexEnabled":      cfg.Frontends == nil || cfg.Frontends["plex"].Enabled,
 	})
 }
 
