@@ -740,8 +740,11 @@ func (m *Manager) prepareOwnedEntry(ctx context.Context, user *core.User, key co
 
 // PrepareWithin leaves a timed-out flight running for a subsequent retry.
 // The prepared source does not supersede the client's current session.
-func (m *Manager) PrepareWithin(ctx context.Context, wait time.Duration, user *core.User, key core.RatingKey, caps core.ClientCaps) (*core.PlaySession, error) {
-	ps, _, err := m.prepareOwnedWithin(ctx, wait, user, key, caps, "", false, true)
+func (m *Manager) PrepareWithin(ctx context.Context, wait time.Duration, user *core.User, key core.RatingKey, caps core.ClientCaps, release string, exact bool) (*core.PlaySession, error) {
+	if exact && release == "" {
+		return nil, core.ErrNotAvailable
+	}
+	ps, _, err := m.prepareOwnedWithin(ctx, wait, user, key, caps, release, exact, true)
 	return ps, err
 }
 

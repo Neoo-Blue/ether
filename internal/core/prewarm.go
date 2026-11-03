@@ -10,7 +10,7 @@ import (
 var ErrPrepareSlow = errors.New("playback preparation is still running")
 
 type PlaybackPrepareWithin interface {
-	PrepareWithin(context.Context, time.Duration, *User, RatingKey, ClientCaps) (*PlaySession, error)
+	PrepareWithin(context.Context, time.Duration, *User, RatingKey, ClientCaps, string, bool) (*PlaySession, error)
 }
 
 // Reasons for PrewarmOptions.Reason.
