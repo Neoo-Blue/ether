@@ -121,3 +121,17 @@ it("does not show a mint that finishes after changing profiles", async () => {
   });
   expect(screen.queryByText("https://ether.example/old-secret")).not.toBeInTheDocument();
 });
+
+it("shows only enabled apps, including Plex with its official sign-in link", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(JSON.stringify({ apps: ["plex", "jellyfin"] }), { status: 200 }),
+  );
+  render(<ConnectApps base="/me" token="portal" />);
+  expect(await screen.findByRole("link", { name: "Open Plex" })).toHaveAttribute(
+    "href",
+    "https://app.plex.tv",
+  );
+  expect(screen.getByText("Jellyfin")).toBeInTheDocument();
+  expect(screen.queryByText("Emby")).not.toBeInTheDocument();
+  expect(screen.getAllByRole("button", { name: "Create connection" })).toHaveLength(1);
+});

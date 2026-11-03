@@ -75,12 +75,15 @@ func (h *Handler) connectApps(w http.ResponseWriter, r *http.Request, viewer *co
 	enabled := map[string]bool{}
 	for _, info := range infos {
 		id := string(info.Descriptor.ID)
-		if info.Enabled && allowed[id] {
+		if info.Enabled && (allowed[id] || id == "plex") {
 			enabled[id] = true
 		}
 	}
 	if r.Method == http.MethodGet {
 		out := make([]string, 0, len(enabled))
+		if enabled["plex"] {
+			out = append(out, "plex")
+		}
 		for _, id := range connectableSurfaces {
 			if enabled[id] {
 				out = append(out, id)
@@ -94,7 +97,7 @@ func (h *Handler) connectApps(w http.ResponseWriter, r *http.Request, viewer *co
 		return
 	}
 	surface := r.PathValue("surface")
-	if !enabled[surface] {
+	if !enabled[surface] || !allowed[surface] {
 		writeError(w, 404, "not_found", "app unavailable")
 		return
 	}

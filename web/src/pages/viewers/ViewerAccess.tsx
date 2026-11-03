@@ -18,7 +18,6 @@ import { api, apiFetch, errorMessage } from "../../lib/api";
 import type { Viewer } from "../../lib/contract";
 import { useAsync } from "../../lib/hooks";
 import { timeZones } from "../livetv/model";
-import { MaxQuality } from "./MaxQuality";
 import { PlexWatchSync } from "./sections/PlexWatchSync";
 import { FromPlexDefaults } from "./FromPlexDefaults";
 import { ViewerLiveTVAccess } from "./sections/ViewerLiveTV";
@@ -270,8 +269,6 @@ export function ViewerAccess({ viewer }: { viewer: Viewer }) {
           </SettingsSection>
         </>
       )}
-
-      <MaxQuality viewerId={id} />
 
       <FromPlexDefaults viewerId={id} show="share" />
 

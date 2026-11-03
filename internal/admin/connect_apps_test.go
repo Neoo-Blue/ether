@@ -241,7 +241,7 @@ func TestConnectAppsPlexViewerWithoutLocalPasswordMintsJellyfinEmbySilo(t *testi
 	}
 	_ = json.NewDecoder(res.Body).Decode(&listing)
 	res.Body.Close()
-	wantApps := []string{"jellyfin", "emby", "silo", "stremio", "webdav", "m3u"}
+	wantApps := []string{"plex", "jellyfin", "emby", "silo", "stremio", "webdav", "m3u"}
 	if res.StatusCode != 200 || strings.Join(listing.Apps, ",") != strings.Join(wantApps, ",") {
 		t.Fatalf("listing: %d %+v", res.StatusCode, listing.Apps)
 	}

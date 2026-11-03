@@ -67,7 +67,7 @@ describe("Viewers", () => {
     expect(await screen.findByRole("heading", { name: /Sam Rivera/ }, WAIT)).toBeInTheDocument();
     // Overview is the landing tab now.
     expect(await screen.findByText("Recent activity", {}, WAIT)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "Home & taste" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Taste" }));
     expect(await screen.findByText("What Ether has learned", {}, WAIT)).toBeInTheDocument();
     expect(await screen.findByText("Up next", {}, WAIT)).toBeInTheDocument();
     expect(await screen.findByText("Pick 1", {}, WAIT)).toBeInTheDocument();
@@ -75,7 +75,7 @@ describe("Viewers", () => {
   });
 
   it("corrects taste from the genre chart and saves overrides", async () => {
-    const { fake } = renderApp("/viewers/2/home-taste");
+    const { fake } = renderApp("/viewers/2/taste");
     fireEvent.click(await screen.findByRole("tab", { name: "Genres" }));
     const genres = await screen.findByRole("list", { name: /Genre affinity/ }, WAIT);
     fireEvent.click(within(genres).getByRole("button", { name: /Horror/ }));
@@ -97,7 +97,7 @@ describe("Viewers", () => {
   });
 
   it("adds a person correction through search", async () => {
-    const { fake } = renderApp("/viewers/1/home-taste");
+    const { fake } = renderApp("/viewers/1/taste");
     fireEvent.click(await screen.findByRole("tab", { name: "Corrections" }));
     await screen.findByText("Your corrections", {}, WAIT);
     fireEvent.click(screen.getByRole("radio", { name: "Person" }));
@@ -366,7 +366,6 @@ it("shows nothing Plex-related when Plex is off", async () => {
 it("adds a local viewer through the guided flow and shows how to connect", async () => {
   const { fake } = renderApp("/viewers", {}, (server) => {
     server.state.config.frontends = {
-      ...server.state.config.frontends,
       plex: { enabled: true },
       jellyfin: { enabled: true },
       stremio: { enabled: true },
@@ -413,7 +412,7 @@ it("adds a local viewer through the guided flow and shows how to connect", async
 });
 
 it("hides server-only sections for a viewer kept for imported history", async () => {
-  renderApp("/viewers/2/home-taste", {}, (server) => {
+  renderApp("/viewers/2/taste", {}, (server) => {
     const base = server.fetch;
     server.fetch = async (input, init) => {
       const res = await base(input, init);
@@ -431,11 +430,32 @@ it("hides server-only sections for a viewer kept for imported history", async ()
   const tabs = await screen.findByRole("tablist", { name: "Viewer sections" }, WAIT);
   expect(within(tabs).queryByRole("tab", { name: "Watchlist" })).toBeNull();
   expect(within(tabs).queryByRole("tab", { name: "Alerts" })).toBeNull();
-  expect(within(tabs).getByRole("tab", { name: "Home & taste" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
-  // The watchlist and alerts sections inside Home & taste need server access.
+  expect(within(tabs).getByRole("tab", { name: "Taste" })).toHaveAttribute("aria-selected", "true");
+  // The watchlist and alerts sections inside Taste need server access.
   await screen.findByText("What Ether has learned", {}, WAIT);
   expect(screen.queryByText("New episodes from favourite shows")).toBeNull();
+});
+
+it("shows a bounded dashboard and ordered viewer sections", async () => {
+  renderApp("/viewers/2/overview");
+  const tabs = await screen.findByRole("tablist", { name: "Viewer sections" }, WAIT);
+  expect(
+    within(tabs)
+      .getAllByRole("tab")
+      .map((tab) => tab.textContent),
+  ).toEqual([
+    "Overview",
+    "Home",
+    "Taste",
+    "Recent activity",
+    "Audio & subtitles",
+    "Limits",
+    "Sign-in & devices",
+    "Lists & alerts",
+  ]);
+  expect(screen.getByLabelText("Viewer dashboard")).toHaveClass("overflow-hidden");
+  expect(screen.getByText("Plays in 30 days")).toBeInTheDocument();
+  expect(screen.queryByText("How they sign in")).toBeNull();
+  fireEvent.click(within(tabs).getByRole("tab", { name: "Recent activity" }));
+  expect(await screen.findByRole("table")).toBeInTheDocument();
 });

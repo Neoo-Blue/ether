@@ -73,7 +73,11 @@ export const PAGES = localized<PageDef[]>(() => [
     href: "/viewers",
     title: t("Viewers"),
     sections: [],
-    keywords: searchTerms(msg("users friends accounts people")),
+    keywords: searchTerms(
+      msg(
+        "users friends accounts people overview home taste recent activity audio subtitles limits sign-in devices lists alerts",
+      ),
+    ),
   },
   {
     href: "/home",
