@@ -11,7 +11,7 @@ import {
 } from "@braedonsaunders/appkit-ui";
 import { useEffect, useState, type ReactNode } from "react";
 import { ListInput, MapInput, NumberInput, SecretInput } from "../../components/fields";
-import { t } from "../../i18n";
+import { t, tn } from "../../i18n";
 import { humanizeKey, isPlainObject } from "../../lib/format";
 import { REDACTED } from "../../lib/types";
 
@@ -546,6 +546,7 @@ function DurationControl({
     setDraft({ amount, unit, raw });
     onChange(raw);
   }
+  const count = Number(current.amount) || 0;
   return (
     <span className="flex items-center gap-2">
       <Input
@@ -563,9 +564,9 @@ function DurationControl({
         value={current.unit}
         onChange={(e) => update(current.amount, e.currentTarget.value as DurationUnit)}
       >
-        <option value="m">{t("Minutes")}</option>
-        <option value="h">{t("Hours")}</option>
-        <option value="d">{t("Days")}</option>
+        <option value="m">{tn(count, "Minute", "Minutes")}</option>
+        <option value="h">{tn(count, "Hour", "Hours")}</option>
+        <option value="d">{tn(count, "Day", "Days")}</option>
       </Select>
     </span>
   );

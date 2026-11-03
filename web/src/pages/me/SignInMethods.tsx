@@ -206,7 +206,11 @@ export default function SignInMethods({
       ) : null}
       <SettingsSection
         title={t("Sign-in methods")}
-        description={t("Accounts that can sign in as you.")}
+        description={
+          owner && showInvite
+            ? t("Accounts that can sign in as this viewer.")
+            : t("Accounts that can sign in as you.")
+        }
         footer={
           !owner ? (
             <div className="flex flex-wrap items-center gap-3">
