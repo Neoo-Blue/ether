@@ -330,6 +330,7 @@ func (p *offcloud) Acquire(ctx context.Context, req AcquireRequest) (*Acquired, 
 	}
 	chosen, err := req.Choose(files)
 	if err != nil {
+		cleanup()
 		return nil, err
 	}
 	p.list.remember(req.InfoHash, id)

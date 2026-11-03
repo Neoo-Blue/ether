@@ -1100,7 +1100,7 @@ function ProfileList({
                 onChange={(v) => patch({ allowDolbyVision: v })}
               />
               <BoolRow
-                label={t("Allow CAM releases")}
+                label={t("Allow CAM and screener releases")}
                 value={draft.allowCam}
                 onChange={(v) => patch({ allowCam: v })}
               />

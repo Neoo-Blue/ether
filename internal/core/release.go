@@ -15,8 +15,8 @@ type Source string
 
 const (
 	SourceUnknown  Source = ""
-	SourceCam      Source = "cam" // CAM, TS, TC, HDCAM, telesync
-	SourceScreener Source = "screener"
+	SourceCam      Source = "cam"      // CAM, TS, TC, HDCAM, telesync
+	SourceScreener Source = "screener" // SCR, DVDSCR, R5, workprint
 	SourceDVD      Source = "dvd"
 	SourceHDTV     Source = "hdtv"
 	SourceWEBRip   Source = "webrip"
@@ -254,7 +254,7 @@ type QualityProfile struct {
 	EpisodeMaxSizeMBPerMin float64  `json:"episodeMaxSizeMbPerMin,omitempty"`
 	PreferLargest          bool     `json:"preferLargest,omitempty"` // prefer larger files among candidates matching the profile
 	PreferredLanguages     []string `json:"preferredLanguages"`
-	AllowCam               bool     `json:"allowCam"` // the only CAM switch; cinema recordings play only for profiles that allow them
+	AllowCam               bool     `json:"allowCam"` // the only pre-release switch; CAM/TS/TC and screener/R5/workprint copies play only for profiles that allow them
 	// SelectionKey is the canonical hash of this profile's configured
 	// definition, computed by resolver.SelectProfile from the pristine
 	// configured profile before download reshaping or client-cap

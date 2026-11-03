@@ -18,8 +18,15 @@ func (s *Service) DiscoveryCandidate(t *core.Title, r core.Release) string {
 func sourceSuitability(r core.Release, t *core.Title, p core.QualityProfile, explicit bool) string {
 	// Reparse the name: saved feed payloads can contain older parser results.
 	info := releaseparse.Parse(r.Name)
-	if (info.Source == core.SourceCam || r.Info.Source == core.SourceCam) && !p.AllowCam {
-		return "cam not allowed"
+	if !p.AllowCam {
+		// AllowCam is the one pre-release switch: cinema recordings,
+		// screeners, R5s and workprints all play only where it is on.
+		switch {
+		case info.Source == core.SourceCam || r.Info.Source == core.SourceCam:
+			return "cam not allowed"
+		case info.Source == core.SourceScreener || r.Info.Source == core.SourceScreener:
+			return "screener not allowed"
+		}
 	}
 	if explicit || !releaseparse.ExplicitDub(r.Name) || len(info.Languages) == 0 {
 		return ""

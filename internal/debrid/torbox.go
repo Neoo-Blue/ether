@@ -252,6 +252,7 @@ func (p *torBox) Acquire(ctx context.Context, req AcquireRequest) (*Acquired, er
 	}
 	chosen, err := req.Choose(files)
 	if err != nil {
+		cleanup()
 		return nil, err
 	}
 	p.rememberKnown(req.InfoHash, id)
