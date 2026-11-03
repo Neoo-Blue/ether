@@ -80,3 +80,23 @@ func IndexerSkipped(ctx context.Context, id string) bool {
 	ids, _ := ctx.Value(indexerSkipKey{}).(map[string]bool)
 	return ids[id]
 }
+
+type unattendedSearchKey struct{}
+
+// WithUnattendedSearch marks a search nobody is waiting on (a watchlist
+// check, a preload, a next-episode prefetch): an indexer tries its fallback
+// queries one at a time and stops at the first that finds releases,
+// instead of firing them all at once as it does for Play.
+func WithUnattendedSearch(ctx context.Context) context.Context {
+	return context.WithValue(ctx, unattendedSearchKey{}, true)
+}
+
+// IsUnattendedSearch reports whether nobody is waiting on ctx's search:
+// marked unattended, or speculative work (a warm-up) not yet promoted to
+// Play.
+func IsUnattendedSearch(ctx context.Context) bool {
+	if v, _ := ctx.Value(unattendedSearchKey{}).(bool); v {
+		return true
+	}
+	return IsSpeculative(ctx)
+}

@@ -195,7 +195,7 @@ func (s *Service) probeCadence(t core.Title, digital time.Time, known, found boo
 }
 
 func (s *Service) probeOne(ctx context.Context, t core.Title, digital time.Time, known bool, last titleCheck, covered map[string]time.Time) (bool, error) {
-	req := core.SearchRequest{Type: t.Type, IDs: t.IDs, Title: t.Title, OriginalTitle: t.OriginalTitle, Year: t.Year, AlternativeTitles: t.AlternativeTitles}
+	req := core.SearchRequest{Type: t.Type, IDs: t.IDs, Title: t.Title, OriginalTitle: t.OriginalTitle, Year: t.Year, AlternativeTitles: t.AlternativeTitles, Released: t.Released}
 	// A title already looked for skips every indexer whose feed has shown
 	// all releases since that look: the feed would have matched anything
 	// new. A first look, an unplayable found release, the look when the
@@ -215,10 +215,20 @@ func (s *Service) probeOne(ctx context.Context, t core.Title, digital time.Time,
 			}
 		}
 	}
+	scrapers := feedless(sources, skip)
 	if !full {
 		for id, since := range covered {
 			if !since.After(last.checked) {
 				skip[id] = true
+			}
+		}
+		// Routine checks ask one feedless source, the one that has returned
+		// releases most often in full searches; Play still asks them all.
+		if best := s.bestScraper(ctx, scrapers); best != "" {
+			for _, f := range scrapers {
+				if f.ID != best {
+					skip[f.ID] = true
+				}
 			}
 		}
 		if len(skip) > 0 && everyIndexer(sources, skip) {
@@ -232,6 +242,9 @@ func (s *Service) probeOne(ctx context.Context, t core.Title, digital time.Time,
 	bctx, cancel := context.WithTimeout(core.WithIndexerSkip(s.budgetContext(ctx, true), skip), 25*time.Second)
 	releases, err := s.d.Search(bctx, req)
 	cancel()
+	if full && err == nil {
+		s.noteScraperYield(ctx, scrapers, releases)
+	}
 	if err != nil && len(releases) == 0 {
 		// A spent budget or a stopping service decides nothing: the title
 		// stays due and the pass ends. A slow or failing indexer is a

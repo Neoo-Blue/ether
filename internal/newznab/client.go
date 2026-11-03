@@ -880,6 +880,7 @@ func (c *Client) Search(ctx context.Context, req core.SearchRequest) ([]core.Rel
 		return nil, fmt.Errorf("indexer %q is disabled", c.Name())
 	}
 	key := cacheKey(c, req)
+	ctx = withCacheAge(ctx, req.Released)
 	if cached, ok := c.cacheGet(ctx, key); ok {
 		return cached, nil
 	}
@@ -933,8 +934,10 @@ func (c *Client) Search(ctx context.Context, req core.SearchRequest) ([]core.Rel
 	// When the primary attempt misses on an uncapped indexer, fan out the
 	// fallback queries (alternate IDs, keyword search, OriginalTitle/aliases,
 	// season packs) in bounded parallel bursts so obscure titles resolve in
-	// a single round-trip instead of N serial timeouts.
-	if c.Config().DailyLimit == 0 && firstErr == nil {
+	// a single round-trip instead of N serial timeouts. A search nobody is
+	// waiting on (a warm-up, a watchlist check) tries them one at a time and
+	// stops at the first hit: it spends fewer API hits and has time.
+	if c.Config().DailyLimit == 0 && firstErr == nil && !core.IsUnattendedSearch(ctx) {
 		const burstWidth = 4
 		for base := 0; base < len(rest); base += burstWidth {
 			if err := ctx.Err(); err != nil {
@@ -1114,6 +1117,7 @@ func (c *Client) SearchRescue(ctx context.Context, req core.SearchRequest) ([]co
 		return nil, fmt.Errorf("indexer %q is disabled", c.Name())
 	}
 	key := cacheKey(c, req) + "|rescue"
+	ctx = withCacheAge(ctx, req.Released)
 	if cached, ok := c.cacheGet(ctx, key); ok {
 		return cached, nil
 	}
@@ -1167,7 +1171,8 @@ func (c *Client) SearchRescue(ctx context.Context, req core.SearchRequest) ([]co
 	var merged []core.Release
 	seen := map[string]bool{}
 	var firstErr error
-	if c.Config().DailyLimit == 0 {
+	// As for Search: unattended rescues go one query at a time.
+	if c.Config().DailyLimit == 0 && !core.IsUnattendedSearch(ctx) {
 		type slot struct {
 			res []core.Release
 			err error

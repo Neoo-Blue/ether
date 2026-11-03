@@ -245,12 +245,9 @@ func (c *Client) cacheGet(ctx context.Context, key string) ([]core.Release, bool
 const emptySearchCacheTTL = 3 * time.Minute
 
 func (c *Client) cachePut(ctx context.Context, key string, results []core.Release) {
-	ttl := c.ttl()
+	ttl := searchCacheTTL(c.ttl(), cacheAge(ctx), c.now(), len(results) == 0)
 	if ttl <= 0 {
 		return
-	}
-	if len(results) == 0 && ttl > emptySearchCacheTTL {
-		ttl = emptySearchCacheTTL
 	}
 	exp := c.now().Add(ttl)
 	if c.db == nil {

@@ -337,6 +337,10 @@ type SearchRequest struct {
 	// alternative titles) a release name may use; matching only, never
 	// part of a query or cache key (additive).
 	AlternativeTitles []string `json:"-"`
+	// Released is when the movie came out or the episode aired (zero when
+	// unknown). Indexer caches keep results for older titles longer; never
+	// part of a query or cache key (additive).
+	Released time.Time `json:"-"`
 }
 
 type Indexer interface {

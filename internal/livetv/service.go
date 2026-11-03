@@ -30,24 +30,27 @@ CREATE TABLE livetv_policies(user_id INTEGER PRIMARY KEY, data TEXT NOT NULL);`)
 }
 
 type Service struct {
-	authCache        authCache  // provider credentials for the stream path (auth.go)
-	inputRelay       inputRelay // loopback ffmpeg input relay (input_relay.go)
-	probeMu          sync.Mutex
-	probeCache       map[string]liveProbeEntry
-	probeWait        map[string]*liveProbeFlight
-	healthMu         sync.RWMutex
-	channelHealth    map[string]sweepResult
-	sourceMu         sync.Mutex
-	sourceHealth     map[string]streamSourceHealth
-	transMu          sync.RWMutex
-	transcodes       map[string]core.HLSSession
-	o                Options
-	kinds            *KindRegistry
-	policyReads      atomic.Uint64
-	mu               sync.Mutex
-	lineupUnix       int64
-	onChange         func()
-	sessions         map[string]*session
+	authCache     authCache  // provider credentials for the stream path (auth.go)
+	inputRelay    inputRelay // loopback ffmpeg input relay (input_relay.go)
+	probeMu       sync.Mutex
+	probeCache    map[string]liveProbeEntry
+	probeWait     map[string]*liveProbeFlight
+	healthMu      sync.RWMutex
+	channelHealth map[string]sweepResult
+	sourceMu      sync.Mutex
+	sourceHealth  map[string]streamSourceHealth
+	transMu       sync.RWMutex
+	transcodes    map[string]core.HLSSession
+	o             Options
+	kinds         *KindRegistry
+	policyReads   atomic.Uint64
+	mu            sync.Mutex
+	lineupUnix    int64
+	onChange      func()
+	sessions      map[string]*session
+	// watched is when each channel was last tuned or playing (guarded by
+	// mu): only channels watched lately are pre-warmed.
+	watched          map[string]time.Time
 	nextSubscription int64 // guarded by mu
 	ctx              context.Context
 	cancel           context.CancelFunc
@@ -152,8 +155,11 @@ func (s *Service) maintain() {
 				if err != nil {
 					continue
 				}
+				recent := s.recentlyWatched()
 				for _, c := range cs {
-					if !c.Enabled || c.Kind != "virtual" {
+					// A channel nobody has watched lately is not pre-warmed:
+					// warming resolves every scheduled item, around the clock.
+					if !c.Enabled || c.Kind != "virtual" || !recent[c.ID] {
 						continue
 					}
 					ps := Schedule(c, s.o.Now(), s.o.Now().Add(3*time.Minute))
