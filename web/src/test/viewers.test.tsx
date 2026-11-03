@@ -268,13 +268,12 @@ it("filters imported history without changing Plex access", async () => {
       });
     };
   });
-  await screen.findByText("Sam Rivera", {}, WAIT);
-  expect(screen.getByText("Imported history", { selector: "span" })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: /^Active \(/ }));
+  // The list opens on Active, so imported history is hidden until All.
+  expect(await screen.findByText("The Kids", {}, WAIT)).toBeInTheDocument();
   expect(screen.queryByText("Sam Rivera")).not.toBeInTheDocument();
-  expect(screen.getByText("The Kids")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: /^All \(/ }));
   expect(screen.getByText("Sam Rivera")).toBeInTheDocument();
+  expect(screen.getByText("Imported history", { selector: "span" })).toBeInTheDocument();
   expect(screen.getByText("The Kids")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Plex.tv" })).toHaveAttribute(
     "href",
@@ -332,6 +331,12 @@ it("puts the owner first as You and filters by lifecycle", async () => {
       },
     }),
   );
+  // Active is the first filter and the default; paused viewers wait under All.
+  const active = await screen.findByRole("button", { name: /^Active \(/ }, WAIT);
+  expect(screen.getAllByRole("button", { name: /^(Active|All|Paused) \(/ })[0]).toBe(active);
+  await screen.findByText("You", {}, WAIT);
+  expect(screen.queryByText("Sam Rivera")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /^All \(/ }));
   await screen.findByText("Sam Rivera", {}, WAIT);
   // The first data row is the owner, shown as "You" with an Owner badge.
   const rows = screen.getAllByRole("row");
@@ -452,6 +457,7 @@ it("shows a bounded dashboard and ordered viewer sections", async () => {
     "Limits",
     "Sign-in & devices",
     "Lists & alerts",
+    "Fixture viewer.tab",
   ]);
   expect(screen.getByLabelText("Viewer dashboard")).toHaveClass("overflow-hidden");
   expect(screen.getByText("Plays in 30 days")).toBeInTheDocument();

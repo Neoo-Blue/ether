@@ -191,7 +191,6 @@ export default function ViewerProfile() {
           active={tab}
           onSelect={setTab}
           tabs={[
-            ...slots.map(d=>({key:`plugin:${d.owner}:${d.meta!.key}`,label:textOf(d.label)})),
             { key: "overview", label: t("Overview") },
             { key: "home", label: t("Home") },
             { key: "taste", label: t("Taste") },
@@ -200,6 +199,8 @@ export default function ViewerProfile() {
             { key: "limits", label: t("Limits") },
             { key: "sign-in", label: t("Sign-in & devices") },
             ...(serverAccess ? [{ key: "lists", label: t("Lists & alerts") }] : []),
+            // Plugin tabs follow Ether's own sections.
+            ...slots.map(d=>({key:`plugin:${d.owner}:${d.meta!.key}`,label:textOf(d.label)})),
           ]}
         /></SlotAnchor>
       }

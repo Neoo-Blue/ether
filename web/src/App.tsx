@@ -426,7 +426,7 @@ const BUILTIN_PAGES: Record<
   cache: { element: <Cache />, suffix: "/:tab?" },
   playback: { element: <Playback />, suffix: "/:tab?/:section?" },
   notifications: { element: <Notifications />, suffix: "/:tab?" },
-  general: { element: <GeneralPage />, suffix: "/:tab?" },
+  general: { element: <GeneralPage /> },
   apps: { element: <Apps />, suffix: "/:tab?/:section?" },
   integrations: { element: <ServicesPage />, suffix: "/:tab?" },
   cluster: { element: <ClusterPage /> },
