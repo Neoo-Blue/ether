@@ -111,12 +111,13 @@ func (s *Server) handleStartHTTP(w http.ResponseWriter, r *http.Request) {
 		s.d.Transcoder.Stop(p.sessionID)
 	}
 	hs, err := s.d.Transcoder.StartHLS(context.WithoutCancel(ctx), core.HLSRequest{
-		SessionID:   p.sessionID,
-		InputURL:    s.d.Playback.InputURL(ps.ID),
-		Info:        ps.Info,
-		Decision:    dec,
-		StartOffset: p.offset,
-		Protocol:    core.ProtocolHTTP,
+		SessionID:      p.sessionID,
+		InputURL:       s.d.Playback.InputURL(ps.ID),
+		Info:           ps.Info,
+		Decision:       dec,
+		StartOffset:    p.offset,
+		Protocol:       core.ProtocolHTTP,
+		CopyTimestamps: p.copyTimestamps,
 	})
 	if err != nil {
 		s.log.Warn("start HTTP session", "session", p.sessionID, "key", p.key, "err", err)

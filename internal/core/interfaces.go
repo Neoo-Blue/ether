@@ -650,8 +650,9 @@ type Decision struct {
 	// AudioChannels and AudioSampleRate keep the already negotiated audio
 	// decoder configuration across a source change. Zero uses the normal
 	// encoder defaults.
-	AudioChannels   int `json:"audioChannels,omitempty"`
-	AudioSampleRate int `json:"audioSampleRate,omitempty"`
+	AudioChannels    int `json:"audioChannels,omitempty"`
+	AudioBitrateKbps int `json:"audioBitrateKbps,omitempty"`
+	AudioSampleRate  int `json:"audioSampleRate,omitempty"`
 
 	// ToneMap converts HDR (HDR10, HLG, Dolby Vision) video to SDR while
 	// transcoding, for clients without HDR support.
