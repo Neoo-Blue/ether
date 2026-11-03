@@ -61,6 +61,70 @@ func (s *Service) Router() http.Handler {
 			}
 			reply(w, v)
 		})
+		// Page-sized membership reads avoid loading a viewer's entire watchlist.
+		r.Post("/membership", func(w http.ResponseWriter, r *http.Request) {
+			var body struct {
+				Keys []string `json:"keys"`
+			}
+			if json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192)).Decode(&body) != nil || len(body.Keys) > 100 {
+				http.Error(w, "Invalid titles", 400)
+				return
+			}
+			keys := make([]core.RatingKey, 0, len(body.Keys))
+			for _, raw := range body.Keys {
+				k, err := core.ParseRatingKey(raw)
+				if err != nil {
+					http.Error(w, "Invalid title", 400)
+					return
+				}
+				keys = append(keys, k)
+			}
+			found, err := s.ContainsMany(r.Context(), viewer(r).ID, keys)
+			if err != nil {
+				http.Error(w, "Watchlist unavailable", 500)
+				return
+			}
+			out := make(map[string]bool, len(found))
+			for _, k := range keys {
+				out[k.String()] = found[k]
+			}
+			reply(w, out)
+		})
+		writeCatalog := func(w http.ResponseWriter, r *http.Request, add bool) {
+			k, err := core.ParseRatingKey(chi.URLParam(r, "key"))
+			if err != nil {
+				http.Error(w, "Invalid title", 400)
+				return
+			}
+			title, err := s.o.Catalog.Get(r.Context(), k)
+			if err != nil || title == nil || !s.allowed(viewer(r), title) {
+				http.Error(w, "Title unavailable", 404)
+				return
+			}
+			if title.Type != core.TypeMovie && title.Type != core.TypeShow {
+				http.Error(w, "Invalid title", 400)
+				return
+			}
+			var linked bool
+			var pushErr error
+			if writer, ok := s.o.Trakt.(interface {
+				SetWatchlist(context.Context, int64, core.Title, bool) (bool, error)
+			}); ok {
+				linked, pushErr = writer.SetWatchlist(r.Context(), viewer(r).ID, *title, add)
+			}
+			if add {
+				err = s.upsert(r.Context(), viewer(r).ID, "manual", *title)
+			} else {
+				err = s.Remove(r.Context(), viewer(r).ID, k)
+			}
+			if err != nil {
+				http.Error(w, "Watchlist unavailable", 500)
+				return
+			}
+			reply(w, map[string]bool{"saved": add, "traktLinked": linked, "traktFailed": pushErr != nil})
+		}
+		r.Put("/catalog/{key}", func(w http.ResponseWriter, r *http.Request) { writeCatalog(w, r, true) })
+		r.Delete("/catalog/{key}", func(w http.ResponseWriter, r *http.Request) { writeCatalog(w, r, false) })
 		r.Post("/sync", func(w http.ResponseWriter, r *http.Request) {
 			ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
 			defer cancel()
