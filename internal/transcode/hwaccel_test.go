@@ -2,6 +2,7 @@ package transcode
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -275,4 +276,26 @@ func TestDetectVAAPIRCModeProbeAndTonemapProbe(t *testing.T) {
 			t.Fatalf("NoGPUTonemap = true, want false")
 		}
 	})
+}
+
+func TestCUDAP010CapabilityProbe(t *testing.T) {
+	f := features{hwaccels: map[string]bool{"cuda": true}, filters: map[string]bool{"scale_cuda": true, "tonemap_cuda": true, "hwupload_cuda": true}}
+	r := newFakeRunner()
+	d := hwDetector{runner: r, ffmpeg: "ffmpeg"}
+	hw := core.HWAccel{Name: AccelNVENC}
+	if !probeCUDAP010(context.Background(), d, hw, f) {
+		t.Fatal("working P010 probe rejected")
+	}
+	if len(r.runCalls) != 1 || !strings.Contains(argValue(r.runCalls[0], "-vf"), "tonemap_cuda=tonemap=hable:format=p010le") || argValue(r.runCalls[0], "-frames:v") != "1" {
+		t.Fatalf("unexpected probe: %v", r.runCalls)
+	}
+	r.runFunc = func(context.Context, Command) error { return fmt.Errorf("device rejected format") }
+	if probeCUDAP010(context.Background(), d, hw, f) {
+		t.Fatal("failed probe accepted")
+	}
+	before := len(r.runCalls)
+	delete(f.filters, "tonemap_cuda")
+	if probeCUDAP010(context.Background(), d, hw, f) || len(r.runCalls) != before {
+		t.Fatal("unavailable filter should not launch a probe")
+	}
 }

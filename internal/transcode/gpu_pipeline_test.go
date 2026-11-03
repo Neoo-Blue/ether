@@ -119,3 +119,32 @@ func TestHigh10KeepsNVENCWithoutCUDADecoding(t *testing.T) {
 	mustContain(t, args, "-c:v h264_nvenc", "scale=1280:720")
 	mustNotContain(t, args, "-hwaccel cuda", "-hwaccel_output_format cuda", "scale_cuda=")
 }
+
+func TestCUDAP010ToneMapContractAndFallback(t *testing.T) {
+	orig, _ := yellowstone()
+	orig.Video().Width, orig.Video().Height = 3840, 1920
+	orig.Video().ColorPrimaries, orig.Video().ColorSpace, orig.Video().ColorTransfer = "bt709", "bt709", "bt709"
+	contract, ok := contractOf(orig, copyMKV())
+	if !ok {
+		t.Fatal("missing contract")
+	}
+	hdr := mustParse(t, "mkv_hevc_hdr10.json")
+	hdr.Video().Width, hdr.Video().Height = 3840, 1920
+	d := adaptToContract(copyMKV(), orig, hdr, ContainerMatroska, contract)
+	s := contractSpec(t, hdr, d, contract)
+	s.Accel = core.HWAccel{Name: AccelNVENC, Encoders: []string{"hevc_nvenc"}}
+	s.Features.hwaccels = map[string]bool{"cuda": true}
+	s.Features.filters["tonemap_cuda"] = true
+	s.Features.filters["scale_cuda"] = true
+	s.Features.cudaP010ToneMap = true
+	args := buildArgs(s)
+	mustContain(t, args, "-c:v hevc_nvenc", "-profile:v main10", "tonemap_cuda=tonemap=hable:format=p010le:t=bt709:m=bt709:p=bt709", "scale_cuda=w=3840:h=1920:format=p010le")
+	mustNotContain(t, args, "hwdownload", "zscale=", "pad=")
+	s.Features.cudaP010ToneMap = false
+	args = buildArgs(s)
+	mustNotContain(t, args, "tonemap_cuda=", "scale_cuda=")
+	mustContain(t, args, "-c:v hevc_nvenc", "format=p010le", "zscale=")
+	s.Features.cudaP010ToneMap = true
+	s.Target = &videoContract{codec: "hevc", depth: 10, rng: rangeSDR, width: 3840, height: 1920, pic: picture{sarNum: 1, sarDen: 1, prim: "bt709", matrix: "bt709", full: true}}
+	mustNotContain(t, buildArgs(s), "tonemap_cuda=")
+}

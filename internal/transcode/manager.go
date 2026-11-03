@@ -263,8 +263,12 @@ func New(cfg config.Transcode, logger *slog.Logger, opts ...Option) (*Manager, e
 	if !o.detectHW {
 		mode = AccelNone
 	}
-	m.hw = hwDetector{runner: m.runner, ffmpeg: m.ffmpeg, goos: f.goos, log: m.log, statDevice: deviceExists}.
-		detect(ctx, mode, cfg.VAAPIDevice, m.feat)
+	detector := hwDetector{runner: m.runner, ffmpeg: m.ffmpeg, goos: f.goos, log: m.log, statDevice: deviceExists}
+	m.hw = detector.detect(ctx, mode, cfg.VAAPIDevice, m.feat)
+	if m.hw.Name == AccelNVENC {
+		m.feat.cudaP010ToneMap = probeCUDAP010(ctx, detector, m.hw, m.feat)
+		m.log.Info("CUDA P010 tone-map probe", "available", m.feat.cudaP010ToneMap)
+	}
 
 	if o.runtimeDir == "" {
 		m.detectRTX(ctx, f.goos)
