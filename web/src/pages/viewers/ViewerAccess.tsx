@@ -18,7 +18,6 @@ import { api, apiFetch, errorMessage } from "../../lib/api";
 import type { Viewer } from "../../lib/contract";
 import { useAsync } from "../../lib/hooks";
 import { timeZones } from "../livetv/model";
-import { MaxQuality } from "./MaxQuality";
 import { PlexWatchSync } from "./sections/PlexWatchSync";
 import { FromPlexDefaults } from "./FromPlexDefaults";
 import { ViewerLiveTVAccess } from "./sections/ViewerLiveTV";
@@ -121,7 +120,7 @@ export function ViewerAccess({ viewer }: { viewer: Viewer }) {
   const noUser = users.data && (!user || !l);
   const simkl = config.data?.simkl;
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="space-y-6">
       {users.error ? (
         <ErrorPanel error={users.error} onRetry={() => void users.reload()} />
       ) : policy.error ? (
@@ -270,8 +269,6 @@ export function ViewerAccess({ viewer }: { viewer: Viewer }) {
           </SettingsSection>
         </>
       )}
-
-      <MaxQuality viewerId={id} />
 
       <FromPlexDefaults viewerId={id} show="share" />
 

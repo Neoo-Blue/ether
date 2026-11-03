@@ -1,5 +1,6 @@
-import { Badge, Switch } from "@braedonsaunders/appkit-ui";
+import { Badge, Switch, SettingsSection, Tooltip } from "@braedonsaunders/appkit-ui";
 import { useEffect, useState } from "react";
+import { SettingsRow } from "../../components/SettingsRow";
 import { t } from "../../i18n";
 
 type Props = {
@@ -44,36 +45,48 @@ export function FavoriteEpisodeAlerts({ load, save }: Props) {
   }
 
   return (
-    <section className="space-y-2">
-      <h2 className="font-medium">{t("Alerts")}</h2>
-      {save ? (
-        <label className="flex items-center gap-2 text-sm">
-          <Switch
-            checked={enabled ?? false}
-            disabled={enabled === undefined || busy}
-            onChange={() => void change()}
-          />
-          {t("New episodes from favourite shows")}
-        </label>
-      ) : (
-        // Read-only for the owner: this is the viewer's own opt-in, so show
-        // it as status rather than a switch that can never move.
-        <p className="flex items-center gap-2 text-sm">
-          {t("New episodes from favourite shows")}
-          {enabled !== undefined ? (
-            <Badge variant={enabled ? "success" : "default"}>{enabled ? t("On") : t("Off")}</Badge>
-          ) : null}
-        </p>
-      )}
-      <p className="text-sm text-fg-muted">
-        {t("Get alerts about new episodes of favourite shows.")}
-      </p>
-      {!save && (
-        <p className="text-sm text-fg-muted">
-          {t("The viewer can change this setting in their profile.")}
-        </p>
-      )}
+    <SettingsSection title={t("Alerts")}>
+      <SettingsRow
+        title={
+          <span className="inline-flex items-center gap-2">
+            {t("New episodes from favourite shows")}
+            {!save && (
+              <Tooltip content={t("The viewer can change this setting in their profile.")}>
+                <button
+                  type="button"
+                  aria-label={t("About episode alerts")}
+                  className="text-fg-muted"
+                >
+                  ?
+                </button>
+              </Tooltip>
+            )}
+          </span>
+        }
+        control={
+          save ? (
+            <label className="flex items-center gap-2 text-sm">
+              <Switch
+                aria-label={t("New episodes from favourite shows")}
+                checked={enabled ?? false}
+                disabled={enabled === undefined || busy}
+                onChange={() => void change()}
+              />
+            </label>
+          ) : (
+            // Read-only for the owner: this is the viewer's own opt-in, so show
+            // it as status rather than a switch that can never move.
+            <p className="flex items-center gap-2 text-sm">
+              {enabled !== undefined ? (
+                <Badge variant={enabled ? "success" : "default"}>
+                  {enabled ? t("On") : t("Off")}
+                </Badge>
+              ) : null}
+            </p>
+          )
+        }
+      />
       {error && <p role="alert">{t("The request could not be completed. Try again.")}</p>}
-    </section>
+    </SettingsSection>
   );
 }

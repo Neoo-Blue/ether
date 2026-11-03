@@ -157,3 +157,18 @@ export function SubtabNav(props: ComponentProps<typeof AppKitSubtabNav>) {
     </div>
   );
 }
+
+/** URL-backed sections within a page, on the shared sub-tab template. */
+export function PageSubtabs({
+  active,
+  onSelect,
+  tabs,
+  ariaLabel,
+}: {
+  active: string;
+  onSelect: (key: string) => void;
+  tabs: PageTab[];
+  ariaLabel: string;
+}) {
+  return <SubtabNav active={active} onSelect={onSelect} tabs={tabs} ariaLabel={ariaLabel} />;
+}

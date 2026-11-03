@@ -1,19 +1,11 @@
-import {
-  Button,
-  Select,
-  SettingsSection,
-  Spinner,
-  Switch,
-  toast,
-} from "@braedonsaunders/appkit-ui";
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Select, SettingsSection, Spinner, Switch, toast } from "@braedonsaunders/appkit-ui";
+import { useState } from "react";
 import { MoreOptions } from "../../../components/ConfigSection";
 import { ErrorPanel } from "../../../components/feedback";
 import { SaveBar, useDraft } from "../../../components/SaveBar";
 import { SettingsRow } from "../../../components/SettingsRow";
 import { CONTENT_RATINGS } from "../../../components/UserLimits";
-import { t, tn, tx } from "../../../i18n";
+import { t } from "../../../i18n";
 import { apiFetch } from "../../../lib/api";
 import { canonicalRating } from "../../../lib/contentRatings";
 import { useAsync } from "../../../lib/hooks";
@@ -29,35 +21,15 @@ type Policy = {
   favorites: string[];
   maxRating: string;
 };
-type ChannelSummary = {
-  id: string;
-  number: string;
-  name: string;
-  enabled: boolean;
-  private?: boolean;
-};
-
 /** One viewer's Live TV access: channels and extra parental limits (viewer profile › Access). */
 export function ViewerLiveTVAccess({ viewerId }: { viewerId: number }) {
   const policy = useAsync(
     (signal) => apiFetch<Policy>(`/livetv/policies/${viewerId}`, { signal }),
     [viewerId],
   );
-  const channels = useAsync(
-    (signal) => apiFetch<ChannelSummary[]>("/livetv/channels", { signal }),
-    [],
-  );
   const { draft, setDraft, dirty, reset } = useDraft(policy.data);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  const sorted = useMemo(
-    () =>
-      [...(channels.data ?? [])].sort(
-        (a, b) => (parseFloat(a.number) || 0) - (parseFloat(b.number) || 0),
-      ),
-    [channels.data],
-  );
-
   if (policy.error) return <ErrorPanel error={policy.error} onRetry={() => void policy.reload()} />;
   if (!draft)
     return (
@@ -66,36 +38,6 @@ export function ViewerLiveTVAccess({ viewerId }: { viewerId: number }) {
       </div>
     );
 
-  // The same allow-list each channel's Viewers tab edits.
-  const allowed = draft.channels ?? [];
-  const granted = draft.granted ?? [];
-  const permits = (c: ChannelSummary) =>
-    draft.restricted ? allowed.includes(c.id) : !c.private || granted.includes(c.id);
-  const anyPrivate = sorted.some((c) => c.private);
-  const toggle = (c: ChannelSummary, on: boolean) => {
-    if (draft.restricted) {
-      setDraft({
-        ...draft,
-        channels: on ? [...allowed, c.id] : allowed.filter((id) => id !== c.id),
-      });
-    } else if (c.private) {
-      setDraft({
-        ...draft,
-        granted: on ? [...granted, c.id] : granted.filter((id) => id !== c.id),
-      });
-    } else if (!on) {
-      // Turning a public channel off limits them to what they see now.
-      setDraft({
-        ...draft,
-        restricted: true,
-        channels: sorted.filter((x) => x.id !== c.id && permits(x)).map((x) => x.id),
-        granted: [],
-      });
-    }
-  };
-  const allowedCount = channels.data
-    ? sorted.filter((c) => allowed.includes(c.id)).length
-    : allowed.length;
   const save = async () => {
     setSaving(true);
     setError(null);
@@ -163,83 +105,6 @@ export function ViewerLiveTVAccess({ viewerId }: { viewerId: number }) {
             }
           />
         </MoreOptions>
-      </SettingsSection>
-      <SettingsSection
-        title={t("Allowed channels")}
-        description={
-          !draft.restricted
-            ? anyPrivate
-              ? t("All channels, including new ones. Private channels only when turned on.")
-              : t("All channels, including new ones.")
-            : allowedCount
-              ? tn(
-                  allowedCount,
-                  "Only the channel selected below.",
-                  "Only the {count} channels selected below.",
-                )
-              : t("No channels.")
-        }
-      >
-        {channels.error ? (
-          <ErrorPanel error={channels.error} onRetry={() => void channels.reload()} />
-        ) : !channels.data ? (
-          <Spinner size={16} label={t("Loading channels")} />
-        ) : sorted.length === 0 ? (
-          <p className="py-2 text-sm text-fg-muted">
-            {tx("No channels yet. {link}.", {
-              link: (
-                <Link to="/livetv/channels" className="font-medium text-fg underline">
-                  {t("Create one in Live TV")}
-                </Link>
-              ),
-            })}
-          </p>
-        ) : (
-          <div className="space-y-3 py-2">
-            <div className="grid gap-2 sm:grid-cols-2">
-              {sorted.map((c) => (
-                <div key={c.id} className="flex items-center gap-2 text-sm">
-                  <Switch
-                    id={`livetv-${viewerId}-channel-${c.id}`}
-                    aria-label={t("Allow {name}", { name: c.name })}
-                    checked={permits(c)}
-                    disabled={draft.disabled}
-                    onChange={(e) => toggle(c, e.currentTarget.checked)}
-                  />
-                  <label
-                    htmlFor={`livetv-${viewerId}-channel-${c.id}`}
-                    className="min-w-0 truncate"
-                  >
-                    <span className="tabular-nums text-fg-muted">{c.number}</span> {c.name}
-                    {c.private ? (
-                      <span className="ml-1.5 text-xs text-fg-muted">{t("Private")}</span>
-                    ) : null}
-                  </label>
-                </div>
-              ))}
-            </div>
-            {draft.restricted ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={draft.disabled}
-                onClick={() =>
-                  setDraft({
-                    ...draft,
-                    restricted: false,
-                    channels: [],
-                    // Private channels they had stay theirs.
-                    granted: sorted
-                      .filter((c) => c.private && allowed.includes(c.id))
-                      .map((c) => c.id),
-                  })
-                }
-              >
-                {t("Allow all channels")}
-              </Button>
-            ) : null}
-          </div>
-        )}
       </SettingsSection>
       <SaveBar
         dirty={dirty}

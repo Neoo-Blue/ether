@@ -1,5 +1,6 @@
-import { Switch } from "@braedonsaunders/appkit-ui";
+import { Switch, SettingsSection } from "@braedonsaunders/appkit-ui";
 import { useEffect, useState } from "react";
+import { SettingsRow } from "../../components/SettingsRow";
 import { t } from "../../i18n";
 
 type Props = {
@@ -37,20 +38,20 @@ export function FavoritesMirror({ load, save }: Props) {
     }
   }
   return (
-    <section className="space-y-2">
-      <h2 className="font-medium">{t("Favorites in Plex")}</h2>
-      <label className="flex items-center gap-2 text-sm">
-        <Switch
-          checked={enabled ?? false}
-          disabled={enabled === undefined || busy}
-          onChange={() => void change()}
-        />
-        {t("Show my favourites as a playlist in Plex.")}
-      </label>
-      {enabled === false && (
-        <p className="text-sm text-fg-muted">{t("Your favourites are kept when this is off.")}</p>
-      )}
+    <SettingsSection title={t("Favorites in Plex")}>
+      <SettingsRow
+        title={t("Show my favourites as a playlist in Plex.")}
+        description={t("Your favourites are kept when this is off.")}
+        control={
+          <Switch
+            aria-label={t("Show my favourites as a playlist in Plex.")}
+            checked={enabled ?? false}
+            disabled={enabled === undefined || busy}
+            onChange={() => void change()}
+          />
+        }
+      />
       {error && <p role="alert">{t("The request could not be completed. Try again.")}</p>}
-    </section>
+    </SettingsSection>
   );
 }

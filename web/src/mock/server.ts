@@ -161,6 +161,12 @@ function defaultConfig(): EtherConfig {
       defaultStreamLimit: 2,
       maxStreams: 0,
     },
+    frontends: {
+      plex: { enabled: true },
+      jellyfin: { enabled: true },
+      emby: { enabled: true },
+      silo: { enabled: true },
+    },
     plex: {
       token: "••••",
       clientIdentifier: "mock-client",
@@ -2060,6 +2066,9 @@ export function createFakeServer(opts: FakeOptions = {}) {
     backups: () => state.backups,
   });
 
+  const viewerStreamRules = new Map<string, unknown>();
+  const restoredHidden = new Set<string>();
+
   // ---- Router ------------------------------------------------------------------------
 
   async function handle(method: string, url: URL, body: unknown): Promise<Response> {
@@ -2067,10 +2076,11 @@ export function createFakeServer(opts: FakeOptions = {}) {
     if (method === "GET" && p.startsWith("/viewer-plex-defaults/")) {
       const id = Number(p.split("/").pop());
       return json({
-        hasProfile: false,
+        hasProfile: true,
         hasSettings: false,
-        audioLanguage: "",
-        subtitleLanguage: "",
+        audioLanguage: "en",
+        autoSelectAudio: true,
+        subtitleLanguage: "en",
         subtitleMode: "off",
         filterMovies: "",
         filterTelevision: "",
@@ -2094,6 +2104,28 @@ export function createFakeServer(opts: FakeOptions = {}) {
     const q = url.searchParams;
     const seg = p.split("/").filter(Boolean);
     const route = `${method} /${seg.join("/")}`;
+    if (seg[0] === "stream-preferences") {
+      if (seg[2] === "shows") return json([]);
+      const id = seg[1] ?? "0";
+      if (method === "PUT") viewerStreamRules.set(id, body);
+      if (method === "DELETE") viewerStreamRules.delete(id);
+      return json(
+        viewerStreamRules.get(id) ??
+          state.streamDefaults ?? {
+            audioLanguages: ["en"],
+            subtitleLanguages: ["en"],
+            preferOriginal: true,
+            subtitleMode: "foreign-only",
+            subtitleStyle: "normal",
+            loudness: false,
+            nightMode: false,
+            dialogueBoost: false,
+          },
+      );
+    }
+    if (p === "/discovery/settings") return json({ enabled: true });
+    if (seg[0] === "discovery" && seg[1] === "users") return json([]);
+    if (seg[0] === "viewers" && seg[2] === "favorite-episode-alert") return json({ enabled: true });
 
     if (p === "/users/local" && method === "POST") {
       const b = body as { username?: string; password?: string };
@@ -2205,7 +2237,7 @@ export function createFakeServer(opts: FakeOptions = {}) {
 
     const appsOffset = seg[0] === "me" ? 1 : seg[0] === "viewers" && seg[1] ? 2 : -1;
     if (appsOffset >= 0 && seg[appsOffset] === "apps") {
-      const enabled = ["jellyfin", "emby", "silo", "stremio", "webdav", "m3u"].filter(
+      const enabled = ["plex", "jellyfin", "emby", "silo", "stremio", "webdav", "m3u"].filter(
         (id) => state.config.frontends?.[id]?.enabled,
       );
       if (method === "GET" && seg.length === appsOffset + 1) return json({ apps: enabled });
@@ -3659,7 +3691,20 @@ export function createFakeServer(opts: FakeOptions = {}) {
       return json({ ok: true });
     const viewerHidden = /^\/viewers\/(\d+)\/not-interested(?:\/restore)?$/.exec(p);
     if (viewerHidden && (method === "GET" || method === "POST")) {
-      if (method === "GET") return json({ items: [] });
+      if (method === "GET")
+        return json({
+          items: catalog
+            .slice(3, 9)
+            .filter((title) => !restoredHidden.has(`${viewerHidden[1]}:${title.key}`))
+            .map((title) => ({
+              handle: String(title.key),
+              title: title.title,
+              year: title.year,
+              posterPath: undefined,
+              poster: title.poster,
+            })),
+        });
+      restoredHidden.add(`${viewerHidden[1]}:${(body as { handle: string }).handle}`);
       return json({ restored: true });
     }
     return err(404, "not_found", "no such API endpoint");

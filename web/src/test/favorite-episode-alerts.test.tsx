@@ -32,7 +32,6 @@ it("shows an owner the saved preference as status, not a dead switch", async () 
   render(<FavoriteEpisodeAlerts load={load} />);
   expect(await screen.findByText("Off")).toBeInTheDocument();
   expect(screen.queryByRole("switch")).toBeNull();
-  expect(
-    screen.getByText("The viewer can change this setting in their profile."),
-  ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "About episode alerts" })).toBeInTheDocument();
+  expect(screen.queryByText("The viewer can change this setting in their profile.")).toBeNull();
 });

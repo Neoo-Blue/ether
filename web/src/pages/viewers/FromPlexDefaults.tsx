@@ -1,7 +1,7 @@
-import { SettingsSection } from "@braedonsaunders/appkit-ui";
+import { Badge, SettingsSection } from "@braedonsaunders/appkit-ui";
 import { SettingsRow } from "../../components/SettingsRow";
 import { t } from "../../i18n";
-import { apiFetch } from "../../lib/api";
+import { api, apiFetch } from "../../lib/api";
 import { useAsync } from "../../lib/hooks";
 
 export type ShareFilterPart = { kind: string; values: string[] };
@@ -79,6 +79,7 @@ export function FromPlexDefaults({
   viewerId: number;
   show: "tracks" | "share";
 }) {
+  const config = useAsync(() => api.getConfig(), []);
   const data = useAsync(
     (signal) =>
       apiFetch<PlexViewerDefaults>(`/viewer-plex-defaults/${viewerId}`, { signal }).catch(
@@ -87,7 +88,7 @@ export function FromPlexDefaults({
     [viewerId],
   );
   const d = data.data;
-  if (!d) return null;
+  if (!d || config.data?.frontends?.plex?.enabled === false || !config.data) return null;
   if (show === "tracks" && !d.hasProfile && !d.audioLanguage && !d.subtitleLanguage) return null;
   if (
     show === "share" &&
@@ -106,32 +107,32 @@ export function FromPlexDefaults({
         <>
           <SettingsRow
             title={t("Audio language")}
-            control={<span>{d.audioLanguage || t("None")}</span>}
+            control={<Badge>{d.audioLanguage || t("None")}</Badge>}
           />
           <SettingsRow
             title={t("Auto-select audio")}
-            control={<span>{yesNo(d.autoSelectAudio)}</span>}
+            control={<Badge>{yesNo(d.autoSelectAudio)}</Badge>}
           />
           <SettingsRow
             title={t("Subtitle language")}
-            control={<span>{d.subtitleLanguage || t("None")}</span>}
+            control={<Badge>{d.subtitleLanguage || t("None")}</Badge>}
           />
           <SettingsRow
             title={t("Subtitle mode")}
-            control={<span>{modeLabel(d.subtitleMode)}</span>}
+            control={<Badge>{modeLabel(d.subtitleMode)}</Badge>}
           />
         </>
       ) : (
         <>
           <SettingsRow
             title={t("Movie filter")}
-            control={<span>{formatFilter(d.filterMoviesParts, d.filterMovies)}</span>}
+            control={<Badge>{formatFilter(d.filterMoviesParts, d.filterMovies)}</Badge>}
           />
           <SettingsRow
             title={t("TV filter")}
-            control={<span>{formatFilter(d.filterTelevisionParts, d.filterTelevision)}</span>}
+            control={<Badge>{formatFilter(d.filterTelevisionParts, d.filterTelevision)}</Badge>}
           />
-          <SettingsRow title={t("Downloads")} control={<span>{yesNo(d.allowSync)}</span>} />
+          <SettingsRow title={t("Downloads")} control={<Badge>{yesNo(d.allowSync)}</Badge>} />
           <p className="px-5 py-2 text-xs text-fg-muted">
             {t(
               "Label filters apply to the TMDB collection name only. Titles without a collection name are not hidden.",

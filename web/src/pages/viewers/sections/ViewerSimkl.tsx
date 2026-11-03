@@ -51,7 +51,7 @@ export function ViewerSimkl({ viewerId, ready }: { viewerId: number; ready: bool
   if (!ready) {
     return (
       <SettingsSection title="Simkl">
-        <p className="py-3 text-sm text-fg-muted">
+        <p className="px-5 py-4 text-sm text-fg-muted">
           {tx("Turn on Simkl in {link} to connect this viewer's account.", {
             link: (
               <Link to="/services/simkl" className="font-medium text-primary hover:underline">

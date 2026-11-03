@@ -249,49 +249,51 @@ export default function SignInMethods({
           </div>
         )}
       </SettingsSection>
-      <form onSubmit={update}>
-        <SettingsSection
-          title={t("Password")}
-          description={t("Choose a username and password. Saving replaces the current password.")}
-          footer={
-            <Button type="submit" disabled={busy || passwordTooShort}>
-              {t("Set or reset password")}
-            </Button>
-          }
-        >
-          <SettingsRow stacked title={t("Username")}>
-            <Input
-              id={`${base}-username`}
-              aria-label={t("Username")}
-              value={username}
-              onChange={(e) => setUsername(e.currentTarget.value)}
-              autoComplete="username"
-              required
-            />
-          </SettingsRow>
-          <SettingsRow
-            stacked
-            title={t("New password")}
-            description={t("Use at least 12 characters.")}
+      {!owner ? (
+        <form onSubmit={update}>
+          <SettingsSection
+            title={t("Password")}
+            description={t("Choose a username and password. Saving replaces the current password.")}
+            footer={
+              <Button type="submit" disabled={busy || passwordTooShort}>
+                {t("Set or reset password")}
+              </Button>
+            }
           >
-            <PasswordInput
-              id={`${base}-password`}
-              aria-label={t("New password")}
-              aria-invalid={passwordTooShort || undefined}
-              minLength={MIN_LOCAL_PASSWORD}
-              value={password}
-              onChange={(e) => setPassword(e.currentTarget.value)}
-              autoComplete="new-password"
-              required
-            />
-            {passwordTooShort ? (
-              <p className="mt-1 text-xs text-danger" role="alert">
-                {t("Password must be at least 12 characters.")}
-              </p>
-            ) : null}
-          </SettingsRow>
-        </SettingsSection>
-      </form>
+            <SettingsRow stacked title={t("Username")}>
+              <Input
+                id={`${base}-username`}
+                aria-label={t("Username")}
+                value={username}
+                onChange={(e) => setUsername(e.currentTarget.value)}
+                autoComplete="username"
+                required
+              />
+            </SettingsRow>
+            <SettingsRow
+              stacked
+              title={t("New password")}
+              description={t("Use at least 12 characters.")}
+            >
+              <PasswordInput
+                id={`${base}-password`}
+                aria-label={t("New password")}
+                aria-invalid={passwordTooShort || undefined}
+                minLength={MIN_LOCAL_PASSWORD}
+                value={password}
+                onChange={(e) => setPassword(e.currentTarget.value)}
+                autoComplete="new-password"
+                required
+              />
+              {passwordTooShort ? (
+                <p className="mt-1 text-xs text-danger" role="alert">
+                  {t("Password must be at least 12 characters.")}
+                </p>
+              ) : null}
+            </SettingsRow>
+          </SettingsSection>
+        </form>
+      ) : null}
       {showInvite ? (
         <SettingsSection
           title={t("Invite")}
@@ -351,13 +353,10 @@ export default function SignInMethods({
             );
           })
         ) : (
-          <div className="px-5 py-6">
-            <EmptyState
-              icon={<MonitorSmartphone />}
-              title={t("No devices.")}
-              description={t("Nothing is signed in with this account yet.")}
-            />
-          </div>
+          <p className="flex items-center gap-2 px-5 py-4 text-sm text-fg-muted">
+            <MonitorSmartphone size={16} />
+            {t("No devices.")}
+          </p>
         )}
       </SettingsSection>
     </div>

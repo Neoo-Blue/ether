@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
-import { Button } from "@braedonsaunders/appkit-ui";
+import { Button, buttonVariants } from "@braedonsaunders/appkit-ui";
+import {
+  PlexMark,
+  JellyfinMark,
+  EmbyMark,
+  SiloMark,
+  householdIcon,
+} from "../../components/integration-brands";
+import { StremioMark } from "../sources/marks";
 import { t } from "../../i18n";
 
 type Connection = {
@@ -10,6 +18,7 @@ type Connection = {
   qr: string;
 };
 const names: Record<string, string> = {
+  plex: "Plex",
   jellyfin: "Jellyfin",
   emby: "Emby",
   silo: "Silo",
@@ -92,57 +101,85 @@ function ConnectAppsSession({ base, token }: { base: string; token: string }) {
     <section className="space-y-3">
       <div className="space-y-1">
         <h2 className="text-lg font-semibold">{t("Connect apps")}</h2>
-        <p className="text-sm text-fg-muted">
-          {t("Server address and app password for Infuse, Swiftfin, and other apps.")}
-        </p>
       </div>
-      {apps
-        .filter((id) => names[id])
-        .map((id) => (
-          <div key={id} className="rounded border border-border p-3 space-y-2">
-            <p>{names[id]}</p>
-            <Button disabled={busy} onClick={() => void create(id)}>
-              {t("Create connection")}
-            </Button>
-            {connection?.surface === id && (
-              <div className="space-y-2">
-                <p>{t("This secret is shown only once.")}</p>
-                <code>{connection.url}</code>
-                {connection.username && (
-                  <p>
-                    {t("Username")}: {connection.username}
-                  </p>
+      <div className="flex flex-wrap gap-3 md:flex-nowrap">
+        {apps
+          .filter((id) => names[id])
+          .map((id) => (
+            <div
+              key={id}
+              className="flex-1 min-w-40 rounded-xl border border-border bg-surface p-4 space-y-3"
+            >
+              <div className="flex items-center gap-3 font-semibold">
+                {id === "plex" ? (
+                  <PlexMark />
+                ) : id === "jellyfin" ? (
+                  <JellyfinMark />
+                ) : id === "emby" ? (
+                  <EmbyMark />
+                ) : id === "silo" ? (
+                  <SiloMark />
+                ) : id === "stremio" ? (
+                  <StremioMark />
+                ) : (
+                  householdIcon(id)
                 )}
-                {connection.password && (
-                  <p>
-                    {t("Password")}: <code>{connection.password}</code>
-                  </p>
-                )}
-                <Button
-                  onClick={() =>
-                    void navigator.clipboard.writeText(connection.password || connection.url)
-                  }
-                >
-                  {t("Copy token")}
-                </Button>
-                <Button onClick={() => setShowQR(!showQR)}>{t("Show QR code")}</Button>
-                {showQR && (
-                  <img
-                    src={connection.qr}
-                    alt={t("QR code for the server address")}
-                    width={192}
-                    height={192}
-                  />
-                )}
-                {id === "stremio" && (
-                  <a href={connection.url.replace(/^https?:\/\//, "stremio://")}>
-                    {t("Open in Stremio")}
-                  </a>
-                )}
+                {names[id]}
               </div>
-            )}
-          </div>
-        ))}
+              {id === "plex" ? (
+                <a
+                  className={buttonVariants({ variant: "default", size: "sm" })}
+                  href="https://app.plex.tv"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {t("Open Plex")}
+                </a>
+              ) : (
+                <Button size="sm" disabled={busy} onClick={() => void create(id)}>
+                  {t("Create connection")}
+                </Button>
+              )}
+              {connection?.surface === id && (
+                <div className="space-y-2">
+                  <p>{t("This secret is shown only once.")}</p>
+                  <code>{connection.url}</code>
+                  {connection.username && (
+                    <p>
+                      {t("Username")}: {connection.username}
+                    </p>
+                  )}
+                  {connection.password && (
+                    <p>
+                      {t("Password")}: <code>{connection.password}</code>
+                    </p>
+                  )}
+                  <Button
+                    onClick={() =>
+                      void navigator.clipboard.writeText(connection.password || connection.url)
+                    }
+                  >
+                    {t("Copy token")}
+                  </Button>
+                  <Button onClick={() => setShowQR(!showQR)}>{t("Show QR code")}</Button>
+                  {showQR && (
+                    <img
+                      src={connection.qr}
+                      alt={t("QR code for the server address")}
+                      width={192}
+                      height={192}
+                    />
+                  )}
+                  {id === "stremio" && (
+                    <a href={connection.url.replace(/^https?:\/\//, "stremio://")}>
+                      {t("Open in Stremio")}
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+      </div>
       {error && <p role="alert">{error}</p>}
     </section>
   );
