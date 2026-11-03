@@ -177,12 +177,15 @@ func (r *frontendRuntime) refreshLAN() {
 		return
 	}
 	r.lanChecking = true
+	generation := r.lanGeneration
 	r.mu.Unlock()
 	go func() {
 		targets, id := r.lanInputs()
 		result := probeLAN(r.ctx, targets, id)
 		r.mu.Lock()
-		r.lan = result
+		if generation == r.lanGeneration && !r.closed {
+			r.lan = result
+		}
 		r.lanChecking = false
 		r.mu.Unlock()
 	}()

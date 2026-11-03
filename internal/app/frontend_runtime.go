@@ -53,6 +53,7 @@ type frontendRuntime struct {
 	lifecycleMu    sync.Mutex
 	lan            lanCheck
 	lanChecking    bool
+	lanGeneration  uint64
 	discoveryError string
 	runCtx         context.Context
 	mainAddr       net.Addr
@@ -518,6 +519,7 @@ func (r *frontendRuntime) start(ctx context.Context, addr net.Addr) {
 	r.runCtx = ctx
 	r.mainAddr = addr
 	r.lan = lanCheck{}
+	r.lanGeneration++
 	r.mu.Unlock()
 	r.control.Reconcile(r.ctx, r.app.cfg.Get())
 	r.mu.Lock()
@@ -552,6 +554,7 @@ func (r *frontendRuntime) stop() {
 	r.runCtx = nil
 	r.mainAddr = nil
 	r.lan = lanCheck{}
+	r.lanGeneration++
 	if r.gdmRunning {
 		r.discovery.Stop()
 		r.discovery = nil
