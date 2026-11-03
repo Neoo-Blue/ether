@@ -681,14 +681,25 @@ const Me = lazy(() => import("./pages/me/Me"));
 export default function App() {
   const location = useLocation();
   const [ready, setReady] = useState(false);
-  const [animation, setAnimation] = useState<boolean | null>(null);
-  const onReady = useCallback((enabled?: boolean) => {
-    if (enabled === undefined) {
-      try { enabled = localStorage.getItem("ether.startupAnimation") !== "false"; } catch { enabled = true; }
-    } else {
-      try { localStorage.setItem("ether.startupAnimation", String(enabled)); } catch { /* Storage is optional. */ }
+  // Decided at page open from the last known server value, so the splash's
+  // minimum time runs from load (not from bootstrap) and never flashes on a
+  // server that turned it off. The server's answer can only hide it.
+  const [animation, setAnimation] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("ether.startupAnimation") !== "false";
+    } catch {
+      return true;
     }
-    setAnimation(enabled);
+  });
+  const onReady = useCallback((enabled?: boolean) => {
+    if (enabled !== undefined) {
+      try {
+        localStorage.setItem("ether.startupAnimation", String(enabled));
+      } catch {
+        /* Storage is optional. */
+      }
+      if (!enabled) setAnimation(false);
+    }
     setReady(true);
   }, []);
   return (
