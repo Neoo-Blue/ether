@@ -1144,6 +1144,25 @@ func subtitleArgs(input string, streamIndex int) []string {
 	return append(args, "-i", input, "-map", fmt.Sprintf("0:%d", streamIndex), "-c:s", "webvtt", "-f", "webvtt", "pipe:1")
 }
 
+// subtitleStreamArgs streams one embedded text subtitle stream from from
+// as an ASS script on stdout: input seek with -copyts keeps the cue times
+// on the title clock, and every event is written as soon as it is read.
+// throttle reads the first minute at full speed and then 1.5x real time.
+func subtitleStreamArgs(input string, streamIndex int, from time.Duration, throttle bool) []string {
+	args := []string{"-hide_banner", "-nostdin", "-loglevel", "error"}
+	input = backgroundReadURL(input)
+	args = append(args, inputSafetyArgs(input, false)...)
+	args = append(args, httpInputArgs(input, true)...)
+	if throttle {
+		args = append(args, "-readrate", "1.5", "-readrate_initial_burst", "60")
+	}
+	if from > 0 {
+		args = append(args, "-ss", secs(from))
+	}
+	return append(args, "-copyts", "-i", input, "-map", fmt.Sprintf("0:%d", streamIndex),
+		"-c:s", "ass", "-f", "ass", "-ignore_readorder", "1", "-flush_packets", "1", "pipe:1")
+}
+
 // vaapiCQPForBitrate derives a constant-quantizer value (18..36) when a VAAPI
 // driver only supports CQP (for example low-power EncSliceLP without EU rate-
 // control shaders), scaling QP to roughly match the requested bitrate budget

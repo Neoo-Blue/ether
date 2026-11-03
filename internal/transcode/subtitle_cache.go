@@ -98,6 +98,18 @@ func (c *subtitleCache) extract(ctx context.Context, key string, run func(contex
 	return e.data, nil
 }
 
+// cached returns a finished track without starting an extraction.
+func (c *subtitleCache) cached(key string) ([]byte, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.m[key]
+	if !ok || e.elem == nil {
+		return nil, false
+	}
+	c.lru.MoveToFront(e.elem)
+	return e.data, true
+}
+
 func subtitleCacheKey(source, inputCodec string, index int) string {
 	return source + "\x00" + strconv.Itoa(index) + "\x00" + inputCodec
 }

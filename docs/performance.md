@@ -309,6 +309,11 @@ catalogue's. Before, it refreshed every series' seasons on the request.
 - An extracted embedded subtitle track is cached per release and track, so
   a seek, a retry or the next session does not run ffmpeg over the file
   again.
+- Plex Web's soft subtitles are streamed as ASS from the player's position
+  instead of after a whole-release read: the cues arrive as the source is
+  read, the first minute at full speed and then at 1.5x real time as a
+  background read, with at most four such readers at once. A track already
+  cached whole is answered from the cache.
 - Identical concurrent work is collapsed with `internal/flight`, the
   singleflight used by TMDB reads, catalogue trends and stats.
 - Per-viewer caches must key on the viewer and on the viewer-policy

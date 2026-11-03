@@ -180,16 +180,19 @@ func withFinder(f finder) Option { return func(o *options) { o.finder = &f } }
 
 // Manager runs ffmpeg for Ether. It implements core.Transcoder.
 type Manager struct {
-	subtitles      subtitleCache
-	rtxSetup       *rtxSetupWorker
-	audioMatchBusy atomic.Bool
-	rtx            rtxBackendState
-	encoders       map[*encoderLifetime]struct{}
-	encoderIDs     map[string]*encoderLifetime
-	encoderLimit   int
-	encoderTimeout time.Duration
-	encoderRemove  func(string) error
-	reaperDone     chan struct{}
+	subtitles subtitleCache
+	// subtitleSlotsCh bounds concurrent StreamSubtitle readers.
+	subtitleSlotsCh   chan struct{}
+	subtitleSlotsOnce sync.Once
+	rtxSetup          *rtxSetupWorker
+	audioMatchBusy    atomic.Bool
+	rtx               rtxBackendState
+	encoders          map[*encoderLifetime]struct{}
+	encoderIDs        map[string]*encoderLifetime
+	encoderLimit      int
+	encoderTimeout    time.Duration
+	encoderRemove     func(string) error
+	reaperDone        chan struct{}
 
 	log     *slog.Logger
 	opts    options
@@ -1083,6 +1086,77 @@ func (m *Manager) ExtractSubtitle(ctx context.Context, inputURL string, streamIn
 		return err
 	}
 	return m.extractSubtitle(ctx, inputURL, streamIndex, w)
+}
+
+// CachedSubtitle is the WebVTT of a track ExtractSubtitle already read
+// whole for the source named by WithSubtitleSource, without reading
+// anything.
+func (m *Manager) CachedSubtitle(ctx context.Context, streamIndex int, codec string) ([]byte, bool) {
+	source, _ := ctx.Value(subtitleSourceKey{}).(string)
+	if source == "" {
+		return nil, false
+	}
+	return m.subtitles.cached(subtitleCacheKey(source, codec, streamIndex))
+}
+
+// maxSubtitleStreams bounds the soft-subtitle readers running at once.
+const maxSubtitleStreams = 4
+
+// StreamSubtitle writes one embedded text subtitle stream as an ASS script
+// while it reads the input from from onward: the header first, then each
+// event as its packet is read, on the title clock (-copyts). This is what
+// Plex's HTML player reads (libjass parses the script as it arrives), so
+// the cues around the playhead arrive in seconds instead of after the whole
+// release. After a one-minute burst the input is read at 1.5x real time,
+// as a background read, so it stays ahead of playback without competing
+// with it. At most maxSubtitleStreams run at once; a caller waits for a
+// slot until ctx ends.
+func (m *Manager) StreamSubtitle(ctx context.Context, inputURL string, streamIndex int, codec string, from time.Duration, w io.Writer) error {
+	if codec != "" && IsImageSubtitle(codec) {
+		return ErrImageSubtitle
+	}
+	select {
+	case m.subtitleSlots() <- struct{}{}:
+		defer func() { <-m.subtitleSlots() }()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	counted := &byteCounter{w: w}
+	err := m.streamSubtitle(ctx, subtitleStreamArgs(inputURL, streamIndex, from, true), counted)
+	if err != nil && ctx.Err() == nil && counted.n == 0 {
+		// An FFmpeg without -readrate_initial_burst (before 6.1) refuses
+		// the arguments outright; read unthrottled instead.
+		err = m.streamSubtitle(ctx, subtitleStreamArgs(inputURL, streamIndex, from, false), w)
+	}
+	return err
+}
+
+func (m *Manager) subtitleSlots() chan struct{} {
+	m.subtitleSlotsOnce.Do(func() { m.subtitleSlotsCh = make(chan struct{}, maxSubtitleStreams) })
+	return m.subtitleSlotsCh
+}
+
+func (m *Manager) streamSubtitle(ctx context.Context, args []string, w io.Writer) error {
+	var stderr tailWriter
+	if err := m.runner.Run(ctx, Command{Path: m.ffmpeg, Args: args, Stdout: w, Stderr: &stderr}); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return fmt.Errorf("transcode: stream subtitle: %w: %s", err, tail(stderr.String(), 300))
+	}
+	return nil
+}
+
+// byteCounter counts what reached w.
+type byteCounter struct {
+	w io.Writer
+	n int64
+}
+
+func (c *byteCounter) Write(b []byte) (int, error) {
+	n, err := c.w.Write(b)
+	c.n += int64(n)
+	return n, err
 }
 
 func (m *Manager) extractSubtitle(ctx context.Context, inputURL string, streamIndex int, w io.Writer) error {
