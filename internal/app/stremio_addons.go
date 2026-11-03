@@ -72,8 +72,16 @@ func (a *App) syncAddonIndexers(ctx context.Context) error {
 	have := map[string]bool{}
 	rows := cfg.Indexers[:0:0]
 	for _, ix := range cfg.Indexers {
+		if ix.Kind == config.IndexerKindStremio {
+			// A legacy row still waiting for migration already stands for
+			// its add-on.
+			if id, _, err := plugins.StremioInstallID(ix.URL); err == nil {
+				have[id] = true
+			}
+		}
 		if ix.IsAddon() {
-			if _, ok := streams[ix.Plugin]; !ok {
+			// One row per add-on: the first keeps its place.
+			if _, ok := streams[ix.Plugin]; !ok || have[ix.Plugin] {
 				changed = true
 				continue
 			}

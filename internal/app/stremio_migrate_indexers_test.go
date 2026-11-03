@@ -59,7 +59,9 @@ func TestLegacyStremioIndexersBecomeAddonRows(t *testing.T) {
 	a.migrateLegacyStremio(ctx)
 
 	rows := a.cfg.Get().Indexers
-	if len(rows) != 3 {
+	// Two legacy rows of one link become one add-on row (the first keeps
+	// its place); no extra row is added for the add-on.
+	if len(rows) != 2 {
 		t.Fatalf("rows: %+v", rows)
 	}
 	got := rows[1]
@@ -77,9 +79,6 @@ func TestLegacyStremioIndexersBecomeAddonRows(t *testing.T) {
 		t.Fatalf("link not kept with its configuration: %q", rec.SourceURL)
 	}
 	// The configure link and the manifest link are the same add-on.
-	if rows[2].Plugin != got.Plugin {
-		t.Fatalf("same link made two add-ons: %q %q", rows[2].Plugin, got.Plugin)
-	}
 	recs, _ := a.pluginManager().List(ctx)
 	if len(recs) != 1 {
 		t.Fatalf("add-ons: %d", len(recs))
