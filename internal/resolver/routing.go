@@ -370,11 +370,13 @@ func (s *Service) sourceAlwaysFirst(cands []candidate, want string, trace *Trace
 		if a.langOK != b.langOK {
 			return a.langOK
 		}
-		if a.rel.Score != b.rel.Score && (a.verified || b.verified) {
-			return a.rel.Score > b.rel.Score
-		}
 		return preferred(a) && !preferred(b)
 	})
+	// A remembered success may break a score tie, but cannot jump ahead
+	// of a higher-scored lead solely through source preference.
+	if len(out) > 0 && out[0].verified && out[0].rel.Score < cands[0].rel.Score {
+		return cands
+	}
 	if trace != nil && len(out) > 0 && preferred(out[0]) && out[0].rel.ID != cands[0].rel.ID {
 		if i := out[0].trace; i >= 0 && i < len(trace.Candidates) {
 			trace.Candidates[i].Route = "owner puts " + sourceName(want) + " first"
