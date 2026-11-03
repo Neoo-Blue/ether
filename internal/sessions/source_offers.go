@@ -2,10 +2,12 @@ package sessions
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"math/big"
 	"strconv"
 	"time"
 
@@ -28,6 +30,38 @@ type sourceOffers struct {
 	maxTotal int
 }
 type offerSelector struct{ kind, reference, revision string }
+
+// siloOfferID allocates a bounded random wire identifier, distinct from the
+// durable offer ID. The admission lock serializes allocation across nodes.
+func siloOfferID(ctx context.Context, tx *sql.Tx, offerID int64) (int64, error) {
+	var id int64
+	err := tx.QueryRowContext(ctx, `SELECT id FROM silo_source_offer_ids WHERE offer_id=?`, offerID).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return 0, err
+	}
+	for attempt := 0; attempt < 32; attempt++ {
+		n, err := rand.Int(rand.Reader, big.NewInt((1<<30)-1))
+		if err != nil {
+			return 0, err
+		}
+		id = n.Int64() + 1
+		result, err := tx.ExecContext(ctx, `INSERT INTO silo_source_offer_ids(id,offer_id) VALUES(?,?) ON CONFLICT DO NOTHING`, id, offerID)
+		if err != nil {
+			return 0, err
+		}
+		count, err := result.RowsAffected()
+		if err != nil {
+			return 0, err
+		}
+		if count == 1 {
+			return id, nil
+		}
+	}
+	return 0, core.ErrNotAvailable
+}
 
 func NewSourceOffers(db *sql.DB, b *Broker, protocol frontend.Protocol) (frontend.SourceOffers, error) {
 	if db == nil || b == nil || protocol == "" {
@@ -213,6 +247,12 @@ func (s *sourceOffers) IssueBatch(ctx context.Context, scope frontend.VersionSco
 		if id <= 1<<31-1 || id > maxSourceOfferID {
 			return nil, core.ErrNotAvailable
 		}
+		if s.protocol == frontend.Protocol("silo") {
+			id, err = siloOfferID(ctx, tx, id)
+			if err != nil {
+				return nil, err
+			}
+		}
 		resolved := frontend.SourceOfferTarget{Item: item}
 		if selector.kind == "detail" {
 			resolved.DetailSource, resolved.ETag = selector.reference, selector.revision
@@ -231,8 +271,13 @@ func (s *sourceOffers) read(ctx context.Context, scope frontend.VersionScope, id
 	var out frontend.SourceOffer
 	var h capability.Header
 	n, err := strconv.ParseInt(id, 10, 64)
-	if err != nil || n <= 1<<31-1 || n > maxSourceOfferID || strconv.FormatInt(n, 10) != id {
+	if err != nil || strconv.FormatInt(n, 10) != id || (s.protocol == frontend.Protocol("silo") && (n <= 0 || n >= 1<<30)) || (s.protocol != frontend.Protocol("silo") && (n <= 1<<31-1 || n > maxSourceOfferID)) {
 		return out, h, frontend.ErrSourceGone
+	}
+	if s.protocol == frontend.Protocol("silo") {
+		if err = s.db.QueryRowContext(ctx, `SELECT offer_id FROM silo_source_offer_ids WHERE id=?`, n).Scan(&n); err != nil {
+			return out, h, offerLookupError(err)
+		}
 	}
 	if scope.Protocol != s.protocol || scope.Viewer == nil || scope.Device.ID == "" {
 		return out, h, core.ErrNotFound
@@ -264,7 +309,7 @@ func (s *sourceOffers) Resolve(ctx context.Context, scope frontend.VersionScope,
 		return frontend.SourceOffer{}, err
 	}
 	scope.Viewer = viewer
-	out, _, err := s.read(ctx, scope, id)
+	out, header, err := s.read(ctx, scope, id)
 	if err != nil {
 		return out, err
 	}
@@ -291,7 +336,12 @@ func (s *sourceOffers) Resolve(ctx context.Context, scope frontend.VersionScope,
 	// Recheck header revocation after policy/selector lookup before publishing.
 	var live int
 	number, _ := strconv.ParseInt(id, 10, 64)
-	err = tx.QueryRowContext(ctx, `SELECT 1 FROM capability_headers WHERE namespace=? AND digest=(SELECT digest FROM sessions_source_offers WHERE id=?) AND viewer_id=? AND surface=? AND device_id=? AND expires>?`, sourceOfferNamespace, number, scope.Viewer.ID, string(s.protocol), scope.Device.ID, s.broker.deps.Now().UnixMilli()).Scan(&live)
+	if s.protocol == frontend.Protocol("silo") {
+		if err = tx.QueryRowContext(ctx, `SELECT offer_id FROM silo_source_offer_ids WHERE id=?`, number).Scan(&number); err != nil {
+			return frontend.SourceOffer{}, offerLookupError(err)
+		}
+	}
+	err = tx.QueryRowContext(ctx, `SELECT 1 FROM capability_headers WHERE namespace=? AND digest=? AND digest=(SELECT digest FROM sessions_source_offers WHERE id=?) AND viewer_id=? AND surface=? AND device_id=? AND expires>?`, sourceOfferNamespace, header.Digest, number, scope.Viewer.ID, string(s.protocol), scope.Device.ID, s.broker.deps.Now().UnixMilli()).Scan(&live)
 	if err != nil {
 		return frontend.SourceOffer{}, offerLookupError(err)
 	}

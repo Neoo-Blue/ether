@@ -25,4 +25,5 @@ func init() {
  CHECK((kind='version' AND revision='') OR (kind='detail' AND revision<>'')),UNIQUE(namespace,digest),
  FOREIGN KEY(namespace,digest) REFERENCES capability_headers(namespace,digest) ON DELETE CASCADE
  );CREATE INDEX sessions_source_offers_target ON sessions_source_offers(item_id,kind,reference,revision);`)
+	store.Register("sessions_source_offers", 2, `CREATE TABLE silo_source_offer_ids (id INTEGER PRIMARY KEY CHECK(id>0 AND id<1073741824), offer_id BIGINT NOT NULL UNIQUE REFERENCES sessions_source_offers(id) ON DELETE CASCADE);`)
 }

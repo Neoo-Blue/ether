@@ -82,6 +82,11 @@ func (i *instance) searchSubtitles(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			seen[offer.ID] = true
+			wireID, err := i.wireID(r.Context(), "subtitle", offer.ID)
+			if err != nil {
+				http.Error(w, "Unavailable", http.StatusServiceUnavailable)
+				return
+			}
 			name := offer.Name
 			if name == "" {
 				name = "Subtitle"
@@ -91,7 +96,7 @@ func (i *instance) searchSubtitles(w http.ResponseWriter, r *http.Request) {
 				format = "srt"
 			}
 			results = append(results, map[string]any{
-				"id": offer.ID, "provider": "opensubtitles", "language": language, "release_name": name,
+				"id": wireID, "provider": "opensubtitles", "language": language, "release_name": name,
 				"format": format, "score": offer.Rating, "downloads": offer.Downloads, "hearing_impaired": offer.HearingImpaired,
 			})
 		}
@@ -122,7 +127,12 @@ func (i *instance) downloadSubtitle(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if _, err := i.host.Subtitles.Download(r.Context(), viewer, device(r), key, body.SubtitleID); err != nil {
+	nativeID, err := i.nativeID(r.Context(), "subtitle", body.SubtitleID)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if _, err := i.host.Subtitles.Download(r.Context(), viewer, device(r), key, nativeID); err != nil {
 		if errors.Is(err, frontend.ErrNotFound) {
 			http.NotFound(w, r)
 			return

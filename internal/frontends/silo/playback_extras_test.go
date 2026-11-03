@@ -124,7 +124,7 @@ func TestSiloSubtitleSearchDoesNotDownloadUntilSelection(t *testing.T) {
 		t.Fatal(err)
 	}
 	search := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/subtitles/search", strings.NewReader(`{"media_file_id":"2147483648","languages":["en"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/subtitles/search", strings.NewReader(`{"media_file_id":"101","languages":["en"]}`))
 	req.Header.Set("Authorization", "Bearer grant")
 	inst.Handler().ServeHTTP(search, req)
 	if search.Code != 200 || catalog.downloads != 0 || !strings.Contains(search.Body.String(), `"id":"42"`) || !strings.Contains(search.Body.String(), `"provider":"opensubtitles"`) {
@@ -138,7 +138,7 @@ func TestSiloSubtitleSearchDoesNotDownloadUntilSelection(t *testing.T) {
 		t.Fatalf("status %d %s", status.Code, status.Body.String())
 	}
 	download := httptest.NewRecorder()
-	body := `{"media_file_id":"2147483648","provider":"opensubtitles","subtitle_id":"42","language":"en","release_name":"Release","score":1.5,"hearing_impaired":false}`
+	body := `{"media_file_id":"101","provider":"opensubtitles","subtitle_id":"42","language":"en","release_name":"Release","score":1.5,"hearing_impaired":false}`
 	down := httptest.NewRequest(http.MethodPost, "/api/v2/subtitles/download", strings.NewReader(body))
 	down.Header.Set("Authorization", "Bearer grant")
 	inst.Handler().ServeHTTP(download, down)
@@ -146,7 +146,7 @@ func TestSiloSubtitleSearchDoesNotDownloadUntilSelection(t *testing.T) {
 		t.Fatalf("download %d downloads %d %s", download.Code, catalog.downloads, download.Body.String())
 	}
 	hidden := httptest.NewRecorder()
-	miss := httptest.NewRequest(http.MethodPost, "/api/v2/subtitles/search", strings.NewReader(`{"media_file_id":"2147483649","languages":["en"]}`))
+	miss := httptest.NewRequest(http.MethodPost, "/api/v2/subtitles/search", strings.NewReader(`{"media_file_id":"102","languages":["en"]}`))
 	miss.Header.Set("Authorization", "Bearer grant")
 	inst.Handler().ServeHTTP(hidden, miss)
 	if hidden.Code != 404 || catalog.downloads != 1 {

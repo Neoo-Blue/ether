@@ -85,9 +85,8 @@ type instance struct {
 	plansMu sync.Mutex
 	plans   map[string]playbackPlan
 
-	liveMu       sync.Mutex
-	liveChannels map[string]string
-	liveCards    map[string]liveChannelCardMeta
+	liveMu    sync.Mutex
+	liveCards map[string]liveChannelCardMeta
 }
 
 func (i *instance) Handler() http.Handler {

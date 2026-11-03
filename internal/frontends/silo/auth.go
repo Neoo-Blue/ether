@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -62,7 +61,7 @@ func (i *instance) resolveDevice(ctx context.Context, token string, d frontend.D
 	}
 	v, expiry, err := identity.ResolveDevice(ctx, token, d)
 	seconds := int64(time.Until(expiry) / time.Second)
-	if err != nil || v == nil || seconds <= 0 {
+	if err != nil || v == nil || seconds <= 0 || i.viewerWireID(ctx, v.ID) == "" {
 		return nil, 0, errors.New("invalid device grant")
 	}
 	return v, seconds, nil
@@ -77,7 +76,7 @@ func (i *instance) deviceViewer(r *http.Request) (*frontend.Viewer, string, erro
 	if err != nil {
 		return nil, "", err
 	}
-	if profile := r.Header.Get("X-Profile-Id"); profile != "" && profile != strconv.FormatInt(v.ID, 10) {
+	if profile := r.Header.Get("X-Profile-Id"); profile != "" && profile != i.viewerWireID(r.Context(), v.ID) {
 		return nil, "", errors.New("profile mismatch")
 	}
 	support.Seen(r, i.host.Support, "silo", v, device(r))
@@ -90,7 +89,10 @@ func (i *instance) viewer(r *http.Request) (*frontend.Viewer, string, error) {
 	}
 	v, err := i.host.Identity.Resolve(r.Context(), a[1])
 	if err == nil && v != nil {
-		if profile := r.Header.Get("X-Profile-Id"); profile != "" && profile != strconv.FormatInt(v.ID, 10) {
+		if i.viewerWireID(r.Context(), v.ID) == "" {
+			return nil, "", errors.New("profile ID unavailable")
+		}
+		if profile := r.Header.Get("X-Profile-Id"); profile != "" && profile != i.viewerWireID(r.Context(), v.ID) {
 			return nil, "", errors.New("profile mismatch")
 		}
 	}
@@ -99,12 +101,12 @@ func (i *instance) viewer(r *http.Request) (*frontend.Viewer, string, error) {
 	}
 	return v, a[1], err
 }
-func user(v *frontend.Viewer) map[string]any {
+func (i *instance) user(r *http.Request, v *frontend.Viewer) map[string]any {
 	role := "user"
 	if v.IsOwner {
 		role = "admin"
 	}
-	return map[string]any{"id": strconv.FormatInt(v.ID, 10), "username": v.Username, "email": v.Email, "role": role, "permissions": []string{}, "download_allowed": false, "password_change_required": false}
+	return map[string]any{"id": i.viewerWireID(r.Context(), v.ID), "username": v.Username, "email": v.Email, "role": role, "permissions": []string{}, "download_allowed": false, "password_change_required": false}
 }
 func (i *instance) login(w http.ResponseWriter, r *http.Request) {
 	var b struct {
@@ -137,7 +139,7 @@ func (i *instance) login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unavailable", 503)
 		return
 	}
-	reply(w, 200, map[string]any{"access_token": token, "refresh_token": refresh, "expires_in": ttl, "user": user(v)})
+	reply(w, 200, map[string]any{"access_token": token, "refresh_token": refresh, "expires_in": ttl, "user": i.user(r, v)})
 }
 
 func (*instance) authProviders(w http.ResponseWriter, _ *http.Request) {
@@ -285,5 +287,5 @@ func (i *instance) devicePoll(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unavailable", 503)
 		return
 	}
-	reply(w, 200, map[string]any{"status": "approved", "poll_after": 5, "profile_id": "", "profile_token": "", "temporary": false, "tokens": map[string]any{"access_token": access, "refresh_token": refresh, "expires_in": ttl, "user": user(v)}})
+	reply(w, 200, map[string]any{"status": "approved", "poll_after": 5, "profile_id": "", "profile_token": "", "temporary": false, "tokens": map[string]any{"access_token": access, "refresh_token": refresh, "expires_in": ttl, "user": i.user(r, v)}})
 }

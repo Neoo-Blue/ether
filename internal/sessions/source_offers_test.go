@@ -57,7 +57,7 @@ func TestSourceOffersSharedExpiryRevocationAndNoABA(t *testing.T) {
 		t.Fatal(err)
 	}
 	n, err := strconv.ParseInt(offer.ID, 10, 64)
-	if err != nil || n <= 1<<31-1 || n > maxSourceOfferID || !offer.ExpiresAt.Equal(underlying.Truncate(time.Millisecond)) {
+	if err != nil || n <= 0 || n >= 1<<30 || !offer.ExpiresAt.Equal(underlying.Truncate(time.Millisecond)) {
 		t.Fatalf("offer %+v %v", offer, err)
 	}
 	got, err := second.Resolve(ctx, scope, offer.ID)
@@ -79,8 +79,8 @@ func TestSourceOffersSharedExpiryRevocationAndNoABA(t *testing.T) {
 	if _, err = second.Resolve(ctx, wrong, offer.ID); err == nil {
 		t.Fatal("foreign surface resolved")
 	}
-	if _, err = second.Resolve(ctx, scope, "1"); err == nil {
-		t.Fatal("legacy compact ID resolved")
+	if _, err = second.Resolve(ctx, scope, "2147483648"); err == nil {
+		t.Fatal("legacy offer ID resolved")
 	}
 	denied = true
 	if _, err = second.Resolve(ctx, scope, offer.ID); !errors.Is(err, core.ErrUnauthorized) {

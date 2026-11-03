@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -148,8 +147,12 @@ func (i *instance) eventsSocket(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
+			profileID := i.viewerWireID(ctx, ticket.Viewer.ID)
+			if profileID == "" {
+				return
+			}
 			if catalog && event.Type == "LibraryChanged" && event.Item != 0 {
-				payload := map[string]any{"profile_id": strconv.FormatInt(ticket.Viewer.ID, 10), "content_id": ids.RatingKeyGUID(event.Item), "change": "available"}
+				payload := map[string]any{"profile_id": profileID, "content_id": ids.RatingKeyGUID(event.Item), "change": "available"}
 				if write(map[string]any{"type": "event", "channel": "catalog", "event": "catalog.changed", "timestamp": time.Now().UTC().Format(time.RFC3339Nano), "data": payload}) != nil {
 					return
 				}
@@ -167,7 +170,7 @@ func (i *instance) eventsSocket(w http.ResponseWriter, r *http.Request) {
 			if _, err := i.host.Experience.Item(ctx, frontend.ItemRequest{Viewer: ticket.Viewer, Device: ticket.Device, Key: event.Item}); err != nil {
 				continue
 			}
-			payload := map[string]any{"profile_id": strconv.FormatInt(ticket.Viewer.ID, 10), "content_id": ids.RatingKeyGUID(event.Item), "change": "progress"}
+			payload := map[string]any{"profile_id": profileID, "content_id": ids.RatingKeyGUID(event.Item), "change": "progress"}
 			if event.Type == "WatchStateChanged" {
 				payload["change"] = "watched"
 			}

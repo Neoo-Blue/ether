@@ -65,7 +65,15 @@ func (i *instance) catalog(w http.ResponseWriter, r *http.Request) {
 		page = frontend.Page{Items: titles[start:end], Total: total}
 		more = end < total
 	} else {
-		page, err = i.host.Experience.LibraryItems(r.Context(), v, device(r), q.Get("library_id"), query)
+		view := q.Get("library_id")
+		if view != "" {
+			view, err = i.nativeID(r.Context(), "library", view)
+			if err != nil {
+				notFound(w)
+				return
+			}
+		}
+		page, err = i.host.Experience.LibraryItems(r.Context(), v, device(r), view, query)
 		if err != nil {
 			http.Error(w, "Unavailable", 503)
 			return
