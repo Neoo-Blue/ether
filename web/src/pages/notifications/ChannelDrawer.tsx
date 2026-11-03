@@ -1,56 +1,162 @@
 import { MoreOptions } from "../../components/ConfigSection";
-import { localized, t } from "../../i18n";
+import { t } from "../../i18n";
 import { Button, Input, Select, Switch } from "@braedonsaunders/appkit-ui";
 import { useEffect, useId, useState } from "react";
 import { Drawer } from "../../components/Drawer";
 import { Field, NumberInput, SecretInput } from "../../components/fields";
 import { MutationError } from "../../components/feedback";
+import { isPluginDescriptor, textOf, useRegistry, type Descriptor } from "../../lib/extend";
 import {
-  TRANSPORTS,
-  TRANSPORT_HELP,
-  CRITICAL_EVENTS,
-  eventLabel,
+  channelKindDescriptor,
+  channelKindDescriptors,
+  criticalEventIds,
+  defaultSettingsForKind,
+  eventAllowedForKind,
+  eventKindDescriptor,
+  eventKindDescriptors,
   transportLabel,
   type Channel,
+  type SettingsField,
 } from "./types";
 
-const SMTP_FIELDS = localized(
-  () =>
-    [
-      { key: "username", label: t("Username") },
-      { key: "password", label: t("Password") },
-      { key: "from", label: t("From address") },
-      { key: "to", label: t("To addresses") },
-    ] as const,
-);
+/** Render the served settings schema for a channel kind. */
+function ChannelSchemaFields({
+  idPrefix,
+  fields,
+  channel,
+  onChange,
+}: {
+  idPrefix: string;
+  fields: readonly SettingsField[];
+  channel: Channel;
+  onChange: (patch: Partial<Channel>) => void;
+}) {
+  const visible = fields.filter((f) => f.kind !== "hidden");
+  return (
+    <>
+      {visible.map((f) => {
+        const fieldId = `${idPrefix}-${f.key}`;
+        const label = textOf(f.label);
+        const hint = textOf(f.hint) || undefined;
+        const rawValue = f.secret
+          ? (channel.secrets?.[f.key] ?? "")
+          : (channel.settings?.[f.key] ?? "");
+        const value =
+          rawValue ||
+          (f.key === "smtpMode" && channel.secrets?.endpoint?.endsWith(":465")
+            ? "tls"
+            : (f.default ?? ""));
+        const setField = (val: string) => {
+          if (f.secret) {
+            onChange({ secrets: { ...channel.secrets, [f.key]: val } });
+          } else {
+            onChange({ settings: { ...channel.settings, [f.key]: val } });
+          }
+        };
+        return (
+          <Field
+            key={f.key}
+            label={label}
+            hint={hint}
+            htmlFor={fieldId}
+            className={f.wide ? "sm:col-span-2" : undefined}
+          >
+            {f.kind === "select" ? (
+              <Select
+                id={fieldId}
+                aria-label={label}
+                value={value}
+                onChange={(e) => setField(e.target.value)}
+              >
+                {(f.options ?? []).map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {textOf(opt.label)}
+                  </option>
+                ))}
+              </Select>
+            ) : f.kind === "number" ? (
+              <NumberInput
+                id={fieldId}
+                min={f.min}
+                max={f.max}
+                value={Number(value || 0)}
+                onChange={(n) => setField(String(n))}
+              />
+            ) : f.kind === "boolean" ? (
+              <Switch
+                id={fieldId}
+                aria-label={label}
+                checked={value === "true"}
+                onChange={(e) => setField(e.target.checked ? "true" : "false")}
+              />
+            ) : (f.secret && f.kind !== "text") || f.key === "endpoint" ? (
+              <SecretInput
+                id={fieldId}
+                value={value}
+                placeholder={f.placeholder}
+                onChange={setField}
+              />
+            ) : (
+              <Input
+                id={fieldId}
+                value={value}
+                placeholder={f.placeholder}
+                onChange={(e) => setField(e.target.value)}
+              />
+            )}
+          </Field>
+        );
+      })}
+    </>
+  );
+}
 
 /** Create or edit one notification channel. */
 export function ChannelDrawer({
   open,
   channel: initial,
   isNew,
-  events,
+  descriptors: providedDescriptors,
   saving,
   error,
-  catalog,
   onClose,
   onSave,
 }: {
   open: boolean;
   channel: Channel;
   isNew: boolean;
-  /** Event kinds the server can publish. */
-  events: string[];
+  descriptors?: readonly Descriptor[];
   saving: boolean;
   error: unknown;
-  catalog?: { kind: string; description: string; automatic: boolean }[];
   onClose: () => void;
   onSave: (channel: Channel) => void;
 }) {
   const id = useId();
+  const registry = useRegistry("channelKind", "eventKind");
+  const descriptors = providedDescriptors?.length ? providedDescriptors : registry.descriptors;
   const [channel, setChannel] = useState(initial);
   useEffect(() => setChannel(initial), [initial]);
   const patch = (p: Partial<Channel>) => setChannel((v) => ({ ...v, ...p }));
+
+  const channelKinds = channelKindDescriptors(descriptors);
+  const selectableKinds = channelKinds.filter((d) => d.meta?.selectable !== false);
+  const currentKind = channelKindDescriptor(descriptors, channel.kind);
+  const eventKinds = eventKindDescriptors(descriptors);
+  const kindLocked =
+    (currentKind ? currentKind.meta?.selectable === false : channel.kind === "webpush") || !isNew;
+
+  const submit = () => {
+    const settings = defaultSettingsForKind(
+      descriptors,
+      channel.kind,
+      channel.settings,
+      channel.secrets,
+    );
+    onSave({
+      ...channel,
+      ...(Object.keys(settings).length ? { settings } : {}),
+    });
+  };
 
   return (
     <Drawer
@@ -66,7 +172,7 @@ export function ChannelDrawer({
           <Button variant="ghost" onClick={onClose} disabled={saving}>
             {t("Cancel")}
           </Button>
-          <Button onClick={() => onSave(channel)} disabled={saving}>
+          <Button onClick={submit} disabled={saving}>
             {saving ? t("Saving…") : t("Save channel")}
           </Button>
         </div>
@@ -79,7 +185,7 @@ export function ChannelDrawer({
             <Input
               id={`${id}-name`}
               value={channel.name}
-              placeholder={transportLabel(channel.kind)}
+              placeholder={transportLabel(channel.kind, descriptors)}
               onChange={(e) => patch({ name: e.target.value })}
             />
           </Field>
@@ -88,99 +194,43 @@ export function ChannelDrawer({
               id={`${id}-kind`}
               aria-label={t("Transport")}
               value={channel.kind}
-              disabled={channel.kind === "webpush" || !isNew}
-              onChange={(e) =>
+              disabled={kindLocked}
+              onChange={(e) => {
+                const nextKind = e.target.value;
+                const nextSettings = defaultSettingsForKind(
+                  descriptors,
+                  nextKind,
+                  channel.settings,
+                  channel.secrets,
+                );
                 patch({
-                  kind: e.target.value,
-                  events: channel.events.filter(
-                    (k) => k !== "newsletter.weekly" || e.target.value === "smtp",
+                  kind: nextKind,
+                  ...(Object.keys(nextSettings).length ? { settings: nextSettings } : {}),
+                  events: channel.events.filter((k) =>
+                    eventAllowedForKind(eventKindDescriptor(descriptors, k), nextKind),
                   ),
-                })
-              }
+                });
+              }}
             >
-              {channel.kind === "webpush" ? (
-                <option value="webpush">{t("Browser push")}</option>
+              {!selectableKinds.some((d) => d.id === channel.kind) ? (
+                <option value={channel.kind}>{transportLabel(channel.kind, descriptors)}</option>
               ) : null}
-              {TRANSPORTS.map((v) => (
-                <option key={v} value={v}>
-                  {transportLabel(v)}
+              {selectableKinds.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {isPluginDescriptor(d)
+                    ? t("{label} (from {owner})", { label: textOf(d.label), owner: d.owner })
+                    : textOf(d.label)}
                 </option>
               ))}
             </Select>
           </Field>
-          <p className="text-sm text-fg-muted sm:col-span-2">{TRANSPORT_HELP[channel.kind]}</p>
-          {channel.kind !== "telegram" && channel.kind !== "webpush" ? (
-            <Field
-              label={channel.kind === "smtp" ? t("SMTP host:port") : t("Endpoint URL")}
-              hint={channel.kind === "smtp" ? t("The server must support TLS.") : undefined}
-              htmlFor={`${id}-endpoint`}
-              className="sm:col-span-2"
-            >
-              <SecretInput
-                id={`${id}-endpoint`}
-                value={channel.endpoint}
-                onChange={(v) => patch({ endpoint: v })}
-              />
-            </Field>
-          ) : null}
-          {channel.kind !== "smtp" && channel.kind !== "webpush" ? (
-            <Field
-              label={channel.kind === "telegram" ? t("Bot token") : t("Access token")}
-              hint={
-                channel.kind === "telegram"
-                  ? undefined
-                  : t("Optional. A bearer token, or the app key for Gotify.")
-              }
-              htmlFor={`${id}-token`}
-            >
-              <SecretInput
-                id={`${id}-token`}
-                value={channel.token}
-                onChange={(v) => patch({ token: v })}
-              />
-            </Field>
-          ) : null}
-          {channel.kind === "telegram" ? (
-            <Field label={t("Chat ID")} htmlFor={`${id}-target`}>
-              <Input
-                id={`${id}-target`}
-                value={channel.target}
-                onChange={(e) => patch({ target: e.target.value })}
-              />
-            </Field>
-          ) : null}
-          {channel.kind === "smtp" ? (
-            <Field label={t("Connection security")} htmlFor={`${id}-security`}>
-              <Select
-                id={`${id}-security`}
-                aria-label={t("Connection security")}
-                value={channel.smtpMode || (channel.endpoint.endsWith(":465") ? "tls" : "starttls")}
-                onChange={(e) => patch({ smtpMode: e.target.value })}
-              >
-                <option value="starttls">{t("STARTTLS (usually 587)")}</option>
-                <option value="tls">{t("Implicit TLS (usually 465)")}</option>
-              </Select>
-            </Field>
-          ) : null}
-          {channel.kind === "smtp"
-            ? SMTP_FIELDS.map((f) => (
-                <Field key={f.key} label={f.label} htmlFor={`${id}-${f.key}`}>
-                  {f.key === "password" ? (
-                    <SecretInput
-                      id={`${id}-${f.key}`}
-                      value={channel.password}
-                      onChange={(v) => patch({ password: v })}
-                    />
-                  ) : (
-                    <Input
-                      id={`${id}-${f.key}`}
-                      value={channel[f.key]}
-                      onChange={(e) => patch({ [f.key]: e.target.value })}
-                    />
-                  )}
-                </Field>
-              ))
-            : null}
+          <p className="text-sm text-fg-muted sm:col-span-2">{textOf(currentKind?.hint)}</p>
+          <ChannelSchemaFields
+            idPrefix={id}
+            fields={currentKind?.meta?.fields ?? []}
+            channel={channel}
+            onChange={patch}
+          />
         </div>
 
         <MoreOptions label={t("More options: {title}", { title: t("Delivery") })}>
@@ -234,7 +284,13 @@ export function ChannelDrawer({
             <Button
               size="sm"
               variant="outline"
-              onClick={() => patch({ events: CRITICAL_EVENTS.filter((k) => events.includes(k)) })}
+              onClick={() =>
+                patch({
+                  events: criticalEventIds(descriptors).filter((k) =>
+                    eventAllowedForKind(eventKindDescriptor(descriptors, k), channel.kind),
+                  ),
+                })
+              }
             >
               {t("Critical alerts")}
             </Button>
@@ -243,13 +299,11 @@ export function ChannelDrawer({
               variant="outline"
               onClick={() =>
                 patch({
-                  events: events.filter(
-                    (k) =>
-                      k !== "test" &&
-                      (k !== "newsletter.weekly" || channel.kind === "smtp") &&
-                      (catalog?.find((e) => e.kind === k)?.automatic ??
-                        !["cert.renewed", "user.joined"].includes(k)),
-                  ),
+                  events: eventKinds
+                    .filter(
+                      (ev) => Boolean(ev.meta?.automatic) && eventAllowedForKind(ev, channel.kind),
+                    )
+                    .map((ev) => ev.id),
                 })
               }
             >
@@ -260,46 +314,40 @@ export function ChannelDrawer({
             </Button>
           </div>
           <div className="grid gap-x-6 gap-y-2 pt-1 sm:grid-cols-2">
-            {events
-              .filter((k) => k !== "test")
-              .map((k) => (
+            {eventKinds.map((ev) => {
+              const k = ev.id;
+              const lbl = textOf(ev.label);
+              const allowed = eventAllowedForKind(ev, channel.kind);
+              return (
                 <label key={k} className="flex items-center justify-between gap-3 py-1 text-sm">
                   <span className="text-fg">
-                    {eventLabel(k)}
-                    <span className="block text-xs text-fg-muted">
-                      {catalog?.find((e) => e.kind === k)?.description ??
-                        (["cert.renewed", "user.joined"].includes(k)
-                          ? t("Owner API integration only; not produced automatically.")
-                          : "")}
-                      {k === "newsletter.weekly" && channel.kind !== "smtp"
-                        ? " " + t("Email channels only.")
-                        : ""}
-                    </span>
+                    {lbl}
+                    <span className="block text-xs text-fg-muted">{textOf(ev.hint)}</span>
                   </span>
                   <Switch
-                    aria-label={eventLabel(k)}
-                    disabled={k === "newsletter.weekly" && channel.kind !== "smtp"}
+                    aria-label={lbl}
+                    disabled={!allowed}
                     checked={
-                      (k !== "newsletter.weekly" || channel.kind === "smtp") &&
-                      (channel.events.includes(k) || channel.events.includes("*"))
+                      allowed && (channel.events.includes(k) || channel.events.includes("*"))
                     }
                     onChange={(e) =>
                       patch({
                         events: e.target.checked
                           ? [...channel.events.filter((v) => v !== "*"), k]
                           : channel.events.includes("*")
-                            ? events.filter(
-                                (v) =>
-                                  v !== "test" &&
-                                  v !== k &&
-                                  (v !== "newsletter.weekly" || channel.kind === "smtp"),
-                              )
+                            ? eventKinds
+                                .filter(
+                                  (other) =>
+                                    other.id !== k && eventAllowedForKind(other, channel.kind),
+                                )
+                                .map((other) => other.id)
                             : channel.events.filter((v) => v !== k),
                       })
                     }
                   />
                 </label>
-              ))}
+              );
+            })}
           </div>
         </fieldset>
       </div>

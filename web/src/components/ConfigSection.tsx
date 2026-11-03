@@ -5,7 +5,14 @@ import { t } from "../i18n";
 import { api, ApiError } from "../lib/api";
 import { useAsync } from "../lib/hooks";
 import type { EtherConfig } from "../lib/types";
-import { asObj, SchemaField, type FieldDef, type FieldGroup } from "../pages/settings/SchemaForm";
+import {
+  asObj,
+  hasFieldError,
+  SchemaField,
+  useSettingsSchemas,
+  type FieldDef,
+  type FieldGroup,
+} from "../pages/settings/SchemaForm";
 import { ErrorPanel } from "./feedback";
 import { SaveBar, useDraft } from "./SaveBar";
 
@@ -62,7 +69,8 @@ function pickShown(draft: Obj, groups: FieldGroup[]): Obj {
 export function ConfigSection({
   configKey,
   endpoint,
-  groups,
+  groups: givenGroups,
+  schemaId,
   label,
   before,
   after,
@@ -79,7 +87,14 @@ export function ConfigSection({
    * save the whole config (sections this UI has no dedicated endpoint for).
    */
   endpoint?: string;
-  groups: FieldGroup[];
+  /** Field groups built by the caller. Prefer schemaId for served schemas. */
+  groups?: FieldGroup[];
+  /**
+   * Served settingsSchema descriptor id (or ids, concatenated in order)
+   * whose groups render this section. The form waits for the registry
+   * before showing fields; the draft loads independently.
+   */
+  schemaId?: string | readonly string[];
   /** Used in the "Settings saved" toast. */
   label: string;
   /** Status or context rendered above the fields, given the live draft. */
@@ -101,6 +116,10 @@ export function ConfigSection({
   onFieldErrors?: (keys: string[]) => void;
 }) {
   const { refreshDashboard } = useApp();
+  const schemaIds =
+    schemaId === undefined ? [] : typeof schemaId === "string" ? [schemaId] : schemaId;
+  const served = useSettingsSchemas(schemaIds);
+  const groups = givenGroups ?? served.groups;
   const config = useAsync(() => api.getConfig(), []);
   const cfg = config.data;
   const stored = cfg ? asObj((cfg as unknown as Obj)[configKey]) : null;
@@ -110,7 +129,7 @@ export function ConfigSection({
   const [saving, setSaving] = useState(false);
 
   const save = useCallback(async () => {
-    if (!cfg || !draft) return;
+    if (!cfg || !draft || !groups) return;
     setSaving(true);
     setError(null);
     setErrors({});
@@ -169,7 +188,9 @@ export function ConfigSection({
   );
   if (hidden) return saveBar;
   if (config.error) return <ErrorPanel error={config.error} onRetry={() => void config.reload()} />;
-  if (!cfg || !draft)
+  if (!givenGroups && served.error && !groups)
+    return <ErrorPanel error={served.error} onRetry={() => void config.reload()} />;
+  if (!cfg || !draft || !groups)
     return (
       <div className="py-10 text-center">
         <Spinner size={20} label={t("Loading settings")} />
@@ -202,7 +223,7 @@ export function ConfigSection({
             {g.more?.length ? (
               <MoreOptions
                 label={g.title ? t("More options: {title}", { title: g.title }) : t("More options")}
-                hasError={g.more.some((f) => Boolean(errors[`${configKey}.${f.key}`]))}
+                hasError={g.more.some((f) => hasFieldError(f, errors, configKey))}
               >
                 {g.more.map((f, j) => renderField(f, `more-${f.key}-${j}`))}
               </MoreOptions>

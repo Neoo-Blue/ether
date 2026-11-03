@@ -135,7 +135,7 @@ func (fakeHelper) TitleDetail(ctx context.Context, key core.RatingKey) (*core.Ti
 	if key != core.MovieKey(7) {
 		return nil, core.ErrNotFound
 	}
-	return &core.Title{Key: key, Type: core.TypeMovie, Title: "Seven", Keywords: []string{"heist"}, CollectionID: 10, CollectionName: "Saga",
+	return &core.Title{Key: key, Type: core.TypeMovie, Title: "Seven", IDs: core.IDs{TMDB: 7, IMDB: "tt0000007"}, Keywords: []string{"heist"}, CollectionID: 10, CollectionName: "Saga",
 		Cast: []core.Person{{TMDB: 1, Name: "Actor", Role: "Lead", ThumbPath: "/a.jpg"}}, Directors: []core.Person{{TMDB: 2, Name: "Director"}}}, nil
 }
 
@@ -335,7 +335,7 @@ func TestCatalogHelperAPI(t *testing.T) {
 	}
 	rec = serve(h, authed(req(http.MethodGet, "/ether/api/catalog/title/"+core.MovieKey(7).String(), "")))
 	body := rec.Body.String()
-	if rec.Code != 200 || !strings.Contains(body, `"keywords":["heist"]`) || !strings.Contains(body, `"collection":{"id":10,"name":"Saga"}`) ||
+	if rec.Code != 200 || !strings.Contains(body, `"tmdbId":7`) || !strings.Contains(body, `"imdbId":"tt0000007"`) || !strings.Contains(body, `"keywords":["heist"]`) || !strings.Contains(body, `"collection":{"id":10,"name":"Saga"}`) ||
 		!strings.Contains(body, `"cast":[{"id":1,"name":"Actor","role":"Lead"`) || !strings.Contains(body, `"directors":[{"id":2`) {
 		t.Fatalf("title: %d %s", rec.Code, body)
 	}

@@ -27,16 +27,20 @@ const (
 
 // Ranking ladder step keys for QualityProfile.Ranking.
 const (
-	RankRulePrefix  = "rule:"
-	RankLanguage    = "language"
-	RankConnection  = "connection"
-	RankResolution  = "resolution"
-	RankReleaseType = "releaseType"
-	RankHDR         = "hdr"
-	RankVerified    = "verified"
-	RankVideoCodec  = "videoCodec"
-	RankAudioFormat = "audioFormat"
-	RankSize        = "size"
+	RankRulePrefix = "rule:"
+	// RankPluginPrefix namespaces plugin-contributed ranking steps:
+	// "plugin:<plugin id>/<key>". The resolver uses a neutral key when
+	// its hosted runtime is unavailable.
+	RankPluginPrefix = "plugin:"
+	RankLanguage     = "language"
+	RankConnection   = "connection"
+	RankResolution   = "resolution"
+	RankReleaseType  = "releaseType"
+	RankHDR          = "hdr"
+	RankVerified     = "verified"
+	RankVideoCodec   = "videoCodec"
+	RankAudioFormat  = "audioFormat"
+	RankSize         = "size"
 )
 
 // DefaultRankingSteps is the built-in ranking ladder order after any Prefer rules.
@@ -60,6 +64,17 @@ func isBuiltinRankingStep(step string) bool {
 	return builtinRankingIndex(step) >= 0
 }
 
+// IsBuiltinRankingStep reports whether step is one of DefaultRankingSteps
+// (additive, WS1a).
+func IsBuiltinRankingStep(step string) bool { return isBuiltinRankingStep(step) }
+
+// IsPluginRankingStep reports whether step is plugin-namespaced
+// ("plugin:<id>/<key>") (additive, WS1a).
+func IsPluginRankingStep(step string) bool {
+	rest, ok := strings.CutPrefix(step, RankPluginPrefix)
+	return ok && strings.Contains(rest, "/")
+}
+
 // DefaultRanking returns today's default ladder order: each Prefer rule in
 // rules (in slice order), followed by DefaultRankingSteps.
 func DefaultRanking(rules []ReleaseRule) []string {
@@ -76,8 +91,24 @@ func DefaultRanking(rules []ReleaseRule) []string {
 }
 
 // ValidateRanking checks an explicit ranking ladder against a profile's rules.
-// An empty ladder is valid and means DefaultRanking(rules).
+// An empty ladder is valid and means DefaultRanking(rules). Plugin-namespaced
+// steps are accepted structurally: the config save path has no descriptor
+// registry, and a profile must stay saveable across a plugin's install life.
+// Callers that hold the registry use ValidateRankingWith to require that a
+// plugin step is actually registered.
 func ValidateRanking(ranking []string, rules []ReleaseRule) error {
+	return ValidateRankingWith(ranking, rules, nil)
+}
+
+// ValidateRankingWith is ValidateRanking with a caller-supplied test for
+// non-rule steps. A nil known accepts built-in steps and any
+// plugin-namespaced step (additive, WS1a).
+func ValidateRankingWith(ranking []string, rules []ReleaseRule, known func(step string) bool) error {
+	if known == nil {
+		known = func(step string) bool {
+			return isBuiltinRankingStep(step) || IsPluginRankingStep(step)
+		}
+	}
 	if len(ranking) == 0 {
 		return nil
 	}
@@ -99,7 +130,7 @@ func ValidateRanking(ranking []string, rules []ReleaseRule) error {
 			}
 			continue
 		}
-		if !isBuiltinRankingStep(step) {
+		if !known(step) {
 			return fmt.Errorf("unknown ranking step %q", step)
 		}
 	}
@@ -196,13 +227,14 @@ type Resolution struct {
 // QualityProfile is an owner-editable rule set ranking releases for a class
 // of client.
 type QualityProfile struct {
-	ReleaseRules         []ReleaseRule  `json:"releaseRules,omitempty"`
-	Ranking              []string       `json:"ranking,omitempty"`
-	AllowedQualities     []string       `json:"allowedQualities,omitempty"` // imported source-resolution gates
-	CustomFormatScores   map[string]int `json:"customFormatScores,omitempty"`
-	MinCustomFormatScore *int           `json:"minCustomFormatScore,omitempty"`
-	Name                 string         `json:"name"`
-	MaxHeight            int            `json:"maxHeight"` // cap, e.g. 1080
+	ReleaseRules         []ReleaseRule              `json:"releaseRules,omitempty"`
+	Ranking              []string                   `json:"ranking,omitempty"`
+	RankingConfig        map[string]json.RawMessage `json:"rankingConfig,omitempty"`
+	AllowedQualities     []string                   `json:"allowedQualities,omitempty"` // imported source-resolution gates
+	CustomFormatScores   map[string]int             `json:"customFormatScores,omitempty"`
+	MinCustomFormatScore *int                       `json:"minCustomFormatScore,omitempty"`
+	Name                 string                     `json:"name"`
+	MaxHeight            int                        `json:"maxHeight"` // cap, e.g. 1080
 	// ConfiguredMaxHeight is MaxHeight as the owner configured it,
 	// before download reshaping or a client's caps clamped the
 	// effective MaxHeight. -1 means the owner set no ceiling ("Any");
@@ -261,7 +293,7 @@ func (p QualityProfile) EffectiveRanking() []string {
 			if !validRules[step] {
 				continue
 			}
-		} else if !isBuiltinRankingStep(step) {
+		} else if !isBuiltinRankingStep(step) && !IsPluginRankingStep(step) {
 			continue
 		}
 		mentioned[step] = true

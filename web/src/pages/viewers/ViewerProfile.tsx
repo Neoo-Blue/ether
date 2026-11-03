@@ -1,3 +1,7 @@
+import { useSlots, PluginActionMenu } from "../../viewspec/slots/Slots";
+import { PluginView } from "../../viewspec/PluginView";
+import { SlotAnchor } from "../../components/SlotXray";
+import { textOf } from "../../lib/extend";
 import { SubtabNav } from "../../components/layout";
 import {
   Avatar,
@@ -56,7 +60,9 @@ function asTab(raw: string | undefined): Tab | undefined {
 export default function ViewerProfile() {
   const { id: raw, tab: routeTab } = useParams();
   const id = Number(raw);
-  const tab: Tab = asTab(routeTab) ?? "overview";
+  const slots = useSlots("viewer.tab");
+  const pluginTab = slots.find(d => `plugin:${d.owner}:${d.meta?.key}` === routeTab);
+  const tab = pluginTab ? routeTab! : asTab(routeTab) ?? "overview";
   const navigate = useNavigate();
   const [search, setSearch] = useSearchParams();
   const listTab = ["alerts", "hidden"].includes(search.get("list") ?? "")
@@ -168,6 +174,7 @@ export default function ViewerProfile() {
                 {v.username} · {t("Active {time}", { time: relativeTime(v.lastActive) })}
               </p>
             </div>
+            <PluginActionMenu slot="actionMenu.viewer" recordId={String(id)} onRefresh={()=>void viewer.reload()} />
             <ViewerActions
               viewer={v}
               onChange={() => void viewer.reload()}
@@ -179,11 +186,12 @@ export default function ViewerProfile() {
         </div>
       }
       subtabs={
-        <SubtabNav
+        <SlotAnchor slot="viewer.tab" onPickSlot={()=>navigate("/plugins/studio")}><SubtabNav
           ariaLabel={t("Viewer sections")}
           active={tab}
           onSelect={setTab}
           tabs={[
+            ...slots.map(d=>({key:`plugin:${d.owner}:${d.meta!.key}`,label:textOf(d.label)})),
             { key: "overview", label: t("Overview") },
             { key: "home", label: t("Home") },
             { key: "taste", label: t("Taste") },
@@ -193,10 +201,10 @@ export default function ViewerProfile() {
             { key: "sign-in", label: t("Sign-in & devices") },
             ...(serverAccess ? [{ key: "lists", label: t("Lists & alerts") }] : []),
           ]}
-        />
+        /></SlotAnchor>
       }
     >
-      {tab === "overview" ? (
+      {pluginTab ? <PluginView plugin={pluginTab.owner} page={pluginTab.meta!.key} params={{recordType:"viewer",recordId:String(id)}}/> : tab === "overview" ? (
         <ViewerDashboard viewer={v} taste={taste.data} />
       ) : tab === "limits" ? (
         <ViewerAccess key={id} viewer={v} />

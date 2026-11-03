@@ -20,9 +20,11 @@ import {
   REFRESH_OPTIONS,
   describeRule,
   describeSource,
+  type SourceDescriptor,
   describeTargets,
   previewableSpec,
 } from "../../lib/rules";
+import { useRegistry } from "../../lib/extend";
 import { ArtworkPreview, describeSchedule } from "./SettingsPanels";
 
 /** Each sort as it reads mid-sentence ("Sorted by release date"). */
@@ -49,6 +51,7 @@ export function CollectionDetail({
   template?: CollectionTemplate;
   actions: ReactNode;
 }) {
+  const sourceKinds = useRegistry("collectionSource");
   const previewKey = JSON.stringify(previewableSpec(spec));
   const preview = useAsync(
     (signal) => api.previewCollection(previewableSpec(spec), signal),
@@ -263,7 +266,9 @@ export function CollectionDetail({
               <h4 className="mb-1.5 font-medium text-fg">{t("Sources")}</h4>
               <ul className="space-y-1">
                 {spec.sources.map((s, i) => (
-                  <li key={i}>{describeSource(s)}</li>
+                  <li key={i}>
+                    {describeSource(s, sourceKinds.descriptors as SourceDescriptor[])}
+                  </li>
                 ))}
               </ul>
             </div>

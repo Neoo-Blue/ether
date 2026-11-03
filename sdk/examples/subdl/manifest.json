@@ -1,0 +1,65 @@
+{
+  "id": "org.ether.examples.subdl",
+  "version": "1.0.0",
+  "name": "SubDL",
+  "description": "Find subtitles with your SubDL account.",
+  "types": [
+    "movie",
+    "series"
+  ],
+  "idPrefixes": [
+    "tt"
+  ],
+  "resources": [
+    "subtitles"
+  ],
+  "ether": {
+    "protocol": 1,
+    "kind": "integration",
+    "capabilities": [
+      "subtitles"
+    ],
+    "summary": "$t:summary",
+    "author": {
+      "name": "Ether"
+    },
+    "license": "MIT",
+    "icon": "assets/icon.svg",
+    "runtime": {
+      "kind": "hosted",
+      "entry": "dist/plugin.js"
+    },
+    "permissions": {
+      "network": [
+        "api.subdl.com",
+        "dl.subdl.com"
+      ],
+      "secrets": [
+        "apiKey"
+      ]
+    },
+    "settings": {
+      "$ref": "settings.schema.json"
+    },
+    "strings": {
+      "en": "i18n/en.json",
+      "fr": "i18n/fr.json"
+    },
+    "contributes": {
+      "integration": {
+        "category": "playback-extras",
+        "adds": [
+          "$t:adds"
+        ],
+        "connect": "fields",
+        "test": true
+      },
+      "subtitles": {
+        "languages": "any",
+        "formats": [
+          "srt"
+        ]
+      }
+    }
+  }
+}

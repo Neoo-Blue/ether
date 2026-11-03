@@ -13,6 +13,7 @@ import (
 )
 
 type candidate struct {
+	pluginKeys map[string]int64
 	policy     releasepolicy.Result
 	rel        core.Release
 	trace      int
@@ -131,7 +132,7 @@ func (s *Service) validateCandidates(ctx context.Context, cands []candidate, tr 
 			// A race stays inside one policy tier. A healthy fallback must
 			// not be selected while a primary in this window is still valid.
 			same := 1
-			for same < count && releasepolicy.Equivalent(cands[base].policy, cands[base+same].policy) {
+			for same < count && releasepolicy.Equivalent(cands[base].policy, cands[base+same].policy) && pluginKeysEqual(cands[base], cands[base+same]) {
 				same++
 			}
 			count = same

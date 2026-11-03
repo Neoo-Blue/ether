@@ -27,9 +27,15 @@ node_modules/
 !/docs/user-guide.md
 !/packaging/community/README.md
 !/release-notes/*.md
+!/sdk/README.md
+!/sdk/**/README.md
 /scripts/lab/lab.env
 /scripts/lab/data/
 /scripts/lab/.conform/
 /drift-watch-out/
 
 /internal/conform/specs/.downloaded/
+
+# Python bytecode (SDK and examples)
+__pycache__/
+*.pyc

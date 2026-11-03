@@ -107,7 +107,7 @@ func collectProtected(v any, parent string, out *[]string) {
 				}
 				continue
 			}
-			if text, ok := value.(string); ok && text != "" && (secretField(k) || secretChild(parent, k)) {
+			if text, ok := value.(string); ok && text != "" && secretIn(x, parent, k) {
 				*out = append(*out, text)
 				continue
 			}
@@ -139,6 +139,24 @@ func isSecretMap(parent, k string) bool {
 // the database connection URL (which embeds a password).
 func secretChild(parent, k string) bool {
 	return strings.EqualFold(parent, "database") && strings.EqualFold(k, "url")
+}
+
+// secretIn reports whether member k of object m is a credential. Beyond
+// the name-based rules, a Stremio add-on install URL is a credential in
+// its own right: the path typically carries the owner's add-on settings,
+// often a debrid key (see internal/newznab/cache_secrets.go). Any object
+// whose "kind" is "stremio" (a stream indexer, a subtitle provider) has
+// its "url" sealed. Before this rule the URL was stored in plaintext.
+func secretIn(m map[string]any, parent, k string) bool {
+	if secretField(k) || secretChild(parent, k) {
+		return true
+	}
+	if strings.EqualFold(k, "url") {
+		if kind, ok := m["kind"].(string); ok && strings.EqualFold(kind, "stremio") {
+			return true
+		}
+	}
+	return false
 }
 
 // destinationFields are the non-secret members of an object that say where
@@ -266,7 +284,7 @@ func (w *credentialWalker) walk(v any, path []string, parent string) error {
 				}
 				continue
 			}
-			if text, ok := value.(string); ok && text != "" && (secretField(k) || secretChild(parent, k)) {
+			if text, ok := value.(string); ok && text != "" && secretIn(x, parent, k) {
 				out, err := w.value(text, k, p, dest)
 				if err != nil {
 					return err
@@ -341,7 +359,7 @@ func destination(m map[string]any, parent string) string {
 	}
 	for _, k := range destinationFields {
 		v, ok := m[k]
-		if !ok || v == nil || secretField(k) || secretChild(parent, k) {
+		if !ok || v == nil || secretIn(m, parent, k) {
 			continue
 		}
 		if _, nested := v.(map[string]any); nested {

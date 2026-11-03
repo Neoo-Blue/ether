@@ -1,4 +1,4 @@
-import { SettingsSection, Switch } from "@braedonsaunders/appkit-ui";
+import { Button, SettingsSection, Switch } from "@braedonsaunders/appkit-ui";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../../app-context";
@@ -8,15 +8,22 @@ import { SaveBar, useDraft } from "../../components/SaveBar";
 import { SettingsRow } from "../../components/SettingsRow";
 import { t, tx } from "../../i18n";
 import { api } from "../../lib/api";
+import { textOf, useRegistry } from "../../lib/extend";
 import { useAsync } from "../../lib/hooks";
 
-type Draft = { theIntroDb: boolean; skipIntro: boolean; skipCredits: boolean };
+type Draft = {
+  theIntroDb: boolean;
+  skipIntro: boolean;
+  skipCredits: boolean;
+  sourceOrder: string[];
+};
 
 /** Intro and credits skip buttons, plus the named places those times come from. */
 export function SkipButtons({ hidden = false }: { hidden?: boolean }) {
   const { refreshDashboard } = useApp();
   const config = useAsync(() => api.getConfig(), []);
   const cfg = config.data;
+  const registry = useRegistry("markerSource");
   const saved = useMemo<Draft | null>(() => {
     if (!cfg) return null;
     const markers = cfg.markers;
@@ -24,6 +31,7 @@ export function SkipButtons({ hidden = false }: { hidden?: boolean }) {
       theIntroDb: Boolean(markers?.theIntroDb),
       skipIntro: markers?.skipIntro !== false,
       skipCredits: markers?.skipCredits !== false,
+      sourceOrder: markers?.sourceOrder ?? ["chapter", "theintrodb"],
     };
   }, [cfg]);
   const { draft, setDraft, dirty, reset } = useDraft(saved);
@@ -129,6 +137,80 @@ export function SkipButtons({ hidden = false }: { hidden?: boolean }) {
           )}
         />
       </SettingsSection>
+      {registry.descriptors.some((d) => d.owner !== "builtin") ? (
+        <SettingsSection
+          title={t("Source order")}
+          description={t("The first source with a matching range supplies the skip button.")}
+        >
+          {[
+            ...draft.sourceOrder,
+            ...registry.descriptors
+              .filter((d) => d.owner !== "builtin" && !draft.sourceOrder.includes(d.id))
+              .map((d) => d.id),
+          ].map((id) => {
+            const index = draft.sourceOrder.indexOf(id);
+            const descriptor = registry.descriptors.find((d) => d.id === id);
+            const label =
+              id === "chapter"
+                ? t("Chapter titles")
+                : id === "theintrodb"
+                  ? t("IntroDB")
+                  : textOf(descriptor?.label) || id;
+            return (
+              <SettingsRow
+                key={id}
+                title={label}
+                control={
+                  <div className="flex items-center gap-2">
+                    {id.startsWith("plugin:") ? (
+                      <Switch
+                        checked={index >= 0}
+                        aria-label={label}
+                        onChange={(e) =>
+                          setDraft({
+                            ...draft,
+                            sourceOrder: e.currentTarget.checked
+                              ? [...draft.sourceOrder, id]
+                              : draft.sourceOrder.filter((entry) => entry !== id),
+                          })
+                        }
+                      />
+                    ) : null}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={index <= 0}
+                      aria-label={t("Move up")}
+                      onClick={() => {
+                        const order = [...draft.sourceOrder];
+                        [order[index - 1], order[index]] = [order[index]!, order[index - 1]!];
+                        setDraft({ ...draft, sourceOrder: order });
+                      }}
+                    >
+                      ↑
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={index < 0 || index === draft.sourceOrder.length - 1}
+                      aria-label={t("Move down")}
+                      onClick={() => {
+                        const order = [...draft.sourceOrder];
+                        [order[index + 1], order[index]] = [order[index]!, order[index + 1]!];
+                        setDraft({ ...draft, sourceOrder: order });
+                      }}
+                    >
+                      ↓
+                    </Button>
+                  </div>
+                }
+              />
+            );
+          })}
+        </SettingsSection>
+      ) : null}
       {saveBar}
     </>
   );

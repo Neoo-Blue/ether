@@ -99,7 +99,7 @@ func (a *App) buildPlayback(ctx context.Context, cfg config.Config) error {
 	})
 	a.markers = markers.New(markers.Options{DB: a.db, Logger: log.With("component", "markers"), Config: func() markers.Lookup {
 		c := a.cfg.Get().Markers
-		return markers.Lookup{Enabled: c.TheIntroDB, APIKey: c.APIKey, IntroOff: !c.OfferIntro(), CreditsOff: !c.OfferCredits()}
+		return markers.Lookup{Enabled: c.TheIntroDB, APIKey: c.APIKey, IntroOff: !c.OfferIntro(), CreditsOff: !c.OfferCredits(), SourceOrder: c.SourceOrder}
 	}, Aligner: a.subtitles.TimelineAligner(), Dialogue: a.markerDialogue})
 	a.buildAdoption()
 	// Playback and prefetch.

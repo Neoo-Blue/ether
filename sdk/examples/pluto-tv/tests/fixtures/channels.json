@@ -1,0 +1,20 @@
+[
+  {
+    "_id": "62b976b93279cb000772c6f9",
+    "name": "Bloomberg TV+",
+    "number": 1030,
+    "category": "News + Opinion",
+    "colorLogoPNG": {
+      "path": "https://images.pluto.tv/channels/62b976b93279cb000772c6f9/colorLogoPNG.png"
+    },
+    "stitched": {
+      "urls": [
+        {
+          "type": "hls",
+          "url": "https://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/62b976b93279cb000772c6f9/master.m3u8"
+        }
+      ],
+      "sessionURL": "https://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/session/undefined.json"
+    }
+  }
+]

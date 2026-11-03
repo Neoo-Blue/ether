@@ -43,26 +43,78 @@ ALTER TABLE notify_queue ADD COLUMN claimed_at INTEGER NOT NULL DEFAULT 0;
 
 const Redacted = "[configured]"
 
-var Kinds = []string{"server.started", "server.stopping", "server.crash", "provider.recovered", "indexer.recovered", "cache.recovered", "playback.start", "playback.stop", "playback.error", "playback.failover", "provider.outage", "indexer.outage", "indexer.budget", "cache.full", "cert.renewed", "update.available", "backup.failed", "user.joined", "title.available", "newsletter.weekly", "test"}
+// Kinds lists every event kind Ether accepts. Definitions live in events.go.
+var Kinds = eventKindIDs()
 
+// Channel is one notification destination. Kind-specific values live in
+// Settings (plain) and Secrets (sealed at rest, redacted by the owner API),
+// keyed by the field names of the kind's schema (kinds.go).
 type Channel struct {
-	SMTPMode      string            `json:"smtpMode,omitempty"`
-	Subscription  *PushSubscription `json:"subscription,omitempty"`
 	ID            string            `json:"id"`
 	Name          string            `json:"name"`
 	Kind          string            `json:"kind"`
 	Enabled       bool              `json:"enabled"`
 	Events        []string          `json:"events"`
-	Endpoint      string            `json:"endpoint"`
-	Token         string            `json:"token"`
-	Target        string            `json:"target"`
-	Username      string            `json:"username"`
-	Password      string            `json:"password"`
-	From          string            `json:"from"`
-	To            string            `json:"to"`
+	Settings      map[string]string `json:"settings,omitempty"`
+	Secrets       map[string]string `json:"secrets,omitempty"`
 	PerMinute     int               `json:"perMinute"`
 	DigestMinutes int               `json:"digestMinutes"`
 }
+
+// Setting returns a non-secret field value, or "".
+func (c Channel) Setting(key string) string { return c.Settings[key] }
+
+// Secret returns a secret field value, or "".
+func (c Channel) Secret(key string) string { return c.Secrets[key] }
+
+// Subscription decodes the browser push subscription held in Secrets.
+func (c Channel) Subscription() (*PushSubscription, error) {
+	raw := c.Secret("subscription")
+	if raw == "" {
+		return nil, errors.New("browser subscription required; connect this device from Notifications")
+	}
+	var p PushSubscription
+	if err := json.Unmarshal([]byte(raw), &p); err != nil {
+		return nil, errors.New("stored browser subscription is unreadable")
+	}
+	return &p, nil
+}
+
+// SetSubscription stores p as the channel's subscription secret.
+func (c *Channel) SetSubscription(p *PushSubscription) {
+	if c.Secrets == nil {
+		c.Secrets = map[string]string{}
+	}
+	if p == nil {
+		delete(c.Secrets, "subscription")
+		return
+	}
+	raw, _ := json.Marshal(p)
+	c.Secrets["subscription"] = string(raw)
+}
+
+// clone deep-copies the channel's value maps.
+func (c Channel) clone() Channel {
+	if c.Settings != nil {
+		m := make(map[string]string, len(c.Settings))
+		for k, v := range c.Settings {
+			m[k] = v
+		}
+		c.Settings = m
+	}
+	if c.Secrets != nil {
+		m := make(map[string]string, len(c.Secrets))
+		for k, v := range c.Secrets {
+			m[k] = v
+		}
+		c.Secrets = m
+	}
+	if c.Events != nil {
+		c.Events = append([]string(nil), c.Events...)
+	}
+	return c
+}
+
 type Event struct {
 	HTML    string    `json:"html,omitempty"`
 	Kind    string    `json:"kind"`
@@ -82,8 +134,13 @@ type Options struct {
 	// Sealer protects stored channel secrets and the push identity
 	// (secrets.go); nil stores them as given.
 	Sealer config.FieldSealer
+	// Kinds is the channel-kind registry; nil uses the built-ins.
+	Kinds *KindRegistry
 }
 type Service struct {
+	subscriberMu            sync.RWMutex
+	subscribers             map[uint64]func(Event)
+	nextSubscriber          uint64
 	monitorDone             <-chan struct{}
 	watchMu                 sync.Mutex
 	watchUpdate             func() error
@@ -98,7 +155,42 @@ type Service struct {
 	cacheFull      bool
 	db             *sql.DB
 	opts           Options
+	kinds          *KindRegistry
 }
+
+// Kinds returns the service's channel-kind registry.
+func (s *Service) Kinds() *KindRegistry { return s.kinds }
+
+// RegisterChannelKind adds a channel kind (plugin kinds; WS9f).
+func (s *Service) RegisterChannelKind(k ChannelKind) error { return s.kinds.Register(k) }
+
+// Subscribe observes successfully emitted events, independent of channel selection.
+func (s *Service) Subscribe(fn func(Event)) func() {
+	s.subscriberMu.Lock()
+	if s.subscribers == nil {
+		s.subscribers = make(map[uint64]func(Event))
+	}
+	s.nextSubscriber++
+	id := s.nextSubscriber
+	s.subscribers[id] = fn
+	s.subscriberMu.Unlock()
+	return func() { s.subscriberMu.Lock(); delete(s.subscribers, id); s.subscriberMu.Unlock() }
+}
+
+func (s *Service) publishEvent(e Event) {
+	s.subscriberMu.RLock()
+	fns := make([]func(Event), 0, len(s.subscribers))
+	for _, fn := range s.subscribers {
+		fns = append(fns, fn)
+	}
+	s.subscriberMu.RUnlock()
+	for _, fn := range fns {
+		fn(e)
+	}
+}
+
+// HTTPClient is the client channel kinds deliver with.
+func (s *Service) HTTPClient() *http.Client { return s.opts.Client }
 
 func New(db *sql.DB, opts Options) *Service {
 	if opts.Client == nil {
@@ -116,7 +208,11 @@ func New(db *sql.DB, opts Options) *Service {
 		_, _ = rand.Read(b[:])
 		opts.NodeID = hex.EncodeToString(b[:])
 	}
-	return &Service{drainMu: make(chan struct{}, 1), db: db, opts: opts, indexerLog: faillog.New(opts.Logger, "enqueue indexer notification")}
+	kinds := opts.Kinds
+	if kinds == nil {
+		kinds = builtinRegistry()
+	}
+	return &Service{drainMu: make(chan struct{}, 1), db: db, opts: opts, kinds: kinds, indexerLog: faillog.New(opts.Logger, "enqueue indexer notification")}
 }
 
 // claimTimeout is how long a claimed row may stay in 'sending' before it is
@@ -144,15 +240,90 @@ func (s *Service) channels(ctx context.Context) ([]Channel, error) {
 	return out, rows.Err()
 }
 func redacted(c Channel) Channel {
-	for _, p := range []*string{&c.Endpoint, &c.Token, &c.Password} {
-		if *p != "" {
-			*p = Redacted
+	c = c.clone()
+	for k, v := range c.Secrets {
+		if v != "" {
+			c.Secrets[k] = Redacted
 		}
 	}
-	if c.Subscription != nil {
-		c.Subscription = &PushSubscription{Endpoint: Redacted, Keys: PushKeys{Auth: Redacted, P256dh: Redacted}}
-	}
 	return c
+}
+
+// normalize moves each value into the map its kind's schema declares
+// (Settings or Secrets), applies field defaults and drops empty values.
+func (s *Service) normalize(c Channel) (Channel, error) {
+	kind, ok := s.kinds.Get(c.Kind)
+	if !ok {
+		return c, errors.New("unsupported channel kind")
+	}
+	settings := map[string]string{}
+	secrets := map[string]string{}
+	known := map[string]bool{}
+	for _, f := range kind.Fields {
+		known[f.Key] = true
+		v := c.Settings[f.Key]
+		if sv, ok := c.Secrets[f.Key]; ok && sv != "" {
+			v = sv
+		}
+		if v == "" {
+			v = f.Default
+		}
+		if v == "" {
+			continue
+		}
+		if f.Secret {
+			secrets[f.Key] = v
+		} else {
+			settings[f.Key] = v
+		}
+	}
+	for k := range c.Settings {
+		if !known[k] {
+			return c, fmt.Errorf("unknown setting %q for %s channels", k, c.Kind)
+		}
+	}
+	for k := range c.Secrets {
+		if !known[k] {
+			return c, fmt.Errorf("unknown setting %q for %s channels", k, c.Kind)
+		}
+	}
+	if len(settings) == 0 {
+		settings = nil
+	}
+	if len(secrets) == 0 {
+		secrets = nil
+	}
+	c.Settings, c.Secrets = settings, secrets
+	return c, nil
+}
+
+// validateChannel checks a channel against the built-in kinds.
+func validateChannel(c Channel) error {
+	return validateWith(builtinRegistry(), c)
+}
+
+func validateWith(reg *KindRegistry, c Channel) error {
+	kind, ok := reg.Get(c.Kind)
+	if !ok {
+		return errors.New("unsupported channel kind")
+	}
+	if err := kind.Validate(c); err != nil {
+		return err
+	}
+	for _, v := range c.Events {
+		if v != "*" && !known(v) {
+			return errors.New("unsupported event rule")
+		}
+	}
+	return nil
+}
+
+func (s *Service) deliver(ctx context.Context, c Channel, e Event) error {
+	kind, ok := s.kinds.Get(c.Kind)
+	if !ok {
+		return errors.New("unsupported channel kind")
+	}
+	return kind.Deliver(ctx, s, c, e)
 }
 func (s *Service) Channels(ctx context.Context) ([]Channel, error) {
 	cs, err := s.channels(ctx)
@@ -164,6 +335,10 @@ func (s *Service) Channels(ctx context.Context) ([]Channel, error) {
 func (s *Service) Save(ctx context.Context, c Channel) error {
 	if c.ID == "" || len(c.ID) > 100 || strings.ContainsAny(c.ID, "/\\") {
 		return errors.New("channel ID required (no slashes)")
+	}
+	c, err := s.normalize(c)
+	if err != nil {
+		return err
 	}
 	cs, err := s.channels(ctx)
 	if err != nil {
@@ -182,7 +357,7 @@ func (s *Service) Save(ctx context.Context, c Channel) error {
 	if c.PerMinute < 1 || c.PerMinute > 60 || c.DigestMinutes < 0 || c.DigestMinutes > 10080 {
 		return errors.New("rate must be 1–60/minute; digest must be 0–10080 minutes")
 	}
-	if err := validateChannel(c); err != nil {
+	if err := validateWith(s.kinds, c); err != nil {
 		return err
 	}
 	raw, err := s.encodeChannel(c)
@@ -197,8 +372,12 @@ func (s *Service) Save(ctx context.Context, c Channel) error {
 }
 func (s *Service) Emit(ctx context.Context, e Event) error {
 	e, selected, err := s.prepare(ctx, e)
-	if err != nil || len(selected) == 0 {
+	if err != nil {
 		return err
+	}
+	if len(selected) == 0 {
+		s.publishEvent(e)
+		return nil
 	}
 	// Commit every destination together. A failed fan-out can be retried
 	// without duplicating notifications already queued for earlier channels.
@@ -212,7 +391,11 @@ func (s *Service) Emit(ctx context.Context, e Event) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.publishEvent(e)
+	return nil
 }
 
 // prepare validates e, stamps its time and selects the channels it goes to.
@@ -232,7 +415,7 @@ func (s *Service) prepare(ctx context.Context, e Event) (Event, []Channel, error
 	}
 	var selected []Channel
 	for _, c := range cs {
-		if c.Enabled && matches(c.Events, e.Kind) && (e.Kind != "newsletter.weekly" || c.Kind == "smtp") {
+		if c.Enabled && matches(c.Events, e.Kind) && eventAllowsKind(e.Kind, c.Kind) {
 			selected = append(selected, c)
 		}
 	}

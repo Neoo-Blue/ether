@@ -15,6 +15,8 @@ import { useEffect, useState } from "react";
 import { Field, SecretInput, Segmented } from "../../components/fields";
 import { localized, t } from "../../i18n";
 import { errorMessage } from "../../lib/api";
+import { isPluginDescriptor, textOf, useRegistry, type Descriptor } from "../../lib/extend";
+import type { ParamField } from "../../lib/rules";
 import { formatNumber, relativeTime } from "../../lib/format";
 import {
   dayClock,
@@ -27,7 +29,29 @@ import {
   type SourceDraft,
 } from "./model";
 
-export type SourceKind = "playlist" | "guide";
+export type SourceKind = "playlist" | "guide" | "stremio";
+
+/** Mirrors internal/extend.LiveTVSourceMeta. */
+interface LiveTVSourceMeta {
+  params?: ParamField[];
+  editor?: string;
+  yieldsChannels?: boolean;
+  yieldsGuide?: boolean;
+  test?: boolean;
+}
+
+type LiveTVDescriptor = Descriptor<LiveTVSourceMeta>;
+
+function kindIcon(d: LiveTVDescriptor | undefined, size = 13) {
+  switch (d?.icon) {
+    case "calendar-range":
+      return <CalendarRange size={size} />;
+    case "key-round":
+      return <KeyRound size={size} />;
+    default:
+      return <ListVideo size={size} />;
+  }
+}
 
 const playlistCap = 64 * 1024 * 1024;
 const guideCap = 2 * 1024 * 1024 * 1024;
@@ -61,12 +85,30 @@ export function SourceEditor({
     playlist: null,
     guide: null,
   });
+  // Source kinds come from the descriptor registry; the editor families
+  // (playlist, guide, xtream) are named by each kind's meta.editor.
+  const registry = useRegistry<LiveTVSourceMeta>("liveTVSource");
+  const kindDescriptors: LiveTVDescriptor[] = registry.descriptors;
+  const byEditor = (editor: string) => kindDescriptors.find((d) => d.meta?.editor === editor);
+  const typeDescriptors = kindDescriptors.filter(
+    (d) =>
+      d.meta?.editor === "playlist" || d.meta?.editor === "guide" || d.meta?.editor === "stremio",
+  );
+  const pluginKinds = kindDescriptors.filter(
+    (d) =>
+      isPluginDescriptor(d) &&
+      d.meta?.editor !== "playlist" &&
+      d.meta?.editor !== "guide" &&
+      d.meta?.editor !== "xtream",
+  );
+  const selectedPlugin = pluginKinds.find((d) => d.id === draft.playlistUrl);
   useEffect(() => {
     setDraft(
       source
         ? {
             ...emptySource(),
             id: source.id,
+            kind: source.kind,
             name: source.name,
             playlistUrl: source.playlistUrl ?? "",
             guideUrl: source.guideUrl ?? "",
@@ -77,10 +119,12 @@ export function SourceEditor({
     );
     setKind(
       source
-        ? source.hasPlaylist === false ||
-          (!source.playlistUrl && !source.channelCount && source.hasGuide)
-          ? "guide"
-          : "playlist"
+        ? source.kind === "stremio"
+          ? "stremio"
+          : source.hasPlaylist === false ||
+              (!source.playlistUrl && !source.channelCount && source.hasGuide)
+            ? "guide"
+            : "playlist"
         : initialKind,
     );
     setFiles({ playlist: null, guide: null });
@@ -110,9 +154,11 @@ export function SourceEditor({
     draft.name.trim() !== "" &&
     (xtream
       ? Boolean(auth.server?.trim() && auth.username?.trim() && auth.password)
-      : kind === "playlist"
-        ? Boolean(files.playlist || draft.playlist || draft.playlistUrl)
-        : Boolean(files.guide || draft.guide || draft.guideUrl));
+      : kind === "stremio"
+        ? Boolean(draft.playlistUrl.trim())
+        : kind === "playlist"
+          ? Boolean(files.playlist || draft.playlist || draft.playlistUrl)
+          : Boolean(files.guide || draft.guide || draft.guideUrl));
 
   const save = async () => {
     setBusy("save");
@@ -120,7 +166,8 @@ export function SourceEditor({
     try {
       const body: SourceDraft =
         kind === "guide" || xtream ? { ...draft, playlist: "", playlistUrl: "" } : { ...draft };
-      body.auth = cleanAuth(draft.auth, kind);
+      body.kind = kind === "stremio" ? "stremio" : "";
+      body.auth = kind === "stremio" ? undefined : cleanAuth(draft.auth, kind);
       const playlistFile = kind === "playlist" && !xtream ? files.playlist : null;
       const guideFile = files.guide;
       if (playlistFile && source?.playlistUrl) body.playlistUrl = source.playlistUrl;
@@ -203,12 +250,22 @@ export function SourceEditor({
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-xl font-semibold tracking-tight text-fg">
-            {source ? source.name : kind === "guide" ? t("New guide source") : t("New IPTV source")}
+            {source
+              ? source.name
+              : kind === "guide"
+                ? t("New guide source")
+                : kind === "stremio"
+                  ? t("New Stremio add-on")
+                  : t("New IPTV source")}
           </h2>
           <p className="text-sm text-fg-muted">
-            {kind === "guide"
-              ? t("An XMLTV guide on its own. Map any channel to it for listings.")
-              : t("An M3U playlist of live streams, with an optional XMLTV guide.")}
+            {textOf(
+              byEditor(kind === "guide" ? "guide" : kind === "stremio" ? "stremio" : "playlist")
+                ?.hint,
+            ) ||
+              (kind === "guide"
+                ? t("An XMLTV guide on its own. Map any channel to it for listings.")
+                : t("An M3U playlist of live streams, with an optional XMLTV guide."))}
           </p>
         </div>
         {source ? (
@@ -283,19 +340,59 @@ export function SourceEditor({
 
       <section className="space-y-4 rounded-2xl border border-border bg-surface p-5">
         {!source ? (
-          <Segmented
-            ariaLabel={t("Source type")}
-            value={kind}
-            onChange={setKind}
-            options={[
-              { value: "playlist", label: t("M3U playlist"), icon: <ListVideo size={13} /> },
-              {
-                value: "guide",
-                label: t("Guide only (XMLTV)"),
-                icon: <CalendarRange size={13} />,
-              },
-            ]}
-          />
+          <div className="space-y-2">
+            <Segmented
+              ariaLabel={t("Source type")}
+              value={kind}
+              onChange={(next) => {
+                setKind(next);
+                if (selectedPlugin) setDraft((d) => ({ ...d, playlistUrl: "" }));
+              }}
+              options={typeDescriptors.map((d) => ({
+                value: (d.meta?.editor === "guide"
+                  ? "guide"
+                  : d.meta?.editor === "stremio"
+                    ? "stremio"
+                    : "playlist") as SourceKind,
+                label: textOf(d.label),
+                icon: kindIcon(d),
+              }))}
+            />
+            {registry.error ? (
+              <p role="alert" className="text-sm text-danger">
+                {t("Source kinds could not be loaded.")}{" "}
+                <Button type="button" variant="ghost" size="sm" onClick={registry.reload}>
+                  {t("Try again")}
+                </Button>
+              </p>
+            ) : registry.loading ? (
+              <p className="text-sm text-fg-muted">{t("Loading source kinds…")}</p>
+            ) : null}
+            {pluginKinds.length ? (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {pluginKinds.map((d) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => {
+                      setKind("playlist");
+                      setDraft((s) => ({
+                        ...s,
+                        playlistUrl: d.id,
+                        playlist: "",
+                        auth: undefined,
+                        name: s.name || textOf(d.label),
+                      }));
+                    }}
+                  >
+                    <Badge variant={draft.playlistUrl === d.id ? "default" : "secondary"}>
+                      {t("{label} (from {owner})", { label: textOf(d.label), owner: d.owner })}
+                    </Badge>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
         ) : null}
         <Field label={t("Source name")} htmlFor="src-name">
           <Input
@@ -307,7 +404,7 @@ export function SourceEditor({
             }
           />
         </Field>
-        {kind === "playlist" ? (
+        {kind === "playlist" && !selectedPlugin ? (
           <Field label={t("Connect with")}>
             <Segmented
               ariaLabel={t("Connect with")}
@@ -324,7 +421,11 @@ export function SourceEditor({
               }
               options={[
                 { value: "url", label: t("Playlist URL or file"), icon: <Link2 size={13} /> },
-                { value: "xtream", label: t("Xtream Codes login"), icon: <KeyRound size={13} /> },
+                {
+                  value: "xtream",
+                  label: textOf(byEditor("xtream")?.label) || t("Xtream Codes login"),
+                  icon: <KeyRound size={13} />,
+                },
               ]}
             />
           </Field>
@@ -379,7 +480,7 @@ export function SourceEditor({
             </Field>
           </div>
         ) : null}
-        {kind === "playlist" && !xtream ? (
+        {kind === "playlist" && !xtream && !selectedPlugin ? (
           <UrlOrFile
             id="src-m3u"
             label={t("M3U playlist")}
@@ -391,31 +492,52 @@ export function SourceEditor({
             onFile={(f) => void upload(f, "playlist")}
           />
         ) : null}
-        <UrlOrFile
-          id="src-xmltv"
-          label={
-            xtream
-              ? t("XMLTV guide override (optional)")
-              : kind === "playlist"
-                ? t("XMLTV guide (optional)")
-                : t("XMLTV guide")
-          }
-          url={draft.guideUrl}
-          fileReady={Boolean(files.guide)}
-          accept=".xml,.gz,application/xml,text/xml,application/gzip"
-          placeholder={
-            xtream ? t("Leave blank to use the panel's guide") : t("https://…/guide.xml or .xml.gz")
-          }
-          hint={
-            xtream
-              ? t("Ether uses the panel's own XMLTV export unless you set one here.")
-              : t("Gzipped guides (.xml.gz) are fine.")
-          }
-          onUrl={(v) => setDraft({ ...draft, guideUrl: v, guide: "" })}
-          onFile={(f) => void upload(f, "guide")}
-        />
-        {!xtream ? <SignIn auth={auth} onChange={setAuth} /> : null}
-        <ClientIdentity auth={auth} onChange={setAuth} />
+        {kind === "stremio" ? (
+          <Field
+            label={t("Add-on URL")}
+            htmlFor="src-stremio"
+            hint={t("Paste the configured manifest URL from your add-on.")}
+          >
+            <SecretInput
+              id="src-stremio"
+              value={draft.playlistUrl}
+              onChange={(v) => setDraft({ ...draft, playlistUrl: v })}
+            />
+          </Field>
+        ) : null}
+        {kind !== "stremio" && !selectedPlugin ? (
+          <UrlOrFile
+            id="src-xmltv"
+            label={
+              xtream
+                ? t("XMLTV guide override (optional)")
+                : kind === "playlist"
+                  ? t("XMLTV guide (optional)")
+                  : t("XMLTV guide")
+            }
+            url={draft.guideUrl}
+            fileReady={Boolean(files.guide)}
+            accept=".xml,.gz,application/xml,text/xml,application/gzip"
+            placeholder={
+              xtream
+                ? t("Leave blank to use the panel's guide")
+                : t("https://…/guide.xml or .xml.gz")
+            }
+            hint={
+              xtream
+                ? t("Ether uses the panel's own XMLTV export unless you set one here.")
+                : t("Gzipped guides (.xml.gz) are fine.")
+            }
+            onUrl={(v) => setDraft({ ...draft, guideUrl: v, guide: "" })}
+            onFile={(f) => void upload(f, "guide")}
+          />
+        ) : null}
+        {!xtream && kind !== "stremio" && !selectedPlugin ? (
+          <SignIn auth={auth} onChange={setAuth} />
+        ) : null}
+        {kind !== "stremio" && !selectedPlugin ? (
+          <ClientIdentity auth={auth} onChange={setAuth} />
+        ) : null}
         <Field
           label={t("Keep it fresh")}
           hint={

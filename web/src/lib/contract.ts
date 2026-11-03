@@ -25,6 +25,8 @@ export interface TitleCard {
 }
 
 export interface TitleDetail extends TitleCard {
+  tmdbId?: number;
+  imdbId?: string;
   cast?: { id: number; name: string; role?: string; image?: string }[];
   directors?: { id: number; name: string; image?: string }[];
   keywords?: { id: number; name: string }[] | string[];
@@ -110,6 +112,13 @@ export type Source =
   | { kind: "letterboxdList"; url: string }
   | { kind: "mdblist"; url: string }
   | { kind: "anilistList"; url: string }
+  | {
+      kind: "stremioCatalog";
+      url: string;
+      list: string;
+      mediaType: "movie" | "show";
+      maxItems?: number;
+    }
   | { kind: "stevenlu"; list: StevenLuList }
   | { kind: "titles"; keys: string[] };
 

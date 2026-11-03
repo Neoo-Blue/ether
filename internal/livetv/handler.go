@@ -19,7 +19,13 @@ import (
 func (s *Service) Handler() http.Handler {
 	r := chi.NewRouter()
 	owner := &core.User{IsOwner: true}
-	r.Get("/channels", func(w http.ResponseWriter, r *http.Request) { v, e := s.Channels(r.Context()); ownerResult(w, v, e) })
+	r.Get("/channels", func(w http.ResponseWriter, r *http.Request) {
+		v, e := s.Channels(r.Context())
+		if e == nil {
+			s.redactAddonChannels(r.Context(), v)
+		}
+		ownerResult(w, v, e)
+	})
 	r.Get("/channels/{id}/sources/status", func(w http.ResponseWriter, r *http.Request) {
 		v, e := s.StreamSourceStatuses(r.Context(), chi.URLParam(r, "id"))
 		ownerResult(w, v, e)
@@ -32,7 +38,16 @@ func (s *Service) Handler() http.Handler {
 		if id := chi.URLParam(r, "id"); id != "" {
 			c.ID = id
 		}
+		if e := s.restoreAddonChannel(r.Context(), &c); e != nil {
+			ownerResult(w, nil, e)
+			return
+		}
 		v, e := s.SaveChannel(r.Context(), c)
+		if e == nil {
+			one := []Channel{v}
+			s.redactAddonChannels(r.Context(), one)
+			v = one[0]
+		}
 		ownerResult(w, v, e)
 	}
 	r.Post("/channels", save)

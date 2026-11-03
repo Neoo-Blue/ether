@@ -2,7 +2,15 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { calls, renderApp } from "./harness";
-import { releaseRuleConflict } from "../pages/releases/ReleasePreferences";
+import {
+  releaseRuleConflict,
+  type RuleFieldDescriptor,
+} from "../pages/releases/ReleasePreferences";
+import { descriptors as rankingDescriptors } from "../mock/extend/descriptors/ranking";
+
+const ruleFields = rankingDescriptors.filter(
+  (d) => d.kind === "ruleField",
+) as unknown as RuleFieldDescriptor[];
 
 const WAIT = { timeout: 4000 };
 
@@ -136,20 +144,23 @@ describe("profile rules and ranking ladder", () => {
 
   it("flags conflicting requirements before save", () => {
     expect(
-      releaseRuleConflict([
-        {
-          id: "a",
-          name: "HEVC",
-          action: "require",
-          conditions: [{ field: "video", operator: "equals", value: "hevc" }],
-        },
-        {
-          id: "b",
-          name: "H.264",
-          action: "require",
-          conditions: [{ field: "video", operator: "equals", value: "h264" }],
-        },
-      ]),
+      releaseRuleConflict(
+        [
+          {
+            id: "a",
+            name: "HEVC",
+            action: "require",
+            conditions: [{ field: "video", operator: "equals", value: "hevc" }],
+          },
+          {
+            id: "b",
+            name: "H.264",
+            action: "require",
+            conditions: [{ field: "video", operator: "equals", value: "h264" }],
+          },
+        ],
+        ruleFields,
+      ),
     ).toMatch(/cannot match the same release/);
   });
 
@@ -164,4 +175,59 @@ describe("profile rules and ranking ladder", () => {
     ).toBeGreaterThan(0);
     expect(within(drawer).getByText(/cannot be compared from a filename/)).toBeInTheDocument();
   });
+
+  it("adds and removes a plugin ranking step and selects a plugin rule field", async () => {
+    const { fake, drawer } = await openProfile();
+    const addStepBtn = await within(drawer).findByRole("button", { name: "Add a step" }, WAIT);
+    fireEvent.click(addStepBtn);
+    expect(
+      await within(drawer).findByText("From community.example.dub", {}, WAIT),
+    ).toBeInTheDocument();
+
+    fireEvent.click(within(drawer).getByRole("button", { name: "Remove step" }));
+    expect(within(drawer).queryByText("From community.example.dub")).not.toBeInTheDocument();
+
+    fireEvent.click(within(drawer).getByRole("button", { name: "Add a step" }));
+    await addRule(drawer, "en", "Dubbed · From community.example.dub", "Prefer");
+    expect(within(drawer).getAllByText("From community.example.dub").length).toBeGreaterThanOrEqual(
+      2,
+    );
+
+    fireEvent.click(within(drawer).getByRole("button", { name: "Save profile" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), WAIT);
+    const saved = fake.state.config.quality.profiles!.find((p) => p.name === "1080p")!;
+    expect(saved.ranking).toContain("plugin:community.example.dub/dub");
+    expect(saved.releaseRules?.[0]?.conditions[0]?.field).toBe(
+      "plugin:community.example.dub/dubbed",
+    );
+  });
+});
+
+it("edits and saves a plugin ranking step's configuration", async () => {
+  const descriptor = {
+    kind: "rankingStep" as const,
+    id: "plugin:test.example/dub",
+    owner: "test.example",
+    label: { source: "Dub preference" },
+    meta: { editor: { kind: "toggle" }, canMove: true, defaultPosition: 0 },
+  };
+  rankingDescriptors.push(descriptor);
+  try {
+    const { resetRegistryCache } = await import("../lib/extend");
+    resetRegistryCache();
+    const { fake, drawer } = await openProfile();
+    fireEvent.click(within(drawer).getByRole("button", { name: "Step to add" }));
+    fireEvent.click(await screen.findByRole("option", { name: /Dub preference/ }, WAIT));
+    fireEvent.click(within(drawer).getByRole("button", { name: "Add a step" }));
+    fireEvent.click(within(drawer).getByRole("button", { name: "Configure Dub preference" }));
+    fireEvent.click(within(drawer).getByRole("switch", { name: "Dub preference" }));
+    fireEvent.click(within(drawer).getByRole("button", { name: "Save profile" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), WAIT);
+    const saved = fake.state.config.quality.profiles!.find((p) => p.name === "1080p")!;
+    expect(saved.rankingConfig?.[descriptor.id]).toEqual({ value: true });
+  } finally {
+    rankingDescriptors.splice(rankingDescriptors.indexOf(descriptor), 1);
+    const { resetRegistryCache } = await import("../lib/extend");
+    resetRegistryCache();
+  }
 });

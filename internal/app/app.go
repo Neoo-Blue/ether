@@ -118,6 +118,10 @@ type Options struct {
 	CatalogNow func() time.Time
 	// plextvHTTP, when set, is the HTTP client used by the plex.tv client in tests.
 	plextvHTTP *http.Client
+	// diskUsage, when set, replaces the cache volume measurement behind the
+	// segment cache's free-space floor, so tests never depend on the free
+	// space of the machine running them.
+	diskUsage segcache.DiskUsageFunc
 	// front is Serve's listener, bound before the database opens; nil
 	// when an App is run on its own (tests), which then binds in Run.
 	front *frontDoor
@@ -258,6 +262,13 @@ type App struct {
 	integrity atomic.Pointer[store.Integrity]
 	// restart is an owner-requested restart (restart.go).
 	restart restartState
+	// Extensibility (docs/extend/SPEC.md). Each runtime type lives in its own
+	// file and is owned by one workstream: extend.go, console_stream.go,
+	// plugins.go and agent.go.
+	extendRT  *extendRuntime
+	streamRT  *consoleStreamRuntime
+	pluginsRT *pluginRuntime
+	agentRT   *agentRuntime
 }
 
 // New builds every component. Nothing listens until Run.
@@ -540,6 +551,7 @@ func (a *App) applyConfig(c config.Config) {
 	}
 	a.trakt.UpdateConfig(c.Trakt)
 	a.subtitles.UpdateConfig(c.OpenSubtitles)
+	a.subtitles.UpdateProviders(c.Subtitles.Providers)
 	// Re-publish section titles when Movies / TV Shows library names change.
 	a.publishLibrarySections()
 	a.registrar.Trigger()

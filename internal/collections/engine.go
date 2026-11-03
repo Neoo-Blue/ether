@@ -71,7 +71,7 @@ type cand struct {
 func (s *Service) evaluate(ctx context.Context, spIn core.CollectionSpec, opt evalOptions) (*buildResult, error) {
 	sp := cloneSpec(spIn)
 	Normalize(&sp)
-	if err := Validate(&sp); err != nil {
+	if err := s.validate(&sp); err != nil {
 		return nil, err
 	}
 	rules, err := compileRules(sp.Rules)
@@ -120,6 +120,9 @@ func (s *Service) evaluate(ctx context.Context, spIn core.CollectionSpec, opt ev
 	}
 	res.resolved = cloneSpec(sp)
 	for i, r := range results {
+		if r.err != nil {
+			return nil, r.err
+		}
 		res.warnings = append(res.warnings, r.warnings...)
 		if r.resolvedID > 0 && res.resolved.Sources[i].ID <= 0 {
 			res.resolved.Sources[i].ID = r.resolvedID

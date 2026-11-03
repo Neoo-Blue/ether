@@ -19,6 +19,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/braedonsaunders/ether/internal/artwork"
 	"github.com/braedonsaunders/ether/internal/clusterbus"
 	"github.com/braedonsaunders/ether/internal/config"
 	"github.com/braedonsaunders/ether/internal/core"
@@ -184,6 +185,7 @@ type Server struct {
 	sections []Section
 
 	images            *artworkservice.RemoteCache
+	channelLogos      *artwork.Images
 	boundStreams      sessions.PlexStreamAPI
 	variantIDs        *variantIDRegistry
 	renderedVariants  *renderedVariants
@@ -254,6 +256,7 @@ func NewServer(d Deps) *Server {
 		d:                 d,
 		log:               d.Logger.With("component", "plex"),
 		images:            artworkservice.NewRemoteCache(d.ImageCacheBytes, d.HTTPClient),
+		channelLogos:      artwork.NewImages(artwork.ImagesOptions{HTTPClient: d.HTTPClient}),
 		variantIDs:        newVariantIDRegistry(d.DB),
 		renderedVariants:  newRenderedVariants(),
 		downloads:         newDownloadStore(),

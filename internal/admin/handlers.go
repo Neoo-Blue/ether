@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -538,34 +537,7 @@ func (h *Handler) safeStatus(r *http.Request, fn StatusFunc) any {
 }
 
 func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
-	providers := h.statusProviders()
-	names := make([]string, 0, len(providers))
-	for n := range providers {
-		names = append(names, n)
-	}
-	sort.Strings(names)
-	sections := map[string]any{}
-	for _, n := range names {
-		sections[n] = h.safeStatus(r, providers[n])
-	}
-	cfg := h.deps.Config.Get()
-	steps, complete := h.setupStatus(r)
-	plexEnabled := cfg.Frontends == nil || cfg.Frontends["plex"].Enabled
-	if !plexEnabled {
-		delete(sections, "remote")
-		kept := names[:0]
-		for _, n := range names {
-			if n != "remote" {
-				kept = append(kept, n)
-			}
-		}
-		names = kept
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"sections": sections, "names": names,
-		"setupComplete": complete, "setupSteps": steps, "version": h.version,
-		"plexEnabled": plexEnabled,
-	})
+	writeJSON(w, http.StatusOK, h.dashboardBody(r))
 }
 
 func (h *Handler) handleSystemLoad(w http.ResponseWriter, r *http.Request) {

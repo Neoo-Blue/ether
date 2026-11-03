@@ -66,5 +66,6 @@ func (a *App) extensionHandlers() map[string]http.Handler {
 	})
 	a.discoveryHandlers(m)
 	adoptionHandlers(a, m)
+	a.extensibilityHandlers(m)
 	return m
 }

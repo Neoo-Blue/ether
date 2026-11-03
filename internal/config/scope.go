@@ -53,6 +53,9 @@ var sectionScopes = map[string]Scope{
 	"personalize":    Shared,
 	"clients":        Shared,
 	"setupComplete":  Shared,
+	"subtitles":      Shared,
+	"liveTV":         Shared,
+	"plugins":        Shared,
 	// Spike serves files from this node's disk.
 	"spike": Local,
 	// Each node holds its own connection settings; the URL is sealed.

@@ -61,7 +61,7 @@ func (s *Service) GetSpec(ctx context.Context, id string) (*core.CollectionSpec,
 // bounded; if it runs long it finishes in the background.
 func (s *Service) CreateSpec(ctx context.Context, sp core.CollectionSpec) (*core.CollectionSpec, error) {
 	Normalize(&sp)
-	if err := Validate(&sp); err != nil {
+	if err := s.validate(&sp); err != nil {
 		return nil, err
 	}
 	row, err := s.insertRow(ctx, sp, 0)
@@ -82,7 +82,7 @@ func (s *Service) UpdateSpec(ctx context.Context, id string, sp core.CollectionS
 	if row.builtin {
 		sp = mergeBuiltin(row.spec, sp)
 	}
-	if err := Validate(&sp); err != nil {
+	if err := s.validate(&sp); err != nil {
 		return nil, err
 	}
 	if err := s.updateRow(ctx, row.id, sp); err != nil {
@@ -98,6 +98,15 @@ func (s *Service) UpdateSpec(ctx context.Context, id string, sp core.CollectionS
 
 func (s *Service) afterSave(ctx context.Context, row *specRow) (*core.CollectionSpec, error) {
 	if row.enabled {
+		if hasStremioCatalog(row.spec) {
+			go func() {
+				bctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+				defer cancel()
+				_, _ = s.build(bctx, row)
+			}()
+			v := row.view()
+			return &v, nil
+		}
 		bctx, cancel := context.WithTimeout(ctx, s.buildBudget)
 		_, err := s.build(bctx, row)
 		cancel()
@@ -165,11 +174,25 @@ func (s *Service) Preview(ctx context.Context, sp core.CollectionSpec, n int) (*
 	if named.Name == "" {
 		named.Name = "Untitled"
 	}
-	if err := Validate(&named); err != nil {
+	if err := s.validate(&named); err != nil {
 		return nil, err
 	}
+	pluginPreview := false
+	for _, src := range named.Sources {
+		if backgroundOnlySource(src) {
+			pluginPreview = true
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			break
+		}
+	}
+	ctx = context.WithValue(ctx, previewContextKey{}, true)
 	res, err := s.evaluate(ctx, named, evalOptions{seed: named.Name})
 	if err != nil {
+		if pluginPreview && errors.Is(err, context.DeadlineExceeded) {
+			return nil, fmt.Errorf("plugin list preview timed out: %w", err)
+		}
 		return nil, err
 	}
 	keys := res.keys

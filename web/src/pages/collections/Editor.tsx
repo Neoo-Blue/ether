@@ -123,6 +123,15 @@ export default function CollectionEditor() {
       if (!tpl) throw new ApiError(404, "not_found", t("That template no longer exists."));
       return normalizeSpec({ ...tpl.spec, id: undefined, enabled: false, templateId: tpl.id });
     }
+    if (search.get("source") === "stremioCatalog") {
+      const spec = blankSpec();
+      const seeded: CollectionSpec = {
+        ...spec,
+        sources: [{ kind: "stremioCatalog", url: "", list: "", mediaType: "movie", maxItems: 100 }],
+        targets: { ...spec.targets, homeRow: true },
+      };
+      return seeded;
+    }
     return blankSpec();
   }, [id, templateId]);
 
@@ -161,6 +170,17 @@ export default function CollectionEditor() {
   const debouncedSpec = useDebouncedValue(spec, 600);
   useEffect(() => {
     if (!ready) return;
+    // Configured add-on URLs contain credentials; never persist a draft
+    // holding a freshly pasted URL in browser storage.
+    if (
+      debouncedSpec.sources.some(
+        (s) => s.kind === "stremioCatalog" && s.url && !s.url.endsWith(" (saved)"),
+      )
+    ) {
+      clearDraft(dKey);
+      setSavedLocallyAt(null);
+      return;
+    }
     if (!same(debouncedSpec, baseline)) {
       saveDraft(dKey, debouncedSpec, baseline?.updatedAt);
       setSavedLocallyAt(new Date().toISOString());

@@ -24,7 +24,6 @@ export default function Notifications() {
     return {
       ...n,
       channels: n.channels ?? [],
-      events: n.events ?? [],
       deliveries: n.deliveries ?? [],
     };
   }, []);

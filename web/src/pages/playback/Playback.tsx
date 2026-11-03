@@ -1,13 +1,14 @@
+import * as S from "../settings/schema";
 import { Link } from "react-router-dom";
 import { ConfigSection } from "../../components/ConfigSection";
 import { DomainPage, useRouteTab } from "../../components/layout";
 import { localized, t, tx } from "../../i18n";
-import * as S from "../settings/schema";
 import { DeviceCapabilities } from "./Devices";
 import { HardwareStatus } from "./Hardware";
 import { MarkerCoverage } from "./Markers";
 import { SkipButtons } from "./SkipButtons";
 import { HouseholdAudio } from "./HouseholdAudio";
+import { SubtitleProviders } from "./SubtitleProviders";
 import { SubtitleTiming } from "./SubtitleTiming";
 
 const TABS = localized(
@@ -86,6 +87,7 @@ export default function Playback() {
               },
             )}
           </p>
+          <SubtitleProviders />
           <SubtitleTiming />
         </>
       ) : null}

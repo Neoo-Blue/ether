@@ -261,6 +261,8 @@ type personCard struct {
 }
 
 type titleDetail struct {
+	TMDBID int64  `json:"tmdbId,omitempty"`
+	IMDBID string `json:"imdbId,omitempty"`
 	TitleCard
 	Cast       []personCard `json:"cast"`
 	Directors  []personCard `json:"directors"`
@@ -293,7 +295,7 @@ func (h *Handler) handleCatalogTitle(w http.ResponseWriter, r *http.Request) {
 		h.writeServiceError(w, err)
 		return
 	}
-	d := titleDetail{TitleCard: CardFor(*t), Cast: people(t.Cast, 20), Directors: people(t.Directors, 5), Keywords: t.Keywords}
+	d := titleDetail{TMDBID: t.IDs.TMDB, IMDBID: t.IDs.IMDB, TitleCard: CardFor(*t), Cast: people(t.Cast, 20), Directors: people(t.Directors, 5), Keywords: t.Keywords}
 	if d.Keywords == nil {
 		d.Keywords = []string{}
 	}

@@ -3,17 +3,15 @@ import type {
   CollectionSpec,
   FacetName,
   LookupKind,
-  LookupSourceKind,
   Rule,
   RuleField,
   RuleOp,
   Source,
-  SourceKind,
-  StevenLuList,
-  TmdbListName,
 } from "./contract";
 import { localized, t, tn } from "../i18n";
 import { NOT_RATED, ratingLevelLabel } from "./contentRatings";
+import type { Descriptor, ExtendText } from "./extend";
+import { textOf } from "./extend";
 
 /**
  * Rule value encoding (the contract leaves `value` typed by field):
@@ -473,211 +471,140 @@ function opPhrase(op: RuleOp, kind: ValueKind | undefined, field: string, value:
 }
 
 // ---- Sources -------------------------------------------------------------------
+//
+// Collection source kinds are served by the descriptor registry
+// (internal/collections, kind "collectionSource"); the console keeps no
+// list of its own. These types mirror internal/extend/meta_sources.go.
 
-export interface SourceMeta {
-  kind: SourceKind;
-  label: string;
-  description: string;
-  lookup?: LookupKind;
+export interface ParamOption {
+  value: string;
+  label: ExtendText;
+  media?: string[];
 }
 
-export const SOURCE_KINDS = localized<SourceMeta[]>(() => [
-  { kind: "catalog", label: t("Whole catalogue"), description: t("Everything browsable in Ether") },
-  {
-    kind: "tmdbList",
-    label: t("TMDB chart"),
-    description: t("Trending, popular, top rated, now playing…"),
-  },
-  {
-    kind: "titles",
-    label: t("Hand-picked titles"),
-    description: t("Choose titles one by one, in your order"),
-  },
-  {
-    kind: "tmdbPerson",
-    label: t("Person's filmography"),
-    description: t("Everything an actor or director made"),
-    lookup: "person",
-  },
-  {
-    kind: "tmdbCollection",
-    label: t("TMDB collection"),
-    description: t("A franchise such as “The Lord of the Rings”"),
-    lookup: "collection",
-  },
-  {
-    kind: "tmdbKeyword",
-    label: t("Keyword"),
-    description: t("Titles tagged with a TMDB keyword"),
-    lookup: "keyword",
-  },
-  {
-    kind: "tmdbCompany",
-    label: t("Studio"),
-    description: t("Titles from a production company"),
-    lookup: "company",
-  },
-  {
-    kind: "tmdbNetwork",
-    label: t("TV network"),
-    description: t("Shows from a network such as HBO"),
-    lookup: "network",
-  },
-  {
-    kind: "watchProvider",
-    label: t("Streaming service"),
-    description: t("What's on a service in your region"),
-    lookup: "watchProvider",
-  },
-  {
-    kind: "tmdbDiscover",
-    label: t("TMDB discover query"),
-    description: t("Raw TMDB discover parameters"),
-  },
-  { kind: "traktList", label: t("Trakt list"), description: t("A public Trakt list URL") },
-  {
-    kind: "letterboxdList",
-    label: t("Letterboxd list"),
-    description: t("A public Letterboxd list URL"),
-  },
-  { kind: "mdblist", label: t("MDBList"), description: t("A public MDBList URL") },
-  {
-    kind: "anilistList",
-    label: t("AniList list"),
-    description: t("A public AniList anime list URL"),
-  },
-  {
-    kind: "stevenlu",
-    label: t("StevenLu popular movies"),
-    description: t("Movies people are talking about"),
-  },
-]);
-
-export function sourceMeta(kind: string): SourceMeta | undefined {
-  return SOURCE_KINDS.find((s) => s.kind === kind);
+export interface ParamField {
+  name: string;
+  kind: string;
+  label: ExtendText;
+  hint?: ExtendText;
+  required?: boolean;
+  options?: ParamOption[];
+  lookup?: string;
+  placeholder?: string;
 }
 
-export const TMDB_LISTS = localized<
-  { value: TmdbListName; label: string; media: ("movie" | "show")[] }[]
->(() => [
-  { value: "trending_day", label: t("Trending today"), media: ["movie", "show"] },
-  { value: "trending_week", label: t("Trending this week"), media: ["movie", "show"] },
-  { value: "popular", label: t("Popular"), media: ["movie", "show"] },
-  { value: "top_rated", label: t("Top rated"), media: ["movie", "show"] },
-  { value: "now_playing", label: t("Now in cinemas"), media: ["movie"] },
-  { value: "upcoming", label: t("Upcoming"), media: ["movie"] },
-  { value: "airing_today", label: t("Airing today"), media: ["show"] },
-  { value: "on_the_air", label: t("On the air"), media: ["show"] },
-]);
+export interface CollectionSourceMeta {
+  params?: ParamField[];
+  editor?: string;
+  defaults?: Record<string, unknown>;
+  mediaTypes?: string[];
+}
 
-export const STEVENLU_LISTS = localized<{ value: StevenLuList; label: string }[]>(() => [
-  { value: "movies", label: t("All popular movies") },
-  { value: "movies-imdb-min7", label: "IMDb 7+" },
-  { value: "movies-imdb-min8", label: "IMDb 8+" },
-  { value: "movies-metacritic-min50", label: "Metacritic 50+" },
-  { value: "movies-metacritic-min60", label: "Metacritic 60+" },
-  { value: "movies-metacritic-min70", label: "Metacritic 70+" },
-  { value: "movies-metacritic-min80", label: "Metacritic 80+" },
-  { value: "movies-rottentomatoes-min70", label: "Rotten Tomatoes 70+" },
-  { value: "movies-rottentomatoes-min80", label: "Rotten Tomatoes 80+" },
-]);
+export type SourceDescriptor = Descriptor<CollectionSourceMeta>;
 
-export function newSource(
-  kind: SourceKind,
+export function sourceDescriptor(
+  descriptors: readonly SourceDescriptor[],
+  kind: string,
+): SourceDescriptor | undefined {
+  return descriptors.find((d) => d.id === kind);
+}
+
+export function paramField(d: SourceDescriptor | undefined, name: string): ParamField | undefined {
+  return d?.meta?.params?.find((p) => p.name === name);
+}
+
+/** Options of a select param, labels in the active language. */
+export function paramOptions(
+  field: ParamField | undefined,
+): { value: string; label: string; media?: string[] }[] {
+  return (field?.options ?? []).map((o) => ({
+    value: o.value,
+    label: textOf(o.label),
+    media: o.media,
+  }));
+}
+
+export function optionLabel(field: ParamField | undefined, value: string): string {
+  const o = field?.options?.find((x) => x.value === value);
+  return o ? textOf(o.label) : value;
+}
+
+/** A fresh source of a descriptor's kind, from its served defaults. */
+export function newSourceFromDescriptor(
+  d: SourceDescriptor,
   mediaType: CollectionSpec["mediaType"],
   region = "US",
 ): Source {
-  switch (kind) {
-    case "catalog":
-      return { kind };
-    case "tmdbList":
-      return { kind, list: "trending_week", mediaType: mediaType === "show" ? "show" : "movie" };
-    case "tmdbCollection":
-      return { kind, id: 0 };
-    case "tmdbDiscover":
-      return { kind, params: {} };
-    case "tmdbKeyword":
-    case "tmdbCompany":
-    case "tmdbNetwork":
-    case "tmdbPerson":
-      return { kind: kind as LookupSourceKind, id: 0 };
-    case "watchProvider":
-      return { kind, id: 0, region };
-    case "traktList":
-    case "letterboxdList":
-    case "mdblist":
-    case "anilistList":
-      return { kind, url: "" };
-    case "stevenlu":
-      return { kind, list: "movies" };
-    case "titles":
-      return { kind, keys: [] };
-  }
+  const src: Record<string, unknown> = { kind: d.id, ...(d.meta?.defaults ?? {}) };
+  if ("mediaType" in src && mediaType === "show") src.mediaType = "show";
+  if (paramField(d, "region") && d.meta?.editor !== "plugin") src.region = region;
+  return src as Source;
 }
 
+/** A source is complete when every value it carries is filled in. Field
+ * shape, not kind lists, decides, so plugin kinds work unchanged. */
 export function isSourceComplete(s: Source): boolean {
-  switch (s.kind) {
-    case "tmdbCollection":
-    case "tmdbKeyword":
-    case "tmdbCompany":
-    case "tmdbNetwork":
-    case "tmdbPerson":
-    case "watchProvider":
-      return s.id > 0;
-    case "traktList":
-    case "letterboxdList":
-    case "mdblist":
-    case "anilistList":
-      return /^https?:\/\/\S+$/.test(s.url.trim());
-    case "titles":
-      return s.keys.length > 0;
-    case "tmdbDiscover":
-      return Object.keys(s.params).length > 0;
-    default:
-      return true;
-  }
+  const v = s as unknown as Record<string, unknown>;
+  if (s.kind === "stremioCatalog")
+    return (
+      typeof v.url === "string" &&
+      (/^https?:\/\/\S+$/.test(v.url.trim()) ||
+        /^https?:\/\/[^\s]+ \(saved\)$/.test(v.url.trim())) &&
+      typeof v.list === "string" &&
+      v.list.trim() !== ""
+    );
+  if (typeof v.url === "string") return /^https?:\/\/\S+$/.test(v.url.trim());
+  if (Array.isArray(v.keys)) return v.keys.length > 0;
+  if (v.params && typeof v.params === "object") return Object.keys(v.params).length > 0;
+  if (typeof v.id === "number") return v.id > 0;
+  return true;
 }
 
-export function describeSource(s: Source): string {
-  switch (s.kind) {
-    case "catalog":
-      return t("Whole catalogue");
-    case "tmdbList": {
-      const list = TMDB_LISTS.find((l) => l.value === s.list)?.label ?? s.list;
-      return s.mediaType === "show" ? t("{list} (TV)", { list }) : t("{list} (movies)", { list });
+export function describeSource(s: Source, descriptors: readonly SourceDescriptor[] = []): string {
+  const d = sourceDescriptor(descriptors, s.kind);
+  const label = d ? textOf(d.label) : s.kind;
+  const v = s as unknown as Record<string, unknown>;
+  switch (d?.meta?.editor) {
+    case "none":
+      return label;
+    case "tmdbChart": {
+      const list = optionLabel(paramField(d, "list"), String(v.list ?? ""));
+      return v.mediaType === "show" ? t("{list} (TV)", { list }) : t("{list} (movies)", { list });
     }
-    case "titles":
-      return tn(s.keys.length, "{count} hand-picked title", "{count} hand-picked titles");
-    case "tmdbDiscover":
+    case "titles": {
+      const keys = Array.isArray(v.keys) ? v.keys : [];
+      return tn(keys.length, "{count} hand-picked title", "{count} hand-picked titles");
+    }
+    case "discover": {
+      const params = (v.params ?? {}) as Record<string, string>;
       return t("Discover: {params}", {
         params:
-          Object.entries(s.params)
-            .map(([k, v]) => `${k}=${v}`)
+          Object.entries(params)
+            .map(([k, val]) => `${k}=${val}`)
             .join("&") || t("no parameters"),
       });
-    case "traktList":
-    case "letterboxdList":
-    case "mdblist":
-    case "anilistList":
+    }
+    case "urlList":
+      return t("{source}: {detail}", { source: label, detail: String(v.url ?? "") || t("no URL") });
+    case "listSelect":
+      return t("{source}: {list}", {
+        source: label,
+        list: optionLabel(paramField(d, "list"), String(v.list ?? "")),
+      });
+    case "lookup": {
+      const service = typeof v.label === "string" && v.label ? v.label : label;
+      if (paramField(d, "region")) {
+        return v.region
+          ? t("{service} ({region})", { service, region: String(v.region) })
+          : t("{service} (default region)", { service });
+      }
       return t("{source}: {detail}", {
-        source: String(sourceMeta(s.kind)?.label),
-        detail: s.url || t("no URL"),
+        source: label,
+        detail: (typeof v.label === "string" && v.label) || (v.id ? `#${v.id}` : t("not chosen")),
       });
-    case "stevenlu":
-      return t("StevenLu: {list}", {
-        list: STEVENLU_LISTS.find((l) => l.value === s.list)?.label ?? s.list,
-      });
-    case "watchProvider": {
-      const service = s.label || t("Streaming service");
-      return s.region
-        ? t("{service} ({region})", { service, region: s.region })
-        : t("{service} (default region)", { service });
     }
     default:
-      return t("{source}: {detail}", {
-        source: String(sourceMeta(s.kind)?.label),
-        detail: s.label || (s.id ? `#${s.id}` : t("not chosen")),
-      });
+      return label;
   }
 }
 

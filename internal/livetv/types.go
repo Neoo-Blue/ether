@@ -68,8 +68,10 @@ type Block struct {
 	Watched     string          `json:"watched,omitempty"`
 }
 type Channel struct {
-	Transcode bool   `json:"transcode"` // IPTV: normalize codecs through the transcoder
-	ID        string `json:"id"`
+	numberMissing bool
+	Health        string `json:"health,omitempty"`
+	Transcode     bool   `json:"transcode"` // IPTV: normalize codecs through the transcoder
+	ID            string `json:"id"`
 	// Private channels are hidden from every viewer whose policy does not
 	// grant them: a restricted viewer needs it in Channels, an unrestricted
 	// one in Granted. Owners always see them.
@@ -80,6 +82,7 @@ type Channel struct {
 	Enabled       bool           `json:"enabled"`
 	Favorite      bool           `json:"favorite"`
 	Logo          string         `json:"logo,omitempty"`
+	LogoMatched   bool           `json:"logoMatched,omitempty"`
 	Rating        string         `json:"rating,omitempty"`
 	SourceID      string         `json:"sourceId,omitempty"`
 	GuideID       string         `json:"guideId,omitempty"`
@@ -117,6 +120,7 @@ type Channel struct {
 type Source struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
+	Kind        string `json:"kind,omitempty"` // stremio for a Stremio tv add-on
 	PlaylistURL string `json:"playlistUrl,omitempty"`
 	GuideURL    string `json:"guideUrl,omitempty"`
 	// Inline uploads are supplied on import and are not returned by GET.
@@ -182,15 +186,18 @@ type Policy struct {
 	channelSet map[string]struct{} // Channels as a set for long lists; see indexChannels
 }
 type Options struct {
-	CanPlay     func(*core.User, bool, time.Time) bool
-	StreamLimit func(*core.User) int
-	DB          *sql.DB
-	Catalog     core.Catalog
-	Collections core.Collections
-	Playback    core.Playback
-	Transcoder  core.Transcoder
-	HTTPClient  *http.Client
-	Now         func() time.Time
+	CanPlay            func(*core.User, bool, time.Time) bool
+	StreamLimit        func(*core.User) int
+	DB                 *sql.DB
+	Catalog            core.Catalog
+	Collections        core.Collections
+	Playback           core.Playback
+	Transcoder         core.Transcoder
+	HTTPClient         *http.Client
+	StremioHTTP        *http.Client // optional test transport; nil uses the guarded Stremio client
+	LogoIndexURL       func() string
+	HealthSweepMinutes func() int // 0 defaults to 15; negative disables
+	Now                func() time.Time
 	// Allowed applies additional owner title/genre policies to every surface.
 	Allowed func(*core.User, *core.Title) bool
 	// Warm resolves/primes a title without opening a viewer stream.
@@ -201,6 +208,8 @@ type Options struct {
 	// Sealer protects source credentials at rest (secrets.go); nil stores
 	// them as given.
 	Sealer config.FieldSealer
+	// Kinds overrides the source-kind registry; nil uses the built-ins.
+	Kinds *KindRegistry
 }
 type SessionInfo struct {
 	ActiveSourceID string `json:"activeSourceId,omitempty"`

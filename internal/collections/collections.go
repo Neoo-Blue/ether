@@ -77,7 +77,9 @@ type Service struct {
 	art         *artwork.Renderer
 	images      *artwork.Images
 	catCfg      func() config.Catalog
+	kinds       *KindRegistry
 	traktCfg    func() config.Trakt
+	sealer      config.FieldSealer
 
 	liveTTL     time.Duration
 	tick        time.Duration
@@ -100,12 +102,13 @@ type Service struct {
 type scorerBox struct{ s core.PersonalScorer }
 
 type options struct {
-	tmdb       TMDB
-	httpClient *http.Client
-	userAgent  string
-	indexTTL   time.Duration
-	bases      *ExternalBases
-	noSeed     bool
+	tmdb        TMDB
+	httpClient  *http.Client
+	stremioHTTP *http.Client
+	userAgent   string
+	indexTTL    time.Duration
+	bases       *ExternalBases
+	noSeed      bool
 }
 
 // Option customises a Service.
@@ -178,7 +181,7 @@ func New(db *sql.DB, cat core.Catalog, log *slog.Logger, opts ...Option) (*Servi
 	if log == nil {
 		log = slog.Default()
 	}
-	s := &Service{db: db, cat: cat, log: log, now: time.Now,
+	s := &Service{db: db, cat: cat, log: log, now: time.Now, kinds: NewKindRegistry(),
 		liveTTL: 2 * time.Minute, tick: time.Minute, buildBudget: 20 * time.Second,
 		members: map[int64]*memberSet{}, failed: map[buildKey]time.Time{}, personal: map[string]personalEntry{}, airGate: make(chan struct{}, 1),
 		opts: options{indexTTL: 2 * time.Minute}}
@@ -356,6 +359,9 @@ func (s *Service) membersFor(ctx context.Context, row *specRow, wait bool) (*mem
 	fresh := ms != nil && ms.builtAt.Equal(row.lastBuilt) && row.buildHash != "" && ms.hash == row.buildHash
 	if row.spec.Refresh == RefreshLive {
 		fresh = ms != nil && row.buildHash != "" && ms.hash == row.buildHash && s.now().Sub(ms.loadedAt) < s.liveTTL
+		if min := s.minimumSourceRefresh(row.spec); min > 0 {
+			fresh = ms != nil && row.buildHash != "" && ms.hash == row.buildHash && s.now().Sub(row.lastBuilt) < min
+		}
 	}
 	if fresh {
 		return ms, nil
@@ -377,6 +383,28 @@ func (s *Service) membersFor(ctx context.Context, row *specRow, wait bool) (*mem
 			return ms, nil
 		}
 		return nil, errNotBuilt
+	}
+	// Plugin list sources and Stremio catalogs are remote lists: they are
+	// refreshed in the background and never fetched on a viewer request,
+	// even when a viewer requests a synchronous live evaluation.
+	for _, src := range row.spec.Sources {
+		if backgroundOnlySource(src) {
+			wait = false
+			if ms == nil && !row.lastBuilt.IsZero() && row.buildHash != "" {
+				keys, unshared, err := s.loadMembers(ctx, row.id)
+				if err != nil {
+					return nil, err
+				}
+				ms = s.newMemberSet(row.spec, keys, unshared, row.lastBuilt, row.buildHash)
+				s.mu.Lock()
+				s.members[row.id] = ms
+				s.mu.Unlock()
+				if row.spec.Refresh == RefreshLive && s.now().Sub(row.lastBuilt) < s.minimumSourceRefresh(row.spec) {
+					return ms, nil
+				}
+			}
+			break
+		}
 	}
 	if !wait {
 		go func() {
@@ -470,8 +498,10 @@ func (s *Service) buildNow(ctx context.Context, row *specRow) (*memberSet, error
 	}
 	resolved := row.rawSpec
 	if !row.builtin && resolvedChanged(row.spec, res.resolved) {
-		if js, err := specJSON(res.resolved); err == nil {
-			resolved = js
+		if sealed, err := s.sealSpec(res.resolved, row.id); err == nil {
+			if js, err := specJSON(sealed); err == nil {
+				resolved = js
+			}
 		}
 	}
 	at := s.now().UTC().Truncate(time.Second)

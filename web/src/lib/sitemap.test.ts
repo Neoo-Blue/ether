@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { destinations, PAGES } from "./sitemap";
+import { destinations } from "./sitemap";
 import { settingsIndex } from "./settings-index";
+import { destinationsFrom, pagesFrom } from "./sitemap";
+import { descriptors } from "../mock/extend/descriptors/console";
+import type { PageMeta } from "./console-descriptors";
+import type { Descriptor } from "./extend";
+
+const pages = descriptors.filter((d) => d.kind === "page") as Descriptor<PageMeta>[];
 
 describe("sitemap", () => {
   it("indexes Rules and upcoming content without the retired gate", () => {
@@ -16,9 +22,9 @@ describe("sitemap", () => {
   });
 
   it("gives every destination exactly one home", () => {
-    const hrefs = destinations().map((d) => d.href);
+    const hrefs = destinationsFrom(pages).map((d) => d.href);
     expect(new Set(hrefs).size).toBe(hrefs.length);
-    expect(PAGES.map((p) => p.title)).toContain("Overview");
+    expect(pagesFrom(pages).map((p) => p.title)).toContain("Overview");
   });
 
   it("points Plex sections at the Plex tab, never at dead Apps tabs", () => {

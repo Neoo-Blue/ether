@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+import { newCollectionHref } from "../collections/links";
 import { Drawer } from "../../components/Drawer";
 import { Badge, Button, Input, cn } from "@braedonsaunders/appkit-ui";
 import { ChevronDown, Plus, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
@@ -34,8 +36,11 @@ import {
   type LayerKey,
 } from "../../lib/layout";
 import { PolicyEditor, type ScheduleSource } from "./PolicyEditor";
-import { Link } from "react-router-dom";
+
+import { isPluginDescriptor, textOf, useRegistry, type Descriptor } from "../../lib/extend";
 import { useLocale } from "../../i18n/react";
+import { useNavigate } from "react-router-dom";
+import { blankSpec, newSourceFromDescriptor, type CollectionSourceMeta } from "../../lib/rules";
 
 interface PoolEntry {
   row: string;
@@ -43,6 +48,17 @@ interface PoolEntry {
   description: string;
   group: RowGroup | "custom";
   kind?: string;
+  owner?: string;
+  collectionSource?: string;
+}
+
+/** Mirrors internal/extend.RowSourceMeta. */
+interface RowSourceMeta {
+  hubId: string;
+  rowKind?: string;
+  sections?: string[];
+  source?: string;
+  collectionSource?: string;
 }
 
 const GROUPS = localized<{ key: RowGroup | "custom"; label: string; hint: string }[]>(() => [
@@ -78,6 +94,8 @@ export function RowPool({
   focusRow: string | null;
   onFocusRow: (row: string | null) => void;
 }) {
+  const navigate = useNavigate();
+  const collectionKinds = useRegistry<CollectionSourceMeta>("collectionSource");
   const [q, setQ] = useState("");
   const [custom, setCustom] = useState("");
   const [patternOpen, setPatternOpen] = useState(false);
@@ -93,16 +111,48 @@ export function RowPool({
     };
   }, []);
   const { locale } = useLocale();
+  // Row kinds come from the descriptor registry: built-in titles and
+  // descriptions render from it, and plugin row sources join the catalogue
+  // with a badge. Dynamic rows (owner collections, extra hubs) still
+  // arrive through the layout API in `available`.
+  const registry = useRegistry<RowSourceMeta>("rowSource");
   const entries = useMemo<PoolEntry[]>(() => {
+    const byKind = new Map<string, Descriptor<RowSourceMeta>>(
+      registry.descriptors.map((d) => [d.id, d]),
+    );
     const out: PoolEntry[] = available
-      .filter((a) => !FRONT_END_ROWS.has(a.kind) && rowFits(a, section))
-      .map((a) => ({
-        row: a.hubId,
-        title: a.title,
-        description: a.description,
-        group: a.group ?? "picks",
-        kind: a.kind,
-      }));
+      .filter(
+        (a) =>
+          !FRONT_END_ROWS.has(a.kind) &&
+          !byKind.get(a.kind)?.meta?.collectionSource &&
+          rowFits(a, section),
+      )
+      .map((a) => {
+        const d = byKind.get(a.kind);
+        return {
+          row: a.hubId,
+          title: d ? textOf(d.label) : a.title,
+          description: d ? textOf(d.hint) : a.description,
+          group: a.group ?? "picks",
+          kind: a.kind,
+        };
+      });
+    for (const d of registry.descriptors) {
+      if (!isPluginDescriptor(d)) continue;
+      const hubId = d.meta?.hubId ?? d.id;
+      if (out.some((e) => e.row === hubId)) continue;
+      if (!rowFits({ sections: d.meta?.sections as LayoutSection[] | undefined }, section))
+        continue;
+      out.push({
+        row: hubId,
+        title: textOf(d.label),
+        description: textOf(d.hint),
+        group: "collections",
+        kind: d.meta?.rowKind ?? d.id,
+        owner: d.owner,
+        collectionSource: d.meta?.collectionSource,
+      });
+    }
     // Policies for patterns or hub ids that are not in the catalogue.
     for (const layerKey of ["global", layer] as LayerKey[]) {
       for (const p of pageOf(draft, layerKey, section)?.rows ?? []) {
@@ -116,7 +166,7 @@ export function RowPool({
       }
     }
     return out;
-  }, [available, draft, layer, section, locale]);
+  }, [available, draft, layer, section, locale, registry.descriptors]);
   const needle = q.trim().toLowerCase();
   const shown = needle
     ? entries.filter(
@@ -152,6 +202,17 @@ export function RowPool({
           className="h-8 pl-8"
         />
       </div>
+      {registry.descriptors
+        .filter((d) => d.meta?.collectionSource === "stremioCatalog")
+        .map((d) => (
+          <Link
+            key={d.id}
+            to={newCollectionHref({ source: "stremioCatalog" })}
+            className="block rounded-lg border border-border bg-surface p-3 text-sm text-primary"
+          >
+            {t("Create a Home row from a Stremio catalog")}
+          </Link>
+        ))}
       {GROUPS.map((g) => {
         const rows = shown.filter((e) => e.group === g.key);
         if (!rows.length) return null;
@@ -168,6 +229,23 @@ export function RowPool({
                 <PoolItem
                   key={e.row}
                   entry={e}
+                  onCreate={
+                    e.collectionSource
+                      ? () => {
+                          const descriptor = collectionKinds.descriptors.find(
+                            (d) => d.id === e.collectionSource,
+                          );
+                          if (!descriptor) return;
+                          const media = section === "shows" ? "show" : "movie";
+                          const spec = blankSpec(media);
+                          spec.name = e.title;
+                          spec.sources = [newSourceFromDescriptor(descriptor, media)];
+                          spec.targets.homeRow = true;
+                          spec.enabled = true;
+                          navigate(newCollectionHref(), { state: { spec } });
+                        }
+                      : undefined
+                  }
                   insight={insightFor(insights, e)}
                   draft={draft}
                   onChange={onChange}
@@ -182,6 +260,14 @@ export function RowPool({
           </div>
         );
       })}
+      {registry.error ? (
+        <p role="alert" className="px-1 py-2 text-xs text-danger">
+          {t("Row kinds could not be loaded.")}{" "}
+          <Button type="button" variant="ghost" size="sm" onClick={registry.reload}>
+            {t("Try again")}
+          </Button>
+        </p>
+      ) : null}
       {shown.length === 0 ? (
         <p className="px-1 py-3 text-center text-xs text-fg-muted">{t("No rows match.")}</p>
       ) : null}
@@ -272,6 +358,7 @@ function Engagement({ insight }: { insight?: RowInsight }) {
 
 function PoolItem({
   entry,
+  onCreate,
   insight,
   draft,
   onChange,
@@ -282,6 +369,7 @@ function PoolItem({
   onToggle,
 }: {
   entry: PoolEntry;
+  onCreate?: () => void;
   insight?: RowInsight;
   draft: HomeLayout;
   onChange: (d: HomeLayout) => void;
@@ -361,6 +449,9 @@ function PoolItem({
             <span className="truncate text-sm font-medium text-fg" title={entry.description}>
               {entry.title}
             </span>
+            {entry.owner ? (
+              <Badge variant="secondary">{t("From {owner}", { owner: entry.owner })}</Badge>
+            ) : null}
             {source === "override" ? (
               <Badge variant="info">{t("Override")}</Badge>
             ) : source === "global" && layer !== "global" ? (
@@ -380,21 +471,29 @@ function PoolItem({
             </div>
           ) : null}
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-7 shrink-0"
-          aria-expanded={open}
-          aria-label={t("Constraints for {title}", { title: entry.title })}
-          onClick={onToggle}
-        >
-          {open ? <ChevronDown size={15} /> : <SlidersHorizontal size={14} />}
+        {!onCreate && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 shrink-0"
+            aria-expanded={open}
+            aria-label={t("Constraints for {title}", { title: entry.title })}
+            onClick={onToggle}
+          >
+            {open ? <ChevronDown size={15} /> : <SlidersHorizontal size={14} />}
+          </Button>
+        )}
+      </div>
+      {onCreate ? (
+        <Button type="button" variant="outline" size="sm" onClick={onCreate}>
+          {t("Create collection")}
         </Button>
-      </div>
-      <div className="mt-2 flex items-center justify-between gap-2">
-        <p className="text-xs text-fg-muted">{STATUS_LABEL[effective.status]}</p>
-        <Engagement insight={insight} />
-      </div>
+      ) : (
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <p className="text-xs text-fg-muted">{STATUS_LABEL[effective.status]}</p>
+          <Engagement insight={insight} />
+        </div>
+      )}
       {layer === "global" && own ? (
         <p className="mt-1.5 text-[11px] text-fg-muted">
           {tn(

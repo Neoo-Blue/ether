@@ -387,6 +387,11 @@ export interface EtherConfig {
     apiKey: string;
     skipIntro?: boolean;
     skipCredits?: boolean;
+    sourceOrder?: string[];
+  };
+  liveTV?: { logoIndexUrl?: string; healthSweepMinutes?: number };
+  subtitles?: {
+    providers?: { id: string; kind: string; name?: string; url?: string; enabled: boolean }[];
   };
   openSubtitles: {
     enabled: boolean;
@@ -443,6 +448,7 @@ export interface EtherConfig {
 export interface QualityProfile {
   releaseRules?: ReleaseRule[] | null;
   ranking?: string[] | null;
+  rankingConfig?: Record<string, Record<string, unknown>> | null;
   name: string;
   maxHeight: number;
   minHeight: number;
@@ -821,7 +827,7 @@ export interface AvailabilityConfig {
 
 export interface ReleaseCondition {
   field: string;
-  operator: "equals" | "contains" | "regex" | "range";
+  operator: "equals" | "contains" | "regex" | "range" | "in";
   value?: string;
   min?: number;
   max?: number;

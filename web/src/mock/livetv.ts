@@ -240,6 +240,7 @@ export function createLiveTVMock(titles: FakeTitle[]) {
     const own = channels.filter((c) => c.sourceId === s.id);
     return {
       ...s,
+      ...(s.kind === "stremio" && s.playlistUrl ? { playlistUrl: "••••" } : {}),
       channelCount: own.length,
       guideChannelCount: s.id === "regional-epg" ? 42 : own.length - 3,
       programmeCount: s.id === "regional-epg" ? 3120 : 1840,
@@ -438,6 +439,10 @@ export function createLiveTVMock(titles: FakeTitle[]) {
       (method === "PUT" && seg[1] === "sources" && seg[2] && !seg[3])
     ) {
       const b = body as Source & { playlist?: string; guide?: string; playlistUrl?: string };
+      const previous = sources.find((x) => x.id === b.id);
+      if (b.kind === "stremio" && b.playlistUrl === "••••" && previous) {
+        b.playlistUrl = String(previous.playlistUrl ?? "");
+      }
       const s: Source = {
         ...b,
         id: b.id || `src-${hash(String(now))}`,

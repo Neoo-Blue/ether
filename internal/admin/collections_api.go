@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/braedonsaunders/ether/internal/collections"
 	"github.com/braedonsaunders/ether/internal/core"
 )
 
@@ -46,6 +47,7 @@ func (h *Handler) collectionRoutes(mux *http.ServeMux, api func(string, http.Han
 	api("GET /api/collections", h.handleListCollections)
 	api("POST /api/collections", h.handleCreateCollection)
 	api("POST /api/collections/preview", h.handlePreviewCollection)
+	api("POST /api/collections/stremio/manifest", h.handleInspectStremioManifest)
 	api("GET /api/collections/templates", h.handleCollectionTemplates)
 	api("POST /api/collections/generate", h.handleGenerateCollection)
 	api("GET /api/collections/{id}", h.handleGetCollection)
@@ -72,6 +74,16 @@ type collectionView struct {
 func viewOf(s core.CollectionSpec) collectionView {
 	s.Rules, s.Warnings = encodableRules(s.Rules, s.Warnings)
 	s.Exclude, s.Warnings = encodableRules(s.Exclude, s.Warnings)
+	if len(s.Sources) > 0 {
+		srcs := make([]core.CollectionSource, len(s.Sources))
+		copy(srcs, s.Sources)
+		for i := range srcs {
+			if srcs[i].Kind == "stremioCatalog" && srcs[i].URL != "" {
+				srcs[i].URL = redactStremioURL(srcs[i].URL)
+			}
+		}
+		s.Sources = srcs
+	}
 	v := collectionView{CollectionSpec: s}
 	if s.ID != "" {
 		stamp := ""
@@ -84,6 +96,58 @@ func viewOf(s core.CollectionSpec) collectionView {
 		v.ArtworkURL = "/ether/api/collections/" + s.ID + "/artwork?v=" + stamp
 	}
 	return v
+}
+
+func (h *Handler) unredactCollectionSources(ctx context.Context, id string, spec *core.CollectionSpec) {
+	if h == nil || h.deps.Collections == nil || spec == nil {
+		return
+	}
+	needsLookup := false
+	for _, src := range spec.Sources {
+		if src.Kind == "stremioCatalog" && isRedactedStremioURL(src.URL) {
+			needsLookup = true
+			break
+		}
+	}
+	if !needsLookup {
+		return
+	}
+	if id == "" {
+		id = spec.ID
+	}
+	if strings.TrimSpace(id) == "" {
+		return
+	}
+	existing, err := h.deps.Collections.GetSpec(ctx, id)
+	if err != nil || existing == nil {
+		return
+	}
+	for i := range spec.Sources {
+		src := &spec.Sources[i]
+		if src.Kind != "stremioCatalog" || !isRedactedStremioURL(src.URL) {
+			continue
+		}
+		wantRedacted := strings.TrimSpace(src.URL)
+		matches := map[string]bool{}
+		exact := map[string]bool{}
+		for _, old := range existing.Sources {
+			if old.Kind == "stremioCatalog" && redactStremioURL(old.URL) == wantRedacted {
+				matches[old.URL] = true
+				if old.List == src.List && old.MediaType == src.MediaType {
+					exact[old.URL] = true
+				}
+			}
+		}
+		if len(matches) == 1 {
+			for url := range matches {
+				src.URL = url
+			}
+		} else if len(exact) == 1 {
+			for url := range exact {
+				src.URL = url
+			}
+		}
+	}
 }
 
 // encodableRules drops rules whose stored value is not valid JSON, so one
@@ -188,7 +252,9 @@ func (h *Handler) handleUpdateCollection(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "bad_json", err.Error())
 		return
 	}
-	s, err := h.deps.Collections.UpdateSpec(r.Context(), r.PathValue("id"), spec)
+	id := r.PathValue("id")
+	h.unredactCollectionSources(r.Context(), id, &spec)
+	s, err := h.deps.Collections.UpdateSpec(r.Context(), id, spec)
 	if err != nil {
 		h.writeServiceError(w, err)
 		return
@@ -220,6 +286,7 @@ func (h *Handler) handlePreviewCollection(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, "bad_json", err.Error())
 		return
 	}
+	h.unredactCollectionSources(r.Context(), spec.ID, &spec)
 	n, _ := strconv.Atoi(r.URL.Query().Get("n"))
 	if n <= 0 || n > 200 {
 		n = 60
@@ -241,6 +308,50 @@ func (h *Handler) handlePreviewCollection(w http.ResponseWriter, r *http.Request
 		took = time.Since(started).Milliseconds()
 	}
 	writeJSON(w, http.StatusOK, previewResponse{Total: p.Total, Items: cardsFor(p.Items), Warnings: warnings, TookMs: took})
+}
+
+func (h *Handler) handleInspectStremioManifest(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		URL          string `json:"url"`
+		CollectionID string `json:"collectionId,omitempty"`
+		CatalogID    string `json:"catalogId,omitempty"`
+		MediaType    string `json:"mediaType,omitempty"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_json", err.Error())
+		return
+	}
+	rawURL := strings.TrimSpace(body.URL)
+	if isRedactedStremioURL(rawURL) && strings.TrimSpace(body.CollectionID) != "" && h.deps.Collections != nil {
+		if existing, err := h.deps.Collections.GetSpec(r.Context(), body.CollectionID); err == nil && existing != nil {
+			var choices = map[string]bool{}
+			for _, old := range existing.Sources {
+				if old.Kind == "stremioCatalog" && old.List == body.CatalogID && old.MediaType == body.MediaType && redactStremioURL(old.URL) == rawURL {
+					choices[old.URL] = true
+				}
+			}
+			if len(choices) == 1 {
+				for choice := range choices {
+					rawURL = choice
+				}
+			}
+		}
+	}
+	inspector, ok := h.deps.Collections.(interface {
+		InspectStremioManifest(ctx context.Context, rawURL string) (*collections.StremioManifestSummary, error)
+	})
+	if !ok {
+		writeError(w, http.StatusNotImplemented, "not_configured", "Stremio catalog inspection is unavailable")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	info, err := inspector.InspectStremioManifest(ctx, rawURL)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "upstream", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, info)
 }
 
 func (h *Handler) handleRebuildCollection(w http.ResponseWriter, r *http.Request) {

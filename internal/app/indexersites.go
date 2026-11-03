@@ -13,6 +13,13 @@ import (
 // validateExtra is the app-level config validation.
 func (a *App) validateExtra(c config.Config) []admin.FieldError {
 	errs := append(validatePlaybackConfig(c), a.validateIndexerSites(c)...)
+	if a.resolver != nil {
+		for i, p := range c.Quality.Profiles {
+			for step, msg := range a.resolver.ValidateRankingConfig(p) {
+				errs = append(errs, admin.FieldError{Field: fmt.Sprintf("quality.profiles[%d].rankingConfig.%s", i, step), Message: msg})
+			}
+		}
+	}
 	if c.Cache.Storage == "shared" {
 		if err := segcache.ValidateSharedMount(c.Cache.Dir, a.db); err != nil {
 			errs = append(errs, admin.FieldError{Field: "cache.dir", Message: err.Error()})

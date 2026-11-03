@@ -1,0 +1,8 @@
+{
+ "id":"tv.ether.examples.local-folders", "version":"1.0.0", "name":"Local folders", "description":"Match local video files to catalogue titles.", "types":["movie","series"], "idPrefixes":["tmdb"], "resources":["stream"],
+ "ether":{"protocol":1,"kind":"source","capabilities":["stream_source","ui"],"summary":"$t:summary","icon":"assets/icon.svg", "runtime":{"kind":"hosted","entry":"plugin.ts"}, "permissions":{"folders":"read","catalog":"read"},
+ "strings":{"en":"i18n/en.json","fr":"i18n/fr.json"},
+ "settings":{"fields":[{"key":"folder","kind":"folder","label":"$t:folder","hint":"$t:folderHint"}]},
+ "schedule":[{"every":"1h","call":"/ether/job/scan"}],
+ "contributes":{"source":{"class":"direct","abilities":["file"]},"pages":[{"key":"matches","label":"$t:page","route":"/ether/view/matches"}]}}
+}

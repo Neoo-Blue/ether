@@ -38,7 +38,8 @@ import {
   type Errors,
 } from "../sources/form";
 import {
-  DEFAULT_BUILTIN_RANKING,
+  useRankingRegistry,
+  descriptorLabel,
   FilterRulesEditor,
   RuleEditorCard,
   RulePreview,
@@ -54,7 +55,7 @@ import { useQuality, type Quality } from "./useQuality";
 function blankProfile(n: number): QualityProfile {
   return {
     name: t("Profile {n}", { n }),
-    ranking: [...DEFAULT_BUILTIN_RANKING],
+    ranking: [],
     maxHeight: 1080,
     minHeight: 720,
     allowHdr: false,
@@ -262,8 +263,9 @@ function WhatMattersMostSection({
   patch: (p: Partial<QualityProfile>) => void;
   rankingError?: string;
 }) {
+  const { steps, fields } = useRankingRegistry();
   const [expanded, setExpanded] = useState<string | null>(null);
-  const ladder = normalizeRanking(draft);
+  const ladder = normalizeRanking(draft, steps);
   const rules = draft.releaseRules ?? [];
 
   function updateRanking(nextRanking: string[]) {
@@ -360,7 +362,8 @@ function WhatMattersMostSection({
           : t("Off"),
       },
     };
-    const meta = stepMeta[step] ?? { title: step, summary: "" };
+    const descriptor = steps.find(d=>d.id===step);
+    const meta = stepMeta[step] ?? { title: descriptor ? descriptorLabel(descriptor) : step, summary: descriptor?.group ?? "" };
     const isExpanded = expanded === step;
 
     return (
@@ -480,6 +483,7 @@ function WhatMattersMostSection({
                 <div data-ranking-step={step}>
                   <RuleEditorCard
                     rule={r}
+                    fields={fields}
                     handle={handle}
                     stepNumber={index + 1}
                     canMoveUp={index > 0}
@@ -541,6 +545,7 @@ function ProfileList({
   commit: Commit;
   refresh: () => Promise<void>;
 }) {
+  const { steps, fields } = useRankingRegistry();
   const profiles = quality.profiles ?? [];
   const [importing, setImporting] = useState(false);
   const rules = quality.rules ?? [];
@@ -558,7 +563,7 @@ function ProfileList({
     setErrors({});
     setError(null);
     const cloned = structuredClone(draft);
-    cloned.ranking = normalizeRanking(cloned);
+    cloned.ranking = normalizeRanking(cloned, steps);
     setEditing({ index, draft: cloned });
     const isExisting = index < profiles.length;
     setDefaultFor({
@@ -573,7 +578,7 @@ function ProfileList({
     const { index, draft: profileDraft } = editing;
     let draft: QualityProfile = {
       ...profileDraft,
-      ranking: normalizeRanking(profileDraft),
+      ranking: normalizeRanking(profileDraft, steps),
     };
     let parsed: ReturnType<typeof parseScoring> | null = null;
     if (scoring && hasImportedRules(profileDraft, resolver)) {
@@ -618,7 +623,7 @@ function ProfileList({
         ? rules.map((r) => (r.profile === renamed ? { ...r, profile: draft.name } : r))
         : rules,
     };
-    const conflict = releaseRuleConflict(draft.releaseRules ?? []);
+    const conflict = releaseRuleConflict(draft.releaseRules ?? [], fields);
     if (conflict) {
       setErrors({ releaseRules: conflict });
       return;

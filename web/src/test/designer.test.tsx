@@ -334,7 +334,7 @@ describe("Home", () => {
   it("discards unsaved edits", async () => {
     const { fake } = renderApp("/home");
     await screen.findByRole("region", { name: /Top 10 on Living Room Ether Today/ }, WAIT);
-    await setStatus("New Releases", "Off");
+    await setStatus("New & Noteworthy", "Off");
     expect(await screen.findByText("Unsaved changes")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Discard/ }));
     await waitFor(() => expect(screen.queryByText("Unsaved changes")).toBeNull());

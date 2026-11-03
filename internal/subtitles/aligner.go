@@ -335,9 +335,13 @@ func (a *Aligner) timelines(ctx context.Context, bs *buildState, title *core.Tit
 	}
 	cands, searched := bs.searches[lang]
 	if !searched {
-		found, err := a.s.Search(ctx, title, lang, releaseName)
-		if err != nil {
-			a.s.log.Debug("alignment subtitle search failed", "lang", lang, "err", err)
+		var found []Candidate
+		if a.s.openSubtitlesEnabled() {
+			var err error
+			found, err = a.s.Search(ctx, title, lang, releaseName)
+			if err != nil {
+				a.s.log.Debug("alignment subtitle search failed", "lang", lang, "err", err)
+			}
 		}
 		cands = found
 		bs.searches[lang] = cands

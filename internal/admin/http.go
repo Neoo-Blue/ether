@@ -91,6 +91,8 @@ func isMutating(r *http.Request) bool {
 // (application/octet-stream) instead of JSON.
 var binaryUploads = map[string]bool{
 	"/api/adoption/backups/restore": true,
+	"/api/plugins/install":          true,
+	"/api/plugins/install/preview":  true,
 }
 
 // csvUploads are the endpoints that take a CSV file body (text/csv or

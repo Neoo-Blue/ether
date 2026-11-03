@@ -3,6 +3,7 @@
 package resolver
 
 import (
+	"encoding/json"
 	"slices"
 	"strings"
 
@@ -262,6 +263,13 @@ func decideProfile(q config.Quality, caps core.ClientCaps, user *core.User) prof
 	prof.PreferredLanguages = append([]string(nil), prof.PreferredLanguages...)
 	prof.AllowedQualities = append([]string(nil), prof.AllowedQualities...)
 	prof.Ranking = append([]string(nil), prof.Ranking...)
+	if prof.RankingConfig != nil {
+		cloned := make(map[string]json.RawMessage, len(prof.RankingConfig))
+		for k, v := range prof.RankingConfig {
+			cloned[k] = append(json.RawMessage(nil), v...)
+		}
+		prof.RankingConfig = cloned
+	}
 	if prof.CustomFormatScores != nil {
 		copyScores := map[string]int{}
 		for k, v := range prof.CustomFormatScores {

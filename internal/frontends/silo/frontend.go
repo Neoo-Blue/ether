@@ -20,7 +20,7 @@ import (
 type Frontend struct{ MachineID string }
 
 func (Frontend) Describe() frontend.Descriptor {
-	return frontend.Descriptor{ID: "silo", Name: "Silo", DefaultPort: 8090}
+	return frontend.Descriptor{ID: "silo", Name: "Silo", DefaultPort: 8090, SettingsSchema: frontend.NamedServerSchema()}
 }
 func (f Frontend) Mount(_ context.Context, host frontend.Host) (frontend.Instance, error) {
 	if f.MachineID == "" || host.Identity == nil {

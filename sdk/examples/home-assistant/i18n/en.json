@@ -1,0 +1,11 @@
+{
+  "summary": "Connect playback events to Home Assistant",
+  "url": "Server address",
+  "token": "Long-lived access token",
+  "started": "Playback started service",
+  "paused": "Playback paused service",
+  "stopped": "Playback stopped service",
+  "service_hint": "Enter a service and entity separated by a space",
+  "states": "Read home states",
+  "scene": "Run a scene"
+}

@@ -66,6 +66,7 @@ import { createTrashMock } from "./trash";
 import { createCacheMock } from "./cache";
 import { createCalendarMock } from "./calendar";
 import { createLiveTVMock } from "./livetv";
+import { createExtendMock } from "./extend";
 import { TEMPLATES } from "./templates";
 import { NOT_RATED, RATING_LEVELS, canonicalRating } from "../lib/contentRatings";
 
@@ -551,6 +552,7 @@ export function createFakeServer(opts: FakeOptions = {}) {
   const qualityMock = createQualityMock();
   const safetyPolicies = new Map<number, Record<string, unknown>>();
   const simklAccounts = new Map<number, { connected: boolean; lastSync?: string }>();
+  const extendMock = createExtendMock();
   const state = {
     boot: {
       ok: true,
@@ -1521,7 +1523,7 @@ export function createFakeServer(opts: FakeOptions = {}) {
       },
       {
         hubId: "new-releases",
-        title: "New Releases",
+        title: "New & Noteworthy",
         kind: "new-releases",
         description: "The newest released titles in the catalogue.",
       },
@@ -2271,6 +2273,9 @@ export function createFakeServer(opts: FakeOptions = {}) {
     const site = sites.handle(method, seg, body, state.config);
     if (site) return json(site.body, site.status);
 
+    const ext = await extendMock(method, seg, q, body);
+    if (ext) return ext;
+
     const cal = calendar.handle(method, seg, q);
     if (cal) return json(cal.body, cal.status);
 
@@ -2306,15 +2311,98 @@ export function createFakeServer(opts: FakeOptions = {}) {
       }
       return [];
     };
+    // Settings schemas mirror internal/frontend (WS1d): keep beside the
+    // descriptors so the Apps page renders from the same shape.
+    const rowKindOptions = [
+      "because-you-watched",
+      "trending",
+      "top-10",
+      "fans-also-loved",
+      "new-releases",
+      "hidden-gems",
+      "more-from-person",
+      "popular-on-server",
+    ];
+    const mediaBrowserSchema = (quickConnect: boolean) => ({
+      signInHelp: true,
+      sections: [
+        {
+          key: "home",
+          fields: [
+            { key: "homeRows", kind: "bool" },
+            { key: "homeRowCount", kind: "number", more: true, min: 0, max: 12 },
+            { key: "homeRowKinds", kind: "rowKinds", more: true, options: rowKindOptions },
+          ],
+        },
+        {
+          key: "find",
+          fields: [
+            { key: "serverName", kind: "serverName" },
+            { key: "port", kind: "port", min: 1, max: 65535 },
+            { key: "discovery", kind: "bool", more: true },
+            ...(quickConnect ? [{ key: "quickConnect", kind: "bool", more: true }] : []),
+            { key: "publicViewerPicker", kind: "bool", more: true },
+          ],
+        },
+      ],
+    });
+    const accountSchema = (note: string) => ({
+      accountConnect: true,
+      sections: [{ key: "connect", fields: [{ key: note, kind: "note" }] }],
+    });
     const protocolDefs = [
-      { id: "plex", name: "Plex", defaultPort: 32400 },
-      { id: "jellyfin", name: "Jellyfin", defaultPort: 8096 },
-      { id: "emby", name: "Emby", defaultPort: 8097 },
-      { id: "stremio", name: "Stremio" },
-      { id: "silo", name: "Silo", defaultPort: 8090 },
-      { id: "dlna", name: "DLNA" },
-      { id: "webdav", name: "Files (WebDAV)" },
-      { id: "m3u", name: "M3U & XMLTV" },
+      {
+        id: "plex",
+        name: "Plex",
+        defaultPort: 32400,
+        settingsSchema: {
+          sections: [{ key: "find", fields: [{ key: "port", kind: "port", min: 1, max: 65535 }] }],
+        },
+      },
+      {
+        id: "jellyfin",
+        name: "Jellyfin",
+        defaultPort: 8096,
+        settingsSchema: mediaBrowserSchema(true),
+      },
+      { id: "emby", name: "Emby", defaultPort: 8097, settingsSchema: mediaBrowserSchema(false) },
+      { id: "stremio", name: "Stremio", settingsSchema: accountSchema("addon") },
+      {
+        id: "silo",
+        name: "Silo",
+        defaultPort: 8090,
+        settingsSchema: {
+          signInHelp: true,
+          sections: [
+            {
+              key: "find",
+              fields: [
+                { key: "serverName", kind: "serverName" },
+                { key: "port", kind: "port", min: 1, max: 65535 },
+                { key: "discovery", kind: "bool", more: true },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        id: "dlna",
+        name: "DLNA",
+        settingsSchema: {
+          sections: [
+            {
+              key: "tv",
+              fields: [
+                { key: "serverName", kind: "serverName" },
+                { key: "viewerId", kind: "viewer" },
+                { key: "discovery", kind: "bool", more: true },
+              ],
+            },
+          ],
+        },
+      },
+      { id: "webdav", name: "Files (WebDAV)", settingsSchema: accountSchema("files") },
+      { id: "m3u", name: "M3U & XMLTV", settingsSchema: accountSchema("playlist") },
     ];
     if (seg[0] === "frontends" && seg.length === 1 && method === "GET") {
       return json(
@@ -3299,6 +3387,19 @@ export function createFakeServer(opts: FakeOptions = {}) {
         return json({ days: activity() });
     }
 
+    if (
+      seg[0] === "collections" &&
+      seg[1] === "stremio" &&
+      seg[2] === "manifest" &&
+      method === "POST"
+    ) {
+      return json({
+        id: "example.catalog",
+        name: "Example catalog",
+        catalogs: [{ id: "top", type: "movie", name: "Top movies" }],
+      });
+    }
+
     // Parameterised routes
     if (seg[0] === "collections" && seg[1]) {
       const id = decodeURIComponent(seg[1]);
@@ -3710,6 +3811,7 @@ export function createFakeServer(opts: FakeOptions = {}) {
     const method = (init?.method ?? req?.method ?? "GET").toUpperCase();
     let body: unknown = undefined;
     const raw = init?.body ?? null;
+    if (raw instanceof FormData) body = raw;
     if (typeof raw === "string" && raw) {
       try {
         body = JSON.parse(raw);

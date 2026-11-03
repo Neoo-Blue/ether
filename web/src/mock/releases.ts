@@ -15,6 +15,7 @@ import type {
 } from "../lib/releases";
 import type { ResolverTrace } from "../lib/types";
 import { hash, type FakeTitle } from "./data";
+import { descriptors as rankingDescriptors } from "./extend/descriptors/ranking";
 
 type Reply = { status: number; body: unknown };
 
@@ -201,7 +202,11 @@ function judgeDraft(name: string, index: number, rules: RuleDraft[]): ConsoleRel
 
 function draftConflict(rules: RuleDraft[]): string {
   const needs: { name: string; field: string; value: string }[] = [];
-  const single = new Set(["group", "source", "video", "audio", "indexer", "protocol", "edition"]);
+  const single = new Set(
+    rankingDescriptors
+      .filter((d) => d.kind === "ruleField" && (d.meta as { singleValue?: boolean })?.singleValue)
+      .map((d) => d.id),
+  );
   for (const rule of rules) {
     if (
       rule.disabled ||

@@ -41,7 +41,11 @@ func (s *Service) EmitOnce(ctx context.Context, key string, e Event) (bool, erro
 			return false, err
 		}
 	}
-	return true, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	s.publishEvent(e)
+	return true, nil
 }
 
 // UpdateAvailable announces a release once per version.

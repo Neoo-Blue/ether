@@ -232,6 +232,8 @@ type Service struct {
 
 	con consoleState // pins, release memory, health results, history (console.go)
 
+	extend extendState // descriptor registry for ranking/rules (extend_registry.go)
+
 	invalMu sync.Mutex
 	inval   *clusterbus.Invalidator // nil on a standalone server
 }
@@ -1126,9 +1128,16 @@ func (s *Service) scoreCandidates(ctx context.Context, req core.ResolveRequest, 
 // traced like every other result. Interactive search reads the same trace.
 func (s *Service) rankCandidates(ctx context.Context, req core.ResolveRequest, sreq core.SearchRequest, profile core.QualityProfile, results []core.Release, trace *Trace, pinID string) ([]candidate, bool, error) {
 	t := req.Title
-	policy, err := releasepolicy.Compile(profile.ReleaseRules)
+	policy, err := s.compileRules(profile.ReleaseRules)
 	if err != nil {
 		return nil, true, err
+	}
+	var hot RankingSession
+	if usesPluginRanking(profile) {
+		hot = s.rankingSession(ctx, req.Client)
+		if hot != nil {
+			defer hot.Close()
+		}
 	}
 	exclude := map[string]bool{}
 	for _, id := range req.Exclude {
@@ -1148,7 +1157,18 @@ func (s *Service) rankCandidates(ctx context.Context, req core.ResolveRequest, s
 		// Catalogue language is applied here, after the search cache.
 		// The cache stores indexer results only; it does not freeze a
 		// previous title's original language or a custom-format guess.
-		policyResult := policy.Evaluate(rel, releasepolicy.Context{OriginalLanguage: titleOriginalLanguage(t)})
+		policyContext := releasepolicy.Context{OriginalLanguage: titleOriginalLanguage(t)}
+		if hot != nil {
+			verifiedKnown, verifiedValue := false, false
+			policyContext.ExternalMatch = func(r core.Release, c core.ReleaseCondition) (bool, bool) {
+				if !verifiedKnown {
+					verifiedValue = s.recentlyVerified(ctx, r.ID)
+					verifiedKnown = true
+				}
+				return hot.Match(r, c, verifiedValue)
+			}
+		}
+		policyResult := policy.Evaluate(rel, policyContext)
 		if len(profile.ReleaseRules) > 0 {
 			ct.Preferences = &policyResult
 		}
@@ -1253,6 +1273,28 @@ func (s *Service) rankCandidates(ctx context.Context, req core.ResolveRequest, s
 			trace.Candidates[tr].CompatibilityReason = strings.TrimPrefix(trace.Candidates[tr].CompatibilityReason+"; ranked after releases in an accepted audio language", "; ")
 		}
 		cands = append(cands, candidate{policy: policyResult, rel: rel, trace: tr, verified: verified, langOK: langOK, langWanted: langWanted, starved: starved, quality: rankQuality(rel, profile, starved), bandwidth: bandwidth})
+	}
+	if hot != nil && len(cands) > 0 {
+		releases := make([]core.Release, len(cands))
+		verified := make([]bool, len(cands))
+		for i := range cands {
+			releases[i], verified[i] = cands[i].rel, cands[i].verified
+		}
+		for _, step := range profile.EffectiveRanking() {
+			if !core.IsPluginRankingStep(step) {
+				continue
+			}
+			keys := hot.Rank(step, profile.RankingConfig[step], releases, verified)
+			if len(keys) != len(cands) {
+				continue
+			}
+			for i, key := range keys {
+				if cands[i].pluginKeys == nil {
+					cands[i].pluginKeys = map[string]int64{}
+				}
+				cands[i].pluginKeys[step] = key
+			}
+		}
 	}
 	return s.orderCandidates(cands, profile, req.Title, trace), clientRejected, nil
 }

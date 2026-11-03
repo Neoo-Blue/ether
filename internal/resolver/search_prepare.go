@@ -46,7 +46,7 @@ const earlyCheckLimit = 32
 
 func newSearchPreparation(ctx context.Context, s *Service, req core.ResolveRequest, search core.SearchRequest, profile core.QualityProfile, pin string) *searchPreparation {
 	return &searchPreparation{ctx: ctx, svc: s, req: req, search: search, profile: profile,
-		disabled: pin != "" || req.Prefer != "" || s.resolverCfg().OptimisticStart,
+		disabled: pin != "" || req.Prefer != "" || s.resolverCfg().OptimisticStart || usesPluginRanking(profile),
 		byID:     map[string]*candidateCheck{}, identities: map[string]bool{}, releases: map[string]core.Release{}, seen: map[string]bool{}}
 }
 

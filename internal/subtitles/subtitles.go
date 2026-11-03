@@ -55,12 +55,14 @@ const defaultBaseURL = "https://api.opensubtitles.com/api/v1"
 // Options construct a Service. Config is a snapshot; call UpdateConfig on
 // config changes if desired.
 type Options struct {
-	Config     config.OpenSubtitles
-	CacheDir   string // data dir subfolder for downloaded subtitles
-	BaseURL    string // override for tests
-	HTTPClient *http.Client
-	Logger     *slog.Logger
-	UserAgent  string // OpenSubtitles requires an app User-Agent
+	Config      config.OpenSubtitles
+	Providers   []config.SubtitleProvider
+	StremioHTTP *http.Client
+	CacheDir    string // data dir subfolder for downloaded subtitles
+	BaseURL     string // override for tests
+	HTTPClient  *http.Client
+	Logger      *slog.Logger
+	UserAgent   string // OpenSubtitles requires an app User-Agent
 	// NegativeTTL is how long "no subtitle found" for a title+language is
 	// remembered before searching again (default 6h).
 	NegativeTTL time.Duration
@@ -75,23 +77,27 @@ type Options struct {
 	FFmpeg string
 }
 
-// Service is the OpenSubtitles client + disk cache.
+// Service is the OpenSubtitles + Stremio subtitle client and disk cache.
 type Service struct {
-	cfg     config.OpenSubtitles
-	dir     string
-	base    string
-	http    *http.Client
-	log     *slog.Logger
-	agent   string
-	negTTL  time.Duration
-	maxWait time.Duration
-	now     func() time.Time
+	cfg             config.OpenSubtitles
+	providers       []config.SubtitleProvider
+	pluginProviders map[string]PluginProvider
+	stremioHTTP     *http.Client
+	dir             string
+	base            string
+	http            *http.Client
+	log             *slog.Logger
+	agent           string
+	negTTL          time.Duration
+	maxWait         time.Duration
+	now             func() time.Time
 
-	mu        sync.Mutex
-	token     string // login token, cached
-	flights   flight.Group[string, string]
-	negative  map[string]time.Time // title+lang -> when nothing was found
-	quotaTill time.Time            // downloads refused until then
+	mu          sync.Mutex
+	token       string // login token, cached
+	flights     flight.Group[string, string]
+	negative    map[string]time.Time // title+lang -> when nothing was found
+	quotaTill   time.Time            // downloads refused until then
+	videoHashes map[core.RatingKey]videoHashEntry
 
 	// pickMu serialises writes of a title's picked subtitle: concurrent
 	// picks of one file rename onto the same path, which Windows refuses
@@ -149,9 +155,17 @@ func New(opts Options) *Service {
 		}
 	}
 	return &Service{
-		cfg: opts.Config, dir: opts.CacheDir, base: strings.TrimSuffix(opts.BaseURL, "/"),
-		http: opts.HTTPClient, log: opts.Logger, agent: opts.UserAgent,
-		negative: map[string]time.Time{}, negTTL: opts.NegativeTTL, maxWait: opts.MaxRetryAfter, now: opts.Now,
+		cfg:         opts.Config,
+		providers:   append([]config.SubtitleProvider(nil), opts.Providers...),
+		stremioHTTP: opts.StremioHTTP,
+		dir:         opts.CacheDir,
+		base:        strings.TrimSuffix(opts.BaseURL, "/"),
+		http:        opts.HTTPClient, log: opts.Logger, agent: opts.UserAgent,
+		negative:       map[string]time.Time{},
+		negTTL:         opts.NegativeTTL,
+		maxWait:        opts.MaxRetryAfter,
+		now:            opts.Now,
+		videoHashes:    map[core.RatingKey]videoHashEntry{},
 		alignLanguages: alignLangs,
 		speechSem:      make(chan struct{}, 2),
 		ffmpeg:         opts.FFmpeg,
@@ -197,12 +211,16 @@ func (s *Service) UpdateConfig(cfg config.OpenSubtitles) {
 	s.mu.Unlock()
 }
 
-// Enabled reports whether sidecar fetching is configured.
-func (s *Service) Enabled() bool {
+func (s *Service) openSubtitlesEnabled() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// Without a cache dir there is nowhere to serve sidecars from.
 	return s.cfg.Enabled && s.cfg.APIKey != "" && s.dir != ""
+}
+
+// Enabled reports whether sidecar fetching is configured.
+func (s *Service) Enabled() bool {
+	return s.searchEnabled()
 }
 
 // Candidate is one OpenSubtitles search result.
@@ -224,6 +242,16 @@ type Candidate struct {
 	// carries that signal separately).
 	Forced bool
 	Score  float64 // filled by Rank
+	// Provider names the source shown to viewers ("OpenSubtitles" or an
+	// add-on name); ProviderID is its configured id. DownloadURL, when
+	// set, is the add-on file URL fetched only on a viewer pick.
+	Provider         string
+	ProviderID       string
+	DownloadURL      string
+	PluginID         string
+	PluginSubtitleID string
+	PluginFormat     string
+	providerOrder    int
 }
 
 type searchResponse struct {
@@ -564,6 +592,22 @@ func (s *Service) requestLink(ctx context.Context, c Candidate) (string, error) 
 
 // download fetches the raw subtitle file bytes for a candidate.
 func (s *Service) download(ctx context.Context, c Candidate) ([]byte, error) {
+	if c.PluginID != "" {
+		s.mu.Lock()
+		p := s.pluginProviders[c.PluginID]
+		s.mu.Unlock()
+		if p == nil {
+			return nil, core.ErrNotFound
+		}
+		raw, err := p.Download(ctx, c)
+		if err != nil {
+			return nil, err
+		}
+		return unzipSubtitleCandidate(raw, c)
+	}
+	if c.DownloadURL != "" {
+		return s.downloadStremio(ctx, c)
+	}
 	link, err := s.requestLink(ctx, c)
 	if err != nil {
 		return nil, err

@@ -802,6 +802,12 @@ function AddMenu({
           () => onSource("playlist"),
         )}
         {item(
+          <ListVideo size={16} />,
+          t("Stremio add-on"),
+          t("Live channels from a Stremio add-on"),
+          () => onSource("stremio"),
+        )}
+        {item(
           <CalendarRange size={16} />,
           t("Guide source"),
           t("XMLTV listings for any channel"),

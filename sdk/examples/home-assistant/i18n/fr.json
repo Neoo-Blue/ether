@@ -1,0 +1,11 @@
+{
+  "summary": "Relier la lecture à Home Assistant",
+  "url": "Adresse du serveur",
+  "token": "Jeton d’accès longue durée",
+  "started": "Service au début de lecture",
+  "paused": "Service à la pause",
+  "stopped": "Service à l’arrêt",
+  "service_hint": "Saisissez un service et une entité séparés par un espace",
+  "states": "Lire les états de la maison",
+  "scene": "Activer une scène"
+}

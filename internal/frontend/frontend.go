@@ -365,8 +365,10 @@ func (r *Registry) Register(f Frontend) error {
 	return nil
 }
 
-// ValidateSettings delegates protocol-specific settings to the registered frontend.
-// The bool reports whether it provides a validator.
+// ValidateSettings checks settings against the frontend's descriptor
+// schema, then delegates protocol-specific settings to the registered
+// frontend. The bool reports whether validation beyond the host's common
+// checks applies (a schema or a protocol validator).
 func (r *Registry) ValidateSettings(id Protocol, settings Settings) (bool, error) {
 	r.mu.Lock()
 	e, ok := r.entries[id]
@@ -374,10 +376,17 @@ func (r *Registry) ValidateSettings(id Protocol, settings Settings) (bool, error
 		r.mu.Unlock()
 		return false, ErrNotRegistered
 	}
+	descriptor := e.descriptor
 	validator, supported := e.frontend.(SettingsValidator)
 	r.mu.Unlock()
-	if !supported {
-		return false, nil
+	if schema, has := schemaOf(descriptor); has {
+		supported = true
+		if err := schema.validate(settings); err != nil {
+			return true, err
+		}
+	}
+	if validator == nil {
+		return supported, nil
 	}
 	return true, validator.ValidateSettings(settings)
 }
@@ -503,6 +512,26 @@ func cloneDescriptor(d Descriptor) Descriptor {
 	d.CertifiedApps = append([]CertifiedApp(nil), d.CertifiedApps...)
 	for i := range d.CertifiedApps {
 		d.CertifiedApps[i].Steps = append([]ConnectStep(nil), d.CertifiedApps[i].Steps...)
+	}
+	if schema, ok := d.SettingsSchema.(SettingsSchema); ok {
+		sections := append([]SettingsSection(nil), schema.Sections...)
+		for i := range sections {
+			fields := append([]SettingsField(nil), sections[i].Fields...)
+			for j := range fields {
+				fields[j].Options = append([]string(nil), fields[j].Options...)
+				if fields[j].Min != nil {
+					min := *fields[j].Min
+					fields[j].Min = &min
+				}
+				if fields[j].Max != nil {
+					max := *fields[j].Max
+					fields[j].Max = &max
+				}
+			}
+			sections[i].Fields = fields
+		}
+		schema.Sections = sections
+		d.SettingsSchema = schema
 	}
 	return d
 }

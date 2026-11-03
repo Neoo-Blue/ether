@@ -139,7 +139,7 @@ func sameTier(a, b candidate) bool {
 // source, since a remux is not a re-encode, nor a disc encode a web file.
 // A faster or preferred source never swaps one for another.
 func sameQuality(a, b candidate) bool {
-	return releasepolicy.Equivalent(a.policy, b.policy) &&
+	return releasepolicy.Equivalent(a.policy, b.policy) && pluginKeysEqual(a, b) &&
 		sameTier(a, b) &&
 		sourceClass(a.rel.Info.Source) == sourceClass(b.rel.Info.Source)
 }
@@ -251,6 +251,10 @@ func compareCandidates(a, b candidate, profile core.QualityProfile) bool {
 	defaultTail := hasDefaultScoreTail(ladder)
 	for _, step := range ladder {
 		switch {
+		case core.IsPluginRankingStep(step):
+			if ak, bk := a.pluginKeys[step], b.pluginKeys[step]; ak != bk {
+				return ak > bk
+			}
 		case strings.HasPrefix(step, core.RankRulePrefix):
 			id := strings.TrimPrefix(step, core.RankRulePrefix)
 			if ap, bp := a.policy.PreferRule(id), b.policy.PreferRule(id); ap != bp {
