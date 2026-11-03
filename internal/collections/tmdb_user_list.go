@@ -14,7 +14,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/tmdb"
 )
 
-var tmdbUserListPath = regexp.MustCompile(`^/list/([0-9]+)(?:/[^/]+)?/?$`)
+var tmdbUserListPath = regexp.MustCompile(`^/list/([0-9]+)(?:-[^/]+)?(?:/[^/]+)?/?$`)
 
 func parseTMDBUserList(raw string) (int64, error) {
 	raw = strings.TrimSpace(raw)
