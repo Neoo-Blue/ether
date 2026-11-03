@@ -597,7 +597,15 @@ func (s *Server) continuousKeys(ctx context.Context, pr *Request, uri string, co
 	}
 	for i, e := range eps {
 		if e.Key == ep {
-			return capKeys(titleKeys(s.visibleTitles(pr.User, eps[i:]))), nil
+			candidates := make([]core.Title, 0, len(eps)-i)
+			for _, candidate := range eps[i+1:] {
+				if (ep.Season() > 0 && candidate.Key.Season() == 0) || (!candidate.Released.IsZero() && candidate.Released.After(s.now())) {
+					continue
+				}
+				candidates = append(candidates, candidate)
+			}
+			candidates = s.availableForViewer(ctx, pr.User, s.visibleTitles(pr.User, candidates))
+			return capKeys(append([]core.RatingKey{ep}, titleKeys(candidates)...)), nil
 		}
 	}
 	return keys, nil
