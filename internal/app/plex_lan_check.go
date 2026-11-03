@@ -75,6 +75,11 @@ func probeLAN(ctx context.Context, targets []lanTarget, machine string) lanCheck
 	if len(targets) == 0 {
 		return result
 	}
+	for _, target := range targets {
+		if target.source == nil {
+			return result
+		}
+	}
 	if len(targets) > 32 {
 		result.reason = "too_many"
 		return result
@@ -142,14 +147,28 @@ func (r *frontendRuntime) lanInputs() ([]lanTarget, string) {
 	if addr != nil {
 		urls = append(urls, connectionURLs(addr.String(), "", addresses)...)
 	}
+	var advertised []string
 	if r.app.registrar != nil {
 		for _, c := range r.app.registrar.Status().Connections {
 			if c.Local && !c.Custom {
+				advertised = append(advertised, c.URI)
 				urls = append(urls, c.URI)
 			}
 		}
 	}
-	return lanTargets(urls, addresses), r.app.cfg.Get().Server.MachineIdentifier
+	targets := lanTargets(urls, addresses)
+	seen := make(map[string]bool, len(targets))
+	for _, target := range targets {
+		seen[target.uri] = true
+	}
+	for _, uri := range advertised {
+		if !seen[uri] {
+			targets = append(targets, lanTarget{uri: uri})
+			seen[uri] = true
+		}
+	}
+	sort.Slice(targets, func(i, j int) bool { return targets[i].uri < targets[j].uri })
+	return targets, r.app.cfg.Get().Server.MachineIdentifier
 }
 func (r *frontendRuntime) refreshLAN() {
 	r.mu.Lock()
