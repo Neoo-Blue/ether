@@ -22,6 +22,8 @@ export type RatingSettings = {
   enabled: boolean;
   provider: string;
   apiKey: string;
+  backupProvider: string;
+  backupApiKey: string;
   critic: string;
   audience: string;
   missing: string;
@@ -182,7 +184,7 @@ export function RatingSources({
           id="ratings-provider"
           className={`${nativeSelect} sm:w-48`}
           value={draft.provider}
-          onChange={(e) => set({ provider: e.currentTarget.value })}
+          onChange={(e) => set({ provider: e.currentTarget.value, ...(e.currentTarget.value === draft.backupProvider ? { backupProvider: "", backupApiKey: "" } : {}) })}
         >
           <option value="omdb">OMDb</option>
           <option value="mdblist">MDBList</option>
@@ -227,6 +229,13 @@ export function RatingSources({
         >
           {providerRow}
           {keyRow}
+          <SettingsRow stacked title={<label htmlFor="ratings-backup">{t("Backup ratings provider")}</label>}
+            control={<select id="ratings-backup" className={`${nativeSelect} sm:w-48`} value={draft.backupProvider || ""} onChange={(e) => set({ backupProvider: e.currentTarget.value, backupApiKey: "" })}>
+              <option value="">{t("None")}</option>
+              {draft.provider !== "omdb" && <option value="omdb">OMDb</option>}
+              {draft.provider !== "mdblist" && <option value="mdblist">MDBList</option>}
+            </select>} />
+          {draft.backupProvider && <SettingsRow stacked title={<label htmlFor="ratings-backup-key">{t("Backup API key")}</label>} control={<PasswordInput id="ratings-backup-key" autoComplete="new-password" value={draft.backupApiKey || ""} onChange={(e) => set({ backupApiKey: e.currentTarget.value })} />} />}
         </SettingsSection>
         {setup ? (
           <form

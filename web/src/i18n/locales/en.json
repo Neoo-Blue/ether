@@ -1186,6 +1186,7 @@
   "m_05cf65fdbec28b": "How {page} picks",
   "m_05d00b2f8fdedf": "Plex picks up the new artwork when it refreshes.",
   "m_05d0676d03c938": "Add the account from your Usenet plan. A block account can be backfill.",
+  "m_05d40e6866fcd8": "Backup API key",
   "m_05d50a7af852fb": "Reads folders you choose",
   "m_05d70cb58b30b8": "Daily budget for new-release checks",
   "m_05d7677b9821d9": "Studio or network",
@@ -3703,6 +3704,7 @@
   "m_125259990af68d": "Kept by you",
   "m_12554fb8746756": "Find a title to customise…",
   "m_12556dc94a08ec": "Compiled cleanly",
+  "m_1257e768d65e6a": "Backup ratings provider",
   "m_12585a510faa20": "Subtitles in their language",
   "m_12589eb2f87843": "Torznab (torrents)",
   "m_1258bfd1fd8938": {

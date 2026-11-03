@@ -29,13 +29,15 @@ func init() {
 }
 
 type Settings struct {
-	Enabled    bool   `json:"enabled"`
-	Provider   string `json:"provider"`
-	APIKey     string `json:"apiKey"`
-	Critic     string `json:"critic"`
-	Audience   string `json:"audience"`
-	Missing    string `json:"missing"`
-	CacheHours int    `json:"cacheHours"`
+	Enabled        bool   `json:"enabled"`
+	Provider       string `json:"provider"`
+	APIKey         string `json:"apiKey"`
+	BackupProvider string `json:"backupProvider"`
+	BackupAPIKey   string `json:"backupApiKey"`
+	Critic         string `json:"critic"`
+	Audience       string `json:"audience"`
+	Missing        string `json:"missing"`
+	CacheHours     int    `json:"cacheHours"`
 }
 type Badge struct {
 	Source string  `json:"source"`
@@ -155,12 +157,19 @@ func (s *Service) settings(ctx context.Context) (Settings, error) {
 	if v.APIKey, _, e = config.OpenWith(s.o.Sealer, v.APIKey, apiKeyContext(v.Provider)...); e != nil {
 		return v, fmt.Errorf("ratings: stored API key: %w", e)
 	}
+	if v.BackupAPIKey, _, e = config.OpenWith(s.o.Sealer, v.BackupAPIKey, backupKeyContext(v.BackupProvider)...); e != nil {
+		return v, fmt.Errorf("ratings: stored backup API key: %w", e)
+	}
 	return v, nil
 }
 
 // apiKeyContext binds the stored key to the provider it is sent to.
 func apiKeyContext(provider string) []string {
 	return []string{"ratings_settings", "apiKey", "1", provider}
+}
+
+func backupKeyContext(provider string) []string {
+	return []string{"ratings_settings", "backupApiKey", "1", provider}
 }
 
 // encodeSettings is the stored form of v, with the API key sealed.
@@ -170,6 +179,10 @@ func (s *Service) encodeSettings(v Settings) (string, error) {
 		return "", fmt.Errorf("ratings: seal API key: %w", err)
 	}
 	v.APIKey = sealed
+	v.BackupAPIKey, err = config.SealWith(s.o.Sealer, v.BackupAPIKey, backupKeyContext(v.BackupProvider)...)
+	if err != nil {
+		return "", fmt.Errorf("ratings: seal backup API key: %w", err)
+	}
 	raw, err := json.Marshal(v)
 	return string(raw), err
 }
@@ -217,6 +230,9 @@ func (s *Service) Settings(ctx context.Context) (Settings, error) {
 	if v.APIKey != "" {
 		v.APIKey = Redacted
 	}
+	if v.BackupAPIKey != "" {
+		v.BackupAPIKey = Redacted
+	}
 	return v, e
 }
 func (s *Service) SaveSettings(ctx context.Context, v Settings) error {
@@ -240,6 +256,25 @@ func (s *Service) SaveSettings(ctx context.Context, v Settings) error {
 	if v.Missing != "" && v.Missing != "none" && v.Missing != "tmdb" {
 		return errors.New("invalid missing rating behavior")
 	}
+	if v.BackupProvider != "" && v.BackupProvider != "omdb" && v.BackupProvider != "mdblist" {
+		return errors.New("invalid backup provider")
+	}
+	if v.BackupProvider != "" && v.BackupProvider == v.Provider {
+		return errors.New("backup provider must differ from primary")
+	}
+	if v.BackupAPIKey == Redacted {
+		old, err := s.settings(ctx)
+		if err != nil {
+			return err
+		}
+		if old.BackupProvider != v.BackupProvider {
+			return errors.New("enter the API key for the new backup provider")
+		}
+		v.BackupAPIKey = old.BackupAPIKey
+	}
+	if v.BackupProvider != "" && strings.TrimSpace(v.BackupAPIKey) == "" {
+		return errors.New("backup provider requires an API key")
+	}
 	for _, src := range []string{v.Critic, v.Audience} {
 		if src != "" && src != "none" && src != "imdb" && src != "tomatoes" && src != "popcorn" {
 			return errors.New("Plex rating slots support imdb, tomatoes or popcorn; other ratings are poster badges")
@@ -256,6 +291,13 @@ func (s *Service) SaveSettings(ctx context.Context, v Settings) error {
 	return e
 }
 
+func cacheProvider(cfg Settings) string {
+	if cfg.BackupProvider == "" {
+		return cfg.Provider
+	}
+	return cfg.Provider + "+" + cfg.BackupProvider + ":" + cfg.Critic + ":" + cfg.Audience
+}
+
 // Cached never performs network I/O; safe for metadata and hub rendering.
 func (s *Service) Cached(ctx context.Context, t *core.Title) ([]Badge, error) {
 	cfg, e := s.settings(ctx)
@@ -264,7 +306,7 @@ func (s *Service) Cached(ctx context.Context, t *core.Title) ([]Badge, error) {
 	}
 	var raw string
 	var at int64
-	e = s.db.QueryRowContext(ctx, `SELECT value,updated FROM ratings_cache WHERE item_key=? AND provider=?`, t.Key, cfg.Provider).Scan(&raw, &at)
+	e = s.db.QueryRowContext(ctx, `SELECT value,updated FROM ratings_cache WHERE item_key=? AND provider=?`, t.Key, cacheProvider(cfg)).Scan(&raw, &at)
 	if errors.Is(e, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -303,7 +345,7 @@ func (s *Service) CachedMany(ctx context.Context, titles []core.Title) (map[core
 	for start := 0; start < len(keys); start += 40 {
 		end := min(start+40, len(keys))
 		args := make([]any, 0, 1+end-start)
-		args = append(args, cfg.Provider)
+		args = append(args, cacheProvider(cfg))
 		query := `SELECT item_key,value,updated FROM ratings_cache WHERE provider=? AND item_key IN (?`
 		args = append(args, int64(keys[start]))
 		for _, key := range keys[start+1 : end] {
@@ -403,60 +445,32 @@ func (s *Service) refresh(ctx context.Context, t *core.Title) ([]Badge, error) {
 	if e != nil || !cfg.Enabled || t == nil {
 		return nil, e
 	}
-	base := s.o.OMDbBaseURL
-	if cfg.Provider == "mdblist" {
-		if t.IDs.TMDB <= 0 {
-			return nil, nil
-		}
-		typ := "movie"
-		if t.Type == core.TypeShow {
-			typ = "show"
-		} else if t.Type != core.TypeMovie {
-			return nil, nil
-		}
-		base = strings.TrimRight(s.o.MDBListBaseURL, "/") + "/tmdb/" + typ + "/" + strconv.FormatInt(t.IDs.TMDB, 10) + "/"
-	} else if t.IDs.IMDB == "" {
-		return nil, nil
-	}
-	u, e := url.Parse(base)
+	badges, certification, e := s.fetchProvider(ctx, t, cfg.Provider, cfg.APIKey)
 	if e != nil {
-		return nil, errors.New("rating provider URL invalid")
+		return nil, e
 	}
-	q := u.Query()
-	q.Set("apikey", cfg.APIKey)
-	if cfg.Provider == "omdb" {
-		q.Set("i", t.IDs.IMDB)
-	}
-	u.RawQuery = q.Encode()
-	req, e := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if e != nil {
-		return nil, errors.New("rating request invalid")
-	}
-	resp, e := s.o.Client.Do(req)
-	if e != nil {
-		return nil, errors.New("rating provider unavailable")
-	}
-	defer resp.Body.Close()
-	var badges []Badge
-	var certification string
-	switch {
-	case resp.StatusCode == http.StatusNotFound && cfg.Provider == "mdblist":
-		// MDBList does not know the title: a definite answer, cached like
-		// one so the owner's quota is not spent asking again every retry.
-	case resp.StatusCode != 200:
-		return nil, fmt.Errorf("rating provider: HTTP %d", resp.StatusCode)
-	default:
-		data, e := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		if e != nil {
-			return nil, errors.New("rating response unreadable")
+	if cfg.BackupProvider != "" {
+		have := map[string]bool{}
+		for _, b := range badges {
+			have[b.Source] = true
 		}
-		if cfg.Provider == "omdb" {
-			badges, certification, e = parseOMDb(data)
-		} else {
-			badges, certification, e = parseMDBList(data)
+		needed := false
+		for _, source := range []string{cfg.Critic, cfg.Audience} {
+			if source != "" && source != "none" && !have[source] {
+				needed = true
+			}
 		}
-		if e != nil {
-			return nil, e
+		if needed {
+			extra, _, err := s.fetchProvider(ctx, t, cfg.BackupProvider, cfg.BackupAPIKey)
+			if err != nil {
+				return nil, err
+			}
+			for _, b := range extra {
+				if !have[b.Source] {
+					badges = append(badges, b)
+					have[b.Source] = true
+				}
+			}
 		}
 	}
 	if badges == nil {
@@ -466,7 +480,7 @@ func (s *Service) refresh(ctx context.Context, t *core.Title) ([]Badge, error) {
 	if e != nil {
 		return nil, e
 	}
-	_, e = s.db.ExecContext(ctx, `INSERT INTO ratings_cache(item_key,provider,value,updated) VALUES(?,?,?,?) ON CONFLICT(item_key,provider) DO UPDATE SET value=excluded.value,updated=excluded.updated`, t.Key, cfg.Provider, string(raw), s.o.Now().Unix())
+	_, e = s.db.ExecContext(ctx, `INSERT INTO ratings_cache(item_key,provider,value,updated) VALUES(?,?,?,?) ON CONFLICT(item_key,provider) DO UPDATE SET value=excluded.value,updated=excluded.updated`, t.Key, cacheProvider(cfg), string(raw), s.o.Now().Unix())
 	if e == nil && certification != "" && s.o.Certification != nil && (t.Type == core.TypeMovie || t.Type == core.TypeShow) {
 		e = s.o.Certification(ctx, t.Key, certification, cfg.Provider)
 	}
@@ -647,4 +661,64 @@ func (s *Service) Run(ctx context.Context) {
 			s.qmu.Unlock()
 		}
 	}
+}
+
+func (s *Service) fetchProvider(ctx context.Context, t *core.Title, provider, apiKey string) ([]Badge, string, error) {
+	base := s.o.OMDbBaseURL
+	if provider == "mdblist" {
+		if t.IDs.TMDB <= 0 {
+			return nil, "", nil
+		}
+		typ := "movie"
+		if t.Type == core.TypeShow {
+			typ = "show"
+		} else if t.Type != core.TypeMovie {
+			return nil, "", nil
+		}
+		base = strings.TrimRight(s.o.MDBListBaseURL, "/") + "/tmdb/" + typ + "/" + strconv.FormatInt(t.IDs.TMDB, 10) + "/"
+	} else if t.IDs.IMDB == "" {
+		return nil, "", nil
+	}
+	u, e := url.Parse(base)
+	if e != nil {
+		return nil, "", errors.New("rating provider URL invalid")
+	}
+	q := u.Query()
+	q.Set("apikey", apiKey)
+	if provider == "omdb" {
+		q.Set("i", t.IDs.IMDB)
+	}
+	u.RawQuery = q.Encode()
+	req, e := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if e != nil {
+		return nil, "", errors.New("rating request invalid")
+	}
+	resp, e := s.o.Client.Do(req)
+	if e != nil {
+		return nil, "", errors.New("rating provider unavailable")
+	}
+	defer resp.Body.Close()
+	var badges []Badge
+	var certification string
+	switch {
+	case resp.StatusCode == http.StatusNotFound && provider == "mdblist":
+		// MDBList does not know the title: a definite answer, cached like
+		// one so the owner's quota is not spent asking again every retry.
+	case resp.StatusCode != 200:
+		return nil, "", fmt.Errorf("rating provider: HTTP %d", resp.StatusCode)
+	default:
+		data, e := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		if e != nil {
+			return nil, "", errors.New("rating response unreadable")
+		}
+		if provider == "omdb" {
+			badges, certification, e = parseOMDb(data)
+		} else {
+			badges, certification, e = parseMDBList(data)
+		}
+		if e != nil {
+			return nil, "", e
+		}
+	}
+	return badges, certification, nil
 }
