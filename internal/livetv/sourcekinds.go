@@ -30,8 +30,8 @@ type Fetched struct {
 //
 // To add a kind: implement SourceKind and register it (built-ins in
 // builtinSourceKinds; runtime kinds such as plugin channel sources, which
-// include Stremio `tv` add-ons, via Service.RegisterSourceKind). Then serve the result of
-// KindRegistry.Descriptors through the extend registry. A kind that needs
+// include Stremio `tv` add-ons, via Service.RegisterSourceKind). Then serve
+// the result of KindRegistry.Descriptors through the extend registry. A kind that needs
 // its own Source fields beyond playlist/guide/auth must extend Source
 // additively and classify in Matches before "m3u".
 type SourceKind interface {
