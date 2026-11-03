@@ -23,6 +23,7 @@ export function HomeStatusRow({
   const reason = status?.lanReason === "verified" ? t("Local identity verified")
     : status?.lanReason === "wrong_identity" ? t("Different server identity")
     : status?.lanReason === "probe_failed" ? t("Local connection failed")
+    : status?.lanReason === "container" ? t("Can't check from inside a container")
     : status?.lanReason ? t("Local check unavailable") : undefined;
   const checked = status?.lanCheckedAt ? new Date(status.lanCheckedAt) : null;
   const detail = reason && checked && !Number.isNaN(checked.valueOf())

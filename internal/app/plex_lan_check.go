@@ -75,11 +75,6 @@ func probeLAN(ctx context.Context, targets []lanTarget, machine string) lanCheck
 	if len(targets) == 0 {
 		return result
 	}
-	for _, target := range targets {
-		if target.source == nil {
-			return result
-		}
-	}
 	if len(targets) > 32 {
 		result.reason = "too_many"
 		return result
@@ -91,27 +86,35 @@ func probeLAN(ctx context.Context, targets []lanTarget, machine string) lanCheck
 	ch := make(chan outcome, len(targets))
 	for _, target := range targets {
 		go func(t lanTarget) {
-			dialer := &net.Dialer{Timeout: 3 * time.Second, LocalAddr: &net.TCPAddr{IP: t.source}}
+			// In a container the advertised LAN address is the host's, not on
+			// this machine's interfaces: probe it unbound, as the host sees it.
+			dialer := &net.Dialer{Timeout: 3 * time.Second}
+			if t.source != nil {
+				dialer.LocalAddr = &net.TCPAddr{IP: t.source}
+			}
 			transport := &http.Transport{Proxy: nil, DisableKeepAlives: true, DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 				host, port, err := net.SplitHostPort(address)
 				if err != nil {
 					return nil, err
 				}
-				resolved, err := net.DefaultResolver.LookupIPAddr(ctx, host)
-				if err != nil {
-					return nil, err
-				}
-				match := false
-				for _, ip := range resolved {
-					if ip.IP.Equal(t.source) {
-						match = true
-						break
+				// A plex.direct name spells out its IP: read it rather than ask
+				// DNS, which routers with rebinding protection refuse (#279).
+				var want net.IP
+				if ip, _, ok := remote.ParsePlexDirectHost(host); ok && ip != nil {
+					want = ip
+				} else if ip := net.ParseIP(host); ip != nil {
+					want = ip
+				} else {
+					resolved, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+					if err != nil || len(resolved) == 0 {
+						return nil, fmt.Errorf("address does not resolve")
 					}
+					want = resolved[0].IP
 				}
-				if !match {
+				if t.source != nil && !want.Equal(t.source) {
 					return nil, fmt.Errorf("address does not resolve to its local interface")
 				}
-				return dialer.DialContext(ctx, network, net.JoinHostPort(t.source.String(), port))
+				return dialer.DialContext(ctx, network, net.JoinHostPort(want.String(), port))
 			}}
 			defer transport.CloseIdleConnections()
 			client := &http.Client{Transport: transport, Timeout: 4 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
@@ -120,20 +123,33 @@ func probeLAN(ctx context.Context, targets []lanTarget, machine string) lanCheck
 			reason := "probe_failed"
 			if len(res.Results) > 0 && strings.Contains(res.Results[0].Error, "different server") {
 				reason = "wrong_identity"
+			} else if !res.Reachable && t.source == nil {
+				// An unbound probe (the address is the container host's) that
+				// fails proves nothing: many container networks cannot reach
+				// their own host's LAN address.
+				reason = "container"
 			}
 			ch <- outcome{res.Reachable, reason}
 		}(target)
 	}
 	result.state = "reachable"
 	result.reason = "verified"
+	unverified := false
 	for range targets {
 		o := <-ch
-		if !o.ok {
+		switch {
+		case o.ok:
+		case o.reason == "container":
+			unverified = true
+		default:
 			result.state = "unreachable"
 			if result.reason != "wrong_identity" {
 				result.reason = o.reason
 			}
 		}
+	}
+	if unverified && result.state == "reachable" {
+		result.state, result.reason = "unknown", "container"
 	}
 	return result
 }

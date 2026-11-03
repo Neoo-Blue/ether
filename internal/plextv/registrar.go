@@ -1108,11 +1108,27 @@ func (r *Registrar) refreshCertTrust(ctx context.Context) {
 		identity = info.Hash
 	}
 	addr := localPlexDirectDial(r.connections(cfg))
-	host, _, _ := net.SplitHostPort(addr)
-	self := net.JoinHostPort("127.0.0.1", strconv.Itoa(serverPort(cfg)))
+	host, port, _ := net.SplitHostPort(addr)
+	// Ether's own listener first (its bind address when it has one, else
+	// loopback), then the LAN address the plex.direct name spells out, dialled
+	// by IP. The name is only the TLS server name, so neither attempt needs
+	// DNS: routers with rebinding protection and containers without hairpin
+	// DNS cannot fail a working certificate (#251, #279). The name itself is
+	// last, for setups where only it routes.
+	selfHost := "127.0.0.1"
+	if b := strings.TrimSpace(cfg.Server.BindAddress); b != "" {
+		if ip := net.ParseIP(b); ip != nil && !ip.IsUnspecified() {
+			selfHost = ip.String()
+		}
+	}
+	dials := []string{net.JoinHostPort(selfHost, strconv.Itoa(serverPort(cfg)))}
+	if ip, _, ok := remote.ParsePlexDirectHost(host); ok && ip != nil && port != "" {
+		dials = append(dials, net.JoinHostPort(ip.String(), port))
+	}
+	dials = append(dials, addr)
 	vctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	_, _ = r.o.Certs.VerifyTrust(vctx, identity, host, self, addr)
+	_, _ = r.o.Certs.VerifyTrust(vctx, identity, host, dials...)
 	r.mu.Lock()
 	r.trustAt = r.o.Now()
 	r.trustFP = info.Fingerprint

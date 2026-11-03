@@ -38,7 +38,7 @@ func TestLANProbeIdentity(t *testing.T) {
 	if got.state != "unreachable" || got.reason != "probe_failed" || got.checked.IsZero() {
 		t.Fatalf("refused: %+v", got)
 	}
-	if got := probeLAN(context.Background(), []lanTarget{{uri: "http://192.0.2.1:32400"}}, "server-id"); got.state != "unknown" || got.reason != "no_addresses" {
+	if got := probeLAN(context.Background(), []lanTarget{{uri: "http://192.0.2.1:32400"}}, "server-id"); got.state != "unknown" || got.reason != "container" {
 		t.Fatalf("missing: %+v", got)
 	}
 }
