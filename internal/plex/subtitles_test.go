@@ -33,8 +33,6 @@ type fakeSubtitles struct {
 	searchErr  error
 	searchLang string
 	searchRel  string
-	atOffset   time.Duration
-	atFormat   string
 }
 
 func newFakeSubtitles() *fakeSubtitles {
@@ -69,18 +67,6 @@ func (f *fakeSubtitles) OpenFormat(id, format string) (io.ReadCloser, string, er
 		return io.NopCloser(strings.NewReader(srtToVTT(text))), "vtt", nil
 	}
 	return io.NopCloser(strings.NewReader(text)), "srt", nil
-}
-
-func (f *fakeSubtitles) OpenFormatAt(id, format string, offset time.Duration) (io.ReadCloser, string, error) {
-	f.mu.Lock()
-	f.atOffset, f.atFormat = offset, format
-	f.mu.Unlock()
-	rc, actual, err := f.OpenFormat(id, format)
-	if err != nil {
-		return nil, "", err
-	}
-	b, _ := io.ReadAll(rc)
-	return io.NopCloser(strings.NewReader("shifted " + offset.String() + "\n" + string(b))), actual, nil
 }
 
 // CachedSidecars mirrors subtitles.Service: picks always (unless listed),
@@ -551,7 +537,7 @@ func TestSubtitleSearchWithoutServiceIsEmpty(t *testing.T) {
 }
 
 func TestTranscodeSidecarSubtitlesFollowSessionOffset(t *testing.T) {
-	f, subs := newSubtitleFixture(t)
+	f, _ := newSubtitleFixture(t)
 	f.playback.info = probedInfo
 	f.trans.decision = core.Decision{Kind: core.DecisionRemux, VideoCopy: true, AudioCopy: true, Container: "mpegts"}
 	key := fightClub.Key.String()
@@ -563,13 +549,13 @@ func TestTranscodeSidecarSubtitlesFollowSessionOffset(t *testing.T) {
 		t.Fatalf("start: %d %s", rec.Code, rec.Body.String())
 	}
 	rec = f.get(t, fmt.Sprintf("/video/:/transcode/universal/subtitles?path=%s&session=hls1&offset=30&directPlay=0&directStream=1&subtitleStreamID=%d", path, releaseID))
-	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "application/x-subrip" || !strings.HasPrefix(rec.Body.String(), "shifted 30s\n1\n00:00:05,000") {
+	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "application/x-subrip" || !strings.HasPrefix(rec.Body.String(), "1\n00:00:05,000") {
 		t.Fatalf("sidecar: %d %q %q", rec.Code, rec.Header().Get("Content-Type"), rec.Body.String())
 	}
 	// The session's own selection applies without an explicit id; WebVTT on request.
 	rec = f.get(t, "/video/:/transcode/universal/subtitles?session=hls1&format=webvtt")
-	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "text/vtt" || subs.atOffset != 30*time.Second || subs.atFormat != "vtt" || !strings.Contains(rec.Body.String(), "WEBVTT") {
-		t.Fatalf("session sidecar: %d %q offset=%v format=%q", rec.Code, rec.Body.String(), subs.atOffset, subs.atFormat)
+	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "text/vtt" || !strings.Contains(rec.Body.String(), "WEBVTT") {
+		t.Fatalf("session sidecar: %d %q", rec.Code, rec.Body.String())
 	}
 	// Another device cannot read the session.
 	rec = f.get(t, "/video/:/transcode/universal/subtitles?session=hls1", "X-Plex-Client-Identifier", "client-2")

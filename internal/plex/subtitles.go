@@ -58,12 +58,6 @@ type SubtitleSearch interface {
 	DownloadSubtitle(ctx context.Context, t *core.Title, u *core.User, id int64) (core.StreamInfo, error)
 }
 
-// SubtitleTimeline is optionally implemented by Deps.Subtitles: a sidecar
-// with its cues moved back by offset, for a transcode that starts there.
-type SubtitleTimeline interface {
-	OpenFormatAt(id, format string, offset time.Duration) (io.ReadCloser, string, error)
-}
-
 // infoWithSelectedSidecar keeps a chosen external subtitle on a metadata
 // stream list. Cached sidecars omit a language the file already embeds, so
 // the next detail response would select that embedded track, or Off when
@@ -507,8 +501,8 @@ func (s *Server) handleSubtitleUpload(w http.ResponseWriter, r *http.Request) {
 
 // handleTranscodeSubtitles is /video/:/transcode/universal/subtitles: the
 // selected subtitle of a transcode session. External sidecars are served
-// with their cues moved back by the session's start offset (the HLS
-// timeline starts there), as SRT or, with format=vtt|webvtt, WebVTT.
+// on the title clock, as SRT or, with format=vtt|webvtt, WebVTT.
+// VOD video retains title timestamps across a resume or seek.
 // Embedded text tracks are extracted from the session's source as WebVTT
 // when the transcoder supports it; image subtitles and unknown sessions
 // get an empty container.
@@ -533,10 +527,6 @@ func (s *Server) handleTranscodeSubtitles(w http.ResponseWriter, r *http.Request
 		resolvePlaySelection(&p, entry.info)
 		pos = p.subSel
 	}
-	offset := entry.offset
-	if perr == nil && q.Get("offset") != "" {
-		offset = p.offset
-	}
 	if pos < 0 || pos >= len(entry.info.Streams) {
 		s.writeEmpty(w, r)
 		return
@@ -549,7 +539,7 @@ func (s *Server) handleTranscodeSubtitles(w http.ResponseWriter, r *http.Request
 	if !st.External {
 		// Embedded track: extract it from the playing source so a subtitle
 		// picked in-player renders without restarting the session.
-		if !s.writeEmbeddedSubtitle(w, r, entry.playID, st, subtitleFormat(q.Get("format")), offset, entry.decision.Container == transcode.ContainerMatroska) {
+		if !s.writeEmbeddedSubtitle(w, r, entry.playID, st, subtitleFormat(q.Get("format")), entry.decision.Container == transcode.ContainerMatroska) {
 			s.writeEmpty(w, r)
 		}
 		return
@@ -558,7 +548,7 @@ func (s *Server) handleTranscodeSubtitles(w http.ResponseWriter, r *http.Request
 		s.writeEmpty(w, r)
 		return
 	}
-	timeline, ok := s.d.Subtitles.(SubtitleTimeline)
+	timeline, ok := s.d.Subtitles.(SubtitleSource)
 	if !ok {
 		s.writeEmpty(w, r)
 		return
@@ -575,11 +565,11 @@ func (s *Server) handleTranscodeSubtitles(w http.ResponseWriter, r *http.Request
 	var reader io.ReadCloser
 	var actual string
 	if from, ok := timeline.(interface {
-		OpenFormatAtFrom(string, string, time.Duration, string) (io.ReadCloser, string, error)
+		OpenFormatFrom(string, string, string) (io.ReadCloser, string, error)
 	}); ok {
-		reader, actual, err = from.OpenFormatAtFrom(st.ExternalURL, subtitleFormat(q.Get("format")), offset, source)
+		reader, actual, err = from.OpenFormatFrom(st.ExternalURL, subtitleFormat(q.Get("format")), source)
 	} else {
-		reader, actual, err = timeline.OpenFormatAt(st.ExternalURL, subtitleFormat(q.Get("format")), offset)
+		reader, actual, err = timeline.OpenFormat(st.ExternalURL, subtitleFormat(q.Get("format")))
 	}
 	if err != nil {
 		writeHTTPError(w, http.StatusNotFound)
@@ -598,7 +588,7 @@ func (s *Server) handleTranscodeSubtitles(w http.ResponseWriter, r *http.Request
 	_, _ = w.Write(body)
 }
 
-func (s *Server) extractEmbeddedSubtitle(ctx context.Context, playID string, st core.StreamInfo, format string, offset time.Duration) ([]byte, string, bool) {
+func (s *Server) extractEmbeddedSubtitle(ctx context.Context, playID string, st core.StreamInfo, format string) ([]byte, string, bool) {
 	ex, ok := s.d.Transcoder.(core.SubtitleExtractor)
 	if !ok || s.d.Playback == nil || playID == "" {
 		return nil, "", false
@@ -621,25 +611,8 @@ func (s *Server) extractEmbeddedSubtitle(ctx context.Context, playID string, st 
 		if perr != nil {
 			return nil, "", false
 		}
-		if offset > 0 {
-			shifted, serr := subtitles.Shift(cues, -offset, 1)
-			if serr != nil {
-				return nil, "", false
-			}
-			cues = shifted
-		}
 		body = []byte(subtitles.RenderSRT(cues))
 		format = "srt"
-	} else if offset > 0 {
-		cues, perr := subtitles.ParseCues(string(body))
-		if perr != nil {
-			return nil, "", false
-		}
-		shifted, serr := subtitles.Shift(cues, -offset, 1)
-		if serr != nil {
-			return nil, "", false
-		}
-		body = []byte(subtitles.RenderVTT(shifted))
 	}
 	return body, format, true
 }
@@ -651,7 +624,6 @@ func (s *Server) serveEmbeddedStream(w http.ResponseWriter, r *http.Request, key
 		return
 	}
 	var playID string
-	var offset time.Duration
 	var bestAt time.Time
 	matroska := false
 	for _, id := range s.transcodes.ids() {
@@ -663,7 +635,7 @@ func (s *Server) serveEmbeddedStream(w http.ResponseWriter, r *http.Request, key
 			continue
 		}
 		if playID == "" || e.updatedAt.After(bestAt) {
-			playID, offset, bestAt = e.playID, e.offset, e.updatedAt
+			playID, bestAt = e.playID, e.updatedAt
 			matroska = e.decision.Container == transcode.ContainerMatroska
 		}
 	}
@@ -681,16 +653,11 @@ func (s *Server) serveEmbeddedStream(w http.ResponseWriter, r *http.Request, key
 		}
 	}
 	q := r.URL.Query()
-	if q.Get("offset") != "" {
-		if sec, err := strconv.ParseFloat(q.Get("offset"), 64); err == nil && sec >= 0 {
-			offset = time.Duration(sec * float64(time.Second))
-		}
-	}
 	format := subtitleFormat(q.Get("format"))
 	if _, ext, ok := strings.Cut(chi.URLParam(r, "stream"), "."); ok && q.Get("format") == "" {
 		format = subtitleFormat(ext)
 	}
-	if !s.writeEmbeddedSubtitle(w, r, playID, info, format, offset, matroska) {
+	if !s.writeEmbeddedSubtitle(w, r, playID, info, format, matroska) {
 		writeHTTPError(w, http.StatusNotFound)
 	}
 }
@@ -710,7 +677,7 @@ var (
 // writeEmbeddedSubtitle serves an embedded text track as format (srt or
 // vtt). It reports false, with nothing written, when extraction failed
 // before the response had to start.
-func (s *Server) writeEmbeddedSubtitle(w http.ResponseWriter, r *http.Request, playID string, st core.StreamInfo, format string, offset time.Duration, matroska bool) bool {
+func (s *Server) writeEmbeddedSubtitle(w http.ResponseWriter, r *http.Request, playID string, st core.StreamInfo, format string, matroska bool) bool {
 	type extracted struct {
 		body   []byte
 		actual string
@@ -718,7 +685,7 @@ func (s *Server) writeEmbeddedSubtitle(w http.ResponseWriter, r *http.Request, p
 	}
 	done := make(chan extracted, 1)
 	go func() {
-		body, actual, ok := s.extractEmbeddedSubtitle(r.Context(), playID, st, format, offset)
+		body, actual, ok := s.extractEmbeddedSubtitle(r.Context(), playID, st, format)
 		done <- extracted{body, actual, ok}
 	}()
 	finish := func(got extracted) []byte {
@@ -819,6 +786,6 @@ func (s *Server) prewarmSidecarSubtitle(u *core.User, ps *core.PlaySession, m mo
 		if ctx == nil {
 			return
 		}
-		go s.extractEmbeddedSubtitle(ctx, ps.ID, binding.Info, "vtt", 0)
+		go s.extractEmbeddedSubtitle(ctx, ps.ID, binding.Info, "vtt")
 	}
 }
