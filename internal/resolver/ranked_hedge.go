@@ -15,7 +15,7 @@ func equivalentHedge(lead, backup candidate, margin float64) bool {
 		!lead.verified && backup.bandwidth >= lead.bandwidth &&
 		sameTier(backup, lead) &&
 		backup.rel.Info.Edition == lead.rel.Info.Edition &&
-		backup.rel.Score >= lead.rel.Score-margin
+		backup.rel.Score == lead.rel.Score
 }
 
 // waitRankedValidation preserves rank order during grace. A healthy equivalent

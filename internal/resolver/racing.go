@@ -132,7 +132,7 @@ func (s *Service) validateCandidates(ctx context.Context, cands []candidate, tr 
 			// A race stays inside one policy tier. A healthy fallback must
 			// not be selected while a primary in this window is still valid.
 			same := 1
-			for same < count && releasepolicy.Equivalent(cands[base].policy, cands[base+same].policy) && pluginKeysEqual(cands[base], cands[base+same]) {
+			for same < count && cands[base].rel.Score == cands[base+same].rel.Score && releasepolicy.Equivalent(cands[base].policy, cands[base+same].policy) && pluginKeysEqual(cands[base], cands[base+same]) {
 				same++
 			}
 			count = same

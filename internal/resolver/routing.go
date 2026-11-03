@@ -160,6 +160,19 @@ func (s *Service) knownCached(rel core.Release) bool {
 // routeSources reorders ranked candidates (best first) by source, as
 // described above. It never changes which quality tier leads.
 func (s *Service) routeSources(cands []candidate, t *core.Title, trace *Trace) []candidate {
+	// Routing may choose a faster source only within the same score tier.
+	for start := 0; start < len(cands); {
+		end := start + 1
+		for end < len(cands) && cands[end].rel.Score == cands[start].rel.Score && cands[end].policy.Fallback == cands[start].policy.Fallback && cands[end].verified == cands[start].verified {
+			end++
+		}
+		copy(cands[start:end], s.routeEqualScores(cands[start:end], t, trace))
+		start = end
+	}
+	return cands
+}
+
+func (s *Service) routeEqualScores(cands []candidate, t *core.Title, trace *Trace) []candidate {
 	if len(cands) < 2 {
 		return cands
 	}
