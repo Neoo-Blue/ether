@@ -274,6 +274,8 @@ func (s *Service) personalScorer() core.PersonalScorer {
 
 // memberSet is a collection's built members plus what serving needs.
 type memberSet struct {
+	setOnce   sync.Once
+	set       map[core.RatingKey]struct{}
 	keys      []core.RatingKey
 	personal  []*rule
 	personalX []*rule
@@ -282,6 +284,54 @@ type memberSet struct {
 	builtAt   time.Time
 	hash      string
 	loadedAt  time.Time
+}
+
+// has reports membership; the lookup set is built once per member set.
+func (ms *memberSet) has(key core.RatingKey) bool {
+	ms.setOnce.Do(func() {
+		ms.set = make(map[core.RatingKey]struct{}, len(ms.keys))
+		for _, k := range ms.keys {
+			ms.set[k] = struct{}{}
+		}
+	})
+	_, ok := ms.set[key]
+	return ok
+}
+
+// Contains reports whether key is a member of owner collection id (an id
+// from the Collection Studio). It never builds a collection on the
+// caller's path: an unbuilt collection contains nothing yet. Genre and
+// studio facets read the one title's index entry.
+func (s *Service) Contains(ctx context.Context, id string, key core.RatingKey) bool {
+	row, err := s.rowByID(ctx, id)
+	if err != nil || !row.enabled {
+		return false
+	}
+	if facet, ok := localFacetSpec(row.spec); ok {
+		snap := s.idx.ready()
+		if snap == nil {
+			return false
+		}
+		e := snap.entries[key]
+		if e == nil {
+			return false
+		}
+		typ, rest, _ := strings.Cut(facet, "|")
+		field, value, _ := strings.Cut(rest, "|")
+		if string(e.typ) != typ {
+			return false
+		}
+		values := e.genresLC
+		if field == "studio" {
+			values = e.studiosLC
+		}
+		return slices.Contains(values, value)
+	}
+	ms, err := s.membersFor(ctx, row, false)
+	if err != nil || ms == nil {
+		return false
+	}
+	return ms.has(key)
 }
 
 func (ms *memberSet) personalRules() personalRules {

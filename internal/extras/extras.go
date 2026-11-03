@@ -305,6 +305,9 @@ func (s *Service) registerLocked(e Extra) Extra {
 		h := fnv.New64a()
 		_, _ = h.Write([]byte(id))
 		key := core.ExtraKey(int64(h.Sum64()%999_999_999_999_999) + 1)
+		if key.IsPreroll() {
+			continue // reserved for owner pre-rolls
+		}
 		if prev, ok := s.registry[key]; ok && prev.identity != e.identity {
 			continue
 		}
