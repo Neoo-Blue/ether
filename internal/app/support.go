@@ -13,12 +13,15 @@ import (
 	"github.com/braedonsaunders/ether/internal/config"
 	"github.com/braedonsaunders/ether/internal/diagnostics"
 	"github.com/braedonsaunders/ether/internal/logfile"
+	"github.com/braedonsaunders/ether/internal/updater"
 )
 
 func (a *App) supportDeps() diagnostics.Deps {
 	return diagnostics.Deps{
 		Now:          parityClock(),
 		Version:      a.opts.Version,
+		Commit:       updater.Commit,
+		BuildDate:    updater.Date,
 		Platform:     runtime.GOOS + "/" + runtime.GOARCH,
 		Container:    containerHint(),
 		Secrets:      func() []string { return supportSecrets(a.cfg.Get()) },
@@ -109,6 +112,12 @@ func (a *App) supportHardware() (diagnostics.HardwareFact, error) {
 func (a *App) supportStorage() (diagnostics.StorageFact, error) {
 	cfg := a.cfg.Get()
 	fact := diagnostics.StorageFact{CacheBudgetBytes: cfg.Cache.BudgetBytes}
+	if info, err := os.Stat(filepath.Join(a.opts.DataDir, "ether.db")); err == nil {
+		fact.DatabaseBytes = info.Size()
+	}
+	if info, err := os.Stat(filepath.Join(a.opts.DataDir, "ether.db-wal")); err == nil {
+		fact.WALBytes = info.Size()
+	}
 	if free, err := admin.DiskFree(a.opts.DataDir); err == nil {
 		fact.DiskFreeBytes = free
 		fact.DiskFreeKnown = true

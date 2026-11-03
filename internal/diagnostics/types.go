@@ -227,6 +227,8 @@ type StorageFact struct {
 	CacheBudgetBytes int64 `json:"cacheBudgetBytes,omitempty"`
 	DiskFreeBytes    int64 `json:"diskFreeBytes,omitempty"`
 	DiskFreeKnown    bool  `json:"diskFreeKnown"`
+	DatabaseBytes    int64 `json:"databaseBytes,omitempty"`
+	WALBytes         int64 `json:"walBytes,omitempty"`
 }
 
 // ConnectivityFact has no public host, custom URL, or certificate path.
@@ -242,6 +244,7 @@ type Deps struct {
 	Now       func() time.Time
 	Version   string
 	Commit    string
+	BuildDate string
 	Platform  string
 	Container string // "yes", "no", or "" when the caller could not tell
 	Secrets   func() []string

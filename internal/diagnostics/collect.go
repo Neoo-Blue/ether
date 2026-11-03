@@ -13,6 +13,13 @@ func (r *Recorder) collect(snap finishSnap, uses []secretUse) ([]archived, []Gap
 		}
 		files = append(files, archived{name: name, body: body})
 	}
+	put("server.json", map[string]string{
+		"version":   redactString(r.deps.Version, uses),
+		"commit":    redactString(r.deps.Commit, uses),
+		"buildDate": redactString(r.deps.BuildDate, uses),
+		"platform":  redactString(r.deps.Platform, uses),
+		"container": redactString(r.deps.Container, uses),
+	})
 	if r.deps.Settings == nil {
 		gaps = append(gaps, Gap{Collector: "settings", Status: "unavailable", Detail: "Settings were not collected."})
 	} else if s, err := r.deps.Settings(); err != nil {
