@@ -104,7 +104,7 @@ def lint_copy(raw: str, max_len: int = 0) -> str:
     words = [w for w in s.split() if w]
     if len(words) >= 3:
         caps = sum(1 for w in words if w[0].isalpha() and w[0].isupper())
-        if caps * 3 >= len(words) * 2:
+        if caps * 3 > len(words) * 2:
             return "must use sentence case"
     return ""
 

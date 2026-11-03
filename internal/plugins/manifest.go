@@ -55,7 +55,8 @@ func LintCopy(s string, max int) string {
 			break
 		}
 	}
-	// Reject Title Case: most words starting upper case.
+	// Reject Title Case: more than two thirds of words capitalised, so one
+	// proper noun ("Screenings this Friday") still passes.
 	words := strings.Fields(s)
 	if len(words) >= 3 {
 		caps := 0
@@ -65,7 +66,7 @@ func LintCopy(s string, max int) string {
 				caps++
 			}
 		}
-		if caps*3 >= len(words)*2 {
+		if caps*3 > len(words)*2 {
 			return "must use sentence case"
 		}
 	}

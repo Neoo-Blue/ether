@@ -137,7 +137,7 @@ func (s *Studio) tryServeDevPlugin(w http.ResponseWriter, r *http.Request, rel s
 
 func (s *Studio) serveStudio(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
-	for _, prefix := range []string{"/api/plugins/studio", "/plugins/studio"} {
+	for _, prefix := range []string{"/api/plugins/studio", "/plugins/studio", "/studio"} {
 		if strings.HasPrefix(path, prefix) {
 			path = strings.TrimPrefix(path, prefix)
 			break

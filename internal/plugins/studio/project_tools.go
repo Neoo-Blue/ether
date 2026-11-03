@@ -3,7 +3,6 @@ package studio
 import (
 	"context"
 	"encoding/json"
-	"sync"
 
 	"github.com/braedonsaunders/ether/internal/agent/tools"
 )
@@ -29,7 +28,7 @@ func ProjectTools(s *Studio) []tools.Tool {
 		}
 		return tools.Result{Data: map[string]any{"project": p}}, nil
 	}
-	create := tools.Tool{Name: "studio_project_create", Title: "Create Studio draft", Description: "Create a saved plugin draft from template page, list, channels, local_files, notification, ranking, tool or stremio_remix. Returns an approval proposal. Read the saved source before editing it.", Audience: tools.AudienceOwner, Owner: "builtin", InputSchema: json.RawMessage(`{"type":"object","required":["template","name"],"properties":{"template":{"type":"string"},"name":{"type":"string"},"pluginId":{"type":"string"}},"additionalProperties":false}`)}
+	create := tools.Tool{Name: "studio_project_create", Title: "Create Studio draft", Description: "Create a saved plugin draft from template page, list, channels, local_files, notification, ranking, tool or stremio_remix. Drafts are sandboxed and never installed, so this applies immediately. Read the saved source before editing it.", Audience: tools.AudienceOwner, Owner: "builtin", InputSchema: json.RawMessage(`{"type":"object","required":["template","name"],"properties":{"template":{"type":"string"},"name":{"type":"string"},"pluginId":{"type":"string"}},"additionalProperties":false}`)}
 	create.Execute = func(ctx context.Context, _ tools.Principal, input map[string]any) (tools.Result, error) {
 		template, err := reqString(input, "template", 64)
 		if err != nil {
@@ -47,15 +46,13 @@ func ProjectTools(s *Studio) []tools.Tool {
 			return tools.Result{}, tools.Userf("Unknown Studio template")
 		}
 		opts := CreateProjectOptions{Template: template, Name: name, PluginID: id}
-		return projectProposal("Create Studio draft", name, input, func(ctx context.Context) (tools.Result, error) {
-			p, err := s.CreateProject(ctx, opts)
-			if err != nil {
-				return tools.Result{}, err
-			}
-			return tools.Result{Data: map[string]any{"project": p}}, nil
-		}), nil
+		p, err := s.CreateProject(ctx, opts)
+		if err != nil {
+			return tools.Result{}, err
+		}
+		return tools.Result{Data: map[string]any{"project": p}}, nil
 	}
-	save := tools.Tool{Name: "studio_project_save", Title: "Save Studio source", Description: "Save source files to an existing Studio draft and return real compiler diagnostics. Requires the exact updatedAt from studio_project_read; a human edit invalidates stale proposals. Does not install the plugin.", Audience: tools.AudienceOwner, Owner: "builtin", InputSchema: json.RawMessage(`{"type":"object","required":["id","updatedAt","files"],"properties":{"id":{"type":"string"},"updatedAt":{"type":"string"},"files":{"type":"object","additionalProperties":{"type":"string"}}},"additionalProperties":false}`)}
+	save := tools.Tool{Name: "studio_project_save", Title: "Save Studio source", Description: "Save source files to an existing Studio draft and return real compiler diagnostics. Requires the exact updatedAt from studio_project_read; a newer human edit makes a stale save fail, so read again and retry. Applies immediately; does not install the plugin. \"$t:key\" text resolves in manifest fields and ViewSpec literals only, never in view data values. Fix every diagnostic it returns before finishing.", Audience: tools.AudienceOwner, Owner: "builtin", InputSchema: json.RawMessage(`{"type":"object","required":["id","updatedAt","files"],"properties":{"id":{"type":"string"},"updatedAt":{"type":"string"},"files":{"type":"object","additionalProperties":{"type":"string"}}},"additionalProperties":false}`)}
 	save.Execute = func(ctx context.Context, _ tools.Principal, input map[string]any) (tools.Result, error) {
 		id, err := reqString(input, "id", 160)
 		if err != nil {
@@ -73,30 +70,11 @@ func ProjectTools(s *Studio) []tools.Tool {
 		if json.Unmarshal(raw, &files) != nil || len(files) == 0 || len(files) > 32 {
 			return tools.Result{}, tools.Userf("Provide 1 to 32 source files")
 		}
-		return projectProposal("Save Studio source", id, input, func(ctx context.Context) (tools.Result, error) {
-			p, comp, err := s.saveFilesVersion(ctx, id, files, version)
-			if err != nil {
-				return tools.Result{}, err
-			}
-			return tools.Result{Data: map[string]any{"project": p, "compile": comp}}, nil
-		}), nil
+		p, comp, err := s.saveFilesVersion(ctx, id, files, version)
+		if err != nil {
+			return tools.Result{}, err
+		}
+		return tools.Result{Data: map[string]any{"project": p, "compile": comp}}, nil
 	}
 	return []tools.Tool{read, create, save}
-}
-
-func projectProposal(category, description string, input map[string]any, apply func(context.Context) (tools.Result, error)) tools.Result {
-	var mu sync.Mutex
-	var saved *tools.Result
-	return tools.Result{Proposal: &tools.Proposal{Category: category, Description: description, Input: input, Apply: func(ctx context.Context) (tools.Result, error) {
-		mu.Lock()
-		defer mu.Unlock()
-		if saved != nil {
-			return *saved, nil
-		}
-		result, err := apply(ctx)
-		if err == nil {
-			saved = &result
-		}
-		return result, err
-	}}}
 }

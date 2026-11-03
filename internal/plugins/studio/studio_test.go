@@ -346,3 +346,12 @@ func TestDraftsSurviveRestartAndFailedSave(t *testing.T) {
 	}
 
 }
+
+func TestMountedStudioRoute(t *testing.T) {
+	s, _, _ := newTestStudio(t)
+	w := httptest.NewRecorder()
+	s.WrapPluginHandler(nil).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/studio/projects", nil))
+	if w.Code != 200 {
+		t.Fatalf("mounted route returned %d: %s", w.Code, w.Body.String())
+	}
+}

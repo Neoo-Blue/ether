@@ -1,3 +1,4 @@
+import LiveStudio from "./LiveStudio";
 import { Badge, Button, Dialog, Skeleton, Textarea, cn } from "@braedonsaunders/appkit-ui";
 import {
   ArrowLeft,
@@ -24,7 +25,15 @@ import { BlocksView } from "./Blocks";
 import { CodeView, useCodeDraft, type Engine } from "./CodeView";
 import { PermissionRows } from "./marks";
 import { PageBuilder } from "./PageBuilder";
-import { HomePreview, homeSummary, useHomeFacts, ROW_NAME, studioSpec, useContextTitles, usePreview } from "./preview";
+import {
+  HomePreview,
+  homeSummary,
+  useHomeFacts,
+  ROW_NAME,
+  studioSpec,
+  useContextTitles,
+  usePreview,
+} from "./preview";
 import { installedPlugins, listings, suggestions, templates, type Template } from "./proto";
 import { GuideStrip, StageRunner, scriptFor, type Script } from "./Stage";
 
@@ -47,6 +56,9 @@ const TEMPLATE_ICON: Record<Template["icon"], LucideIcon> = {
  * live result.
  */
 export default function Studio() {
+  return import.meta.env.MODE === "mock" ? <PrototypeStudio /> : <LiveStudio />;
+}
+function PrototypeStudio() {
   const [params] = useSearchParams();
   const demo = params.get("demo") ?? (params.get("open") ? "home" : null);
   const remix = params.get("remix");
@@ -108,10 +120,7 @@ export default function Studio() {
           {phase === "stage" ? (
             <StageRunner script={script} onDone={settle} />
           ) : (
-            <StageHome
-              remixName={remixName}
-              onPick={(text) => setPrompt(text)}
-            />
+            <StageHome remixName={remixName} onPick={(text) => setPrompt(text)} />
           )}
         </div>
         <Composer
@@ -141,9 +150,7 @@ function StageHome({ remixName, onPick }: { remixName: string; onPick: (text: st
           <Sparkles size={24} aria-hidden />
         </span>
         <h2 className="text-2xl font-semibold tracking-tight text-fg">
-          {remixName
-            ? t("Make {name} yours", { name: remixName })
-            : t("What should Ether do?")}
+          {remixName ? t("Make {name} yours", { name: remixName }) : t("What should Ether do?")}
         </h2>
         <p className="text-sm text-fg-muted">
           {t("It builds here, tested on your server. Nothing changes until you install.")}
@@ -244,11 +251,24 @@ function Composer({
           className="min-h-10 w-full min-w-0 flex-1 resize-none border-0 bg-transparent text-base shadow-none focus-visible:ring-0"
         />
         {working ? (
-          <Button type="button" size="icon" variant="outline" onClick={onStop} aria-label={t("Stop")} className="shrink-0 rounded-full">
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            onClick={onStop}
+            aria-label={t("Stop")}
+            className="shrink-0 rounded-full"
+          >
             <Square size={14} />
           </Button>
         ) : (
-          <Button type="submit" size="icon" disabled={!value.trim()} aria-label={t("Build")} className="shrink-0 rounded-full">
+          <Button
+            type="submit"
+            size="icon"
+            disabled={!value.trim()}
+            aria-label={t("Build")}
+            className="shrink-0 rounded-full"
+          >
             <ArrowUp size={16} />
           </Button>
         )}
@@ -307,7 +327,9 @@ function Editor({
       navigate(settingHref("/livetv", "Kigali Sport 1"));
       return;
     }
-    const created = await api.createCollection({ ...studioSpec(kids), enabled: true }).catch(() => null);
+    const created = await api
+      .createCollection({ ...studioSpec(kids), enabled: true })
+      .catch(() => null);
     const at = created?.id
       ? `/collections?collection=${encodeURIComponent(created.id)}`
       : "/collections";
@@ -347,11 +369,13 @@ function Editor({
           {asked}
         </div>
         <ul className="space-y-2.5" aria-label={t("What it did")}>
-          {(script.key === "home" && !page ? homeSummary(facts) : builtSummary(script, page)).map((line) => (
-            <li key={line} className="flex items-start gap-2 text-sm text-fg">
-              <Check size={14} className="mt-0.5 shrink-0 text-success" aria-hidden /> {line}
-            </li>
-          ))}
+          {(script.key === "home" && !page ? homeSummary(facts) : builtSummary(script, page)).map(
+            (line) => (
+              <li key={line} className="flex items-start gap-2 text-sm text-fg">
+                <Check size={14} className="mt-0.5 shrink-0 text-success" aria-hidden /> {line}
+              </li>
+            ),
+          )}
         </ul>
         {turns.map((turn, i) => (
           <div key={`${turn.ask}-${i}`} className="space-y-2">
@@ -369,7 +393,13 @@ function Editor({
         ))}
       </div>
       <div className="sticky bottom-0">
-        <Composer compact value={reply} onChange={setReply} onSend={refine} placeholder={t("Tell it what to change")} />
+        <Composer
+          compact
+          value={reply}
+          onChange={setReply}
+          onSend={refine}
+          placeholder={t("Tell it what to change")}
+        />
       </div>
     </div>
   );
@@ -398,10 +428,14 @@ function Editor({
                 />
               </div>
               <div className={cn(pane === "preview" && "hidden lg:block")}>{describeAside}</div>
-              <div className={cn("lg:hidden", pane === "steps" && "hidden")}>{page ? <PageBuilder /> : preview}</div>
+              <div className={cn("lg:hidden", pane === "steps" && "hidden")}>
+                {page ? <PageBuilder /> : preview}
+              </div>
             </>
           }
-          main={<div className="hidden min-h-full lg:block">{page ? <PageBuilder /> : preview}</div>}
+          main={
+            <div className="hidden min-h-full lg:block">{page ? <PageBuilder /> : preview}</div>
+          }
         />
       ) : (
         <Workspace title={t("Studio")} subtitle={asked} actions={header}>
@@ -479,9 +513,27 @@ function ChannelsPreview() {
       <div className="space-y-5 p-4 sm:p-5">
         <GuideStrip
           channels={[
-            { number: 801, name: "Kigali Sport 1", now: "Rwanda Premier League", next: "Sports news", progress: 0.62 },
-            { number: 802, name: "Amahoro Sports", now: "Basketball Africa League", next: "Cycling: Tour du Rwanda", progress: 0.35 },
-            { number: 803, name: "Rwanda Sports Live", now: "Volleyball final", next: "Match of the week", progress: 0.81 },
+            {
+              number: 801,
+              name: "Kigali Sport 1",
+              now: "Rwanda Premier League",
+              next: "Sports news",
+              progress: 0.62,
+            },
+            {
+              number: 802,
+              name: "Amahoro Sports",
+              now: "Basketball Africa League",
+              next: "Cycling: Tour du Rwanda",
+              progress: 0.35,
+            },
+            {
+              number: 803,
+              name: "Rwanda Sports Live",
+              now: "Volleyball final",
+              next: "Match of the week",
+              progress: 0.81,
+            },
           ]}
         />
       </div>

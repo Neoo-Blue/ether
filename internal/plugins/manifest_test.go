@@ -196,6 +196,13 @@ func TestLintCopy(t *testing.T) {
 	if msg := LintCopy("Just do it", 40); msg == "" {
 		t.Fatal("want banned word failure")
 	}
+	// One proper noun is not Title Case; every word capitalised is.
+	if msg := LintCopy("Screenings this Friday", 40); msg != "" {
+		t.Fatalf("proper noun flagged: %s", msg)
+	}
+	if msg := LintCopy("Screenings This Friday", 40); msg != "must use sentence case" {
+		t.Fatalf("Title Case passed: %q", msg)
+	}
 }
 
 func TestActionSlotContract(t *testing.T) {

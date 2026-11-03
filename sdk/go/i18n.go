@@ -51,7 +51,7 @@ func LintCopy(raw string, maxRunes int) string {
 				caps++
 			}
 		}
-		if caps*3 >= len(words)*2 {
+		if caps*3 > len(words)*2 {
 			return "must use sentence case"
 		}
 	}

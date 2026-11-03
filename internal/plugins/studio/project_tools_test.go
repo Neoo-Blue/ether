@@ -2,12 +2,15 @@ package studio
 
 import (
 	"context"
-	"github.com/braedonsaunders/ether/internal/agent/tools"
 	"testing"
 	"time"
+
+	"github.com/braedonsaunders/ether/internal/agent/tools"
 )
 
-func TestProjectToolsRequireApprovalAndRejectStaleWrites(t *testing.T) {
+// Drafts are sandboxed and never installed, so the agent edits them
+// directly; a stale model save must still never overwrite a human edit.
+func TestProjectToolsApplyDraftsAndRejectStaleWrites(t *testing.T) {
 	s, _, _ := newTestStudio(t)
 	ctx := context.Background()
 	ts := ProjectTools(s)
@@ -17,33 +20,29 @@ func TestProjectToolsRequireApprovalAndRejectStaleWrites(t *testing.T) {
 		}
 	}
 	principal := tools.Principal{IsOwner: true, Surface: "console"}
-	proposal, err := ts[1].Execute(ctx, principal, map[string]any{"template": "page", "name": "A real draft"})
-	if err != nil || proposal.Proposal == nil {
-		t.Fatalf("create proposal: %v", err)
+	created, err := ts[1].Execute(ctx, principal, map[string]any{"template": "page", "name": "A real draft"})
+	if err != nil || created.Proposal != nil || len(s.ListProjects(ctx)) != 1 {
+		t.Fatalf("create: %v proposal=%v", err, created.Proposal)
 	}
-	if len(s.ListProjects(ctx)) != 0 {
-		t.Fatal("draft created before approval")
+	p := created.Data["project"].(*Project)
+	stale := p.UpdatedAt.Format(time.RFC3339Nano)
+	saved, err := ts[2].Execute(ctx, principal, map[string]any{"id": p.ID, "updatedAt": stale, "files": map[string]any{"src/plugin.ts": "export function handle() { return {}; }"}})
+	if err != nil || saved.Proposal != nil {
+		t.Fatalf("save: %v", err)
 	}
-	result, err := proposal.Proposal.Apply(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = proposal.Proposal.Apply(ctx); err != nil || len(s.ListProjects(ctx)) != 1 {
-		t.Fatal("repeated approval duplicated draft")
-	}
-	p := result.Data["project"].(*Project)
-	update, err := ts[2].Execute(ctx, principal, map[string]any{"id": p.ID, "updatedAt": p.UpdatedAt.Format(time.RFC3339Nano), "files": map[string]any{"src/plugin.ts": "export function handle() { return {}; }"}})
-	if err != nil || update.Proposal == nil {
-		t.Fatalf("save proposal %v", err)
+	current, _ := s.GetProject(ctx, p.ID)
+	if current.Files["src/plugin.ts"] != "export function handle() { return {}; }" {
+		t.Fatal("save did not apply")
 	}
 	if _, _, err = s.SaveFiles(ctx, p.ID, map[string]string{"notes.txt": "human edit"}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = update.Proposal.Apply(ctx); err == nil {
+	after, _ := s.GetProject(ctx, p.ID)
+	if _, err = ts[2].Execute(ctx, principal, map[string]any{"id": p.ID, "updatedAt": current.UpdatedAt.Format(time.RFC3339Nano), "files": map[string]any{"src/plugin.ts": "overwrite"}}); err == nil {
 		t.Fatal("stale model edit overwrote human edit")
 	}
-	current, _ := s.GetProject(ctx, p.ID)
-	if current.Files["notes.txt"] != "human edit" || current.Files["src/plugin.ts"] != p.Files["src/plugin.ts"] {
+	final, _ := s.GetProject(ctx, p.ID)
+	if final.Files["notes.txt"] != "human edit" || final.Files["src/plugin.ts"] != after.Files["src/plugin.ts"] {
 		t.Fatal("rejected edit changed source")
 	}
 }

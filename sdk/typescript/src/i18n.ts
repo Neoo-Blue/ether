@@ -102,7 +102,7 @@ export function lintCopy(raw: string, max = 0): string {
         caps++;
       }
     }
-    if (caps * 3 >= words.length * 2) {
+    if (caps * 3 > words.length * 2) {
       return "must use sentence case";
     }
   }
