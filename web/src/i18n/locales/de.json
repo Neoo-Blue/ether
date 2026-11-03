@@ -1145,7 +1145,6 @@
   "m_05a70cbb4e34fd": "Oben",
   "m_05a76cb616d8c1": "Titel entfernen, die auf eine dieser Angaben zutreffen, unabhängig von den Regeln.",
   "m_05a94969d28928": "Titel für Erwachsene einschließen",
-  "m_05ac64cdfe9727": "Benachrichtige mich, wenn eine neue Episode einer Serie, der ich folge, verfügbar ist",
   "m_05ad43fe3d9433": {
     "one": "{count} Fehler",
     "other": "{count} Fehler"
@@ -1553,6 +1552,7 @@
   "m_07bed3c91302aa": "Ausgehend von {name} und ",
   "m_07bf034a1366dc": "Zufällig",
   "m_07c02317d64ece": "Sportkanäle aus Ruanda, in Live-TV mit Programm",
+  "m_07c17a495b94e9": "Kostenlose Livesender mit Programmführer zu Live-TV hinzufügen",
   "m_07c1d86fe6ea45": "Kompatibilität Codecs",
   "m_07c2920e1765cf": "Unbekannter Zuschauer",
   "m_07c5a9129a7dd0": "Auf deinem Server geprüft",
@@ -2363,6 +2363,7 @@
   "m_0bd120cc5417f5": "Wiedergabe verfolgen",
   "m_0bd28d1751deda": "Ersatztitel suchen",
   "m_0bd4c613cb55fc": "Nächste Episode vorab laden",
+  "m_0bd5b0326e3ce6": "Eine Startseiten-Reihe aus einer externen Filmliste erstellen",
   "m_0bdb7c543a465a": "Wird sicher gespeichert",
   "m_0bdcc953ae29cd": "Einstellungen speichern",
   "m_0bde8a507ea480": "Ether sendet einen JSON-POST mit kind, title, message und at. Optional kannst du ein Bearer-Token hinzufügen. Nur HTTP-2xx-Antworten gelten als angenommen.",
@@ -2854,7 +2855,6 @@
   },
   "m_0e4ee49208a5ee": "Katalog-Artwork wird geladen",
   "m_0e5052de347388": "Route ausführen",
-  "m_0e53e7d4495e6b": "Eine Seite mit den drei Vorstellungen dieses Freitags samt Uhrzeiten und Sälen",
   "m_0e55365789fb94": "Nicht beansprucht",
   "m_0e56edadca55be": "Noch keine Epochenpräferenz.",
   "m_0e5a21a46d8ee0": "Automatisch · lokale Streams",
@@ -3700,6 +3700,7 @@
     "other": "{count} Verbindungen"
   },
   "m_128352ce00cc1d": "Beispielaktivität: SubDL durchsucht; keine Untertitel heruntergeladen.",
+  "m_1284bc58f42b43": "Kostenlose, legale Kopien klassischer Filme für Filme in meinem Katalog finden",
   "m_12859ebc213052": "Steht unter dem Sammlungstitel.",
   "m_1285cbf4746d19": "TMDB-Beliebtheitswert",
   "m_128a0a30452c62": "Immer Usenet",
@@ -5672,7 +5673,6 @@
   "m_1caa4a4e2a10b9": "Ein Franchise wie „Der Herr der Ringe“",
   "m_1cac46719656ac": "Reparatur konfigurieren",
   "m_1cac99f5521734": "{name} mit {dest} zusammenführen?",
-  "m_1cad1c79bb0705": "Ein Regal mit meinen ungesehenen Filmen unter 100 Minuten",
   "m_1cad377153f4cd": "Braucht einen API-Schlüssel",
   "m_1caed2e2377609": "Produktionsland",
   "m_1cb36afd93dbf8": {

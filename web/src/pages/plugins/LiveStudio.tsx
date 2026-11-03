@@ -200,9 +200,9 @@ export default function LiveStudio() {
             initialMessages={messages}
             send={send}
             suggestions={[
-              t("A page listing this Friday's three screenings with times and screens"),
-              t("A shelf of my unwatched movies that are under 100 minutes"),
-              t("Send me a notification when a new episode of a show I follow is available"),
+              t("Add free live channels to Live TV, with a programme guide"),
+              t("Find free, legal copies of classic films for movies in my catalogue"),
+              t("Make a Home row from an external list of films"),
             ]}
             labels={{
               title: t("Build with Ether"),

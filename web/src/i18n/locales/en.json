@@ -1148,7 +1148,6 @@
   "m_05a70cbb4e34fd": "Top",
   "m_05a76cb616d8c1": "Drop titles matching any of these, whatever the rules say.",
   "m_05a94969d28928": "Include adult titles",
-  "m_05ac64cdfe9727": "Send me a notification when a new episode of a show I follow is available",
   "m_05ad43fe3d9433": {
     "one": "{count} failure",
     "other": "{count} failures"
@@ -1556,6 +1555,7 @@
   "m_07bed3c91302aa": "Start from {name} and ",
   "m_07bf034a1366dc": "Shuffle",
   "m_07c02317d64ece": "Sports channels from Rwanda, in Live TV with a guide",
+  "m_07c17a495b94e9": "Add free live channels to Live TV, with a programme guide",
   "m_07c1d86fe6ea45": "compatibility codecs",
   "m_07c2920e1765cf": "Unknown viewer",
   "m_07c5a9129a7dd0": "Checked on your server",
@@ -2369,6 +2369,7 @@
   "m_0bd120cc5417f5": "Watch tracking",
   "m_0bd28d1751deda": "Search fallback titles",
   "m_0bd4c613cb55fc": "Prefetch the next episode",
+  "m_0bd5b0326e3ce6": "Make a Home row from an external list of films",
   "m_0bdb7c543a465a": "Saving securely",
   "m_0bdcc953ae29cd": "Save settings",
   "m_0bde8a507ea480": "Ether sends a JSON POST with kind, title, message and at. Optionally add a bearer token. Only HTTP 2xx responses count as accepted.",
@@ -2863,7 +2864,6 @@
   },
   "m_0e4ee49208a5ee": "Loading catalogue artwork",
   "m_0e5052de347388": "Run route",
-  "m_0e53e7d4495e6b": "A page listing this Friday's three screenings with times and screens",
   "m_0e55365789fb94": "Not claimed",
   "m_0e56edadca55be": "No era preference yet.",
   "m_0e5a21a46d8ee0": "Automatic · local streams",
@@ -3709,6 +3709,7 @@
     "other": "{count} connections"
   },
   "m_128352ce00cc1d": "Sample activity: searched SubDL; downloaded no subtitles.",
+  "m_1284bc58f42b43": "Find free, legal copies of classic films for movies in my catalogue",
   "m_12859ebc213052": "Shown under the collection title.",
   "m_1285cbf4746d19": "TMDB popularity score",
   "m_128a0a30452c62": "Always Usenet",
@@ -5687,7 +5688,6 @@
   "m_1caa4a4e2a10b9": "A franchise such as “The Lord of the Rings”",
   "m_1cac46719656ac": "Configure repair",
   "m_1cac99f5521734": "Merge {name} into {dest}?",
-  "m_1cad1c79bb0705": "A shelf of my unwatched movies that are under 100 minutes",
   "m_1cad377153f4cd": "Needs an API key",
   "m_1caed2e2377609": "Production country",
   "m_1cb36afd93dbf8": {

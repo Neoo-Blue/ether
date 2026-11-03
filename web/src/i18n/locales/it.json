@@ -1175,7 +1175,6 @@
   "m_05a70cbb4e34fd": "In alto",
   "m_05a76cb616d8c1": "Scarta i titoli che corrispondono a uno qualsiasi di questi, qualunque cosa dicano le regole.",
   "m_05a94969d28928": "Includi i titoli per adulti",
-  "m_05ac64cdfe9727": "Inviami una notifica quando è disponibile un nuovo episodio di una serie che seguo",
   "m_05ad43fe3d9433": {
     "many": "{count} errori",
     "one": "{count} errore",
@@ -1592,6 +1591,7 @@
   "m_07bed3c91302aa": "Parti da {name} e ",
   "m_07bf034a1366dc": "Casuale",
   "m_07c02317d64ece": "Canali sportivi del Ruanda, nella TV in diretta con una guida",
+  "m_07c17a495b94e9": "Aggiungi canali live gratuiti a TV in diretta, con guida ai programmi",
   "m_07c1d86fe6ea45": "compatibilità codec",
   "m_07c2920e1765cf": "Spettatore sconosciuto",
   "m_07c5a9129a7dd0": "Controllato sul tuo server",
@@ -2418,6 +2418,7 @@
   "m_0bd120cc5417f5": "Monitoraggio della visione",
   "m_0bd28d1751deda": "Cerca titoli di riserva",
   "m_0bd4c613cb55fc": "Precarica l'episodio successivo",
+  "m_0bd5b0326e3ce6": "Crea una riga della Home da un elenco esterno di film",
   "m_0bdb7c543a465a": "Salvataggio sicuro",
   "m_0bdcc953ae29cd": "Salva impostazioni",
   "m_0bde8a507ea480": "Ether invia una richiesta POST JSON con kind, title, message e at. Facoltativamente aggiungi un token Bearer. Solo le risposte HTTP 2xx vengono considerate accettate.",
@@ -2920,7 +2921,6 @@
   },
   "m_0e4ee49208a5ee": "Caricamento della grafica del catalogo",
   "m_0e5052de347388": "Esegui route",
-  "m_0e53e7d4495e6b": "Una pagina con le tre proiezioni di questo venerdì con orari e sale",
   "m_0e55365789fb94": "Non associato",
   "m_0e56edadca55be": "Ancora nessuna preferenza per le epoche.",
   "m_0e5a21a46d8ee0": "Automatico · stream locali",
@@ -3792,6 +3792,7 @@
     "other": "{count} connessioni"
   },
   "m_128352ce00cc1d": "Attività di esempio: ha cercato su SubDL; nessun sottotitolo scaricato.",
+  "m_1284bc58f42b43": "Trova copie gratuite e legali di film classici per i film del mio catalogo",
   "m_12859ebc213052": "Mostrato sotto il titolo della raccolta.",
   "m_1285cbf4746d19": "Punteggio di popolarità TMDB",
   "m_128a0a30452c62": "Sempre Usenet",
@@ -5810,7 +5811,6 @@
   "m_1caa4a4e2a10b9": "Una saga come “Il Signore degli Anelli”",
   "m_1cac46719656ac": "Configura la riparazione",
   "m_1cac99f5521734": "Unire {name} a {dest}?",
-  "m_1cad1c79bb0705": "Uno scaffale con i miei film non visti sotto i 100 minuti",
   "m_1cad377153f4cd": "Richiede una chiave API",
   "m_1caed2e2377609": "Paese di produzione",
   "m_1cb36afd93dbf8": {

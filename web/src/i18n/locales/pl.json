@@ -1205,7 +1205,6 @@
   "m_05a70cbb4e34fd": "Góra",
   "m_05a76cb616d8c1": "Pomiń tytuły pasujące do któregokolwiek z tych warunków, niezależnie od reguł.",
   "m_05a94969d28928": "Uwzględnij tytuły dla dorosłych",
-  "m_05ac64cdfe9727": "Powiadom mnie, gdy pojawi się nowy odcinek serialu, który śledzę",
   "m_05ad43fe3d9433": {
     "few": "{count} niepowodzenia",
     "many": "{count} niepowodzeń",
@@ -1631,6 +1630,7 @@
   "m_07bed3c91302aa": "Zacznij od {name} i ",
   "m_07bf034a1366dc": "Losowo",
   "m_07c02317d64ece": "Kanały sportowe z Rwandy w telewizji na żywo z programem",
+  "m_07c17a495b94e9": "Dodaj darmowe kanały na żywo do telewizji na żywo, z przewodnikiem po programach",
   "m_07c1d86fe6ea45": "compatibility codecs zgodność kodeki",
   "m_07c2920e1765cf": "Nieznany widz",
   "m_07c5a9129a7dd0": "Sprawdzono na Twoim serwerze",
@@ -2473,6 +2473,7 @@
   "m_0bd120cc5417f5": "Śledzenie oglądania",
   "m_0bd28d1751deda": "Szukaj tytułów zapasowych",
   "m_0bd4c613cb55fc": "Wstępnie pobieraj następny odcinek",
+  "m_0bd5b0326e3ce6": "Utwórz wiersz na stronie głównej z zewnętrznej listy filmów",
   "m_0bdb7c543a465a": "Bezpieczne zapisywanie",
   "m_0bdcc953ae29cd": "Zapisz ustawienia",
   "m_0bde8a507ea480": "Ether wysyła żądanie POST z JSON zawierającym kind, title, message i at. Opcjonalnie dodaj token Bearer. Za zaakceptowane uznawane są tylko odpowiedzi HTTP 2xx.",
@@ -2986,7 +2987,6 @@
   },
   "m_0e4ee49208a5ee": "Ładowanie grafik z katalogu",
   "m_0e5052de347388": "Uruchom trasę",
-  "m_0e53e7d4495e6b": "Strona z trzema piątkowymi seansami wraz z godzinami i salami",
   "m_0e55365789fb94": "Nieprzejęty",
   "m_0e56edadca55be": "Brak preferencji co do epok.",
   "m_0e5a21a46d8ee0": "Automatycznie · strumienie lokalne",
@@ -3884,6 +3884,7 @@
     "other": "{count} połączenia"
   },
   "m_128352ce00cc1d": "Przykładowa aktywność: przeszukano SubDL; nie pobrano napisów.",
+  "m_1284bc58f42b43": "Znajdź darmowe, legalne kopie klasycznych filmów dla filmów z mojego katalogu",
   "m_12859ebc213052": "Pokazane pod tytułem kolekcji.",
   "m_1285cbf4746d19": "Wskaźnik popularności TMDB",
   "m_128a0a30452c62": "Zawsze Usenet",
@@ -5948,7 +5949,6 @@
   "m_1caa4a4e2a10b9": "Franczyza, np. „Władca Pierścieni”",
   "m_1cac46719656ac": "Skonfiguruj naprawę",
   "m_1cac99f5521734": "Połączyć {name} z {dest}?",
-  "m_1cad1c79bb0705": "Półka z moimi nieobejrzanymi filmami krótszymi niż 100 minut",
   "m_1cad377153f4cd": "Wymaga klucza API",
   "m_1caed2e2377609": "Kraj produkcji",
   "m_1cb36afd93dbf8": {

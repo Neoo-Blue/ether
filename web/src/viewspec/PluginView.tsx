@@ -124,12 +124,15 @@ export function PluginView({
   page,
   params,
   onDoc,
+  liftPageHeader = false,
 }: {
   plugin: string;
   page: string;
   params?: Record<string, string | number | undefined>;
   /** Called with each loaded document, so a page chrome can show its title. */
   onDoc?: (doc: PluginViewDoc) => void;
+  /** The page chrome shows the plugin's page header, so skip it in the body. */
+  liftPageHeader?: boolean;
 }) {
   const navigate = useNavigate();
   const [viewParams, setViewParams] = useState<Record<string, string>>(() => toParams(params));
@@ -297,7 +300,14 @@ export function PluginView({
         ) : !doc ? (
           <LoadingRows rows={3} />
         ) : (
-          <ViewSpecPage spec={doc.spec} data={doc.data} />
+          <ViewSpecPage
+            spec={
+              liftPageHeader
+                ? { ...doc.spec, header: doc.spec.header.filter((b) => b.kind !== "page-header") }
+                : doc.spec
+            }
+            data={doc.data}
+          />
         )}
       </div>
       <Drawer
@@ -311,4 +321,23 @@ export function PluginView({
       </Drawer>
     </PluginViewContext.Provider>
   );
+}
+
+/** The plain title and description of a document's page header, if any. */
+export function pageHeaderText(doc: PluginViewDoc): { title?: string; description?: string } {
+  const header = doc.spec.header.find((b) => b.kind === "page-header") as
+    { title?: unknown; description?: unknown } | undefined;
+  if (!header) return {};
+  const read = (v: unknown): string | undefined => {
+    if (typeof v === "string") return v;
+    if (v && typeof v === "object" && typeof (v as { $?: unknown }).$ === "string") {
+      let cur: unknown = doc.data;
+      for (const part of (v as { $: string }).$.split(".")) {
+        cur = cur && typeof cur === "object" ? (cur as Record<string, unknown>)[part] : undefined;
+      }
+      return typeof cur === "string" || typeof cur === "number" ? String(cur) : undefined;
+    }
+    return undefined;
+  };
+  return { title: read(header.title), description: read(header.description) };
 }

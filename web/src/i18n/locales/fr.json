@@ -1175,7 +1175,6 @@
   "m_05a70cbb4e34fd": "Haut",
   "m_05a76cb616d8c1": "Écarter les titres correspondant à l’un de ces critères, quelles que soient les règles.",
   "m_05a94969d28928": "Inclure les titres pour adultes",
-  "m_05ac64cdfe9727": "M’envoyer une notification quand un nouvel épisode d’une série que je suis est disponible",
   "m_05ad43fe3d9433": {
     "many": "{count} d’échecs",
     "one": "{count} échec",
@@ -1592,6 +1591,7 @@
   "m_07bed3c91302aa": "Partir de {name} et ",
   "m_07bf034a1366dc": "Aléatoire",
   "m_07c02317d64ece": "Chaînes de sport du Rwanda, dans la télévision en direct avec un guide",
+  "m_07c17a495b94e9": "Ajouter des chaînes en direct gratuites à la TV en direct, avec un guide des programmes",
   "m_07c1d86fe6ea45": "compatibilité codecs",
   "m_07c2920e1765cf": "Spectateur inconnu",
   "m_07c5a9129a7dd0": "Vérifié sur votre serveur",
@@ -2418,6 +2418,7 @@
   "m_0bd120cc5417f5": "Suivi du visionnage",
   "m_0bd28d1751deda": "Chercher des titres de repli",
   "m_0bd4c613cb55fc": "Précharger l’épisode suivant",
+  "m_0bd5b0326e3ce6": "Créer une rangée d'accueil à partir d'une liste de films externe",
   "m_0bdb7c543a465a": "Enregistrement sécurisé",
   "m_0bdcc953ae29cd": "Enregistrer les paramètres",
   "m_0bde8a507ea480": "Ether envoie un POST JSON contenant kind, title, message et at. Ajoutez éventuellement un jeton Bearer. Seules les réponses HTTP 2xx comptent comme acceptées.",
@@ -2920,7 +2921,6 @@
   },
   "m_0e4ee49208a5ee": "Chargement des illustrations du catalogue",
   "m_0e5052de347388": "Exécuter la route",
-  "m_0e53e7d4495e6b": "Une page listant les trois séances de ce vendredi avec les horaires et les salles",
   "m_0e55365789fb94": "Non réclamé",
   "m_0e56edadca55be": "Aucune préférence d’époque pour le moment.",
   "m_0e5a21a46d8ee0": "Automatique · flux locaux",
@@ -3792,6 +3792,7 @@
     "other": "{count} connexions"
   },
   "m_128352ce00cc1d": "Activité d’exemple : a cherché sur SubDL ; n’a téléchargé aucun sous-titre.",
+  "m_1284bc58f42b43": "Trouver des copies gratuites et légales de films classiques pour les films de mon catalogue",
   "m_12859ebc213052": "Affiché sous le titre de la collection.",
   "m_1285cbf4746d19": "Score de popularité TMDB",
   "m_128a0a30452c62": "Toujours Usenet",
@@ -5810,7 +5811,6 @@
   "m_1caa4a4e2a10b9": "Une franchise comme « Le Seigneur des anneaux »",
   "m_1cac46719656ac": "Configurer la réparation",
   "m_1cac99f5521734": "Fusionner {name} avec {dest} ?",
-  "m_1cad1c79bb0705": "Une étagère de mes films non vus de moins de 100 minutes",
   "m_1cad377153f4cd": "Nécessite une clé API",
   "m_1caed2e2377609": "Pays de production",
   "m_1cb36afd93dbf8": {

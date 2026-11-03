@@ -1145,7 +1145,6 @@
   "m_05a70cbb4e34fd": "Üst",
   "m_05a76cb616d8c1": "Kurallar ne derse desin, bunlardan herhangi biriyle eşleşen başlıkları çıkar.",
   "m_05a94969d28928": "Yetişkin başlıkları dahil et",
-  "m_05ac64cdfe9727": "Takip ettiğim bir dizinin yeni bölümü çıktığında bana bildirim gönder",
   "m_05ad43fe3d9433": {
     "one": "{count} hata",
     "other": "{count} hata"
@@ -1553,6 +1552,7 @@
   "m_07bed3c91302aa": "{name} ile başla ve ",
   "m_07bf034a1366dc": "Karıştır",
   "m_07c02317d64ece": "Ruanda'dan spor kanalları, rehberle birlikte Canlı TV'de",
+  "m_07c17a495b94e9": "Canlı TV'ye program rehberiyle ücretsiz canlı kanallar ekle",
   "m_07c1d86fe6ea45": "uyumluluk codec bileşenleri",
   "m_07c2920e1765cf": "Bilinmeyen izleyici",
   "m_07c5a9129a7dd0": "Sunucunuzda kontrol edildi",
@@ -2363,6 +2363,7 @@
   "m_0bd120cc5417f5": "İzleme takibi",
   "m_0bd28d1751deda": "Yedek başlık ara",
   "m_0bd4c613cb55fc": "Sonraki bölümü önceden getir",
+  "m_0bd5b0326e3ce6": "Harici bir film listesinden Ana sayfa satırı oluştur",
   "m_0bdb7c543a465a": "Güvenle kaydediliyor",
   "m_0bdcc953ae29cd": "Ayarları kaydet",
   "m_0bde8a507ea480": "Ether; kind, title, message ve at alanlarını içeren bir JSON POST gönderir. İsteğe bağlı olarak bir bearer belirteci ekleyin. Yalnızca HTTP 2xx yanıtları kabul edilmiş sayılır.",
@@ -2854,7 +2855,6 @@
   },
   "m_0e4ee49208a5ee": "Katalog görseli yükleniyor",
   "m_0e5052de347388": "Rotayı çalıştır",
-  "m_0e53e7d4495e6b": "Bu cuma günkü üç gösterimi saatleri ve salonlarıyla listeleyen bir sayfa",
   "m_0e55365789fb94": "Sahiplenilmedi",
   "m_0e56edadca55be": "Henüz dönem tercihi yok.",
   "m_0e5a21a46d8ee0": "Otomatik · yerel akışlar",
@@ -3700,6 +3700,7 @@
     "other": "{count} bağlantı"
   },
   "m_128352ce00cc1d": "Örnek etkinlik: SubDL arandı; altyazı indirilmedi.",
+  "m_1284bc58f42b43": "Kataloğumdaki filmler için klasik filmlerin ücretsiz, yasal kopyalarını bul",
   "m_12859ebc213052": "Koleksiyon başlığının altında gösterilir.",
   "m_1285cbf4746d19": "TMDB popülerlik puanı",
   "m_128a0a30452c62": "Her zaman Usenet",
@@ -5672,7 +5673,6 @@
   "m_1caa4a4e2a10b9": "“Yüzüklerin Efendisi” gibi bir seri",
   "m_1cac46719656ac": "Onarımı yapılandır",
   "m_1cac99f5521734": "{name}, {dest} ile birleştirilsin mi?",
-  "m_1cad1c79bb0705": "İzlemediğim, 100 dakikadan kısa filmlerden oluşan bir raf",
   "m_1cad377153f4cd": "Bir API anahtarı gerekiyor",
   "m_1caed2e2377609": "Yapım ülkesi",
   "m_1cb36afd93dbf8": {

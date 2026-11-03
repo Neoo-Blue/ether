@@ -1205,7 +1205,6 @@
   "m_05a70cbb4e34fd": "Nahoře",
   "m_05a76cb616d8c1": "Vyřadit tituly odpovídající kterémukoli z těchto, ať pravidla říkají cokoli.",
   "m_05a94969d28928": "Zahrnout tituly pro dospělé",
-  "m_05ac64cdfe9727": "Pošli mi upozornění, když bude dostupná nová epizoda seriálu, který sleduji",
   "m_05ad43fe3d9433": {
     "few": "{count} selhání",
     "many": "{count} selhání",
@@ -1631,6 +1630,7 @@
   "m_07bed3c91302aa": "Začít od {name} a ",
   "m_07bf034a1366dc": "Náhodně",
   "m_07c02317d64ece": "Sportovní kanály z Rwandy v Živé TV s programem",
+  "m_07c17a495b94e9": "Přidat bezplatné živé kanály do živé TV s programovým průvodcem",
   "m_07c1d86fe6ea45": "kompatibilita kodeky",
   "m_07c2920e1765cf": "Neznámý divák",
   "m_07c5a9129a7dd0": "Zkontrolováno na vašem serveru",
@@ -2473,6 +2473,7 @@
   "m_0bd120cc5417f5": "Sledování přehrávání",
   "m_0bd28d1751deda": "Hledat náhradní tituly",
   "m_0bd4c613cb55fc": "Předem načíst další epizodu",
+  "m_0bd5b0326e3ce6": "Vytvořit řádek na Domů z externího seznamu filmů",
   "m_0bdb7c543a465a": "Bezpečně se ukládá",
   "m_0bdcc953ae29cd": "Uložit nastavení",
   "m_0bde8a507ea480": "Ether odešle POST s JSON obsahujícím kind, title, message a at. Volitelně přidejte token Bearer. Za přijaté se počítají jen odpovědi HTTP 2xx.",
@@ -2986,7 +2987,6 @@
   },
   "m_0e4ee49208a5ee": "Načítání artworku katalogu",
   "m_0e5052de347388": "Spustit trasu",
-  "m_0e53e7d4495e6b": "Stránka s třemi páteční projekcemi s časy a sály",
   "m_0e55365789fb94": "Nepřevzato",
   "m_0e56edadca55be": "Zatím žádná preference období.",
   "m_0e5a21a46d8ee0": "Automaticky · místní streamy",
@@ -3884,6 +3884,7 @@
     "other": "{count} připojení"
   },
   "m_128352ce00cc1d": "Ukázková aktivita: hledáno na SubDL; žádné titulky nestaženy.",
+  "m_1284bc58f42b43": "Najít bezplatné legální kopie klasických filmů pro filmy v mém katalogu",
   "m_12859ebc213052": "Zobrazeno pod názvem kolekce.",
   "m_1285cbf4746d19": "Skóre popularity na TMDB",
   "m_128a0a30452c62": "Vždy Usenet",
@@ -5948,7 +5949,6 @@
   "m_1caa4a4e2a10b9": "Filmová série, například „Pán prstenů“",
   "m_1cac46719656ac": "Nastavit opravu",
   "m_1cac99f5521734": "Sloučit {name} do {dest}?",
-  "m_1cad1c79bb0705": "Police s mými neshlédnutými filmy kratšími než 100 minut",
   "m_1cad377153f4cd": "Vyžaduje klíč API",
   "m_1caed2e2377609": "Země produkce",
   "m_1cb36afd93dbf8": {

@@ -1145,7 +1145,6 @@
   "m_05a70cbb4e34fd": "Øverst",
   "m_05a76cb616d8c1": "Fjern titler, der matcher en af disse, uanset hvad reglerne siger.",
   "m_05a94969d28928": "Medtag titler for voksne",
-  "m_05ac64cdfe9727": "Giv mig besked, når en ny episode af en serie, jeg følger, er tilgængelig",
   "m_05ad43fe3d9433": {
     "one": "{count} fejl",
     "other": "{count} fejl"
@@ -1553,6 +1552,7 @@
   "m_07bed3c91302aa": "Start fra {name} og ",
   "m_07bf034a1366dc": "Bland",
   "m_07c02317d64ece": "Sportskanaler fra Rwanda, i Live-tv med guide",
+  "m_07c17a495b94e9": "Tilføj gratis livekanaler til Live-tv med en programoversigt",
   "m_07c1d86fe6ea45": "kompatibilitet codecs",
   "m_07c2920e1765cf": "Ukendt seer",
   "m_07c5a9129a7dd0": "Tjekket på din server",
@@ -2363,6 +2363,7 @@
   "m_0bd120cc5417f5": "Afspilningssporing",
   "m_0bd28d1751deda": "Søg reservetitler",
   "m_0bd4c613cb55fc": "Forhåndshent næste episode",
+  "m_0bd5b0326e3ce6": "Lav en række på Hjem ud fra en ekstern filmliste",
   "m_0bdb7c543a465a": "Gemmer sikkert",
   "m_0bdcc953ae29cd": "Gem indstillinger",
   "m_0bde8a507ea480": "Ether sender en JSON-POST med kind, title, message og at. Tilføj eventuelt et bearer-token. Kun HTTP 2xx-svar tæller som accepteret.",
@@ -2854,7 +2855,6 @@
   },
   "m_0e4ee49208a5ee": "Indlæser katalogets grafik",
   "m_0e5052de347388": "Kør rute",
-  "m_0e53e7d4495e6b": "En side med denne fredags tre visninger med tidspunkter og sale",
   "m_0e55365789fb94": "Ikke tilknyttet",
   "m_0e56edadca55be": "Ingen epokepræference endnu.",
   "m_0e5a21a46d8ee0": "Automatisk · lokale streams",
@@ -3700,6 +3700,7 @@
     "other": "{count} forbindelser"
   },
   "m_128352ce00cc1d": "Eksempelaktivitet: søgte hos SubDL; downloadede ingen undertekster.",
+  "m_1284bc58f42b43": "Find gratis, lovlige kopier af klassiske film til film i mit katalog",
   "m_12859ebc213052": "Vises under samlingens titel.",
   "m_1285cbf4746d19": "TMDB-popularitetsscore",
   "m_128a0a30452c62": "Altid Usenet",
@@ -5672,7 +5673,6 @@
   "m_1caa4a4e2a10b9": "En franchise som “Ringenes Herre”",
   "m_1cac46719656ac": "Konfigurer reparation",
   "m_1cac99f5521734": "Flet {name} ind i {dest}?",
-  "m_1cad1c79bb0705": "En hylde med mine usete film under 100 minutter",
   "m_1cad377153f4cd": "Kræver en API-nøgle",
   "m_1caed2e2377609": "Produktionsland",
   "m_1cb36afd93dbf8": {

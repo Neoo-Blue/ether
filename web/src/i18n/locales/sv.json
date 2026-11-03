@@ -1145,7 +1145,6 @@
   "m_05a70cbb4e34fd": "Överkant",
   "m_05a76cb616d8c1": "Ta bort titlar som matchar något av dessa, oavsett vad reglerna säger.",
   "m_05a94969d28928": "Ta med vuxentitlar",
-  "m_05ac64cdfe9727": "Meddela mig när ett nytt avsnitt av en serie jag följer är tillgängligt",
   "m_05ad43fe3d9433": {
     "one": "{count} misslyckande",
     "other": "{count} misslyckanden"
@@ -1553,6 +1552,7 @@
   "m_07bed3c91302aa": "Börja från {name} och ",
   "m_07bf034a1366dc": "Blanda",
   "m_07c02317d64ece": "Sportkanaler från Rwanda, i Live-TV med guide",
+  "m_07c17a495b94e9": "Lägg till gratis livekanaler i Live-tv, med programguide",
   "m_07c1d86fe6ea45": "kompatibilitet codecs",
   "m_07c2920e1765cf": "Okänd tittare",
   "m_07c5a9129a7dd0": "Kontrollerat på din server",
@@ -2363,6 +2363,7 @@
   "m_0bd120cc5417f5": "Tittarspårning",
   "m_0bd28d1751deda": "Sök reservtitlar",
   "m_0bd4c613cb55fc": "Förhämta nästa avsnitt",
+  "m_0bd5b0326e3ce6": "Skapa en rad på Hem från en extern filmlista",
   "m_0bdb7c543a465a": "Sparar säkert",
   "m_0bdcc953ae29cd": "Spara inställningar",
   "m_0bde8a507ea480": "Ether skickar en JSON-POST med kind, title, message och at. Lägg eventuellt till en bearer-token. Endast HTTP 2xx-svar räknas som godkända.",
@@ -2854,7 +2855,6 @@
   },
   "m_0e4ee49208a5ee": "Läser in katalogomslag",
   "m_0e5052de347388": "Kör rutt",
-  "m_0e53e7d4495e6b": "En sida med fredagens tre visningar med tider och salonger",
   "m_0e55365789fb94": "Inte kopplad",
   "m_0e56edadca55be": "Ingen epokpreferens ännu.",
   "m_0e5a21a46d8ee0": "Automatisk · lokala strömmar",
@@ -3700,6 +3700,7 @@
     "other": "{count} anslutningar"
   },
   "m_128352ce00cc1d": "Exempelaktivitet: sökte hos SubDL; laddade inte ned några undertexter.",
+  "m_1284bc58f42b43": "Hitta gratis, lagliga kopior av klassiska filmer för filmer i min katalog",
   "m_12859ebc213052": "Visas under samlingens titel.",
   "m_1285cbf4746d19": "TMDB-popularitetspoäng",
   "m_128a0a30452c62": "Alltid Usenet",
@@ -5672,7 +5673,6 @@
   "m_1caa4a4e2a10b9": "En franchise som ”Sagan om ringen”",
   "m_1cac46719656ac": "Konfigurera reparation",
   "m_1cac99f5521734": "Slå ihop {name} med {dest}?",
-  "m_1cad1c79bb0705": "En hylla med mina osedda filmer under 100 minuter",
   "m_1cad377153f4cd": "Kräver en API-nyckel",
   "m_1caed2e2377609": "Produktionsland",
   "m_1cb36afd93dbf8": {

@@ -54,8 +54,8 @@ func TestTemplatesAllValidAndRunnable(t *testing.T) {
 	ctx := context.Background()
 
 	tpls := Templates()
-	if len(tpls) != 8 {
-		t.Fatalf("expected 8 templates, got %d", len(tpls))
+	if len(tpls) != 9 {
+		t.Fatalf("expected 9 templates, got %d", len(tpls))
 	}
 
 	for _, tpl := range tpls {
@@ -408,5 +408,33 @@ func TestRemixDoesNotPersistAddonLink(t *testing.T) {
 	}
 	if !strings.Contains(p.Files["src/plugin.ts"], "addon.example") {
 		t.Fatal("upstream host not noted in source")
+	}
+}
+
+// Every draft is its own plugin, named after the draft, so installing a
+// second one never replaces the first.
+func TestDraftsGetTheirOwnPluginIDs(t *testing.T) {
+	s, _, _ := newTestStudio(t)
+	ctx := context.Background()
+	a, err := s.CreateProject(ctx, CreateProjectOptions{Template: "page", Name: "Friday screenings"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.InstallProject(ctx, a.ID, plugins.InstallOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteProject(ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.CreateProject(ctx, CreateProjectOptions{Template: "page", Name: "Friday screenings"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.CreateProject(ctx, CreateProjectOptions{Template: "page", Name: "Weekend picks!"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.PluginID != "community.friday-screenings" || b.PluginID != "community.friday-screenings-2" || c.PluginID != "community.weekend-picks" {
+		t.Fatalf("ids: %s %s %s", a.PluginID, b.PluginID, c.PluginID)
 	}
 }

@@ -1175,7 +1175,6 @@
   "m_05a70cbb4e34fd": "Superior",
   "m_05a76cb616d8c1": "Descarta títulos que correspondam a qualquer um destes, independentemente das regras.",
   "m_05a94969d28928": "Incluir títulos adultos",
-  "m_05ac64cdfe9727": "Me envie uma notificação quando um novo episódio de uma série que sigo estiver disponível",
   "m_05ad43fe3d9433": {
     "many": "{count} falhas",
     "one": "{count} falha",
@@ -1592,6 +1591,7 @@
   "m_07bed3c91302aa": "Começar de {name} e ",
   "m_07bf034a1366dc": "Aleatória",
   "m_07c02317d64ece": "Canais de esportes de Ruanda, na TV ao vivo com guia",
+  "m_07c17a495b94e9": "Adicionar canais ao vivo gratuitos à TV ao vivo, com guia de programação",
   "m_07c1d86fe6ea45": "compatibilidade codecs",
   "m_07c2920e1765cf": "Espectador desconhecido",
   "m_07c5a9129a7dd0": "Verificado no seu servidor",
@@ -2418,6 +2418,7 @@
   "m_0bd120cc5417f5": "Acompanhamento de exibição",
   "m_0bd28d1751deda": "Buscar títulos de reserva",
   "m_0bd4c613cb55fc": "Pré-buscar o próximo episódio",
+  "m_0bd5b0326e3ce6": "Criar uma fileira da Início a partir de uma lista externa de filmes",
   "m_0bdb7c543a465a": "Salvando com segurança",
   "m_0bdcc953ae29cd": "Salvar configurações",
   "m_0bde8a507ea480": "O Ether envia um POST JSON com kind, title, message e at. Opcionalmente, adicione um token Bearer. Somente respostas HTTP 2xx contam como aceitas.",
@@ -2920,7 +2921,6 @@
   },
   "m_0e4ee49208a5ee": "Carregando arte do catálogo",
   "m_0e5052de347388": "Executar rota",
-  "m_0e53e7d4495e6b": "Uma página com as três sessões desta sexta com horários e salas",
   "m_0e55365789fb94": "Não reivindicado",
   "m_0e56edadca55be": "Ainda sem preferência de época.",
   "m_0e5a21a46d8ee0": "Automático · streams locais",
@@ -3792,6 +3792,7 @@
     "other": "{count} conexões"
   },
   "m_128352ce00cc1d": "Atividade de exemplo: buscou no SubDL; não baixou legendas.",
+  "m_1284bc58f42b43": "Encontrar cópias gratuitas e legais de filmes clássicos para os filmes do meu catálogo",
   "m_12859ebc213052": "Mostrado sob o título da coleção.",
   "m_1285cbf4746d19": "Pontuação de popularidade do TMDB",
   "m_128a0a30452c62": "Sempre Usenet",
@@ -5810,7 +5811,6 @@
   "m_1caa4a4e2a10b9": "Uma franquia, como “O Senhor dos Anéis”",
   "m_1cac46719656ac": "Configurar reparo",
   "m_1cac99f5521734": "Mesclar {name} em {dest}?",
-  "m_1cad1c79bb0705": "Uma prateleira com meus filmes não assistidos de menos de 100 minutos",
   "m_1cad377153f4cd": "Precisa de uma chave de API",
   "m_1caed2e2377609": "País de produção",
   "m_1cb36afd93dbf8": {

@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"path"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -192,6 +193,41 @@ func (s *Studio) Close() error {
 	return nil
 }
 
+var slugUnsafe = regexp.MustCompile(`[^a-z0-9]+`)
+
+// freshPluginID derives "community.<name>" from the draft's name, numbered
+// when a draft or installed plugin already uses it.
+func (s *Studio) freshPluginID(ctx context.Context, name string, tpl Template) string {
+	slug := strings.Trim(slugUnsafe.ReplaceAllString(strings.ToLower(strings.TrimSpace(name)), "-"), "-")
+	if len(slug) > 48 {
+		slug = strings.Trim(slug[:48], "-")
+	}
+	if slug == "" || slug[0] < 'a' || slug[0] > 'z' {
+		slug = strings.TrimPrefix(tpl.DefaultPluginID, "community.")
+		slug = strings.ReplaceAll(slug, ".", "-")
+	}
+	base := "community." + slug
+	taken := func(id string) bool {
+		s.mu.Lock()
+		_, used := s.lookupLocked(id)
+		s.mu.Unlock()
+		if used {
+			return true
+		}
+		if s.mgr != nil {
+			if _, err := s.mgr.Get(ctx, id); err == nil {
+				return true
+			}
+		}
+		return false
+	}
+	id := base
+	for n := 2; taken(id); n++ {
+		id = fmt.Sprintf("%s-%d", base, n)
+	}
+	return id
+}
+
 // CreateProject scaffolds a new Studio project from one of the 8 templates.
 func (s *Studio) CreateProject(ctx context.Context, opts CreateProjectOptions) (*Project, error) {
 	tplID := strings.TrimSpace(opts.Template)
@@ -201,6 +237,11 @@ func (s *Studio) CreateProject(ctx context.Context, opts CreateProjectOptions) (
 	tpl, ok := LookupTemplate(tplID)
 	if !ok {
 		return nil, fmt.Errorf("studio: unknown template %q", tplID)
+	}
+	if strings.TrimSpace(opts.PluginID) == "" {
+		// Each draft is its own plugin: a second draft from the same template
+		// must never update or replace the first one once installed.
+		opts.PluginID = s.freshPluginID(ctx, opts.Name, tpl)
 	}
 	pluginID, name, files := applyProjectOptions(tpl, opts)
 	comp := s.CompileFiles(files, "")

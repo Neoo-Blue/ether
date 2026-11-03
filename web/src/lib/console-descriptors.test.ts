@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   agentSuggestionsFor,
   pageRoute,
+  pluginNavGroup,
   type CommandMeta,
   type PageMeta,
 } from "./console-descriptors";
@@ -57,5 +58,17 @@ describe("console descriptors", () => {
     const actions = commands.filter((c) => c.meta?.route && !c.meta.agentSuggestion);
     expect(actions.map((c) => c.id)).toContain("new-collection");
     expect(actions.map((c) => c.id)).not.toContain("ask.releases.why-pick");
+  });
+});
+
+describe("pluginNavGroup", () => {
+  const page = (meta: Record<string, unknown>, group?: string) =>
+    ({ ...fixturePluginPage, group, meta }) as unknown as Descriptor<PageMeta>;
+  it("never places a plugin page in the top group above Overview", () => {
+    expect(pluginNavGroup(page({ group: "" }, "My plugin"))).toBe("server");
+    expect(pluginNavGroup(page({}))).toBeUndefined();
+  });
+  it("keeps a group the manifest declares", () => {
+    expect(pluginNavGroup(page({ group: "library" }))).toBe("library");
   });
 });
