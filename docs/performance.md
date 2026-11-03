@@ -102,8 +102,10 @@ real data:
 7. It writes `report.md`, which checks every endpoint against its budget and
    shows the server's own statement count, rows read, database time and lock
    wait for it. Allocation counts and bytes are process-wide deltas while the
-   request runs and can include background work. It also writes `audit.md`
-   and `results.json` (including response hashes for comparisons).
+   request runs and can include background work. The harness enables this
+   sampling explicitly; ordinary traces leave it off to avoid perturbing the
+   scale gate. It also writes `audit.md` and `results.json` (including response
+   hashes for comparisons).
 
 To replay specific Plex metadata or postplay paths, `-plex-cases` accepts a
 private JSON file containing an array such as

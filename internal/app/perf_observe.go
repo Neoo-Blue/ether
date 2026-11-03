@@ -23,6 +23,11 @@ import (
 // sets it; production leaves it unset.
 const PerfTraceEnv = "ETHER_PERF_TRACE"
 
+// PerfAllocEnv enables process-wide allocation sampling for tagged traces.
+// ReadMemStats stops the runtime briefly, so ordinary traces and the scale
+// gate leave it off; etherperf enables it for its isolated measurements.
+const PerfAllocEnv = "ETHER_PERF_ALLOC"
+
 // PerfTraceDepthEnv sets how many callers each traced statement's site
 // records (default 1).
 const PerfTraceDepthEnv = "ETHER_PERF_TRACE_DEPTH"
@@ -51,10 +56,11 @@ type perfObserver struct {
 	lastWarn map[string]time.Time
 	trace    *os.File
 	encoder  *json.Encoder
+	alloc    bool
 }
 
 func newPerfObserver(log *slog.Logger) *perfObserver {
-	p := &perfObserver{log: log, lastWarn: make(map[string]time.Time)}
+	p := &perfObserver{log: log, lastWarn: make(map[string]time.Time), alloc: os.Getenv(PerfAllocEnv) == "1"}
 	if path := strings.TrimSpace(os.Getenv(PerfTraceEnv)); path != "" {
 		f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 		if err != nil {
@@ -123,14 +129,14 @@ func (p *perfObserver) wrap(surface string, next http.Handler) http.Handler {
 			w = recorder
 		}
 		var before runtime.MemStats
-		if tracing && r.Header.Get(PerfTagHeader) != "" {
+		if tracing && p.alloc && r.Header.Get(PerfTagHeader) != "" {
 			runtime.ReadMemStats(&before)
 		}
 		next.ServeHTTP(w, r.WithContext(ctx))
 		elapsed := time.Since(start)
 		if tracing {
 			var after runtime.MemStats
-			if r.Header.Get(PerfTagHeader) != "" {
+			if p.alloc && r.Header.Get(PerfTagHeader) != "" {
 				runtime.ReadMemStats(&after)
 			}
 			p.writeTrace(PerfTraceRecord{
