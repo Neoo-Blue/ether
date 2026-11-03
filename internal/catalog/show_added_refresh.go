@@ -24,7 +24,7 @@ func (c *Catalog) refreshShowAdded(ctx context.Context) error {
 	if store.DialectOf(c.db) == store.SQLite {
 		indexHint = " INDEXED BY catalog_titles_episode_recent"
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT released_ts,key,show_key FROM catalog_titles`+indexHint+` WHERE type='episode' AND release_known=1 AND released_ts<=? AND (released_ts,key)>(?,?) ORDER BY released_ts ASC,key ASC LIMIT 256`, now, ts, key)
+	rows, err := tx.QueryContext(ctx, `SELECT released_ts,key,show_key FROM catalog_titles`+indexHint+` WHERE type='episode' AND release_known=1 AND released_ts<=? AND released_ts>=? AND (released_ts>? OR key<?) ORDER BY released_ts ASC,key DESC LIMIT 256`, now, ts, ts, key)
 	if err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func (c *Catalog) refreshShowAdded(ctx context.Context) error {
 	}
 	if len(batch) < 256 {
 		ts = now
-		key = 0
+		key = 1<<63 - 1
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE catalog_show_added_cursor SET ts=?,episode_key=? WHERE id=1`, ts, key); err != nil {
 		return err
