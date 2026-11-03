@@ -216,6 +216,9 @@ func (s *Server) parsePlayRequest(r *http.Request) (playRequest, error) {
 		return playRequest{}, fmt.Errorf("no playable item in request")
 	}
 	caps := s.clientCaps(pr)
+	if s.dvBaseOnly(pr, key) {
+		caps.DolbyVisionBaseOnly = true // this start stalled in Dolby Vision
+	}
 	applyDecisionQuery(&caps, q)
 	// The decision query can identify WAN even when the metadata request
 	// looked local. Apply the remote ceiling before source resolution too.

@@ -94,6 +94,7 @@ func (s *Server) revokeReadCapability(sessionID string) {
 func (s *Server) dropTranscode(id string) {
 	s.revokeReadCapability(id)
 	s.transcodes.remove(id)
+	s.starts.forget(id)
 }
 
 func readCapURL(raw, token string) string {

@@ -83,6 +83,13 @@ func (s *Server) handleTimeline(w http.ResponseWriter, r *http.Request) {
 		s.log.Warn("timeline report", "key", key, "state", state)
 	}
 	tids := s.transcodes.forClient(user.ID, pr.ClientID, key)
+	tid := trackID(user.ID, pr.ClientID, pr.SessionID)
+	if reason := s.checkStartStall(pr, key, state, offset, tids); reason != "" {
+		// The player took the media and never started. End this attempt
+		// with the reason; the stop below closes its encoder and source.
+		s.setTermination(tid, reason)
+		s.reportBrokerTimeline(ctx, pr, key, offset, duration, "stopped", sanitizeSessionID(q.Get("session")))
+	}
 	for _, id := range tids {
 		if e, ok := s.transcodes.get(id); ok && s.playbackOwners.Stale(user.ID, pr.ClientID, key, e.playbackID) {
 			s.cleanSupersededEncoders(ctx, user.ID, pr.ClientID, key, e.playbackID)
@@ -95,7 +102,6 @@ func (s *Server) handleTimeline(w http.ResponseWriter, r *http.Request) {
 	if pqItem > 0 {
 		s.queues.selectItem(user.ID, pqItem)
 	}
-	tid := trackID(user.ID, pr.ClientID, pr.SessionID)
 
 	mc := &model.MediaContainer{}
 	if reason, killed := s.takeTermination(tid); killed {
