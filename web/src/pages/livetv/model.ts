@@ -292,6 +292,9 @@ export const emptyChannel = (): Channel => ({
   items: [],
 });
 
+/** The Live TV source kind of an installed add-on's channels. */
+export const addonChannelsKind = (pluginId: string) => `plugin:${pluginId}/channels`;
+
 export const emptySource = (): SourceDraft => ({
   id: "",
   name: "",

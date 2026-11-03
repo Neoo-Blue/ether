@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { Field, SecretInput, Segmented } from "../../components/fields";
 import { localized, t } from "../../i18n";
 import { errorMessage } from "../../lib/api";
@@ -29,7 +30,7 @@ import {
   type SourceDraft,
 } from "./model";
 
-export type SourceKind = "playlist" | "guide" | "stremio";
+export type SourceKind = "playlist" | "guide";
 
 /** Mirrors internal/extend.LiveTVSourceMeta. */
 interface LiveTVSourceMeta {
@@ -91,8 +92,7 @@ export function SourceEditor({
   const kindDescriptors: LiveTVDescriptor[] = registry.descriptors;
   const byEditor = (editor: string) => kindDescriptors.find((d) => d.meta?.editor === editor);
   const typeDescriptors = kindDescriptors.filter(
-    (d) =>
-      d.meta?.editor === "playlist" || d.meta?.editor === "guide" || d.meta?.editor === "stremio",
+    (d) => d.meta?.editor === "playlist" || d.meta?.editor === "guide",
   );
   const pluginKinds = kindDescriptors.filter(
     (d) =>
@@ -101,7 +101,15 @@ export function SourceEditor({
       d.meta?.editor !== "guide" &&
       d.meta?.editor !== "xtream",
   );
-  const selectedPlugin = pluginKinds.find((d) => d.id === draft.playlistUrl);
+  const selectedPlugin = pluginKinds.find(
+    (d) => d.id === draft.playlistUrl || (!!draft.kind && d.id === draft.kind),
+  );
+  // A source whose channels come from a plugin or add-on (installed or not):
+  // the plugin owns its links, so the editor shows none.
+  const pluginBacked =
+    Boolean(selectedPlugin) ||
+    Boolean(draft.kind?.startsWith("plugin:")) ||
+    draft.playlistUrl.startsWith("plugin:");
   useEffect(() => {
     setDraft(
       source
@@ -119,12 +127,10 @@ export function SourceEditor({
     );
     setKind(
       source
-        ? source.kind === "stremio"
-          ? "stremio"
-          : source.hasPlaylist === false ||
-              (!source.playlistUrl && !source.channelCount && source.hasGuide)
-            ? "guide"
-            : "playlist"
+        ? source.hasPlaylist === false ||
+          (!source.playlistUrl && !source.channelCount && source.hasGuide)
+          ? "guide"
+          : "playlist"
         : initialKind,
     );
     setFiles({ playlist: null, guide: null });
@@ -154,11 +160,9 @@ export function SourceEditor({
     draft.name.trim() !== "" &&
     (xtream
       ? Boolean(auth.server?.trim() && auth.username?.trim() && auth.password)
-      : kind === "stremio"
-        ? Boolean(draft.playlistUrl.trim())
-        : kind === "playlist"
-          ? Boolean(files.playlist || draft.playlist || draft.playlistUrl)
-          : Boolean(files.guide || draft.guide || draft.guideUrl));
+      : kind === "playlist"
+        ? Boolean(files.playlist || draft.playlist || draft.playlistUrl)
+        : Boolean(files.guide || draft.guide || draft.guideUrl));
 
   const save = async () => {
     setBusy("save");
@@ -166,8 +170,8 @@ export function SourceEditor({
     try {
       const body: SourceDraft =
         kind === "guide" || xtream ? { ...draft, playlist: "", playlistUrl: "" } : { ...draft };
-      body.kind = kind === "stremio" ? "stremio" : "";
-      body.auth = kind === "stremio" ? undefined : cleanAuth(draft.auth, kind);
+      body.kind = pluginBacked ? (selectedPlugin?.id ?? draft.kind) : "";
+      body.auth = pluginBacked ? undefined : cleanAuth(draft.auth, kind);
       const playlistFile = kind === "playlist" && !xtream ? files.playlist : null;
       const guideFile = files.guide;
       if (playlistFile && source?.playlistUrl) body.playlistUrl = source.playlistUrl;
@@ -250,19 +254,10 @@ export function SourceEditor({
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-xl font-semibold tracking-tight text-fg">
-            {source
-              ? source.name
-              : kind === "guide"
-                ? t("New guide source")
-                : kind === "stremio"
-                  ? t("New Stremio add-on")
-                  : t("New IPTV source")}
+            {source ? source.name : kind === "guide" ? t("New guide source") : t("New IPTV source")}
           </h2>
           <p className="text-sm text-fg-muted">
-            {textOf(
-              byEditor(kind === "guide" ? "guide" : kind === "stremio" ? "stremio" : "playlist")
-                ?.hint,
-            ) ||
+            {textOf((selectedPlugin ?? byEditor(kind === "guide" ? "guide" : "playlist"))?.hint) ||
               (kind === "guide"
                 ? t("An XMLTV guide on its own. Map any channel to it for listings.")
                 : t("An M3U playlist of live streams, with an optional XMLTV guide."))}
@@ -349,11 +344,7 @@ export function SourceEditor({
                 if (selectedPlugin) setDraft((d) => ({ ...d, playlistUrl: "" }));
               }}
               options={typeDescriptors.map((d) => ({
-                value: (d.meta?.editor === "guide"
-                  ? "guide"
-                  : d.meta?.editor === "stremio"
-                    ? "stremio"
-                    : "playlist") as SourceKind,
+                value: (d.meta?.editor === "guide" ? "guide" : "playlist") as SourceKind,
                 label: textOf(d.label),
                 icon: kindIcon(d),
               }))}
@@ -404,7 +395,19 @@ export function SourceEditor({
             }
           />
         </Field>
-        {kind === "playlist" && !selectedPlugin ? (
+        {source && pluginBacked ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-bg-subtle/60 px-4 py-3 text-sm">
+            <span className="text-fg-muted">
+              {selectedPlugin
+                ? t("Channels come from {name}.", { name: textOf(selectedPlugin.label) })
+                : t("The plugin behind this source is off or removed.")}
+            </span>
+            <Link to="/plugins/installed" className="font-medium text-primary hover:underline">
+              {t("Manage in Plugins")}
+            </Link>
+          </div>
+        ) : null}
+        {kind === "playlist" && !pluginBacked ? (
           <Field label={t("Connect with")}>
             <Segmented
               ariaLabel={t("Connect with")}
@@ -480,7 +483,7 @@ export function SourceEditor({
             </Field>
           </div>
         ) : null}
-        {kind === "playlist" && !xtream && !selectedPlugin ? (
+        {kind === "playlist" && !xtream && !pluginBacked ? (
           <UrlOrFile
             id="src-m3u"
             label={t("M3U playlist")}
@@ -492,20 +495,7 @@ export function SourceEditor({
             onFile={(f) => void upload(f, "playlist")}
           />
         ) : null}
-        {kind === "stremio" ? (
-          <Field
-            label={t("Add-on URL")}
-            htmlFor="src-stremio"
-            hint={t("Paste the configured manifest URL from your add-on.")}
-          >
-            <SecretInput
-              id="src-stremio"
-              value={draft.playlistUrl}
-              onChange={(v) => setDraft({ ...draft, playlistUrl: v })}
-            />
-          </Field>
-        ) : null}
-        {kind !== "stremio" && !selectedPlugin ? (
+        {!pluginBacked ? (
           <UrlOrFile
             id="src-xmltv"
             label={
@@ -532,12 +522,8 @@ export function SourceEditor({
             onFile={(f) => void upload(f, "guide")}
           />
         ) : null}
-        {!xtream && kind !== "stremio" && !selectedPlugin ? (
-          <SignIn auth={auth} onChange={setAuth} />
-        ) : null}
-        {kind !== "stremio" && !selectedPlugin ? (
-          <ClientIdentity auth={auth} onChange={setAuth} />
-        ) : null}
+        {!xtream && !pluginBacked ? <SignIn auth={auth} onChange={setAuth} /> : null}
+        {!pluginBacked ? <ClientIdentity auth={auth} onChange={setAuth} /> : null}
         <Field
           label={t("Keep it fresh")}
           hint={
