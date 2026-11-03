@@ -122,8 +122,8 @@ func TestProbeSearchesIndexersWhoseFeedHasGaps(t *testing.T) {
 	}
 }
 
-// A found title is not searched again for a month, unless its release
-// proves unplayable.
+// A found title is available like any other and is never searched again in
+// the background, unless its release proves unplayable.
 func TestProbeLeavesFoundTitlesUntilUnplayable(t *testing.T) {
 	x, _, counter := coverageFixture(t, 5)
 	var searches int
@@ -134,8 +134,10 @@ func TestProbeLeavesFoundTitlesUntilUnplayable(t *testing.T) {
 	x.s.d.Search = found
 	_ = counter
 	runFor(t, x, 3*24*time.Hour)
+	x.now = x.now.Add(45 * 24 * time.Hour) // and well past any cadence
+	runFor(t, x, 10*time.Minute)
 	if searches != 40 {
-		t.Fatalf("searched %d times over three days, want once per found title (40)", searches)
+		t.Fatalf("searched %d times, want once per found title (40)", searches)
 	}
 	unplayable := &unplayableValidator{fakeValidator: x.v, since: map[core.RatingKey]time.Time{core.MovieKey(3): x.now}}
 	x.s.d.Validator = unplayable
