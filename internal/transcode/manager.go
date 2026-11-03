@@ -180,17 +180,16 @@ func withFinder(f finder) Option { return func(o *options) { o.finder = &f } }
 
 // Manager runs ffmpeg for Ether. It implements core.Transcoder.
 type Manager struct {
-	subtitles        subtitleCache
-	rtxSetup         *rtxSetupWorker
-	audioMatchBusy   atomic.Bool
-	decodeSampleBusy atomic.Bool
-	rtx              rtxBackendState
-	encoders         map[*encoderLifetime]struct{}
-	encoderIDs       map[string]*encoderLifetime
-	encoderLimit     int
-	encoderTimeout   time.Duration
-	encoderRemove    func(string) error
-	reaperDone       chan struct{}
+	subtitles      subtitleCache
+	rtxSetup       *rtxSetupWorker
+	audioMatchBusy atomic.Bool
+	rtx            rtxBackendState
+	encoders       map[*encoderLifetime]struct{}
+	encoderIDs     map[string]*encoderLifetime
+	encoderLimit   int
+	encoderTimeout time.Duration
+	encoderRemove  func(string) error
+	reaperDone     chan struct{}
 
 	log     *slog.Logger
 	opts    options
