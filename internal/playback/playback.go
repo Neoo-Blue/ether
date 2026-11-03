@@ -306,12 +306,13 @@ func (m *Manager) hasFlightLocked(id identity) bool {
 
 // flight is one in-progress Prepare shared by concurrent callers.
 type flight struct {
-	sources *sourceLifetime
-	done    chan struct{}
-	cancel  context.CancelFunc
-	waiters int
-	sess    *session
-	err     error
+	sources  *sourceLifetime
+	done     chan struct{}
+	cancel   context.CancelFunc
+	waiters  int
+	detached bool
+	sess     *session
+	err      error
 }
 
 // Pin reasons used with core.SegmentCache.
@@ -734,6 +735,20 @@ func (m *Manager) prepareEntry(ctx context.Context, user *core.User, key core.Ra
 }
 
 func (m *Manager) prepareOwnedEntry(ctx context.Context, user *core.User, key core.RatingKey, caps core.ClientCaps, prefer string, exact, deferSupersession bool) (*core.PlaySession, core.SourceRetirement, error) {
+	return m.prepareOwnedWithin(ctx, 0, user, key, caps, prefer, exact, deferSupersession)
+}
+
+// PrepareWithin leaves a timed-out flight running for a subsequent retry.
+// The prepared source does not supersede the client's current session.
+func (m *Manager) PrepareWithin(ctx context.Context, wait time.Duration, user *core.User, key core.RatingKey, caps core.ClientCaps, release string, exact bool) (*core.PlaySession, error) {
+	if exact && release == "" {
+		return nil, core.ErrNotAvailable
+	}
+	ps, _, err := m.prepareOwnedWithin(ctx, wait, user, key, caps, release, exact, true)
+	return ps, err
+}
+
+func (m *Manager) prepareOwnedWithin(ctx context.Context, wait time.Duration, user *core.User, key core.RatingKey, caps core.ClientCaps, prefer string, exact, deferSupersession bool) (*core.PlaySession, core.SourceRetirement, error) {
 	if user == nil {
 		return nil, nil, core.ErrUnauthorized
 	}
@@ -794,6 +809,12 @@ func (m *Manager) prepareOwnedEntry(ctx context.Context, user *core.User, key co
 	}
 	f.waiters++
 	m.mu.Unlock()
+	var timeout <-chan time.Time
+	if wait > 0 {
+		timer := time.NewTimer(wait)
+		defer timer.Stop()
+		timeout = timer.C
+	}
 
 	select {
 	case <-f.done:
@@ -803,11 +824,17 @@ func (m *Manager) prepareOwnedEntry(ctx context.Context, user *core.User, key co
 		return f.sess.snapshot(m.now()), f.sess.sources, nil
 	case <-ctx.Done():
 		m.mu.Lock()
-		if f.waiters--; f.waiters == 0 {
+		if f.waiters--; f.waiters == 0 && !f.detached {
 			f.cancel() // nobody wants it any more
 		}
 		m.mu.Unlock()
 		return nil, f.sources, ctx.Err()
+	case <-timeout:
+		m.mu.Lock()
+		f.waiters--
+		f.detached = true
+		m.mu.Unlock()
+		return nil, f.sources, core.ErrPrepareSlow
 	}
 }
 

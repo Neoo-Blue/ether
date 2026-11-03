@@ -107,7 +107,7 @@ func (a *App) newSessionBroker(events *sessions.EventBus) (*sessions.Broker, err
 			}
 			return a.transcoder.ExtractSubtitle(ctx, input, index, codec, w)
 		},
-		OnEventError: func(err error) { a.log.Warn("session event publication failed", "err", err) },
+		OnEventError: func(err error) { a.log.Warn("session lifecycle operation failed", "err", err) },
 	})
 }
 
