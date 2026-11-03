@@ -1035,3 +1035,20 @@ func TestExtensionRootKeepsConsolePrefixAndQuery(t *testing.T) {
 		}
 	}
 }
+
+func TestExtensionKeepsEscapedPathBehindConsolePrefix(t *testing.T) {
+	store := newStore(t, seededConfig)
+	handler := admin.New(admin.Deps{Config: store, IsOwnerToken: storedOwner(store), Extensions: map[string]http.Handler{"plugins": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/studio:community.page/views/overview" {
+			t.Errorf("wrong resource: %q", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+	})}})
+	req := httptest.NewRequest(http.MethodGet, "/ether/api/plugins/studio%3Acommunity.page/views/overview", nil)
+	req.Header.Set("X-Ether-Admin-Token", ownerToken)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("encoded plugin path: %d %s", w.Code, w.Body.String())
+	}
+}

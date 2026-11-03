@@ -58,6 +58,7 @@ type Service struct {
 
 	mu      sync.Mutex
 	turns   map[string]context.CancelFunc
+	busy    map[string]bool // threads with a turn in flight
 	secrets map[string]func(ctx context.Context, value string) error
 }
 
@@ -88,7 +89,7 @@ func New(opts Options) *Service {
 	return &Service{
 		model: opts.Model, catalogue: opts.Catalogue, store: opts.Store, log: log,
 		maxSteps: steps, timeout: timeout, budget: budget,
-		turns: map[string]context.CancelFunc{}, secrets: map[string]func(ctx context.Context, value string) error{},
+		turns: map[string]context.CancelFunc{}, busy: map[string]bool{}, secrets: map[string]func(ctx context.Context, value string) error{},
 	}
 }
 
@@ -168,6 +169,20 @@ func marshalParts(parts []part) json.RawMessage {
 // historyToModel converts stored messages to model messages.
 func historyToModel(msgs []Message) []llm.StreamMessage {
 	out := []llm.StreamMessage{}
+	decided := map[string]map[string]any{}
+	for _, m := range msgs {
+		var parts []map[string]any
+		if json.Unmarshal(m.Parts, &parts) != nil {
+			continue
+		}
+		for _, p := range parts {
+			if typ, _ := p["type"].(string); typ == "approval-request" {
+				if id, _ := p["approvalId"].(string); id != "" {
+					decided[id] = p
+				}
+			}
+		}
+	}
 	for _, m := range msgs {
 		var parts []map[string]any
 		if json.Unmarshal(m.Parts, &parts) != nil {
@@ -191,6 +206,7 @@ func historyToModel(msgs []Message) []llm.StreamMessage {
 				inputRaw, _ := json.Marshal(p["input"])
 				sm.ToolCalls = append(sm.ToolCalls, llm.ToolCall{ID: callID, Name: name, Input: inputRaw})
 				if outp, present := p["output"]; present {
+					outp = withApprovalOutcome(outp, decided)
 					b, _ := json.Marshal(outp)
 					results = append(results, llm.ToolResult{ToolCallID: callID, Name: name, Content: string(b)})
 				} else {
@@ -213,6 +229,37 @@ func historyToModel(msgs []Message) []llm.StreamMessage {
 		}
 	}
 	return out
+}
+
+// withApprovalOutcome replaces a pending-approval tool output with the
+// owner's recorded decision, so later turns never act on a stale "pending".
+func withApprovalOutcome(outp any, decided map[string]map[string]any) any {
+	o, ok := outp.(map[string]any)
+	if !ok || o["status"] != "pending_approval" {
+		return outp
+	}
+	id, _ := o["approvalId"].(string)
+	card := decided[id]
+	status, _ := card["status"].(string)
+	if card == nil || status == "" || status == "pending" {
+		return outp
+	}
+	next := map[string]any{"approvalId": id, "status": status}
+	switch status {
+	case "approved":
+		next["message"] = "The owner approved this change and it has been applied."
+	case "rejected":
+		next["message"] = "The owner declined this change. It was not applied."
+	default:
+		next["message"] = "The owner approved this change but it could not be applied."
+	}
+	if note, _ := card["decisionNote"].(string); note != "" {
+		next["ownerNote"] = note
+	}
+	if reason, _ := card["failureReason"].(string); reason != "" {
+		next["failureReason"] = reason
+	}
+	return next
 }
 
 const maxToolOutputBytes = 16 << 10
@@ -245,27 +292,84 @@ func (s *Service) RunTurn(ctx context.Context, p tools.Principal, threadID, prom
 		return "", "", fmt.Errorf("thread not found")
 	}
 
+	if !s.claimThread(threadID) {
+		return threadID, "", ErrThreadBusy
+	}
+	defer s.releaseThread(threadID)
 	if _, err := s.store.AppendMessage(ctx, threadID, "user",
 		marshalParts([]part{{"type": "text", "text": prompt}})); err != nil {
 		return threadID, "", err
 	}
+	turnID, err := s.runAssistant(ctx, p, threadID, tc, nil, emit)
+	return threadID, turnID, err
+}
+
+// ErrThreadBusy reports a second concurrent turn in one conversation.
+var ErrThreadBusy = errors.New("a turn is already running in this conversation")
+
+// ContinueAfterApproval runs the follow-up turn the approval card promises:
+// the agent picks up with the owner's decision. It is skipped when another
+// turn is already running in the conversation.
+func (s *Service) ContinueAfterApproval(ctx context.Context, p tools.Principal, appr Approval, tc TurnContext) (bool, error) {
+	if s.model == nil || s.store == nil || s.catalogue == nil || appr.ThreadID == "" {
+		return false, nil
+	}
+	if !s.claimThread(appr.ThreadID) {
+		return false, nil
+	}
+	defer s.releaseThread(appr.ThreadID)
+	ctx, cancel := context.WithTimeout(ctx, s.timeout)
+	defer cancel()
+	verb := "approved"
+	if appr.Status == "rejected" {
+		verb = "declined"
+	}
+	nudge := fmt.Sprintf("[The owner %s the proposed change %q. Its tool result now shows the outcome. Continue the task from where you stopped; do not ask the owner to approve it again.]", verb, appr.Description)
+	if appr.DecisionNote != "" {
+		nudge += "\nOwner note: " + appr.DecisionNote
+	}
+	_, err := s.runAssistant(ctx, p, appr.ThreadID, tc, []llm.StreamMessage{{Role: "user", Content: nudge}}, func(Chunk) error { return nil })
+	return err == nil, err
+}
+
+func (s *Service) claimThread(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.busy[id] {
+		return false
+	}
+	s.busy[id] = true
+	return true
+}
+
+func (s *Service) releaseThread(id string) {
+	s.mu.Lock()
+	delete(s.busy, id)
+	s.mu.Unlock()
+}
+
+// runAssistant appends the assistant message and runs the tool loop. extra
+// messages reach the model only; they are not stored.
+func (s *Service) runAssistant(ctx context.Context, p tools.Principal, threadID string, tc TurnContext, extra []llm.StreamMessage, emit func(Chunk) error) (string, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	assistant, err := s.store.AppendMessage(ctx, threadID, "assistant", marshalParts(nil))
 	if err != nil {
-		return threadID, "", err
+		return "", err
 	}
 	turnID := assistant.ID
 	s.registerTurn(turnID, cancel)
 	defer s.unregisterTurn(turnID)
 
 	if err := emit(chunkStart(turnID)); err != nil {
-		return threadID, turnID, err
+		return turnID, err
 	}
-	finishReason, runErr := s.loop(ctx, p, threadID, turnID, tc, emit)
+	finishReason, runErr := s.loop(ctx, p, threadID, turnID, tc, extra, emit)
 	if runErr != nil {
 		if errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded) {
 			_ = emit(chunkError("The turn was stopped."))
 			_ = emit(chunkFinish("error"))
-			return threadID, turnID, nil
+			return turnID, nil
 		}
 		msg := "The turn failed. Details are in the server log."
 		if errors.Is(runErr, llm.ErrToolsUnsupported) {
@@ -274,12 +378,12 @@ func (s *Service) RunTurn(ctx context.Context, p tools.Principal, threadID, prom
 		s.log.Warn("agent turn failed", "thread", threadID, "err", runErr)
 		_ = emit(chunkError(msg))
 		_ = emit(chunkFinish("error"))
-		return threadID, turnID, nil
+		return turnID, nil
 	}
 	if err := emit(chunkFinish(finishReason)); err != nil {
-		return threadID, turnID, err
+		return turnID, err
 	}
-	return threadID, turnID, nil
+	return turnID, nil
 }
 
 func threadTitle(prompt string) string {

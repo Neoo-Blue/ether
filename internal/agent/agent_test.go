@@ -264,6 +264,12 @@ func TestLoopStepCapAndBudget(t *testing.T) {
 	if !hasFinish {
 		t.Error("no finish chunk")
 	}
+	// The stored transcript explains the stop instead of ending silently.
+	thread, _ := fx.svc.store.ListThreads(context.Background(), 1)
+	msgs, _ := fx.svc.store.AllMessages(context.Background(), thread[0].ID)
+	if last := string(msgs[len(msgs)-1].Parts); !strings.Contains(last, "Ask me to continue") {
+		t.Errorf("no stored stop note: %s", last)
+	}
 	if got := fx.svc.maxSteps; got != 2 {
 		t.Errorf("maxSteps clamp = %d", got)
 	}
@@ -498,6 +504,35 @@ func TestHTTPEndToEnd(t *testing.T) {
 	resp.Body.Close()
 	if dec["status"] != "approved" || len(*fx.applied) != 1 {
 		t.Errorf("approval response %v applied %v", dec, *fx.applied)
+	}
+	// The card promises the agent continues: a follow-up turn ran with the
+	// decision visible in the tool result rather than a stale "pending".
+	if dec["continued"] != true {
+		t.Errorf("approval did not continue the turn: %v", dec)
+	}
+	model.mu.Lock()
+	last := model.requests[len(model.requests)-1]
+	model.mu.Unlock()
+	sawApproved, sawPending, sawNudge := false, false, false
+	for _, m := range last.Messages {
+		for _, r := range m.ToolResults {
+			if r.Name == "release_block" {
+				sawApproved = strings.Contains(r.Content, `"status":"approved"`)
+				sawPending = strings.Contains(r.Content, "pending_approval")
+			}
+		}
+		if m.Role == "user" && strings.Contains(m.Content, "owner approved") {
+			sawNudge = true
+		}
+	}
+	if !sawApproved || sawPending || !sawNudge {
+		t.Errorf("follow-up history approved=%v pending=%v nudge=%v: %+v", sawApproved, sawPending, sawNudge, last.Messages)
+	}
+	resp, _ = http.Get(srv.URL + "/api/agent/threads/" + threadID + "/messages?limit=10")
+	_ = json.NewDecoder(resp.Body).Decode(&page)
+	resp.Body.Close()
+	if len(page.Messages) != 3 || page.Messages[2].Role != "assistant" {
+		t.Errorf("follow-up turn not stored: %+v", page.Messages)
 	}
 
 	// cancel unknown turn is a clean no-op

@@ -23,6 +23,7 @@ import { apiStream, errorMessage } from "../../lib/api";
 import { ActionMenu } from "../ActionMenu";
 import { Drawer } from "../Drawer";
 import { ErrorPanel } from "../feedback";
+import { approvalRequestLabels as approvalLabels } from "./approvalLabels";
 import {
   decideAgentApproval,
   deleteAgentThread,
@@ -112,21 +113,7 @@ export function AskEther() {
     [locale],
   );
 
-  const approvalRequestLabels = useMemo(
-    () => ({
-      title: t("Approval needed"),
-      note: t("Add a note (optional)"),
-      approve: t("Approve"),
-      reject: t("Decline"),
-      deciding: t("Saving decision"),
-      approved: t("Approved. Ether will carry on from here."),
-      rejected: t("Declined. Nothing changed."),
-      expired: t("This approval request has expired."),
-      failed: t("The decision could not be saved. Try again."),
-      carryOutFailed: t("Approved, but the change could not be carried out."),
-    }),
-    [locale],
-  );
+  const approvalRequestLabels = useMemo(() => approvalLabels(), [locale]);
 
   const secretRequestLabels = useMemo(
     () => ({
@@ -272,11 +259,14 @@ export function AskEther() {
 
   const decideApproval = useCallback(
     async (approvalId: string, decision: "approved" | "rejected", note?: string) => {
-      await decideAgentApproval(approvalId, decision, note);
+      await decideAgentApproval(approvalId, decision, note, {
+        route,
+        record: inferRecord(route),
+      });
       const id = threadIdRef.current;
       if (id) await refetchMessages(id);
     },
-    [refetchMessages],
+    [refetchMessages, route],
   );
 
   const submitSecret = useCallback(

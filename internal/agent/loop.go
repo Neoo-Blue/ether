@@ -12,7 +12,7 @@ import (
 )
 
 // loop runs the bounded tool-calling loop for one turn.
-func (s *Service) loop(ctx context.Context, p tools.Principal, threadID, turnID string, tc TurnContext, emit func(Chunk) error) (string, error) {
+func (s *Service) loop(ctx context.Context, p tools.Principal, threadID, turnID string, tc TurnContext, extra []llm.StreamMessage, emit func(Chunk) error) (string, error) {
 	visible := s.catalogue.Visible(ctx, p)
 	defs := make([]llm.ToolDef, 0, len(visible))
 	byName := map[string]tools.Tool{}
@@ -31,7 +31,7 @@ func (s *Service) loop(ctx context.Context, p tools.Principal, threadID, turnID 
 	if len(stored) > 100 {
 		stored = stored[len(stored)-100:]
 	}
-	messages := historyToModel(stored)
+	messages := append(historyToModel(stored), extra...)
 
 	system := systemPrompt
 	if tc.Route != "" {
@@ -47,6 +47,16 @@ func (s *Service) loop(ctx context.Context, p tools.Principal, threadID, turnID 
 	}
 	tokensUsed := 0
 	textSeq := 0
+	// stopNote leaves a visible, stored reason when the loop gives up, so the
+	// transcript never ends on a silent tool call.
+	stopNote := func(msg string) {
+		id := "txt_stop"
+		_ = emit(chunkTextStart(id))
+		_ = emit(chunkTextDelta(id, msg))
+		_ = emit(chunkTextEnd(id))
+		parts = append(parts, part{"type": "text", "text": msg})
+		persist()
+	}
 
 	for step := 0; step < s.maxSteps; step++ {
 		if err := emit(chunkStartStep()); err != nil {
@@ -149,10 +159,11 @@ func (s *Service) loop(ctx context.Context, p tools.Principal, threadID, turnID 
 			return "error", err
 		}
 		if tokensUsed > s.budget {
-			_ = emit(chunkError("This turn reached its token budget and stopped. Ask a narrower question."))
+			stopNote("I stopped because this turn used its token budget. Ask me to continue, or narrow the request.")
 			return "other", nil
 		}
 	}
+	stopNote(fmt.Sprintf("I stopped after %d steps without finishing. Ask me to continue and I will pick up from here.", s.maxSteps))
 	return "tool-calls", nil
 }
 

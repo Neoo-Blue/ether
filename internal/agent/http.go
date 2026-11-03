@@ -1,7 +1,9 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -88,7 +90,11 @@ func (s *Service) handleTurn(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	emit := func(c Chunk) error { return writeSSE(w, c) }
 	if _, _, err := s.RunTurn(ctx, OwnerPrincipal(), threadID, req.Prompt, req.Context, emit); err != nil {
-		_ = writeSSE(w, chunkError("The turn failed. Details are in the server log."))
+		msg := "The turn failed. Details are in the server log."
+		if errors.Is(err, ErrThreadBusy) {
+			msg = "Ether is still working in this conversation. Send again when it finishes."
+		}
+		_ = writeSSE(w, chunkError(msg))
 		_ = writeSSE(w, chunkFinish("error"))
 		s.log.Warn("agent turn http failed", "thread", threadID, "err", err)
 	}
@@ -137,8 +143,9 @@ func (s *Service) handleDeleteThread(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) handleApproval(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Decision string `json:"decision"`
-		Note     string `json:"note"`
+		Decision string      `json:"decision"`
+		Note     string      `json:"note"`
+		Context  TurnContext `json:"context"`
 	}
 	if err := decodeBody(r, &body); err != nil {
 		writeErr(w, http.StatusBadRequest, "Invalid request body.")
@@ -164,6 +171,15 @@ func (s *Service) handleApproval(w http.ResponseWriter, r *http.Request) {
 	}
 	out := map[string]any{
 		"approvalId": appr.ID, "status": appr.Status, "decisionNote": appr.DecisionNote,
+	}
+	// The card promises the agent carries on; run that turn before replying
+	// so the console's refetch shows it. A failed apply does not continue.
+	if appr.Status == "approved" || appr.Status == "rejected" {
+		continued, err := s.ContinueAfterApproval(context.WithoutCancel(r.Context()), OwnerPrincipal(), appr, body.Context)
+		if err != nil {
+			s.log.Warn("agent approval follow-up failed", "id", appr.ID, "err", err)
+		}
+		out["continued"] = continued
 	}
 	if appr.FailureReason != "" {
 		out["failureReason"] = appr.FailureReason

@@ -106,10 +106,12 @@ export async function decideAgentApproval(
   approvalId: string,
   decision: "approved" | "rejected",
   note?: string,
+  context?: { route: string; record?: { type: string; id: string } },
 ): Promise<void> {
+  // The server runs the agent's follow-up turn before it replies.
   await apiFetch<unknown>(`/agent/approvals/${encodeURIComponent(approvalId)}`, {
     method: "POST",
-    body: JSON.stringify({ decision, note }),
+    body: JSON.stringify({ decision, note, context }),
   });
 }
 

@@ -291,6 +291,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r2.URL.Path == "" {
 			r2.URL.Path = "/"
 		}
+		// Keep the escaped form in step, or StripPrefix rejects encoded
+		// paths such as /api/plugins/studio%3Aid/views/overview.
+		if raw := r.URL.RawPath; strings.HasPrefix(raw, "/ether/") {
+			r2.URL.RawPath = raw[6:]
+		} else {
+			r2.URL.RawPath = ""
+		}
 		r = r2
 	}
 	w.Header().Set("X-Content-Type-Options", "nosniff")
