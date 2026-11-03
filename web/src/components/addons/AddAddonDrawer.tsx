@@ -1,6 +1,6 @@
 import { Badge, Button, Input, Switch, toast } from "@braedonsaunders/appkit-ui";
 import { AlertTriangle, ArrowLeft, Link2, Puzzle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Artwork } from "../Artwork";
 import { Drawer } from "../Drawer";
 import { MutationError } from "../feedback";
@@ -8,7 +8,13 @@ import { Field } from "../fields";
 import { t } from "../../i18n";
 import { apiFetch } from "../../lib/api";
 import { invalidateRegistry } from "../../lib/extend";
-import { ADDON_ROLE_LABEL, type AddonPreview, type AddonRole, type AddonSummary } from "./addons";
+import {
+  ADDON_ROLE_LABEL,
+  addonUrlHasDebridKey,
+  type AddonPreview,
+  type AddonRole,
+  type AddonSummary,
+} from "./addons";
 
 /**
  * The one way to add a Stremio add-on, from any page: paste its install
@@ -30,6 +36,7 @@ export function AddAddonDrawer({
   onClose: () => void;
   onAdded: (addon: AddonSummary, preview: AddonPreview) => void;
 }) {
+  const linkId = useId();
   const [url, setUrl] = useState("");
   const [preview, setPreview] = useState<AddonPreview | null>(null);
   const [on, setOn] = useState<Record<string, boolean>>({});
@@ -142,8 +149,9 @@ export function AddAddonDrawer({
               "Paste the install link from the add-on's configure page. Ether keeps it private: it may contain your debrid key.",
             )}
           </p>
-          <Field label={t("Install link")}>
+          <Field label={t("Install link")} htmlFor={linkId}>
             <Input
+              id={linkId}
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://… /manifest.json"
@@ -153,6 +161,13 @@ export function AddAddonDrawer({
               }}
             />
           </Field>
+          {addonUrlHasDebridKey(url) ? (
+            <p role="status" className="rounded-lg bg-warning-subtle p-3 text-sm">
+              {t(
+                "This link includes a debrid API key. Ether checks your debrid accounts itself, so the add-on doesn't need it: a key only adds cached hints, and it is then also stored in this link on this server.",
+              )}
+            </p>
+          ) : null}
           <p className="flex items-start gap-2 text-xs text-fg-subtle">
             <Link2 size={13} className="mt-0.5 shrink-0" aria-hidden />
             {t(

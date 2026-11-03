@@ -5,6 +5,7 @@ import {
   EmptyState,
   SearchSelect,
   SettingsSection,
+  Switch,
   confirmDialog,
   toast,
 } from "@braedonsaunders/appkit-ui";
@@ -48,6 +49,8 @@ import {
 } from "./form";
 import { PluginSourceCards, SourceCard } from "./cards";
 import { StremioMark } from "./marks";
+import { AddAddonDrawer } from "../../components/addons/AddAddonDrawer";
+import { addonsApi } from "../../components/addons/addons";
 import {
   MissingDefinition,
   SiteDefinitionRow,
@@ -77,65 +80,9 @@ function blankIndexer(priority: number): Indexer {
   };
 }
 
-/** A Stremio stream addon: torrent results streamed through debrid. */
-function blankStremioIndexer(priority: number): Indexer {
-  return { ...blankIndexer(priority), kind: "stremio", protocol: "torrent" };
-}
-
-export function isStremio(ix: { kind?: string }) {
-  return ix.kind === "stremio";
-}
-
-/** An addon install link as saved: trimmed, with stremio:// read as https://. */
-export function normalizeAddonUrl(url: string): string {
-  const trimmed = url.trim();
-  return /^stremio:\/\//i.test(trimmed) ? `https://${trimmed.slice("stremio://".length)}` : trimmed;
-}
-
-/** The addon's host, shown instead of a URL whose path may hold settings. */
-function addonHost(url: string): string {
-  try {
-    return new URL(normalizeAddonUrl(url)).host;
-  } catch {
-    return url;
-  }
-}
-
-const DEBRID_KEY_PARAM =
-  /(?:^|[/|&?,;])(?:realdebrid|torbox|alldebrid|premiumize|debridlink|offcloud|putio)=/i;
-const DEBRID_KEY_FIELD = /"(?:debridApiKey|apiKey|debridService)"\s*:\s*"[^"]+"/i;
-
-/** A base64 or base64url path segment decoded, when it is a JSON object. */
-function decodeJsonSegment(segment: string): string | null {
-  if (segment.length < 16 || !/^[A-Za-z0-9+/_=-]+$/.test(segment)) return null;
-  const b64 = segment.replace(/-/g, "+").replace(/_/g, "/");
-  try {
-    const text = atob(b64.padEnd(Math.ceil(b64.length / 4) * 4, "="));
-    return text.trimStart().startsWith("{") ? text : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Whether an addon URL embeds a debrid API key in its configuration. */
-export function addonUrlHasDebridKey(url: string): boolean {
-  let path = normalizeAddonUrl(url);
-  try {
-    path = new URL(path).pathname;
-  } catch {
-    // Not a URL yet: inspect what was typed.
-  }
-  let decoded = path;
-  try {
-    decoded = decodeURIComponent(path);
-  } catch {
-    // Keep the raw path.
-  }
-  if (DEBRID_KEY_PARAM.test(decoded)) return true;
-  return path.split("/").some((segment) => {
-    const json = decodeJsonSegment(segment);
-    return json !== null && DEBRID_KEY_FIELD.test(json);
-  });
+/** An installed add-on's streams (its row names the add-on, not a link). */
+export function isAddon(ix: { kind?: string }) {
+  return ix.kind === "addon";
 }
 
 const PROTOCOLS: { value: IndexerProtocol; label: string }[] = localized(() => [
@@ -162,11 +109,7 @@ function hostOf(url: string): string {
 }
 
 function indexerName(ix: Indexer, i: number) {
-  return (
-    ix.name ||
-    (isStremio(ix) && ix.url ? addonHost(ix.url) : ix.url) ||
-    t("Indexer {number}", { number: i + 1 })
-  );
+  return ix.name || (isAddon(ix) ? "" : ix.url) || t("Indexer {number}", { number: i + 1 });
 }
 
 /** A site's test: result count and a few sample titles, or the error. */
@@ -221,6 +164,27 @@ export function IndexerList({
   const statuses = useAsync(() => api.sites.status().catch(() => []), [version, sitesVersion]);
   const [editing, setEditing] = useState<{ index: number; draft: Indexer } | null>(null);
   const [picking, setPicking] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [togglingRole, setTogglingRole] = useState(false);
+  const addons = useAsync(() => addonsApi.list().catch(() => []), [version]);
+  const toggleStreams = async (ix: Indexer, on: boolean) => {
+    const a = addons.data?.find((x) => x.id === ix.plugin);
+    if (!a) return;
+    setTogglingRole(true);
+    try {
+      const off = (a.roles ?? [])
+        .filter((r) => (r.role === "stream_source" ? !on : !r.on))
+        .map((r) => r.role);
+      await addonsApi.setRoles(a.id, off);
+      await addons.reload();
+      void refreshDashboard();
+      toast.success(on ? t("Streams on") : t("Streams off"));
+    } catch (e) {
+      toast.error(t("That didn't work"), { description: errorMessage(e) });
+    } finally {
+      setTogglingRole(false);
+    }
+  };
   /** Uploading a definition: "add" continues to a new indexer for it. */
   const [uploading, setUploading] = useState<"add" | "install" | null>(null);
   const [errors, setErrors] = useState<Errors>({});
@@ -283,25 +247,19 @@ export function IndexerList({
       setPicking(true);
       return;
     }
-    open(
-      indexers.length,
-      addRequest.type === "stremio"
-        ? blankStremioIndexer(indexers.length)
-        : blankIndexer(indexers.length),
-    );
+    if (addRequest.type === "stremio") {
+      setEditing(null);
+      setAdding(true);
+      return;
+    }
+    open(indexers.length, blankIndexer(indexers.length));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addRequest, cfg, indexers.length]);
 
   async function save() {
     if (!editing) return;
     const { index } = editing;
-    const draft = isStremio(editing.draft)
-      ? {
-          ...editing.draft,
-          url: normalizeAddonUrl(editing.draft.url),
-          protocol: "torrent" as const,
-        }
-      : editing.draft;
+    const draft = editing.draft;
     const list =
       index < indexers.length
         ? indexers.map((ix, j) => (j === index ? draft : ix))
@@ -380,7 +338,11 @@ export function IndexerList({
   const used = Number(stat?.hitsUsed ?? 0);
   const needsDebrid = indexers.some((ix) => isTorrent(ix) && ix.enabled) && !hasUsableDebrid(cfg);
   const builtin = draft ? isBuiltin(draft) : false;
-  const stremio = draft ? isStremio(draft) : false;
+  const addon = draft ? isAddon(draft) : false;
+  const addonOf = (ix: Indexer) => addons.data?.find((a) => a.id === ix.plugin);
+  const streamsOn = (ix: Indexer) =>
+    addonOf(ix)?.enabled !== false &&
+    (addonOf(ix)?.roles ?? []).some((r) => r.role === "stream_source" && r.on);
   const draftDef = draft && builtin ? defFor(draft) : undefined;
 
   return (
@@ -424,9 +386,12 @@ export function IndexerList({
               },
               {
                 key: "stremio",
-                label: t("Stremio addon URL…"),
+                label: t("Stremio add-on…"),
                 icon: Puzzle,
-                onSelect: () => open(indexers.length, blankStremioIndexer(indexers.length)),
+                onSelect: () => {
+                  setEditing(null);
+                  setAdding(true);
+                },
               },
             ]}
           >
@@ -456,12 +421,12 @@ export function IndexerList({
               const site = isBuiltin(ix);
               const def = site ? defFor(ix) : undefined;
               const tested = site ? statusFor(ix) : undefined;
-              const countsSearches = site || isStremio(ix);
+              const countsSearches = site || isAddon(ix);
               return (
                 <SourceCard
                   name={label}
                   position={i + 1}
-                  logo={isStremio(ix) ? <StremioMark /> : undefined}
+                  logo={isAddon(ix) ? <StremioMark /> : undefined}
                   description={[
                     i === 0 ? t("Searched first") : t("Priority {number}", { number: i + 1 }),
                     site && ix.url ? hostOf(ix.url) : "",
@@ -526,12 +491,14 @@ export function IndexerList({
                             </Badge>
                           ) : null}
                         </>
-                      ) : isStremio(ix) ? (
-                        <Badge variant="outline">{t("Stremio addon")}</Badge>
+                      ) : isAddon(ix) ? (
+                        <Badge variant="outline">{t("Add-on")}</Badge>
                       ) : (
                         <Badge variant="outline">{protocolLabel(ix)}</Badge>
                       )}
-                      {!ix.enabled ? <Badge variant="secondary">{t("Off")}</Badge> : null}
+                      {(isAddon(ix) ? addons.data && !streamsOn(ix) : !ix.enabled) ? (
+                        <Badge variant="secondary">{t("Off")}</Badge>
+                      ) : null}
                       {s && Number(s.retryAt ?? 0) > Date.now() / 1000 ? (
                         <Badge variant="warning">
                           {t("Waiting for service · retries automatically")}
@@ -629,9 +596,7 @@ export function IndexerList({
           isNew
             ? builtin
               ? (draftDef?.name ?? t("New site"))
-              : stremio
-                ? t("New Stremio addon")
-                : t("New indexer")
+              : t("New indexer")
             : draft && editing
               ? indexerName(draft, editing.index)
               : ""
@@ -640,8 +605,8 @@ export function IndexerList({
           draft
             ? builtin
               ? siteKindLabel(draft.protocol)
-              : stremio
-                ? t("Stremio addon · Torrent")
+              : addon
+                ? t("Add-on streams")
                 : isTorrent(draft)
                   ? t("Torznab indexer")
                   : t("Newznab indexer")
@@ -650,7 +615,7 @@ export function IndexerList({
         onSave={() => void save()}
         saving={saving}
         saveLabel={t("Save indexer")}
-        onRemove={isNew ? undefined : () => void remove()}
+        onRemove={isNew || addon ? undefined : () => void remove()}
         removeLabel={t("Remove indexer")}
         error={error}
         tools={
@@ -664,16 +629,8 @@ export function IndexerList({
             ) : (
               <TestButton
                 state={tests[draft.id] ?? { status: "idle" }}
-                onTest={() =>
-                  runTest(draft.id, () =>
-                    api.testIndexer(
-                      stremio
-                        ? { ...draft, url: normalizeAddonUrl(draft.url), protocol: "torrent" }
-                        : draft,
-                    ),
-                  )
-                }
-                disabled={!draft.url}
+                onTest={() => runTest(draft.id, () => api.testIndexer(draft))}
+                disabled={!addon && !draft.url}
               />
             )
           ) : null
@@ -738,41 +695,33 @@ export function IndexerList({
                   onChange={(v) => set({ enabled: v })}
                 />
               </SettingsSection>
-            ) : stremio ? (
-              <SettingsSection title={t("Addon")}>
+            ) : addon ? (
+              <SettingsSection title={t("Add-on")}>
                 <TextRow label={t("Name")} value={draft.name} onChange={(v) => set({ name: v })} />
-                <TextRow
-                  label={t("Addon URL")}
-                  type="url"
-                  value={draft.url}
-                  placeholder="https://addon.example/manifest.json"
-                  help={t(
-                    "Paste the addon's install link. Choose an addon that exposes torrent results; direct or proxied playback links alone are not supported. Ether streams through your configured debrid accounts.",
-                  )}
-                  error={errors.url}
-                  onChange={(v) => set({ url: v })}
+                <SettingsRow
+                  title={t("Streams")}
+                  description={
+                    addonOf(draft)?.host
+                      ? t("Searches {host} when someone presses Play.", {
+                          host: addonOf(draft)!.host!,
+                        })
+                      : t("Searches this add-on when someone presses Play.")
+                  }
+                  control={
+                    <Switch
+                      aria-label={t("Streams")}
+                      checked={streamsOn(draft)}
+                      disabled={!addonOf(draft) || togglingRole}
+                      onChange={(e) => void toggleStreams(draft, e.currentTarget.checked)}
+                    />
+                  }
                 />
-                {draft.url.includes("torrentio.strem.fun") ? (
-                  <p className="px-5 text-sm text-fg-muted">
-                    {t(
-                      "Lookups go to torrentio.strem.fun. Prefer your own? Use Torznab (Prowlarr, Jackett, Zilean).",
-                    )}
-                  </p>
-                ) : null}
-                {addonUrlHasDebridKey(draft.url) ? (
-                  <Alert variant="warning" role="status">
-                    <AlertDescription>
-                      {t(
-                        "This link includes a debrid API key. Ether checks your debrid accounts itself, so the addon doesn't need it: a key only adds cached hints, and it is then also stored in this link on this server.",
-                      )}
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-                <BoolRow
-                  label={t("Enabled")}
-                  value={draft.enabled}
-                  onChange={(v) => set({ enabled: v })}
-                />
+                <p className="px-5 pb-3 text-sm text-fg-muted">
+                  {t("Its install link and its other roles are managed with the add-on.")}{" "}
+                  <Link to="/plugins" className="font-medium underline underline-offset-2">
+                    {t("Open in Plugins")}
+                  </Link>
+                </p>
               </SettingsSection>
             ) : (
               <>
@@ -861,7 +810,7 @@ export function IndexerList({
                     ? t(
                         "Sites report no limits to Ether. Add a cap if the site restricts how often you search or download.",
                       )
-                    : stremio
+                    : addon
                       ? t(
                           "Ether follows the addon's rate limit responses automatically. Add a cap if you want fewer searches.",
                         )
@@ -871,18 +820,18 @@ export function IndexerList({
                 }
               >
                 <NumRow
-                  label={builtin || stremio ? t("Searches per day") : t("API requests per day")}
+                  label={builtin || addon ? t("Searches per day") : t("API requests per day")}
                   value={draft.dailyLimit}
                   min={0}
                   help={
-                    builtin || stremio
+                    builtin || addon
                       ? t("0 = no cap.")
                       : t("0 = automatic. Includes searches and capability checks.")
                   }
                   error={errors.dailyLimit}
                   onChange={(n) => set({ dailyLimit: n })}
                 />
-                {stremio ? null : (
+                {addon ? null : (
                   <NumRow
                     label={
                       isTorrent(draft) ? t("Torrent downloads per day") : t("NZB downloads per day")
@@ -897,7 +846,7 @@ export function IndexerList({
                   />
                 )}
               </SettingsSection>
-              {builtin || stremio ? null : (
+              {builtin || addon ? null : (
                 <SettingsSection title={t("Categories")}>
                   <SettingsRow
                     stacked
@@ -934,6 +883,16 @@ export function IndexerList({
           </>
         ) : null}
       </RecordDrawer>
+      <AddAddonDrawer
+        open={adding}
+        role="stream_source"
+        onClose={() => setAdding(false)}
+        onAdded={() => {
+          void config.reload();
+          void addons.reload();
+          void refreshDashboard();
+        }}
+      />
     </>
   );
 }

@@ -72,3 +72,46 @@ export const addonsApi = {
       body: JSON.stringify({ off }),
     }),
 };
+
+/** An add-on install link as typed: trimmed, with stremio:// read as https://. */
+export function normalizeAddonUrl(url: string): string {
+  const trimmed = url.trim();
+  return /^stremio:\/\//i.test(trimmed) ? `https://${trimmed.slice("stremio://".length)}` : trimmed;
+}
+
+const DEBRID_KEY_PARAM =
+  /(?:^|[/|&?,;])(?:realdebrid|torbox|alldebrid|premiumize|debridlink|offcloud|putio)=/i;
+const DEBRID_KEY_FIELD = /"(?:debridApiKey|apiKey|debridService)"\s*:\s*"[^"]+"/i;
+
+/** A base64 or base64url path segment decoded, when it is a JSON object. */
+function decodeJsonSegment(segment: string): string | null {
+  if (segment.length < 16 || !/^[A-Za-z0-9+/_=-]+$/.test(segment)) return null;
+  const b64 = segment.replace(/-/g, "+").replace(/_/g, "/");
+  try {
+    const text = atob(b64.padEnd(Math.ceil(b64.length / 4) * 4, "="));
+    return text.trimStart().startsWith("{") ? text : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether an addon URL embeds a debrid API key in its configuration. */
+export function addonUrlHasDebridKey(url: string): boolean {
+  let path = normalizeAddonUrl(url);
+  try {
+    path = new URL(path).pathname;
+  } catch {
+    // Not a URL yet: inspect what was typed.
+  }
+  let decoded = path;
+  try {
+    decoded = decodeURIComponent(path);
+  } catch {
+    // Keep the raw path.
+  }
+  if (DEBRID_KEY_PARAM.test(decoded)) return true;
+  return path.split("/").some((segment) => {
+    const json = decodeJsonSegment(segment);
+    return json !== null && DEBRID_KEY_FIELD.test(json);
+  });
+}

@@ -249,7 +249,8 @@ function defaultConfig(): EtherConfig {
       {
         id: "i4",
         name: "Stream Addon",
-        url: "https://addon.example/manifest.json",
+        url: "",
+        plugin: "addon.mockstreams",
         apiKey: "",
         dailyLimit: 0,
         dailyGrabs: 0,
@@ -258,7 +259,7 @@ function defaultConfig(): EtherConfig {
         movieCategories: null,
         tvCategories: null,
         protocol: "torrent",
-        kind: "stremio",
+        kind: "addon",
       },
     ],
     debrid: {
@@ -1856,7 +1857,7 @@ export function createFakeServer(opts: FakeOptions = {}) {
           grabsLimit: ix.dailyGrabs,
           grabsRemaining: ix.dailyGrabs - 3,
           enabled: ix.enabled,
-          torrent: ix.protocol === "torrent" || ix.kind === "stremio",
+          torrent: ix.protocol === "torrent" || ix.kind === "addon",
         })),
         providers: (state.config.usenet.providers ?? []).map((p, i) => ({
           id: p.id,
@@ -3034,7 +3035,8 @@ export function createFakeServer(opts: FakeOptions = {}) {
           id: `c${seq++}`,
           updatedAt: new Date().toISOString(),
           lastBuiltAt: new Date().toISOString(),
-          itemCount: spec.limit > 0 ? Math.min(evaluate(spec).total, spec.limit) : evaluate(spec).total,
+          itemCount:
+            spec.limit > 0 ? Math.min(evaluate(spec).total, spec.limit) : evaluate(spec).total,
         };
         state.collections.push(saved);
         return json(saved);

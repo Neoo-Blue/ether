@@ -44,7 +44,13 @@ import { CachePresetCards, cachePresetKey, presetForFreeBytes } from "./cache/pr
 import { ProwlarrImport } from "../components/ProwlarrImport";
 import { DEBRID_KINDS } from "./sources/Debrid";
 import { DEBRID_TOKEN_URL } from "./sources/cards";
-import { addonUrlHasDebridKey, isStremio, normalizeAddonUrl } from "./sources/Indexers";
+import { isAddon } from "./sources/Indexers";
+import {
+  addonUrlHasDebridKey,
+  normalizeAddonUrl,
+  type AddonPreview,
+  type AddonSummary,
+} from "../components/addons/addons";
 import { LanguageStep } from "./setup/LanguageStep";
 import { SetupReady, connectDevicePath } from "./setup/SetupReady";
 export { connectDevicePath };
@@ -197,8 +203,8 @@ type IndexerType = "newznab" | "torznab" | "stremio";
 const INDEXER_TYPES: { value: IndexerType; label: string; hint: string }[] = localized(() => [
   {
     value: "stremio",
-    label: t("Stremio addon (torrents)"),
-    hint: t("A link from a torrent addon, such as Torrentio. No account."),
+    label: t("Stremio add-on (torrents)"),
+    hint: t("A link from a torrent add-on, such as Torrentio. No account."),
   },
   {
     value: "torznab",
@@ -212,15 +218,23 @@ const INDEXER_TYPES: { value: IndexerType; label: string; hint: string }[] = loc
   },
 ]);
 function indexerType(ix: Indexer): IndexerType {
-  if (isStremio(ix)) return "stremio";
+  if (isAddon(ix)) return "stremio";
   return ix.protocol === "torrent" ? "torznab" : "newznab";
 }
 function withIndexerType(ix: Indexer, type: IndexerType): Indexer {
-  if (type === "stremio") return { ...ix, kind: "stremio", protocol: "torrent", apiKey: "" };
+  if (type === "stremio") return { ...ix, kind: "addon", protocol: "torrent", apiKey: "" };
   return { ...ix, kind: "", protocol: type === "torznab" ? "torrent" : "usenet" };
 }
 
 const TORRENTIO_URL = "https://torrentio.strem.fun/manifest.json";
+
+/** The one-click Torrentio row, typed or installed. */
+function isTorrentio(ix: Indexer): boolean {
+  return (
+    isAddon(ix) &&
+    (ix.url.trim() === TORRENTIO_URL || (Boolean(ix.plugin) && ix.name === "Torrentio"))
+  );
+}
 
 function SourceChoice({
   pressed,
@@ -313,9 +327,47 @@ function blankIndexer(type: IndexerType = "newznab"): Indexer {
   );
 }
 
-/** An indexer as saved and tested: addon links are read as https. */
-function normalizedIndexer(ix: Indexer): Indexer {
-  return isStremio(ix) ? { ...ix, url: normalizeAddonUrl(ix.url), protocol: "torrent" } : ix;
+/**
+ * An add-on row typed in the wizard holds its link until it is installed
+ * (installAddonRows); an installed one names its add-on instead.
+ */
+function pendingAddon(ix: Indexer): boolean {
+  return isAddon(ix) && !ix.plugin && Boolean(ix.url.trim());
+}
+
+/** Checks a typed add-on link without installing it: it must offer streams. */
+async function testAddonLink(
+  url: string,
+): Promise<{ ok: boolean; error?: string; durationMs: number }> {
+  const started = Date.now();
+  const p = await apiFetch<AddonPreview>("/plugins/addons/preview", {
+    method: "POST",
+    body: JSON.stringify({ url: normalizeAddonUrl(url) }),
+  });
+  if (p.configureFirst)
+    throw new Error(
+      t("This add-on needs configuring first. Paste the link its configure page gives you."),
+    );
+  if (!(p.roles ?? []).some((r) => r.role === "stream_source"))
+    throw new Error(t("This add-on does not offer streams."));
+  return { ok: true, durationMs: Date.now() - started };
+}
+
+/** Installs the add-on rows typed in the wizard; each becomes an add-on row. */
+async function installAddonRows(indexers: Indexer[]): Promise<Indexer[]> {
+  const out: Indexer[] = [];
+  for (const ix of indexers) {
+    if (!pendingAddon(ix)) {
+      out.push(ix);
+      continue;
+    }
+    const added = await apiFetch<AddonSummary>("/plugins/addons", {
+      method: "POST",
+      body: JSON.stringify({ url: normalizeAddonUrl(ix.url), roles: ["stream_source"] }),
+    });
+    out.push({ ...ix, plugin: added.id, url: "", name: ix.name.trim() || added.name });
+  }
+  return out;
 }
 
 /**
@@ -332,9 +384,9 @@ export function savedDraft(cfg: EtherConfig): EtherConfig {
         (p) => !blank(p.name, p.host, p.username, p.password),
       ),
     },
-    indexers: (cfg.indexers ?? [])
-      .filter((ix) => !blank(ix.name, ix.url, ix.apiKey))
-      .map(normalizedIndexer),
+    indexers: (cfg.indexers ?? []).filter((ix) =>
+      isAddon(ix) ? Boolean(ix.plugin) : !blank(ix.name, ix.url, ix.apiKey),
+    ),
     ...(cfg.debrid && {
       debrid: {
         ...cfg.debrid,
@@ -377,7 +429,9 @@ export function canAdvance(
       // A debrid account, a Usenet provider, or a torrent addon. Skip only skips the test.
       const usenet = opts.providers.filter((p) => p.enabled);
       const debrid = (opts.debrid ?? []).filter((d) => d.enabled && d.kind && d.apiKey.trim());
-      const addons = opts.indexers.filter((i) => i.enabled && isStremio(i) && i.url.trim());
+      const addons = opts.indexers.filter(
+        (i) => i.enabled && isAddon(i) && (Boolean(i.plugin) || Boolean(i.url.trim())),
+      );
       const present = usenet.length + debrid.length + addons.length > 0;
       if (!present) return Boolean(opts.readyMade);
       if (opts.skipped[step]) return true;
@@ -392,6 +446,8 @@ export function canAdvance(
       if (enabled.length === 0) return false;
       if (opts.skipped[step]) return true;
       return enabled.every((i) => {
+        // An installed add-on was checked when it was added.
+        if (isAddon(i) && i.plugin) return true;
         const url = i.url.trim();
         if (!url) return false;
         if (opts.indexerTests[i.id]?.status === "ok") return true;
@@ -866,6 +922,9 @@ export default function Setup() {
         rememberLocale(languageChoice.console);
         await loadLocale(languageChoice.console);
       }
+      if ((draft.indexers ?? []).some(pendingAddon)) {
+        draft = { ...draft, indexers: await installAddonRows(draft.indexers ?? []) };
+      }
       const saved = await api.putConfig(
         savedDraft(
           mergeFrontendSelection(
@@ -875,8 +934,8 @@ export default function Setup() {
           ),
         ),
       );
-      // The empty addon is not stored until it has an address. Keep the row so the next step can take it.
-      if (readyMade && !(saved.indexers ?? []).some((item) => isStremio(item))) {
+      // The empty add-on is not stored until it has a link. Keep the row so the next step can take it.
+      if (readyMade && !(saved.indexers ?? []).some((item) => isAddon(item))) {
         saved.indexers = [...(saved.indexers ?? []), blankIndexer("stremio")];
       }
       setCfg(saved);
@@ -1416,10 +1475,7 @@ export default function Setup() {
             </Button>
           </SourceChoice>
           <SourceChoice
-            pressed={
-              readyMade ||
-              indexers.some((item) => isStremio(item) && item.url.trim() === TORRENTIO_URL)
-            }
+            pressed={readyMade || indexers.some((item) => isTorrentio(item))}
             logo={<StremioMark />}
             title="Torrentio"
             line={t("finds releases; needs debrid to play")}
@@ -1427,19 +1483,14 @@ export default function Setup() {
               "Lookups go to torrentio.strem.fun. Prefer your own? Use Torznab (Prowlarr, Jackett, Zilean).",
             )}
             note={
-              readyMade ||
-              indexers.some((item) => isStremio(item) && item.url.trim() === TORRENTIO_URL)
+              readyMade || indexers.some((item) => isTorrentio(item))
                 ? t("Added. You'll test it on the next step.")
                 : undefined
             }
             onClick={() => {
-              const chosen = indexers.some(
-                (item) => isStremio(item) && item.url.trim() === TORRENTIO_URL,
-              );
+              const chosen = indexers.some((item) => isTorrentio(item));
               if (readyMade || chosen) {
-                const removed = indexers.filter(
-                  (item) => isStremio(item) && item.url.trim() === TORRENTIO_URL,
-                );
+                const removed = indexers.filter((item) => isTorrentio(item));
                 setIndexers(indexers.filter((item) => !removed.some((row) => row.id === item.id)));
                 setIndexerTests((current) => {
                   const nextTests = { ...current };
@@ -1450,10 +1501,12 @@ export default function Setup() {
                 return;
               }
               const row = { ...blankIndexer("stremio"), name: "Torrentio", url: TORRENTIO_URL };
-              const rest = indexers.filter((item) => !(isStremio(item) && !item.url.trim()));
+              const rest = indexers.filter(
+                (item) => !(isAddon(item) && !item.plugin && !item.url.trim()),
+              );
               setIndexers([...rest, row]);
               setReadyMade(true);
-              void runTest("indexer", row.id, () => api.testIndexer(normalizedIndexer(row)));
+              void runTest("indexer", row.id, () => testAddonLink(row.url));
             }}
           />
         </div>
@@ -1473,6 +1526,30 @@ export default function Setup() {
           {indexers.map((ix, i) => {
             const type = indexerType(ix);
             const addon = type === "stremio";
+            if (isAddon(ix) && ix.plugin) {
+              // An installed add-on: its link lives with the add-on.
+              return (
+                <fieldset
+                  key={ix.id || i}
+                  className="rounded-xl border border-border bg-surface p-4"
+                >
+                  <legend className="px-1 text-sm font-medium text-fg">
+                    {ix.name || t("Indexer {number}", { number: i + 1 })}
+                  </legend>
+                  <p className="flex flex-wrap items-center gap-2 text-sm text-fg">
+                    <Check size={14} className="text-primary" />
+                    {t("Add-on added. Its streams are searched like an indexer.")}
+                    <Button
+                      variant="link"
+                      size="sm"
+                      onClick={() => setIndexers(indexers.filter((_, j) => j !== i))}
+                    >
+                      {t("Remove")}
+                    </Button>
+                  </p>
+                </fieldset>
+              );
+            }
             const savedURL = savedIndexerURLs.current?.[ix.id];
             const alreadyPassed = Boolean(savedURL && savedURL === ix.url.trim());
             if (alreadyPassed && !editingIndexers[ix.id]) {
@@ -1595,7 +1672,9 @@ export default function Setup() {
                     <TestButton
                       state={indexerTests[ix.id] ?? { status: "idle" }}
                       onTest={() =>
-                        void runTest("indexer", ix.id, () => api.testIndexer(normalizedIndexer(ix)))
+                        void runTest("indexer", ix.id, () =>
+                          pendingAddon(ix) ? testAddonLink(ix.url) : api.testIndexer(ix),
+                        )
                       }
                     />
                     <Button
