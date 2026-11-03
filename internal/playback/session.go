@@ -261,6 +261,7 @@ type session struct {
 	slowChecks        int       // consecutive slow evaluations
 	encoderSampleAt   time.Time
 	encoderRunAt      time.Time
+	encoderSeekAt     time.Time
 	encoderSlowChecks int
 	encoderRetryAt    time.Time
 	lastSrcPos        int64 // latest source read position on the current generation

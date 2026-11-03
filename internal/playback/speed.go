@@ -152,6 +152,12 @@ func (m *Manager) checkSpeed(s *session, now time.Time) {
 	decision, downs, misses, viewerState := s.decision, s.downFailovers, s.downMisses, s.viewerState
 	s.mu.Unlock()
 	if viewerState == "paused" || viewerState == "stopped" {
+		s.mu.Lock()
+		s.encoderRecoveryReason, s.encoderRunway = "", nil
+		s.mu.Unlock()
+		s.speedMu.Lock()
+		s.encoderSlowChecks = 0
+		s.speedMu.Unlock()
 		return
 	}
 	hls, hasHLS := m.deps.HLSLookup(s.id)

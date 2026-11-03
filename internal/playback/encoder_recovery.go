@@ -19,6 +19,12 @@ func (m *Manager) checkEncoderSpeed(s *session, g *generation, hls core.HLSSessi
 	}
 	status := source.EncoderStatus()
 	if status == nil || status.Decision.VideoCopy || status.Phase != "running" || status.Speed <= 0 || status.UpdatedAt.IsZero() || now.Sub(status.UpdatedAt) > 8*time.Second || now.Before(status.UpdatedAt) || now.Sub(status.StartedAt) < 6*time.Second {
+		s.mu.Lock()
+		s.encoderRecoveryReason, s.encoderRunway = "", nil
+		s.mu.Unlock()
+		s.speedMu.Lock()
+		s.encoderSlowChecks = 0
+		s.speedMu.Unlock()
 		return false
 	}
 	slow := status.Speed < 0.95
@@ -27,10 +33,22 @@ func (m *Manager) checkEncoderSpeed(s *session, g *generation, hls core.HLSSessi
 	s.mu.Unlock()
 	buffer, ok := hls.(core.RecoveryBufferSource)
 	if !ok || state != "playing" || viewerAt.IsZero() || now.Before(viewerAt) || now.Sub(viewerAt) > 30*time.Second {
+		s.mu.Lock()
+		s.encoderRecoveryReason, s.encoderRunway = "", nil
+		s.mu.Unlock()
+		s.speedMu.Lock()
+		s.encoderSlowChecks = 0
+		s.speedMu.Unlock()
 		return slow
 	}
 	b := buffer.RecoveryBuffer()
 	if !viewerAt.After(b.SeekAt) || b.ReadyUntil <= 0 {
+		s.mu.Lock()
+		s.encoderRecoveryReason, s.encoderRunway = "", nil
+		s.mu.Unlock()
+		s.speedMu.Lock()
+		s.encoderSlowChecks = 0
+		s.speedMu.Unlock()
 		return slow
 	}
 	position += now.Sub(viewerAt)
@@ -42,6 +60,10 @@ func (m *Manager) checkEncoderSpeed(s *session, g *generation, hls core.HLSSessi
 	s.speedMu.Lock()
 	if s.encoderRunAt != status.StartedAt {
 		s.encoderRunAt, s.encoderSampleAt = status.StartedAt, time.Time{}
+		s.encoderSlowChecks = 0
+	}
+	if s.encoderSeekAt != b.SeekAt {
+		s.encoderSeekAt, s.encoderSampleAt = b.SeekAt, time.Time{}
 		s.encoderSlowChecks = 0
 	}
 	if status.UpdatedAt.After(s.encoderSampleAt) {
@@ -60,7 +82,7 @@ func (m *Manager) checkEncoderSpeed(s *session, g *generation, hls core.HLSSessi
 	s.speedMu.Unlock()
 	s.mu.Lock()
 	if slow {
-		s.encoderRecoveryReason = "encoder below real time"
+		s.encoderRecoveryReason = "encoder output below real time"
 		r := runway
 		s.encoderRunway = &r
 		if trigger {
@@ -122,7 +144,7 @@ func (m *Manager) backgroundEncoderFailover(s *session, g *generation, at time.D
 		if err != nil && ctx.Err() == nil {
 			s.mu.Lock()
 			if s.cur == g {
-				s.encoderRecoveryReason = "encoder below real time; no compatible video copy available"
+				s.encoderRecoveryReason = "encoder output below real time; compatible-copy recovery failed"
 			}
 			s.mu.Unlock()
 			m.log.Info("no compatible copy available for slow encoder", "session", s.id, "err", err)
