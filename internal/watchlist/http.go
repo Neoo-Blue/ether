@@ -110,7 +110,9 @@ func (s *Service) Router() http.Handler {
 			if writer, ok := s.o.Trakt.(interface {
 				SetWatchlist(context.Context, int64, core.Title, bool) (bool, error)
 			}); ok {
-				linked, pushErr = writer.SetWatchlist(r.Context(), viewer(r).ID, *title, add)
+				ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+				linked, pushErr = writer.SetWatchlist(ctx, viewer(r).ID, *title, add)
+				cancel()
 			}
 			if add {
 				err = s.upsert(r.Context(), viewer(r).ID, "manual", *title)
