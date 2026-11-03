@@ -16,6 +16,7 @@ import { DomainPage } from "../../components/layout";
 import { t } from "../../i18n";
 import { apiFetch, ApiError } from "../../lib/api";
 import { useRegistry, type DescriptorKind } from "../../lib/extend";
+import { DirectoryBrowser } from "./DirectoryBrowser";
 import { PluginMark } from "./marks";
 
 interface Manifest {
@@ -63,6 +64,7 @@ export default function LivePlugins() {
   const [open, setOpen] = useState<string | null>(null);
   const [tab, setTab] = useState("overview");
   const [adding, setAdding] = useState(false);
+  const [browsing, setBrowsing] = useState(false);
   const [url, setURL] = useState("");
   const [preview, setPreview] = useState<{ manifest: Manifest; permissions: string[] } | null>(
     null,
@@ -121,6 +123,9 @@ export default function LivePlugins() {
       base="/plugins"
       actions={
         <>
+          <Button variant="outline" onClick={() => setBrowsing(true)}>
+            {t("Browse plugins")}
+          </Button>
           <Button
             variant="outline"
             onClick={() => {
@@ -338,11 +343,23 @@ export default function LivePlugins() {
           </div>
         </Drawer>
       ) : null}
+      {browsing ? (
+        <DirectoryBrowser
+          onClose={() => setBrowsing(false)}
+          onImport={(address) => {
+            setBrowsing(false);
+            setURL(address);
+            setPreview(null);
+            setImportError("");
+            setAdding(true);
+          }}
+        />
+      ) : null}
       {adding ? (
         <Dialog
           open
           onClose={() => setAdding(false)}
-          title={t("Import Stremio add-on")}
+          title={t("Import plugin")}
           footer={
             <>
               <Button variant="ghost" onClick={() => setAdding(false)}>
@@ -441,7 +458,10 @@ function resourceSupport(resource: string): {
     case "addon_catalog":
       return {
         label: t("Plugin directories"),
-        detail: t("Directory discovery is not connected to the native plugin catalogue yet."),
+        kind: "pluginDirectory",
+        detail: t(
+          "Available through Browse plugins. Each entry is fetched and reviewed before installation.",
+        ),
       };
     default:
       return {

@@ -39,18 +39,19 @@ const (
 type Capability string
 
 const (
-	CapStreamSource  Capability = "stream_source"
-	CapListSource    Capability = "list_source"
-	CapMetadata      Capability = "metadata"
-	CapLiveTV        Capability = "livetv_channels"
-	CapSubtitles     Capability = "subtitles"
-	CapMarkers       Capability = "markers"
-	CapNotify        Capability = "notify"
-	CapEvents        Capability = "events"
-	CapRankingStep   Capability = "ranking_step"
-	CapRuleCondition Capability = "rule_condition"
-	CapTools         Capability = "tools"
-	CapUI            Capability = "ui"
+	CapStreamSource    Capability = "stream_source"
+	CapListSource      Capability = "list_source"
+	CapMetadata        Capability = "metadata"
+	CapPluginDirectory Capability = "plugin_directory"
+	CapLiveTV          Capability = "livetv_channels"
+	CapSubtitles       Capability = "subtitles"
+	CapMarkers         Capability = "markers"
+	CapNotify          Capability = "notify"
+	CapEvents          Capability = "events"
+	CapRankingStep     Capability = "ranking_step"
+	CapRuleCondition   Capability = "rule_condition"
+	CapTools           Capability = "tools"
+	CapUI              Capability = "ui"
 )
 
 // Reserved capabilities are known names a manifest may not claim in v1.
@@ -165,6 +166,7 @@ type ViewerPerms struct {
 
 // Contributes carries per-capability metadata and UI contributions.
 type Contributes struct {
+	Directories    []DirectoryMeta     `json:"directories,omitempty"`
 	Metadata       *MetadataMeta       `json:"metadata,omitempty"`
 	Source         *SourceMeta         `json:"source,omitempty"`
 	Channels       *ChannelsMeta       `json:"channels,omitempty"`
@@ -535,4 +537,11 @@ func (e *ValidationError) Error() string {
 // core.MetadataRequest and a {"title": core.Title} response.
 type MetadataMeta struct {
 	Types []string `json:"types"`
+}
+
+// DirectoryMeta declares a protocol-neutral plugin discovery source.
+// Entries are suggestions, never installation authorization or verification.
+type DirectoryMeta struct {
+	Key   string `json:"key"`
+	Label string `json:"label"`
 }

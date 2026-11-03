@@ -96,6 +96,11 @@ func DescriptorsFor(man Manifest) []extend.Descriptor {
 		add(extend.KindChannelKind, "notify", textOf(id, man.Name), map[string]any{
 			"fields": notificationFields(id, c.Notification.Fields), "sendTest": c.Notification.SendTest, "selectable": true, "formats": c.Notification.Formats, "maxLength": c.Notification.MaxLength})
 	}
+	if man.HasCapability(CapPluginDirectory) {
+		for _, d := range c.Directories {
+			add(extend.KindPluginDirectory, d.Key, textOf(id, d.Label), map[string]any{"key": d.Key})
+		}
+	}
 	if man.HasCapability(CapMetadata) && c.Metadata != nil {
 		add(extend.KindMetadataProvider, "metadata", textOf(id, man.Name), c.Metadata)
 	}

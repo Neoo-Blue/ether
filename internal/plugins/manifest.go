@@ -74,16 +74,17 @@ func LintCopy(s string, max int) string {
 
 // capabilityKinds is the SPEC §5.1.3 table. A nil set means any kind.
 var capabilityKinds = map[Capability]map[Kind]bool{
-	CapStreamSource:  {KindSource: true},
-	CapListSource:    {KindIntegration: true, KindExtension: true},
-	CapMetadata:      {KindIntegration: true, KindExtension: true, KindSource: true},
-	CapLiveTV:        {KindLiveTVSource: true},
-	CapSubtitles:     {KindIntegration: true, KindExtension: true},
-	CapMarkers:       {KindIntegration: true, KindExtension: true},
-	CapNotify:        {KindNotificationChannel: true},
-	CapRankingStep:   {KindExtension: true, KindIntegration: true},
-	CapRuleCondition: {KindExtension: true, KindIntegration: true},
-	CapEvents:        nil, CapTools: nil, CapUI: nil,
+	CapStreamSource:    {KindSource: true},
+	CapListSource:      {KindIntegration: true, KindExtension: true},
+	CapPluginDirectory: {KindIntegration: true, KindExtension: true, KindSource: true},
+	CapMetadata:        {KindIntegration: true, KindExtension: true, KindSource: true},
+	CapLiveTV:          {KindLiveTVSource: true},
+	CapSubtitles:       {KindIntegration: true, KindExtension: true},
+	CapMarkers:         {KindIntegration: true, KindExtension: true},
+	CapNotify:          {KindNotificationChannel: true},
+	CapRankingStep:     {KindExtension: true, KindIntegration: true},
+	CapRuleCondition:   {KindExtension: true, KindIntegration: true},
+	CapEvents:          nil, CapTools: nil, CapUI: nil,
 }
 
 var knownKinds = map[Kind]bool{
@@ -405,6 +406,18 @@ func validateContributes(m Manifest, add func(string, string)) {
 		if c.Channels == nil || !c.Channels.Test {
 			add("ether.contributes.channels", "is required for livetv_channels, with test set")
 		}
+	}
+	if m.HasCapability(CapPluginDirectory) && len(c.Directories) == 0 {
+		add("ether.contributes.directories", "is required for plugin_directory")
+	}
+	seenDirectories := map[string]bool{}
+	for i, d := range c.Directories {
+		base := fmt.Sprintf("ether.contributes.directories[%d]", i)
+		if !keyRe.MatchString(d.Key) || seenDirectories[d.Key] {
+			add(base+".key", "must be a unique simple key")
+		}
+		seenDirectories[d.Key] = true
+		label(base+".label", d.Label, 80)
 	}
 	if m.HasCapability(CapMetadata) {
 		if c.Metadata == nil || len(c.Metadata.Types) == 0 {

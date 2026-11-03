@@ -141,6 +141,16 @@ func (m Manifest) EffectiveEther() *EtherBlock {
 			e.Contributes.ListSources = append(e.Contributes.ListSources, ListSourceMeta{Key: StremioCatalogKey(c), Label: label + " · " + c.Type, Catalog: c.Type + "/" + c.ID, Params: params, Refresh: "1h"})
 		}
 	}
+	if m.HasResource("addon_catalog") && len(m.AddonCatalogs) > 0 {
+		e.Capabilities = append(e.Capabilities, CapPluginDirectory)
+		for _, c := range m.AddonCatalogs {
+			label := c.Name
+			if label == "" {
+				label = c.ID
+			}
+			e.Contributes.Directories = append(e.Contributes.Directories, DirectoryMeta{Key: "directory-" + strings.TrimPrefix(StremioCatalogKey(c), "catalog-"), Label: label + " · " + c.Type})
+		}
+	}
 	if m.HasResource("meta") {
 		var types []string
 		for _, typ := range []string{"movie", "show"} {

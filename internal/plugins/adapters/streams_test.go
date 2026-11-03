@@ -737,11 +737,26 @@ func TestOrdinaryStremioStreamsUseSharedSources(t *testing.T) {
 		if r.ID == "" || r.Indexer != rec.Name || r.TitleIDs.IMDB != req.IDs.IMDB {
 			t.Fatalf("invalid shared release: %+v", r)
 		}
+		if ids[r.ID] {
+			t.Fatal("release IDs collide")
+		}
 		ids[r.ID] = true
 		protocols[r.Protocol] = true
+		switch r.Protocol {
+		case core.ProtocolHTTP:
+			if r.StreamURL != "https://example.test/metropolis.mp4" {
+				t.Fatalf("direct URL not retained: %+v", r)
+			}
+		case core.ProtocolTorrent:
+			if r.InfoHash != "0123456789abcdef0123456789abcdef01234567" || r.GUID != "btih:0123456789abcdef0123456789abcdef01234567/2" || !strings.Contains(r.MagnetURL, "0123456789abcdef0123456789abcdef01234567") {
+				t.Fatalf("torrent identity/file selection lost: %+v", r)
+			}
+		default:
+			t.Fatalf("unexpected protocol %q", r.Protocol)
+		}
 	}
-	if !protocols[core.ProtocolTorrent] {
-		t.Fatal("torrent form missing")
+	if !protocols[core.ProtocolTorrent] || !protocols[core.ProtocolHTTP] {
+		t.Fatal("direct or torrent form missing")
 	}
 	if err := env.mgr.SetEnabled(ctx, id, false); err != nil {
 		t.Fatal(err)
@@ -775,5 +790,8 @@ func TestOrdinaryStremioStreamsUseSharedSources(t *testing.T) {
 	}
 	if _, ok := env.reg.Get(extend.KindSourceKind, descriptor); ok {
 		t.Fatal("uninstalled contribution remains")
+	}
+	if got, err = env.sources.Search(ctx, req); err != nil || len(got) != 0 || calls != 2 {
+		t.Fatalf("uninstalled source called: calls=%d err=%v", calls, err)
 	}
 }

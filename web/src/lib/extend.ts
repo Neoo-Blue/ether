@@ -19,6 +19,7 @@ export type DescriptorKind =
   | "eventKind"
   | "subtitleProvider"
   | "metadataProvider"
+  | "pluginDirectory"
   | "markerSource"
   | "sourceKind"
   | "integration"
