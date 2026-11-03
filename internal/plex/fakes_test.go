@@ -135,6 +135,32 @@ func (c *fakeCatalog) Grandchildren(ctx context.Context, k core.RatingKey) ([]co
 	return out, nil
 }
 
+func compareTitlesBySpec(a, b core.Title, spec core.SortSpec, now time.Time) int {
+	var c int
+	switch spec.Sort {
+	case core.SortTitle:
+		c = cmp.Compare(titleSortKey(a), titleSortKey(b))
+	case core.SortYear:
+		c = cmp.Compare(a.Year, b.Year)
+	case core.SortReleased:
+		c = cmp.Compare(a.Released.Unix(), b.Released.Unix())
+	case core.SortAdded:
+		c = cmp.Compare(a.DateAdded(now).Unix(), b.DateAdded(now).Unix())
+	case core.SortUpdated:
+		c = cmp.Compare(a.UpdatedAt.Unix(), b.UpdatedAt.Unix())
+	case core.SortRating:
+		c = cmp.Compare(a.Rating, b.Rating)
+	case core.SortDuration:
+		c = cmp.Compare(a.Runtime, b.Runtime)
+	default:
+		c = cmp.Compare(a.Popularity, b.Popularity)
+	}
+	if spec.Desc {
+		return -c
+	}
+	return c
+}
+
 func (c *fakeCatalog) Browse(_ context.Context, q core.BrowseQuery) (core.Page, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -147,6 +173,31 @@ func (c *fakeCatalog) Browse(_ context.Context, q core.BrowseQuery) (core.Page, 
 		all = append(all, t)
 	}
 	slices.SortStableFunc(all, func(a, b core.Title) int {
+		if q.SortLastViewed {
+			var astate, bstate core.WatchStatus
+			if c.state != nil {
+				astate, _ = c.state.Get(context.Background(), q.SortViewerID, a.Key)
+				bstate, _ = c.state.Get(context.Background(), q.SortViewerID, b.Key)
+			}
+			av, bv := unixOrZero(astate.LastViewedAt), unixOrZero(bstate.LastViewedAt)
+			if av != bv {
+				if q.Desc {
+					return cmp.Compare(bv, av)
+				}
+				return cmp.Compare(av, bv)
+			}
+			for _, spec := range q.SecondarySorts {
+				if v := compareTitlesBySpec(a, b, spec, fixedNow); v != 0 {
+					return v
+				}
+			}
+			if q.Filter.Type != core.TypeEpisode && q.Filter.Type != core.TypeSeason {
+				if v := cmp.Compare(titleSortKey(a), titleSortKey(b)); v != 0 {
+					return v
+				}
+			}
+			return cmp.Compare(a.Key, b.Key)
+		}
 		if q.Sort == "" {
 			if q.Desc {
 				return cmp.Compare(b.Key, a.Key)

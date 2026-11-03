@@ -50,7 +50,7 @@ func (c *Catalog) Browse(ctx context.Context, q core.BrowseQuery) (core.Page, er
 	ckey := browseFilterKey(q.Filter) + fmt.Sprintf("|rules:%s:%#v:%s", q.Filter.RuleVisibility, q.Filter.PreviewRules, q.Filter.PreviewFallback)
 	bkey := fmt.Sprintf("%s|%s|%v|%v|%d|%d|%v", ckey, q.Sort, q.Desc, q.SecondarySorts, offset, limit, q.NoTotal)
 	c.cacheMu.RLock()
-	if ent, ok := c.browseCache[bkey]; q.Filter.Group == nil && ok && ent.gen == gen && ent.minute == minBucket {
+	if ent, ok := c.browseCache[bkey]; q.Filter.Group == nil && !q.SortLastViewed && ok && ent.gen == gen && ent.minute == minBucket {
 		items := make([]core.Title, len(ent.page.Items))
 		for i := range ent.page.Items {
 			items[i] = cloneTitle(ent.page.Items[i])
@@ -103,7 +103,7 @@ func (c *Catalog) Browse(ctx context.Context, q core.BrowseQuery) (core.Page, er
 	}
 	if total == 0 || offset >= total {
 		page := core.Page{Items: []core.Title{}, Total: total}
-		if q.Filter.Group == nil && c.writeGen.Load() == gen && !staleTotal {
+		if q.Filter.Group == nil && !q.SortLastViewed && c.writeGen.Load() == gen && !staleTotal {
 			c.cacheMu.Lock()
 			if len(c.browseCache) >= 512 {
 				c.browseCache = map[string]cachedBrowse{}
@@ -174,7 +174,7 @@ func (c *Catalog) Browse(ctx context.Context, q core.BrowseQuery) (core.Page, er
 	}
 	switch {
 	case walked:
-	case q.Filter.Type == "" && !computedAdded && len(q.SecondarySorts) == 0 && q.Sort != core.SortTitle && offset+limit <= mergedPageMax:
+	case q.Filter.Type == "" && !q.SortLastViewed && !computedAdded && len(q.SecondarySorts) == 0 && q.Sort != core.SortTitle && offset+limit <= mergedPageMax:
 		// Movies and series together: no index orders both types, so the
 		// sorted query reads every browsable title. Each type's page comes
 		// from its own index and the two merge.
@@ -201,7 +201,7 @@ func (c *Catalog) Browse(ctx context.Context, q core.BrowseQuery) (core.Page, er
 	if q.NoTotal {
 		total = offset + len(items)
 	}
-	if q.Filter.Group == nil && c.writeGen.Load() == gen && !staleTotal {
+	if q.Filter.Group == nil && !q.SortLastViewed && c.writeGen.Load() == gen && !staleTotal {
 		cachedItems := make([]core.Title, len(items))
 		for i := range items {
 			cachedItems[i] = cloneTitle(items[i])
@@ -263,6 +263,9 @@ func browseSecondaryOrder(alias string, specs []core.SortSpec) string {
 }
 
 func browseOrder(q core.BrowseQuery) string {
+	if q.SortLastViewed {
+		return lastViewedOrder("t", q) + ", t.sort_title ASC"
+	}
 	col := sortColumn("t", q.Sort)
 	dir := "ASC"
 	if q.Desc {
@@ -273,6 +276,19 @@ func browseOrder(q core.BrowseQuery) string {
 		dir = "DESC"
 	}
 	return col + " " + dir + browseSecondaryOrder("t", q.SecondarySorts)
+}
+
+// lastViewedOrder uses a numeric viewer identity and the state primary key.
+func lastViewedOrder(alias string, q core.BrowseQuery) string {
+	col := "(0+0)"
+	if q.SortViewerID > 0 {
+		col = fmt.Sprintf("COALESCE((SELECT w.last_viewed_at FROM state_watch w WHERE w.user_id=%d AND w.rating_key=%s.key),0)", q.SortViewerID, alias)
+	}
+	dir := "ASC"
+	if q.Desc {
+		dir = "DESC"
+	}
+	return col + " " + dir + browseSecondaryOrder(alias, q.SecondarySorts)
 }
 
 // CountBrowsable is the library size behind a view list. The (type, browsable,

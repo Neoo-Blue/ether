@@ -130,6 +130,8 @@ type Filter struct {
 }
 
 type BrowseQuery struct {
+	SortLastViewed bool
+	SortViewerID   int64
 	Filter         Filter
 	Sort           SortOrder
 	Desc           bool

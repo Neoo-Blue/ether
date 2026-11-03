@@ -343,7 +343,7 @@ func (c *Catalog) BrowseStoredEpisodes(ctx context.Context, q core.BrowseQuery) 
 	cursorPrefix := fmt.Sprintf("cursor:%s|%s|%v|%v|", ckey, q.Sort, q.Desc, q.SecondarySorts)
 
 	c.cacheMu.RLock()
-	if ent, ok := c.browseCache[bkey]; q.Filter.Group == nil && ok && ent.gen == gen && ent.minute == minBucket {
+	if ent, ok := c.browseCache[bkey]; q.Filter.Group == nil && !q.SortLastViewed && ok && ent.gen == gen && ent.minute == minBucket {
 		items := make([]core.Title, len(ent.page.Items))
 		for i := range ent.page.Items {
 			items[i] = cloneTitle(ent.page.Items[i])
@@ -352,7 +352,7 @@ func (c *Catalog) BrowseStoredEpisodes(ctx context.Context, q core.BrowseQuery) 
 		return core.Page{Items: items, Total: ent.page.Total}, nil
 	}
 	var afterKey core.RatingKey
-	if offset > 0 && q.Filter.Group == nil {
+	if offset > 0 && q.Filter.Group == nil && !q.SortLastViewed {
 		if cur, ok := c.browseCache[cursorPrefix+strconv.Itoa(offset)]; ok && cur.gen == gen && cur.minute == minBucket && len(cur.page.Items) == 1 {
 			afterKey = cur.page.Items[0].Key
 		}
@@ -373,8 +373,8 @@ func (c *Catalog) BrowseStoredEpisodes(ctx context.Context, q core.BrowseQuery) 
 		}
 	}
 
-	keyOrder := len(q.SecondarySorts) == 0 && (q.Sort == "" || (q.Sort == core.SortPopularity && !q.Desc))
-	if !keyOrder && len(q.SecondarySorts) == 0 && q.Sort == core.SortPopularity {
+	keyOrder := !q.SortLastViewed && len(q.SecondarySorts) == 0 && (q.Sort == "" || (q.Sort == core.SortPopularity && !q.Desc))
+	if !q.SortLastViewed && !keyOrder && len(q.SecondarySorts) == 0 && q.Sort == core.SortPopularity {
 		if unranked, err := c.EpisodesUnranked(ctx); err == nil && unranked {
 			keyOrder = true
 		}
@@ -413,7 +413,7 @@ func (c *Catalog) BrowseStoredEpisodes(ctx context.Context, q core.BrowseQuery) 
 	if q.NoTotal {
 		total = offset + len(items)
 	}
-	if q.Filter.Group == nil && c.writeGen.Load() == gen {
+	if q.Filter.Group == nil && !q.SortLastViewed && c.writeGen.Load() == gen {
 		cachedItems := make([]core.Title, len(items))
 		for i := range items {
 			cachedItems[i] = cloneTitle(items[i])
@@ -435,6 +435,9 @@ func (c *Catalog) BrowseStoredEpisodes(ctx context.Context, q core.BrowseQuery) 
 }
 
 func storedChildOrder(alias string, q core.BrowseQuery) string {
+	if q.SortLastViewed {
+		return lastViewedOrder(alias, q)
+	}
 	col := alias + ".key"
 	switch q.Sort {
 	case core.SortTitle:
@@ -611,7 +614,7 @@ func (c *Catalog) BrowseStoredSeasons(ctx context.Context, q core.BrowseQuery) (
 	cursorPrefix := fmt.Sprintf("cursor:%s|%s|%v|%v|", ckey, q.Sort, q.Desc, q.SecondarySorts)
 
 	c.cacheMu.RLock()
-	if ent, ok := c.browseCache[bkey]; q.Filter.Group == nil && ok && ent.gen == gen && ent.minute == minBucket {
+	if ent, ok := c.browseCache[bkey]; q.Filter.Group == nil && !q.SortLastViewed && ok && ent.gen == gen && ent.minute == minBucket {
 		items := make([]core.Title, len(ent.page.Items))
 		for i := range ent.page.Items {
 			items[i] = cloneTitle(ent.page.Items[i])
@@ -620,7 +623,7 @@ func (c *Catalog) BrowseStoredSeasons(ctx context.Context, q core.BrowseQuery) (
 		return core.Page{Items: items, Total: ent.page.Total}, nil
 	}
 	var afterKey core.RatingKey
-	if offset > 0 && q.Filter.Group == nil {
+	if offset > 0 && q.Filter.Group == nil && !q.SortLastViewed {
 		if cur, ok := c.browseCache[cursorPrefix+strconv.Itoa(offset)]; ok && cur.gen == gen && cur.minute == minBucket && len(cur.page.Items) == 1 {
 			afterKey = cur.page.Items[0].Key
 		}
@@ -641,7 +644,7 @@ func (c *Catalog) BrowseStoredSeasons(ctx context.Context, q core.BrowseQuery) (
 		}
 	}
 
-	keyOrder := len(q.SecondarySorts) == 0 && (q.Sort == "" || (q.Sort == core.SortPopularity && !q.Desc))
+	keyOrder := !q.SortLastViewed && len(q.SecondarySorts) == 0 && (q.Sort == "" || (q.Sort == core.SortPopularity && !q.Desc))
 	now := c.now()
 	var items []core.Title
 	switch {
@@ -701,7 +704,7 @@ func (c *Catalog) BrowseStoredSeasons(ctx context.Context, q core.BrowseQuery) (
 	if q.NoTotal {
 		total = offset + len(items)
 	}
-	if q.Filter.Group == nil && c.writeGen.Load() == gen {
+	if q.Filter.Group == nil && !q.SortLastViewed && c.writeGen.Load() == gen {
 		cachedItems := make([]core.Title, len(items))
 		for i := range items {
 			cachedItems[i] = cloneTitle(items[i])

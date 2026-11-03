@@ -1,7 +1,6 @@
 package plex
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"net/http"
@@ -1032,32 +1031,6 @@ func titleSortKey(t core.Title) string {
 	return strings.ToLower(t.Title)
 }
 
-func compareTitlesBySpec(a, b core.Title, spec core.SortSpec, now time.Time) int {
-	var c int
-	switch spec.Sort {
-	case core.SortTitle:
-		c = cmp.Compare(titleSortKey(a), titleSortKey(b))
-	case core.SortYear:
-		c = cmp.Compare(a.Year, b.Year)
-	case core.SortReleased:
-		c = cmp.Compare(a.Released.Unix(), b.Released.Unix())
-	case core.SortAdded:
-		c = cmp.Compare(a.DateAdded(now).Unix(), b.DateAdded(now).Unix())
-	case core.SortUpdated:
-		c = cmp.Compare(a.UpdatedAt.Unix(), b.UpdatedAt.Unix())
-	case core.SortRating:
-		c = cmp.Compare(a.Rating, b.Rating)
-	case core.SortDuration:
-		c = cmp.Compare(a.Runtime, b.Runtime)
-	default:
-		c = cmp.Compare(a.Popularity, b.Popularity)
-	}
-	if spec.Desc {
-		return -c
-	}
-	return c
-}
-
 // browse runs a catalogue query honouring paging and watch-state filters.
 func (s *Server) browse(ctx context.Context, pr *Request, br browseRequest) ([]core.Title, int, int, error) {
 	offset, size := pr.pageOf(br.limit)
@@ -1082,12 +1055,19 @@ func (s *Server) browse(ctx context.Context, pr *Request, br browseRequest) ([]c
 		br.unwatched, br.inProgress = nil, nil
 		br.lastViewedAfter, br.lastViewedBefore = 0, 0
 	}
+	if br.sortLastViewed {
+		br.q.SortLastViewed = true
+		br.q.Desc = br.lastViewedDesc
+		if pr.User != nil && s.d.State != nil {
+			br.q.SortViewerID = pr.User.ID
+		}
+		br.sortLastViewed = false
+	}
 	_, hasBrowseBlocks := s.d.AccessPolicy.(interface {
 		BrowseBlocks(*core.User) ([]string, []string)
 	})
 	needsPostPolicy := s.d.AccessPolicy != nil && !hasBrowseBlocks && s.viewerRestricted(pr.User)
-	needsStateScan := br.unwatched != nil || br.inProgress != nil || br.sortLastViewed || br.lastViewedAfter > 0 || br.lastViewedBefore > 0
-	if !needsStateScan && !needsPostPolicy {
+	if !needsPostPolicy {
 		q := br.q
 		q.Offset, q.Limit = offset, size
 		if size == 0 {
@@ -1107,11 +1087,9 @@ func (s *Server) browse(ctx context.Context, pr *Request, br browseRequest) ([]c
 		}
 		return items, total, offset, nil
 	}
-	// State-filtered or custom-policy browse: scan the catalogue in chunks.
+	// Custom policies without SQL predicates are evaluated in bounded chunks.
 	const chunk, maxScan = 200, 5000
 	var out []core.Title
-	var allMatched []core.Title
-	viewTimes := map[core.RatingKey]int64{}
 	matched, scanned, total := 0, 0, 0
 	for scanned < maxScan {
 		q := br.q
@@ -1124,80 +1102,20 @@ func (s *Server) browse(ctx context.Context, pr *Request, br browseRequest) ([]c
 		if len(page.Items) == 0 {
 			break
 		}
-		var st map[core.RatingKey]core.WatchStatus
-		if needsStateScan {
-			st = s.stateFor(ctx, pr, page.Items)
-		}
 		for _, t := range page.Items {
 			if needsPostPolicy && !s.visibleTitle(ctx, pr.User, &t) {
 				total--
 				continue
 			}
-			ws := st[t.Key]
-			if br.unwatched != nil {
-				isUnwatched := ws.ViewCount == 0
-				if isUnwatched != *br.unwatched {
-					total--
-					continue
-				}
-			}
-			if br.inProgress != nil {
-				isInProgress := ws.ViewOffset > 0
-				if isInProgress != *br.inProgress {
-					total--
-					continue
-				}
-			}
-			if br.lastViewedAfter > 0 || br.lastViewedBefore > 0 {
-				lv := unixOrZero(ws.LastViewedAt)
-				if lv <= 0 || (br.lastViewedAfter > 0 && lv < br.lastViewedAfter) || (br.lastViewedBefore > 0 && lv > br.lastViewedBefore) {
-					total--
-					continue
-				}
-			}
-			if br.sortLastViewed {
-				viewTimes[t.Key] = unixOrZero(ws.LastViewedAt)
-				allMatched = append(allMatched, t)
-			} else if matched >= offset && len(out) < size {
+			if matched >= offset && len(out) < size {
 				out = append(out, t)
 			}
 			matched++
 		}
 		scanned += len(page.Items)
-		if scanned >= page.Total || (!br.sortLastViewed && !needsPostPolicy && len(out) >= size && matched > offset+size) {
+		if scanned >= page.Total {
 			break
 		}
-	}
-	if br.sortLastViewed {
-		now := s.now()
-		isChildType := br.q.Filter.Type == core.TypeEpisode || br.q.Filter.Type == core.TypeSeason
-		sort.SliceStable(allMatched, func(i, j int) bool {
-			vi, vj := viewTimes[allMatched[i].Key], viewTimes[allMatched[j].Key]
-			if vi != vj {
-				if br.lastViewedDesc {
-					return vi > vj
-				}
-				return vi < vj
-			}
-			for _, spec := range br.q.SecondarySorts {
-				if c := compareTitlesBySpec(allMatched[i], allMatched[j], spec, now); c != 0 {
-					return c < 0
-				}
-			}
-			if !isChildType {
-				if c := cmp.Compare(titleSortKey(allMatched[i]), titleSortKey(allMatched[j])); c != 0 {
-					return c < 0
-				}
-			}
-			return allMatched[i].Key < allMatched[j].Key
-		})
-		total = len(allMatched)
-		if br.limit > 0 && total > br.limit {
-			total = br.limit
-		}
-		lo := min(offset, len(allMatched))
-		hi := min(lo+size, len(allMatched))
-		return allMatched[lo:hi], total, offset, nil
 	}
 	if total < matched {
 		total = matched
