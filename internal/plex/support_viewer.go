@@ -54,6 +54,17 @@ func (s *Server) SupportViewer(ctx context.Context, user *core.User) (diagnostic
 		switch {
 		case !ok:
 			c.Reason = "not returned by the catalogue: missing or filtered by catalogue or release rules"
+			if source, yes := s.d.Catalog.(interface {
+				SupportVisibility(context.Context, core.RatingKey) (*core.Title, string, error)
+			}); yes {
+				title, reason, err := source.SupportVisibility(ctx, st.Key)
+				if err == nil {
+					c.Reason = reason
+					if title != nil {
+						c.Title = title.Title
+					}
+				}
+			}
 		case selectedSet[st.Key]:
 			c.Title = ti.Title
 			c.Included = true
