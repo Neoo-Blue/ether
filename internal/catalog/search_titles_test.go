@@ -185,43 +185,49 @@ func TestSearchSpellingRanksLiteralBeforeCorrected(t *testing.T) {
 	if err := c.upsertMany(ctx, []core.Title{extra}, upsertOpts{browsable: true}); err != nil {
 		t.Fatal(err)
 	}
-	c.spell.lx.Store(nil) // rebuild with the new title
+	c.searchIx.ix.Store(nil) // rebuild with the new title
 	got := searchTitles(t, c, ctx, "guilded")
 	if len(got) == 0 || got[0] != "Guilded Lily" {
 		t.Fatalf("Search(guilded) = %v, want the literal match first", got)
 	}
 }
 
-func TestSearchLexiconRefreshesAfterWrites(t *testing.T) {
+func TestSearchIndexRefreshesAfterWrites(t *testing.T) {
 	c, ctx := spellTestCatalog(t)
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	c.SetNow(func() time.Time { return now })
 	if got := searchTitles(t, c, ctx, "The Guilded Age"); len(got) == 0 {
-		t.Fatal("lexicon not built")
+		t.Fatal("search index not built")
 	}
 	late := core.Title{Key: core.MovieKey(30), Type: core.TypeMovie, Title: "Oppenheimer", Year: 2023, Popularity: 9, Released: time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)}
 	if err := c.upsertMany(ctx, []core.Title{late}, upsertOpts{browsable: true}); err != nil {
 		t.Fatal(err)
 	}
-	// Within the refresh interval the old lexicon serves (and the literal
-	// match still finds the title as typed correctly).
-	if got := searchTitles(t, c, ctx, "Oppenheimer"); len(got) != 1 {
-		t.Fatalf("literal search = %v", got)
+	// Within the refresh interval the old index serves, and the new title is
+	// searchable at once (misspelt too) from the titles written since.
+	if got := searchTitles(t, c, ctx, "Openheimer"); len(got) == 0 || got[0] != "Oppenheimer" {
+		t.Fatalf("fresh Search(Openheimer) = %v", got)
 	}
-	now = now.Add(searchLexiconRefresh)
-	c.searchLexicon(ctx, false)
+	now = now.Add(searchIndexRefresh)
+	c.searchIndex(ctx, false)
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		if lx := c.spell.lx.Load(); lx != nil && lx.find("oppenheimer") >= 0 {
+		if ix := c.searchIx.ix.Load(); ix != nil && ix.lx.find("oppenheimer") >= 0 {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("lexicon did not rebuild after a write")
+			t.Fatal("search index did not rebuild after a write")
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 	if got := searchTitles(t, c, ctx, "Openheimer"); len(got) == 0 || got[0] != "Oppenheimer" {
 		t.Fatalf("Search(Openheimer) = %v", got)
+	}
+	c.searchIx.freshMu.Lock()
+	n := len(c.searchIx.fresh)
+	c.searchIx.freshMu.Unlock()
+	if n != 0 {
+		t.Fatalf("%d fresh titles kept after the rebuild that holds them", n)
 	}
 }
 

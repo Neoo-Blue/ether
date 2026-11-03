@@ -615,6 +615,7 @@ func (c *Catalog) upsertMany(ctx context.Context, titles []core.Title, o upsertO
 		return err
 	}
 	c.writeGen.Add(1)
+	c.noteSearchWrites(titles)
 	return nil
 }
 

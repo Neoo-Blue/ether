@@ -7,10 +7,13 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/go-chi/chi/v5"
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/experience"
@@ -789,7 +792,52 @@ type peopleSearchResult struct {
 	directors     []model.Directory
 	directorsMore bool
 	titles        map[core.MediaType][]reasonedTitle
+	// actorScores and directorScores are each directory's relevance.
+	actorScores    []float64
+	directorScores []float64
 }
+
+// Search relevance as PMS reports it: a person whose whole name is the
+// query, any other matching person, and a title found through a person.
+const (
+	searchPersonExactScore = 0.92
+	searchPersonScore      = 0.32
+	searchReasonedScore    = 0.33
+)
+
+// personSearchScore is a matching person's relevance to query.
+func personSearchScore(query, name string) float64 {
+	if searchFoldName(query) == searchFoldName(name) {
+		return searchPersonExactScore
+	}
+	return searchPersonScore
+}
+
+// searchFoldName is s in lower case without accents, keeping only letters
+// and digits, so names compare whatever their punctuation and spacing.
+func searchFoldName(s string) string {
+	var b strings.Builder
+	for _, r := range norm.NFD.String(s) {
+		if unicode.Is(unicode.Mn, r) || !(unicode.IsLetter(r) || unicode.IsDigit(r)) {
+			continue
+		}
+		b.WriteRune(unicode.ToLower(r))
+	}
+	return b.String()
+}
+
+// titleSearchScore is a result's relevance: the catalogue's score when it
+// has one, otherwise one by its place among n. It orders results and hubs;
+// clients are sent it capped at 1 (reportedScore).
+func titleSearchScore(t *core.Title, i, n int) float64 {
+	if t.SearchScore > 0 {
+		return t.SearchScore
+	}
+	return searchScore(i, n)
+}
+
+// reportedScore is a relevance as PMS reports it, between 0 and 1.
+func reportedScore(score float64) float64 { return min(1, score) }
 
 func peopleQueryTerms(query string) []string {
 	return strings.FieldsFunc(strings.ToLower(strings.TrimSpace(query)), func(r rune) bool {
@@ -866,9 +914,26 @@ func personSearchDirectory(sec Section, person core.Person, kind string, count i
 	return model.Directory{Extra: attrs}
 }
 
-func stampDirectoryScores(dirs []model.Directory) {
+// rankDirectories orders person directories best match first (stable) and
+// returns their scores in the new order.
+func rankDirectories(dirs []model.Directory, scores []float64) []float64 {
+	idx := make([]int, len(dirs))
+	for i := range idx {
+		idx[i] = i
+	}
+	sort.SliceStable(idx, func(a, b int) bool { return scores[idx[a]] > scores[idx[b]] })
+	sortedDirs := make([]model.Directory, len(dirs))
+	sortedScores := make([]float64, len(dirs))
+	for i, j := range idx {
+		sortedDirs[i], sortedScores[i] = dirs[j], scores[j]
+	}
+	copy(dirs, sortedDirs)
+	return sortedScores
+}
+
+func stampDirectoryScores(dirs []model.Directory, scores []float64) {
 	for i := range dirs {
-		score := strconv.FormatFloat(searchScore(i, len(dirs)), 'f', 5, 64)
+		score := strconv.FormatFloat(scores[i], 'f', 5, 64)
 		inserted := false
 		extra := make([]model.Attr, 0, len(dirs[i].Extra)+1)
 		for _, a := range dirs[i].Extra {
@@ -928,12 +993,35 @@ func (s *Server) searchPeople(ctx context.Context, pr *Request, query string, se
 	// An explicit search: rules the owner limited to browsing do not apply.
 	catVis, _ := s.d.Catalog.(interface{ SearchVisible(*core.Title) bool })
 	now := s.now()
-	creditLimit := max(limit*6, 60)
+	creditLimit := max(limit*3, 30)
+	// A person whose whole name is the query leads, then the most credited.
+	// Each person costs a credit walk, so only as many are walked as a hub
+	// can show, with headroom for people with nothing visible.
+	sort.SliceStable(candidates, func(i, j int) bool {
+		return personSearchScore(query, candidates[i].Name) > personSearchScore(query, candidates[j].Name)
+	})
+	walkBudget, partialBudget := limit+limit/2, max(limit/2, 3)
 	var actorTitles, directorTitles []reasonedTitle
 	for _, cand := range candidates {
 		if !personMatchesTerms(cand.Name, terms) {
 			continue
 		}
+		exactName := personSearchScore(query, cand.Name) == searchPersonExactScore
+		if !exactName {
+			// Partial name matches ("Her" in Barbara Hershey) rank last and
+			// are only a few of the people a hub shows.
+			if partialBudget == 0 {
+				walkBudget = 0
+			} else {
+				partialBudget--
+			}
+		}
+		if walkBudget == 0 {
+			out.actorsMore = out.actorsMore || len(out.actors) >= limit
+			out.directorsMore = out.directorsMore || len(out.directors) >= limit
+			break
+		}
+		walkBudget--
 		keys, err := ps.PersonCreditKeys(ctx, cand.TMDB, queryTypes, creditLimit)
 		if err != nil || len(keys) == 0 {
 			continue
@@ -1008,6 +1096,7 @@ func (s *Server) searchPeople(ctx context.Context, pr *Request, query string, se
 				if len(out.actors) < limit {
 					person := core.Person{TMDB: cand.TMDB, Name: cand.Name, ThumbPath: h.thumbPath}
 					out.actors = append(out.actors, personSearchDirectory(sec, person, "actor", h.count, h.thumbKey, inHub))
+					out.actorScores = append(out.actorScores, personSearchScore(query, cand.Name))
 				} else {
 					out.actorsMore = true
 				}
@@ -1016,6 +1105,7 @@ func (s *Server) searchPeople(ctx context.Context, pr *Request, query string, se
 				if len(out.directors) < limit {
 					person := core.Person{TMDB: cand.TMDB, Name: cand.Name, ThumbPath: h.thumbPath}
 					out.directors = append(out.directors, personSearchDirectory(sec, person, "director", h.count, h.thumbKey, inHub))
+					out.directorScores = append(out.directorScores, personSearchScore(query, cand.Name))
 				} else {
 					out.directorsMore = true
 				}
@@ -1064,7 +1154,8 @@ func (s *Server) searchExperience() experience.Search {
 	return experience.Search{
 		Visibility: s.visibility(), Unrestricted: unrestricted,
 		Natural: experience.DiscoverySearch(s.d.Discovery), Catalog: s.d.Catalog.Search,
-		Vibe: experience.VibeSearch{Source: searcher, Visibility: s.visibility(), Unrestricted: unrestricted},
+		Familiar: experience.FamiliarFrom(s.d.State),
+		Vibe:     experience.VibeSearch{Source: searcher, Visibility: s.visibility(), Unrestricted: unrestricted},
 	}
 }
 
@@ -1100,13 +1191,16 @@ func (s *Server) handleHubSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	sectionID, _ := strconv.Atoi(q.Get("sectionId"))
 	fetch := max(limit*2, s.saferFetchCount(pr.User, limit))
+	// People are searched beside titles; neither waits for the other.
+	peopleDone := make(chan peopleSearchResult, 1)
+	go func() { peopleDone <- s.searchPeople(ctx, pr, query, sectionID, limit, true) }()
 	result, err := s.searchExperience().Resolve(ctx, pr.User, query, s.searchTypes(pr.User, sectionID), fetch, true)
+	people := <-peopleDone
 	if err != nil {
 		s.writeErr(w, r, err)
 		return
 	}
 	vibe, res, isVibe := result.Collection, result.Items, result.CollectionSearch
-	people := s.searchPeople(ctx, pr, query, sectionID, limit, true)
 	byType := map[core.MediaType][]core.Title{}
 	for _, t := range res {
 		byType[t.Type] = append(byType[t.Type], t)
@@ -1118,9 +1212,12 @@ func (s *Server) handleHubSearch(w http.ResponseWriter, r *http.Request) {
 			allowed[core.TypeEpisode] = true
 		}
 	}
-	// PMS returns every result hub, empty ones included, in searchHubDefs order.
+	// PMS returns every result hub, empty ones included: those with results
+	// first, best match first, then the rest in searchHubDefs order.
 	mc := &model.MediaContainer{}
+	var tops []float64 // each hub's best score
 	for _, hd := range searchHubDefs {
+		top := 0.0
 		switch hd.id {
 		case string(core.TypeMovie), string(core.TypeShow), string(core.TypeEpisode):
 			mediaType := core.MediaType(hd.typ)
@@ -1146,15 +1243,29 @@ func (s *Server) handleHubSearch(w http.ResponseWriter, r *http.Request) {
 				items, more = items[:limit], true
 			}
 			h := core.Hub{ID: hd.id, Title: hd.title, Type: mediaType, Items: items, More: more, Style: "shelf"}
+			scores := make(map[string]float64, len(items))
+			relevant := make(map[string]bool, len(items))
+			for i := range items {
+				scores[items[i].Key.String()] = titleSearchScore(&items[i], i, len(items))
+				relevant[items[i].Key.String()] = items[i].SearchScore > 0
+			}
 			mh := s.renderHub(ctx, pr, hubSpec{Hub: h, noPromoted: true}, hubCtx{})
 			mh.Context, mh.Key, mh.HubKey = "", "", ""
 			for i := range mh.Metadata {
+				score, ok := scores[mh.Metadata[i].RatingKey]
+				if !ok {
+					score = searchScore(i, len(mh.Metadata))
+				}
 				if rt, ok := reasons[mh.Metadata[i].RatingKey]; ok {
 					mh.Metadata[i].Reason = rt.reason
 					mh.Metadata[i].ReasonID = rt.reasonID
 					mh.Metadata[i].ReasonTitle = rt.reasonTitle
+					score = searchReasonedScore
 				}
-				mh.Metadata[i].Score = strconv.FormatFloat(searchScore(i, len(mh.Metadata)), 'f', 5, 64)
+				mh.Metadata[i].Score = strconv.FormatFloat(reportedScore(score), 'f', 5, 64)
+				if relevant[mh.Metadata[i].RatingKey] {
+					top = max(top, score)
+				}
 			}
 			mc.Hub = append(mc.Hub, mh)
 		case "collection":
@@ -1167,11 +1278,16 @@ func (s *Server) handleHubSearch(w http.ResponseWriter, r *http.Request) {
 			if isVibe && vibe != nil {
 				mh.Directory = []model.Directory{s.collectionDirectory(ctx, vibe)}
 				mh.Size = len(mh.Directory)
+				top = searchPersonExactScore
 			}
 			mc.Hub = append(mc.Hub, mh)
 		case "actor":
 			dirs := people.actors
-			stampDirectoryScores(dirs)
+			scores := rankDirectories(dirs, people.actorScores)
+			stampDirectoryScores(dirs, scores)
+			if len(scores) > 0 {
+				top = scores[0]
+			}
 			mc.Hub = append(mc.Hub, model.Hub{
 				Title:         hd.title,
 				Type:          hd.typ,
@@ -1183,7 +1299,11 @@ func (s *Server) handleHubSearch(w http.ResponseWriter, r *http.Request) {
 			})
 		case "director":
 			dirs := people.directors
-			stampDirectoryScores(dirs)
+			scores := rankDirectories(dirs, people.directorScores)
+			stampDirectoryScores(dirs, scores)
+			if len(scores) > 0 {
+				top = scores[0]
+			}
 			mc.Hub = append(mc.Hub, model.Hub{
 				Title:         hd.title,
 				Type:          hd.typ,
@@ -1201,9 +1321,38 @@ func (s *Server) handleHubSearch(w http.ResponseWriter, r *http.Request) {
 				Style:         "shelf",
 			})
 		}
+		tops = append(tops, top)
 	}
+	orderSearchHubs(mc.Hub, tops)
 	mc.Size = len(mc.Hub)
 	s.write(w, r, mc)
+}
+
+// searchStrongMatch is the relevance from which a hub's best result moves
+// the hub ahead of PMS's fixed hub order, as PMS does: the title the viewer
+// typed, a title it begins, a person by full name. Hubs holding only weak
+// matches (PMS's 0.33) keep their place.
+const searchStrongMatch = 0.5
+
+// orderSearchHubs moves hubs whose best result is a strong match (tops)
+// to the front, best first, and leaves the rest in their given order.
+func orderSearchHubs(hubs []model.Hub, tops []float64) {
+	idx := make([]int, len(hubs))
+	for i := range idx {
+		idx[i] = i
+	}
+	key := func(i int) float64 {
+		if tops[i] < searchStrongMatch {
+			return 0
+		}
+		return tops[i]
+	}
+	sort.SliceStable(idx, func(a, b int) bool { return key(idx[a]) > key(idx[b]) })
+	ordered := make([]model.Hub, len(hubs))
+	for i, j := range idx {
+		ordered[i] = hubs[j]
+	}
+	copy(hubs, ordered)
 }
 
 // searchScore is a descending relevance score for the i-th of n results.
@@ -1242,7 +1391,24 @@ func (s *Server) handleLibrarySearch(w http.ResponseWriter, r *http.Request) {
 	if n, _ := strconv.Atoi(q.Get("limit")); n > 0 {
 		limit = min(n, 200)
 	}
+	// People are searched beside titles when the request wants them.
+	wantPeople := q.Get("searchTypes") == ""
+	for _, v := range strings.Split(q.Get("searchTypes"), ",") {
+		switch strings.TrimSpace(v) {
+		case "people", "person", "actors", "actor", "directors", "director":
+			wantPeople = true
+		}
+	}
+	var peopleDone chan peopleSearchResult
+	if wantPeople {
+		peopleDone = make(chan peopleSearchResult, 1)
+		go func() { peopleDone <- s.searchPeople(ctx, pr, query, 0, limit, false) }()
+	}
 	result, err := s.searchExperience().Resolve(ctx, pr.User, query, s.searchTypes(pr.User, 0), limit, true)
+	var people peopleSearchResult
+	if peopleDone != nil {
+		people = <-peopleDone
+	}
 	if err != nil {
 		s.writeErr(w, r, err)
 		return
@@ -1278,25 +1444,46 @@ func (s *Server) handleLibrarySearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	var peopleDirs []model.Directory
+	var peopleScores []float64
 	if searchPeopleFlag {
-		people := s.searchPeople(ctx, pr, query, 0, limit, false)
 		peopleDirs = append(peopleDirs, people.actors...)
 		peopleDirs = append(peopleDirs, people.directors...)
+		peopleScores = append(append(peopleScores, people.actorScores...), people.directorScores...)
+	}
+	scores := make(map[string]float64, len(res))
+	for i := range res {
+		scores[res[i].Key.String()] = titleSearchScore(&res[i], i, len(res)+len(peopleDirs))
 	}
 	md := s.renderTitles(ctx, pr, res, renderOpts{media: true})
 	mc := &model.MediaContainer{}
 	totalRanked := len(md) + len(peopleDirs)
+	raw := make([]float64, 0, totalRanked)
 	for i := range md {
-		score := math.Round(searchScore(i, totalRanked)*10000) / 10000
+		score, ok := scores[md[i].RatingKey]
+		if !ok {
+			score = searchScore(i, totalRanked)
+		}
 		// PMS names the section here but sends no section id or key.
 		md[i].LibrarySectionID, md[i].LibrarySectionKey = 0, ""
-		mc.SearchResult = append(mc.SearchResult, model.SearchResult{Score: score, Metadata: &md[i]})
+		mc.SearchResult = append(mc.SearchResult, model.SearchResult{Score: math.Round(reportedScore(score)*10000) / 10000, Metadata: &md[i]})
+		raw = append(raw, score)
 	}
 	for i := range peopleDirs {
-		score := math.Round(searchScore(len(md)+i, totalRanked)*10000) / 10000
 		d := peopleDirs[i]
-		mc.SearchResult = append(mc.SearchResult, model.SearchResult{Score: score, Directory: &d})
+		mc.SearchResult = append(mc.SearchResult, model.SearchResult{Score: math.Round(peopleScores[i]*10000) / 10000, Directory: &d})
+		raw = append(raw, peopleScores[i])
 	}
+	// PMS lists every result best match first.
+	order := make([]int, len(raw))
+	for i := range order {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(a, b int) bool { return raw[order[a]] > raw[order[b]] })
+	ranked := make([]model.SearchResult, len(order))
+	for i, j := range order {
+		ranked[i] = mc.SearchResult[j]
+	}
+	mc.SearchResult = ranked
 	if isVibe && vibe != nil && (searchCollections || q.Get("searchTypes") == "") {
 		d := s.collectionDirectory(ctx, vibe)
 		mc.SearchResult = append(mc.SearchResult, model.SearchResult{Score: 1, Directory: &d})

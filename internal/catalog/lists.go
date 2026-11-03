@@ -3,6 +3,7 @@ package catalog
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -119,8 +120,6 @@ func (c *Catalog) searchTitles(ctx context.Context, query string, types []core.M
 }
 
 func (c *Catalog) searchTitlesOpts(ctx context.Context, query string, types []core.MediaType, limit, year int, unfiltered bool) ([]core.Title, error) {
-	// spelled holds the titles only a spelling rewrite found (search_spell.go).
-	var spelled map[core.RatingKey]spellMatch
 	finish := func(items []core.Title) []core.Title {
 		if !unfiltered {
 			items = c.FilterVisibility(ctx, items)
@@ -136,7 +135,8 @@ func (c *Catalog) searchTitlesOpts(ctx context.Context, query string, types []co
 				items = matching
 			}
 		}
-		sortTitlesForSearchSpelled(items, query, spelled)
+		applySearchAffinity(ctx, items)
+		sortTitlesForSearch(items)
 		return limitTitles(items, limit)
 	}
 	wantMovie, wantTV, wantSeason, wantEpisode := true, true, false, false
@@ -157,39 +157,18 @@ func (c *Catalog) searchTitlesOpts(ctx context.Context, query string, types []co
 	}
 	seen := map[core.RatingKey]bool{}
 	var out []core.Title
+	sq := parseSearchQuery(query)
 	add := func(ts []core.Title) {
 		for _, t := range ts {
 			if t.Adult || (!unfiltered && !t.IsReleased(c.now())) || t.Key == 0 || seen[t.Key] {
 				continue
 			}
 			seen[t.Key] = true
+			if t.SearchScore == 0 {
+				t.SearchScore = scoreSearchText(sq, &t)
+			}
 			out = append(out, t)
 		}
-	}
-	// Local first (instant, works offline). Seasons and episodes are library
-	// keyword hits; the remote catalogue only knows movies and shows.
-	match, localArgs := c.titleMatch("", query)
-	var local []core.Title
-	var localErr error
-	localSQL := `SELECT ` + titleCols + ` FROM catalog_titles WHERE type IN ('movie','show','season','episode')
-		AND ` + match + ` ORDER BY CASE WHEN ?>0 AND year=? THEN 0 ELSE 1 END, popularity DESC LIMIT ?`
-	localArgs = append(localArgs, year, year, limit*2)
-	walked := false
-	if year == 0 {
-		// A dense term: the same candidates from the popularity index.
-		if keys, ok, err := c.searchByPopularity(ctx, query, limit*2, unfiltered); err == nil && ok {
-			walked = true
-			local, localErr = c.searchCandidates(ctx, keys, unfiltered)
-		}
-	}
-	switch {
-	case walked:
-	case unfiltered:
-		localSQL = `SELECT ` + titleCols + ` FROM catalog_titles WHERE type IN ('movie','show','season','episode')
-			AND adult=0 AND ` + match + ` ORDER BY CASE WHEN ?>0 AND year=? THEN 0 ELSE 1 END, popularity DESC LIMIT ?`
-		local, localErr = c.queryTitlesUnfiltered(ctx, localSQL, localArgs...)
-	default:
-		local, localErr = c.queryTitles(ctx, localSQL, localArgs...)
 	}
 	wanted := func(ts []core.Title) []core.Title {
 		var filtered []core.Title
@@ -200,28 +179,39 @@ func (c *Catalog) searchTitlesOpts(ctx context.Context, query string, types []co
 		}
 		return filtered
 	}
-	if localErr == nil {
+	// Local first (instant, works offline). Movies and shows come from the
+	// in-memory title index (search_titles.go); seasons and episodes, and
+	// every type until the index's first build, from the literal match.
+	var localErr error
+	ix := c.searchIndex(ctx, true)
+	if ix != nil && (wantMovie || wantTV) {
+		keys, scores := c.searchKeys(ix, sq, wantMovie, wantTV, max(limit*3, 30))
+		local, err := c.searchCandidates(ctx, keys, unfiltered)
+		if err != nil {
+			localErr = err
+		}
+		for i := range local {
+			local[i].SearchScore = scores[local[i].Key]
+		}
 		add(wanted(local))
 	}
-	// A query the titles do not literally hold (a misspelling, a missing
-	// accent or hyphen, words out of order) is retried with spelling
-	// rewrites. A dense term matched plenty literally and is never retried.
-	if localErr == nil && !walked {
-		literal := len(out)
-		found, matches := c.searchSpelling(ctx, query, literal > 0, limit*2, func(match string, args []any) ([]core.Title, error) {
-			q := `SELECT ` + titleCols + ` FROM catalog_titles WHERE type IN ('movie','show','season','episode') AND ` + match + ` ORDER BY CASE WHEN ?>0 AND year=? THEN 0 ELSE 1 END, popularity DESC LIMIT ?`
-			args = append(args, year, year, limit*2)
-			if unfiltered {
-				return c.queryTitlesUnfiltered(ctx, strings.Replace(q, "WHERE type", "WHERE adult=0 AND type", 1), args...)
+	if ix == nil || wantSeason || wantEpisode {
+		types := []string{}
+		if ix == nil {
+			types = append(types, "'movie'", "'show'")
+		}
+		if wantSeason {
+			types = append(types, "'season'")
+		}
+		if wantEpisode {
+			types = append(types, "'episode'")
+		}
+		if len(types) > 0 {
+			local, err := c.searchLiteral(ctx, query, strings.Join(types, ","), year, limit*2, unfiltered, ix == nil)
+			if err != nil && localErr == nil {
+				localErr = err
 			}
-			return c.queryTitles(ctx, q, args...)
-		})
-		add(wanted(found))
-		if len(out) > literal {
-			spelled = make(map[core.RatingKey]spellMatch, len(out)-literal)
-			for _, t := range out[literal:] {
-				spelled[t.Key] = matches[t.Key]
-			}
+			add(wanted(local))
 		}
 	}
 	// A missing or failing metadata service must not fail the request.
@@ -290,7 +280,13 @@ func (c *Catalog) searchTitlesOpts(ctx context.Context, query string, types []co
 		return remote, nil
 	}
 	wait := searchRemoteWait
-	if len(out) >= limit {
+	switch {
+	case slices.ContainsFunc(out, func(t core.Title) bool { return t.SearchScore >= searchConfident }):
+		// The mirror holds the title the viewer typed: answer now. TMDB
+		// still runs, detached, and what it finds joins the mirror (and the
+		// search index) for the next search.
+		wait = 0
+	case len(out) >= limit:
 		// The mirror already answers the search; take TMDB's results only if
 		// they are immediate.
 		wait = searchRemoteGrace
@@ -306,14 +302,15 @@ func (c *Catalog) searchTitlesOpts(ctx context.Context, query string, types []co
 		// Reload so callers get hydrated/genres-preserved rows.
 		for _, t := range remote {
 			if st, err := c.loadByKey(ctx, t.Key); err == nil {
-				add([]core.Title{st.t})
-			} else {
-				add([]core.Title{t})
+				t = st.t
 			}
+			if t.SearchScore = scoreSearchText(sq, &t); t.SearchScore == 0 {
+				// TMDB matched a name the catalogue does not hold.
+				t.SearchScore = searchRemoteOnly + popularityPrior(t.Popularity, t.VoteCount)
+			}
+			add([]core.Title{t})
 		}
 	}
-	// Remote (TMDB relevance) order is preserved after local exact-prefix matches:
-	// keep simple stable order: exact title first, then popularity.
 	return finish(out), nil
 }
 
@@ -342,48 +339,37 @@ func (c *Catalog) queryTitlesUnfiltered(ctx context.Context, q string, args ...a
 	return out, nil
 }
 
-func sortTitlesForSearch(items []core.Title, q string) {
-	sortTitlesForSearchSpelled(items, q, nil)
+// sortTitlesForSearch orders search results best match first (SearchScore,
+// see search_titles.go), then most popular.
+func sortTitlesForSearch(items []core.Title) {
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].SearchScore != items[j].SearchScore {
+			return items[i].SearchScore > items[j].SearchScore
+		}
+		return items[i].Popularity > items[j].Popularity
+	})
 }
 
-// sortTitlesForSearchSpelled orders search results: titles matching the
-// query literally (exactly, as a prefix, then anywhere), then titles only a
-// spelling rewrite found (cheapest rewrite, then closest match), then the
-// rest, each group most popular first.
-func sortTitlesForSearchSpelled(items []core.Title, q string, spelled map[core.RatingKey]spellMatch) {
-	lq := searchFold(q)
-	score := func(t core.Title) int {
-		lt := searchFold(t.Title)
-		switch {
-		case lt == lq:
-			return 0
-		case strings.HasPrefix(lt, lq):
-			return 1
-		case strings.Contains(lt, lq):
-			return 2
+// searchLiteral is the literal title match over types (a quoted SQL list):
+// the most popular titles whose name holds query. Without the title index
+// (walk) a dense movie and show term is read from the popularity index.
+func (c *Catalog) searchLiteral(ctx context.Context, query, types string, year, n int, unfiltered, walk bool) ([]core.Title, error) {
+	if walk && year == 0 {
+		if keys, ok, err := c.searchByPopularity(ctx, query, n, unfiltered); err == nil && ok {
+			return c.searchCandidates(ctx, keys, unfiltered)
 		}
-		if m, ok := spelled[t.Key]; ok {
-			return 3 + m.cost*4 + spellCloseness(t.Title, m.words)
-		}
-		return 1 << 20
 	}
-	type scored struct {
-		t core.Title
-		s int
+	match, args := c.titleMatch("", query)
+	adult := ""
+	if unfiltered {
+		adult = "adult=0 AND "
 	}
-	ranked := make([]scored, len(items))
-	for i, t := range items {
-		ranked[i] = scored{t, score(t)}
+	q := `SELECT ` + titleCols + ` FROM catalog_titles WHERE ` + adult + `type IN (` + types + `) AND ` + match + ` ORDER BY CASE WHEN ?>0 AND year=? THEN 0 ELSE 1 END, popularity DESC LIMIT ?`
+	args = append(args, year, year, n)
+	if unfiltered {
+		return c.queryTitlesUnfiltered(ctx, q, args...)
 	}
-	sort.SliceStable(ranked, func(i, j int) bool {
-		if ranked[i].s != ranked[j].s {
-			return ranked[i].s < ranked[j].s
-		}
-		return ranked[i].t.Popularity > ranked[j].t.Popularity
-	})
-	for i := range ranked {
-		items[i] = ranked[i].t
-	}
+	return c.queryTitles(ctx, q, args...)
 }
 
 // Fold accents for relevance ranking without changing the title sent to TMDB.

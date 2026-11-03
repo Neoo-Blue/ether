@@ -51,7 +51,11 @@ func (a *App) experienceSearch(vis experience.Visibility) experience.Search {
 	unrestricted := func(viewer *core.User) bool {
 		return a.safety != nil && viewer != nil && !a.safety.Restricted(viewer)
 	}
-	return experience.Search{Catalog: a.catalog.Search, Visibility: vis, Unrestricted: unrestricted, Vibe: experience.VibeSearch{Source: source, Visibility: vis, Unrestricted: unrestricted}}
+	search := experience.Search{Catalog: a.catalog.Search, Visibility: vis, Unrestricted: unrestricted, Vibe: experience.VibeSearch{Source: source, Visibility: vis, Unrestricted: unrestricted}}
+	if a.state != nil {
+		search.Familiar = experience.FamiliarFrom(a.state)
+	}
+	return search
 }
 
 // peopleIndex adapts the catalogue's people-name index to experience.

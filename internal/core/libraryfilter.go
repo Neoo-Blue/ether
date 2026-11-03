@@ -47,3 +47,35 @@ func ExplicitSearch(ctx context.Context) bool {
 	v, _ := ctx.Value(explicitSearchKey{}).(bool)
 	return v
 }
+
+type searchAffinityKey struct{}
+
+// Search affinity levels: someone on this server has a history with the
+// title, or the searching viewer has.
+const (
+	AffinityServer = 1
+	AffinityViewer = 2
+)
+
+// SearchAffinityFunc reports the searching viewer's affinity level with
+// each of keys (movies and shows) that has one: watched, started or rated,
+// a show through any of its episodes.
+type SearchAffinityFunc func(ctx context.Context, keys []RatingKey) map[RatingKey]int
+
+// WithSearchAffinity attaches the searching viewer's affinity to ctx, so the
+// catalogue ranks titles the viewer knows first among equally good matches.
+func WithSearchAffinity(ctx context.Context, fn SearchAffinityFunc) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, searchAffinityKey{}, fn)
+}
+
+// SearchAffinity is ctx's viewer affinity, or nil.
+func SearchAffinity(ctx context.Context) SearchAffinityFunc {
+	if ctx == nil {
+		return nil
+	}
+	fn, _ := ctx.Value(searchAffinityKey{}).(SearchAffinityFunc)
+	return fn
+}
