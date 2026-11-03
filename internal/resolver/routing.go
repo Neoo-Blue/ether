@@ -190,7 +190,7 @@ func (s *Service) routeSources(cands []candidate, t *core.Title, trace *Trace) [
 	var group []candidate
 	var indexes []int
 	for i, c := range cands {
-		eligible := pluginKeysEqual(c, lead) && c.bandwidth >= lead.bandwidth && (!c.verified || explicit) && sameQuality(c, lead) && c.rel.Score >= lead.rel.Score-margin
+		eligible := !(c.verified && c.rel.Score < lead.rel.Score) && pluginKeysEqual(c, lead) && c.bandwidth >= lead.bandwidth && (!c.verified || explicit) && sameQuality(c, lead) && c.rel.Score >= lead.rel.Score-margin
 		if !eligible {
 			if !explicit {
 				break
@@ -372,6 +372,11 @@ func (s *Service) sourceAlwaysFirst(cands []candidate, want string, trace *Trace
 		}
 		return preferred(a) && !preferred(b)
 	})
+	// A remembered success may break a score tie, but cannot jump ahead
+	// of a higher-scored lead solely through source preference.
+	if len(out) > 0 && out[0].verified && out[0].rel.Score < cands[0].rel.Score {
+		return cands
+	}
 	if trace != nil && len(out) > 0 && preferred(out[0]) && out[0].rel.ID != cands[0].rel.ID {
 		if i := out[0].trace; i >= 0 && i < len(trace.Candidates) {
 			trace.Candidates[i].Route = "owner puts " + sourceName(want) + " first"

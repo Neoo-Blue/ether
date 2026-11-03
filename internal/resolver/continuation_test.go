@@ -93,17 +93,28 @@ func TestVerifiedWorkingSourceIsTriedFirstAfterRestart(t *testing.T) {
 	h.mu.Lock()
 	before := h.checks["source00"]
 	h.mu.Unlock()
-	// The short failure cache is gone, but the successful health check is
-	// persisted. A new service should pick that working source immediately.
+	// The failure cache is gone. The higher score is tried again even though
+	// the lower-scored source has persisted successful evidence.
 	s = New(idx, h, db, testCfg(), Options{})
 	defer s.Close()
 	if res, err := s.Resolve(ctx, req); err != nil || res.Release.ID != "source01" {
-		t.Fatalf("known working source was not preferred: %+v %v", res, err)
+		t.Fatalf("fallback to working source: %+v %v", res, err)
 	}
 	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.checks["source00"] != before {
-		t.Fatal("restart re-probed the higher-ranked missing source")
+	after := h.checks["source00"]
+	h.mu.Unlock()
+	if after <= before {
+		t.Fatal("higher-scored source was not retried")
+	}
+	profile := core.QualityProfile{}
+	high := candidate{rel: core.Release{Score: 2806}}
+	known := candidate{rel: core.Release{Score: 129}, verified: true}
+	if !compareCandidates(high, known, profile) || compareCandidates(known, high, profile) {
+		t.Fatal("verified lower score outranked higher score")
+	}
+	known.rel.Score = high.rel.Score
+	if !compareCandidates(known, high, profile) || compareCandidates(high, known, profile) {
+		t.Fatal("verified source did not break score tie")
 	}
 }
 

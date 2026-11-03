@@ -643,6 +643,8 @@ func (s *Service) resolve(ctx context.Context, req core.ResolveRequest, profile 
 			trace.Discovery = append(trace.Discovery, DiscoveryTrace{Path: "feed", Count: len(discovered)})
 		}
 		early.arrived(discovered)
+		early.startFeed()
+
 		// A locally verified feed answer can avoid a search. A slow feed
 		// gets only 100ms head start, then keeps checking alongside search.
 		if len(discovered) > 0 && !early.disabled {
@@ -1459,7 +1461,9 @@ func rejectIdentity(rel core.Release, t *core.Title, sreq core.SearchRequest, ca
 		releaseparse.TitleMatches(rel.Info, wantTitle) ||
 		(!isEpisode && t.OriginalTitle != "" && releaseparse.TitleMatches(rel.Info, t.OriginalTitle)) ||
 		(isEpisode && t.ShowOriginalTitle != "" && releaseparse.TitleMatches(rel.Info, t.ShowOriginalTitle)) ||
-		matchesAlternativeTitle(rel.Info, sreq.AlternativeTitles)
+		matchesAlternativeTitle(rel.Info, sreq.AlternativeTitles) ||
+		(!isEpisode && matchesAlternativeTitle(rel.Info, t.AlternativeTitles)) ||
+		(isEpisode && matchesAlternativeTitle(rel.Info, t.ShowAlternativeTitles))
 	if titleOK && !idMatch && regionTagConflicts(rel.Info.Title, wantTitle, t.Countries) {
 		titleOK = false
 	}
