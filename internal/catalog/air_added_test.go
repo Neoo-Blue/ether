@@ -11,7 +11,9 @@ import (
 func TestAirAddedAndAiredEpisodeBrowse(t *testing.T) {
 	ctx := context.Background()
 	c := newChunkTestCatalog(t)
-	now := time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC)
+	// Show date-added triggers read the database clock, so "future" must be
+	// future in real time too.
+	now := time.Now().UTC().Truncate(time.Hour)
 	c.SetNow(func() time.Time { return now })
 	show, other := core.ShowKey(11), core.ShowKey(12)
 	old := now.Add(-48 * time.Hour)
@@ -88,7 +90,9 @@ func TestAirAddedAndAiredEpisodeBrowse(t *testing.T) {
 func TestSeasonAirAddedFallbacks(t *testing.T) {
 	ctx := context.Background()
 	c := newChunkTestCatalog(t)
-	now := time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC)
+	// Show date-added triggers read the database clock, so "future" must be
+	// future in real time too.
+	now := time.Now().UTC().Truncate(time.Hour)
 	c.SetNow(func() time.Time { return now })
 	show, emptyShow, unknownShow := core.ShowKey(20), core.ShowKey(21), core.ShowKey(22)
 	first := now.Add(-100 * 24 * time.Hour)
