@@ -6,16 +6,16 @@ func init() {
 	store.Register("catalog", 29, `
 CREATE TRIGGER catalog_show_added_insert AFTER INSERT ON catalog_titles
 WHEN new.type IN ('show','episode') BEGIN
- UPDATE catalog_titles SET show_added_ts=COALESCE((SELECT e.released_ts FROM catalog_titles e WHERE e.type='episode' AND e.show_key=catalog_titles.key AND e.release_known=1 AND e.released_ts<=CAST(strftime('%s','now') AS INTEGER) ORDER BY e.released_ts DESC LIMIT 1), CASE WHEN released_ts<>0 AND released_ts<=CAST(strftime('%s','now') AS INTEGER) THEN released_ts ELSE 0 END)
+ UPDATE catalog_titles SET show_added_ts=COALESCE((SELECT e.released_ts FROM catalog_titles e WHERE e.type='episode' AND e.show_key=catalog_titles.key AND e.release_known=1 AND e.released_ts<=CAST(strftime('%s','now') AS INTEGER) ORDER BY e.released_ts DESC LIMIT 1), CASE WHEN released_ts<>0 THEN released_ts ELSE 0 END)
  WHERE type='show' AND key=CASE WHEN new.type='show' THEN new.key ELSE new.show_key END;
 END;
 CREATE TRIGGER catalog_show_added_delete AFTER DELETE ON catalog_titles
 WHEN old.type='episode' BEGIN
- UPDATE catalog_titles SET show_added_ts=COALESCE((SELECT e.released_ts FROM catalog_titles e WHERE e.type='episode' AND e.show_key=catalog_titles.key AND e.release_known=1 AND e.released_ts<=CAST(strftime('%s','now') AS INTEGER) ORDER BY e.released_ts DESC LIMIT 1), CASE WHEN released_ts<>0 AND released_ts<=CAST(strftime('%s','now') AS INTEGER) THEN released_ts ELSE 0 END)
+ UPDATE catalog_titles SET show_added_ts=COALESCE((SELECT e.released_ts FROM catalog_titles e WHERE e.type='episode' AND e.show_key=catalog_titles.key AND e.release_known=1 AND e.released_ts<=CAST(strftime('%s','now') AS INTEGER) ORDER BY e.released_ts DESC LIMIT 1), CASE WHEN released_ts<>0 THEN released_ts ELSE 0 END)
  WHERE type='show' AND key=old.show_key;
 END;
 CREATE TRIGGER catalog_show_added_update AFTER UPDATE OF type,show_key,released_ts ON catalog_titles BEGIN
- UPDATE catalog_titles SET show_added_ts=COALESCE((SELECT e.released_ts FROM catalog_titles e WHERE e.type='episode' AND e.show_key=catalog_titles.key AND e.release_known=1 AND e.released_ts<=CAST(strftime('%s','now') AS INTEGER) ORDER BY e.released_ts DESC LIMIT 1), CASE WHEN released_ts<>0 AND released_ts<=CAST(strftime('%s','now') AS INTEGER) THEN released_ts ELSE 0 END)
+ UPDATE catalog_titles SET show_added_ts=COALESCE((SELECT e.released_ts FROM catalog_titles e WHERE e.type='episode' AND e.show_key=catalog_titles.key AND e.release_known=1 AND e.released_ts<=CAST(strftime('%s','now') AS INTEGER) ORDER BY e.released_ts DESC LIMIT 1), CASE WHEN released_ts<>0 THEN released_ts ELSE 0 END)
  WHERE type='show' AND (key=CASE WHEN old.type='show' THEN old.key WHEN old.type='episode' THEN old.show_key ELSE 0 END OR key=CASE WHEN new.type='show' THEN new.key WHEN new.type='episode' THEN new.show_key ELSE 0 END);
 END;
 `)
@@ -23,7 +23,7 @@ END;
 CREATE FUNCTION catalog_refresh_show_added(k BIGINT) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN
  PERFORM 1 FROM catalog_titles WHERE key=k AND type='show' FOR UPDATE;
- UPDATE catalog_titles t SET show_added_ts=COALESCE((SELECT e.released_ts FROM catalog_titles e WHERE e.type='episode' AND e.show_key=t.key AND e.release_known=1 AND e.released_ts<=EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) ORDER BY e.released_ts DESC LIMIT 1), CASE WHEN t.released_ts<>0 AND t.released_ts<=EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) THEN t.released_ts ELSE 0 END) WHERE t.type='show' AND t.key=k;
+ UPDATE catalog_titles t SET show_added_ts=COALESCE((SELECT e.released_ts FROM catalog_titles e WHERE e.type='episode' AND e.show_key=t.key AND e.release_known=1 AND e.released_ts<=EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) ORDER BY e.released_ts DESC LIMIT 1), CASE WHEN t.released_ts<>0 THEN t.released_ts ELSE 0 END) WHERE t.type='show' AND t.key=k;
 END $$;
 CREATE FUNCTION catalog_show_added_change() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE oldkey BIGINT; newkey BIGINT;
