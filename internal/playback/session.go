@@ -412,6 +412,7 @@ func (s *session) snapshot(now time.Time) *core.PlaySession {
 		BytesServed:       s.bytes.Load(),
 		SpeedBps:          s.rate.rate(now),
 		LastActive:        s.lastActive,
+		ViewerState:       s.viewerState,
 		Failovers:         s.failovers,
 		DownFailovers:     s.downFailovers,
 		RequiresRemux:     s.requiresRemux,

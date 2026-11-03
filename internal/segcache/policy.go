@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/braedonsaunders/ether/internal/core"
 )
 
 // Policy controls retention of bytes already fetched. It never downloads media.
@@ -17,10 +19,39 @@ type Policy struct {
 }
 
 type experience struct {
-	Title      string    `json:"title"`
-	Size       int64     `json:"size"`
-	Plays      int       `json:"plays"`
-	LastPlayed time.Time `json:"lastPlayed"`
+	Title      string            `json:"title"`
+	Size       int64             `json:"size"`
+	Plays      int               `json:"plays"`
+	LastPlayed time.Time         `json:"lastPlayed"`
+	File       string            `json:"file,omitempty"`
+	Source     string            `json:"source,omitempty"`
+	Causes     []core.CacheCause `json:"causes,omitempty"`
+}
+
+const maxCauses = 16
+
+// mergeCause adds one observed reason. A repeated code keeps its earliest
+// first-seen time, and the closed vocabulary bounds the stored list.
+func mergeCause(causes []core.CacheCause, add core.CacheCause) []core.CacheCause {
+	if add.Code == "" || add.Code == core.CacheCauseUnrecorded {
+		return causes
+	}
+	for i := range causes {
+		if causes[i].Code != add.Code {
+			continue
+		}
+		if causes[i].FirstSeen.IsZero() || (!add.FirstSeen.IsZero() && add.FirstSeen.Before(causes[i].FirstSeen)) {
+			causes[i].FirstSeen = add.FirstSeen
+		}
+		if add.Shelf != nil {
+			causes[i].Shelf = add.Shelf
+		}
+		return causes
+	}
+	if len(causes) >= maxCauses {
+		return causes
+	}
+	return append(causes, add)
 }
 
 // Metrics count disk-cache reads since this process started (not RAM hits).
@@ -44,61 +75,62 @@ func (c *Cache) SetPolicy(p Policy) {
 // RecordPlay counts actual playback admissions, never speculative reads. The
 // metadata is local, contains no viewer identity, and survives restarts.
 func (c *Cache) RecordPlay(id, title string, size int64) {
-	if c.shared != nil {
-		c.shared.describe(id, title, size, true)
-		return
-	}
-	c.mu.Lock()
-	if c.closed || c.policy.Mode == "off" {
-		c.mu.Unlock()
-		return
-	}
-	r := c.releaseLocked(id)
-	c.mu.Unlock()
-	r.metaMu.Lock()
-	defer r.metaMu.Unlock()
-	c.mu.Lock()
-	r.experience.Title, r.experience.Size = title, size
-	r.experience.Plays = min(r.experience.Plays+1, 1000000)
-	r.experience.LastPlayed = c.now()
-	b, err := json.Marshal(r.experience)
-	c.mu.Unlock()
-	if err != nil {
-		c.logger.Warn("save cache playback metadata", "err", err)
-		return
-	}
-	c.queueExperience(r.dir, b)
+	c.RecordProvenance(core.CacheProvenance{ReleaseID: id, Title: title, Size: size, Play: true})
 }
 
 // Describe records a source's display metadata without counting a play.
 func (c *Cache) Describe(id, title string, size int64) {
+	c.RecordProvenance(core.CacheProvenance{ReleaseID: id, Title: title, Size: size})
+}
+
+// RecordProvenance merges observed reasons into the release's metadata. A
+// write failure is logged and never blocks byte admission.
+func (c *Cache) RecordProvenance(p core.CacheProvenance) {
+	if p.ReleaseID == "" {
+		return
+	}
 	if c.shared != nil {
-		c.shared.describe(id, title, size, false)
+		c.shared.recordProvenance(p)
 		return
 	}
 	c.mu.Lock()
-	if c.closed {
+	if c.closed || (p.Play && c.policy.Mode == "off") {
 		c.mu.Unlock()
 		return
 	}
-	r := c.releaseLocked(id)
+	r := c.releaseLocked(p.ReleaseID)
+	now := c.now()
 	c.mu.Unlock()
 	r.metaMu.Lock()
 	defer r.metaMu.Unlock()
 	c.mu.Lock()
-	r.experience.Title = title
-	r.experience.Size = size
-	b, err := json.Marshal(r.experience)
+	e := &r.experience
+	if p.Title != "" {
+		e.Title = p.Title
+	}
+	if p.File != "" {
+		e.File = p.File
+	}
+	if p.Source != "" {
+		e.Source = p.Source
+	}
+	if p.Size > 0 {
+		e.Size = p.Size
+	}
+	if p.Play {
+		e.Plays = min(e.Plays+1, 1000000)
+		e.LastPlayed = now
+	}
+	if p.Cause != "" {
+		e.Causes = mergeCause(e.Causes, core.CacheCause{Code: p.Cause, FirstSeen: now, Shelf: p.Shelf})
+	}
+	b, err := json.Marshal(e)
 	c.mu.Unlock()
-	if err == nil {
-		err = os.MkdirAll(r.dir, 0755)
-	}
-	if err == nil {
-		err = writeFileAtomic(filepath.Join(r.dir, "experience.json"), b, false)
-	}
 	if err != nil {
-		c.logger.Warn("save source metadata", "err", err)
+		c.logger.Warn("save cache provenance", "err", err)
+		return
 	}
+	c.queueExperience(r.dir, b)
 }
 
 // Sweep expires idle releases, retaining live streams and owner/resume pins.

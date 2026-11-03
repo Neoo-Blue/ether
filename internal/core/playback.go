@@ -160,7 +160,14 @@ type PlaySession struct {
 	DecisionAudioCopy bool  `json:"decisionAudioCopy,omitempty"`
 	BytesServed       int64 // source bytes delivered (direct play and ffmpeg input)
 	SpeedBps          int64 // recent delivery rate, bytes per second
-	LastActive        time.Time
+	// BufferedBytes is contiguous media downloaded ahead of the reader; zero
+	// when the source cannot report it. BufferedUntil is the absolute media
+	// time that read-ahead reaches, zero when unknown.
+	BufferedBytes int64
+	BufferedUntil time.Duration
+	LastActive    time.Time
+	// ViewerState is the last client timeline state: playing, paused, or stopped.
+	ViewerState string `json:"viewerState,omitempty"`
 	// ViewOffset is the client's last reported playhead in milliseconds.
 	// Nil means no timeline has arrived; source bytes do not imply progress.
 	ViewOffset *int64 `json:"viewOffset,omitempty"`

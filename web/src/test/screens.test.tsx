@@ -5,6 +5,27 @@ import { calls, renderApp } from "./harness";
 const WAIT = { timeout: 4000 };
 
 describe.each(["/", "/activity"])("Playback progress on %s", (path) => {
+  it("shows read-ahead buffer ahead of the playhead", async () => {
+    renderApp(path, {}, (fake) => {
+      const original = fake.fetch;
+      fake.fetch = async (input, init) => {
+        const res = await original(input, init);
+        const dashboard = String(input).endsWith("/dashboard");
+        const sessions = String(input).endsWith("/status/sessions");
+        if (!dashboard && !sessions) return res;
+        const body = await res.json();
+        for (const s of dashboard ? body.sections.sessions : body.value) {
+          s.viewOffset = 30000;
+          s.Info.duration = 60e9;
+          s.Info.size = 100;
+          s.BufferedUntil = 45e9;
+          s.BufferedBytes = 0;
+        }
+        return new Response(JSON.stringify(body), { status: 200 });
+      };
+    });
+    expect(await screen.findByText(/50% watched · 75% buffered/, {}, WAIT)).toBeInTheDocument();
+  });
   it.each([undefined, 0, 55000])(
     "uses timeline position %s instead of byte delivery",
     async (position) => {
@@ -21,6 +42,8 @@ describe.each(["/", "/activity"])("Playback progress on %s", (path) => {
             s.Info.duration = 60e9;
             s.Info.size = 100;
             s.BytesServed = 33;
+            s.BufferedBytes = 0;
+            s.BufferedUntil = 0;
           }
           return new Response(JSON.stringify(body), { status: 200 });
         };

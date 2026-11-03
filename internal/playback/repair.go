@@ -44,7 +44,12 @@ func (m *Manager) PlaybackProgress(userID int64, clientID string, key core.Ratin
 		} else if state == "stopped" && s.stopAt.IsZero() {
 			s.stopAt = now.Add(m.opts.StoppedGrace)
 		}
+		var pausedRelease string
+		if state == "paused" && s.cur != nil {
+			pausedRelease = s.cur.releaseID()
+		}
 		s.mu.Unlock()
+		m.noteCause(pausedRelease, core.CacheCausePaused)
 		m.maintainReserve(s, position, state)
 	}
 	if state == "stopped" && len(sessions) > 0 {

@@ -210,6 +210,9 @@ func TestPlaybackReadAheadRespectsCacheLimit(t *testing.T) {
 		defer src.mu.Unlock()
 		return len(src.cursors) > 0 && src.cursors[0].playNext >= 4<<20
 	})
+	if got := src.BufferedAhead(); got < 2<<20 {
+		t.Fatalf("buffered ahead = %d, want at least the 2 MiB read-ahead", got)
+	}
 	time.Sleep(100 * time.Millisecond)
 	for n := (4<<20)/playPart + 2; n <= playSize/playPart; n++ {
 		if c := f.calls(postID("budget.mkv", n)); c != 0 {

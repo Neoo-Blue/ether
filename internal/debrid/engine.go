@@ -339,6 +339,9 @@ func (e *Engine) CheckRelease(ctx context.Context, releaseID string, payload []b
 	if err != nil {
 		return false, fmt.Errorf("%w: %v", core.ErrReleaseRejected, err)
 	}
+	if rec, ok := e.cache.(core.CacheProvenanceRecorder); ok && p.ReleaseID != "" {
+		rec.RecordProvenance(core.CacheProvenance{ReleaseID: p.ReleaseID, File: p.Name(), Size: p.Size, Cause: core.CacheCauseQualityCheck})
+	}
 	// Health checks have no release id; the payload carries it so the head
 	// block lands where Open will look for it.
 	f, err := e.acquireFile(ctx, healthKey(p), payload)
@@ -1556,6 +1559,24 @@ type httpSource struct {
 func (s *httpSource) Size() int64       { return s.f.size }
 func (s *httpSource) Name() string      { p, _ := s.f.payload(); return p.Name() }
 func (s *httpSource) ReleaseID() string { return s.f.id }
+
+// BufferedAhead reports contiguous downloaded blocks after the last read.
+func (s *httpSource) BufferedAhead() int64 {
+	s.mu.Lock()
+	last := s.last
+	s.mu.Unlock()
+	if last < 0 {
+		return 0
+	}
+	f := s.f
+	f.bmu.Lock()
+	defer f.bmu.Unlock()
+	idx := last + 1
+	for idx < f.nblocks && f.presentLocked(idx) {
+		idx++
+	}
+	return int64(idx-last-1) * f.e.block
+}
 
 // Origin implements core.OriginSource with the debrid service's name.
 func (s *httpSource) Origin() string {

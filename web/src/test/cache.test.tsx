@@ -112,7 +112,7 @@ describe("Cache management", () => {
     expect(screen.queryByText("Arrival")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Pin Interstellar" }));
     await waitFor(() => expect(calls(fake, "POST", "/cache/pin")).toHaveLength(1));
-    expect(await screen.findByText("Kept by you")).toBeInTheDocument();
+    expect((await screen.findAllByText("Kept by you")).length).toBeGreaterThan(0);
   });
   it("saves a household blend and rolling TV window with explanations", async () => {
     const { fake } = renderApp("/cache");
@@ -133,8 +133,60 @@ describe("Cache management", () => {
       expect(screen.queryByRole("button", { name: "Save policy" })).not.toBeInTheDocument(),
     );
     fireEvent.click(screen.getByRole("tab", { name: "Preloading" }));
-    expect(await screen.findByText(/Severance · S02E04/)).toBeInTheDocument();
-    expect(screen.getByText(/next in a household viewing sequence/)).toBeInTheDocument();
+    expect((await screen.findAllByText(/Severance · S02E04/)).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Next in a household viewing sequence/)).toBeInTheDocument();
+  });
+  it("explains releases by reason, file name, filters, and detail", async () => {
+    renderApp("/cache/explorer");
+    expect(await screen.findByText("Arrival", {}, WAIT)).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Reason" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Plays" })).not.toBeInTheDocument();
+    expect(screen.getAllByText("Unfinished").length).toBeGreaterThan(0);
+
+    fireEvent.change(screen.getByLabelText("Search cached releases"), {
+      target: { value: "Interstellar.2014" },
+    });
+    expect(await screen.findByText("Interstellar.2014.1080p.mkv")).toBeInTheDocument();
+    expect(screen.queryByText("Arrival")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Filter cached releases"), {
+      target: { value: "all" },
+    });
+    fireEvent.change(screen.getByLabelText("Search cached releases"), { target: { value: "" } });
+    expect(
+      await screen.findByText("No reason was recorded for this older entry."),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText("The.Americans.2013.S03E01.1080p.BRRip.x264-HiQVE"),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Written by a quality check or probe.")).toBeInTheDocument();
+    fireEvent.click(await screen.findByText("Interstellar.2014.1080p.mkv"));
+    expect(await screen.findByText("Fetched because")).toBeInTheDocument();
+    expect(screen.getByText("Kept because")).toBeInTheDocument();
+    expect(screen.getByText("Play history")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Filter cached releases"), {
+      target: { value: "unfinished" },
+    });
+    expect(await screen.findByText(/Severance · S02E03/)).toBeInTheDocument();
+    expect(screen.queryByText("Arrival")).not.toBeInTheDocument();
+  });
+  it("breaks protected bytes down by cause and names the current warm", async () => {
+    renderApp("/cache/overview");
+    expect(await screen.findByText(/Playing now: /, {}, WAIT)).toBeInTheDocument();
+    expect(screen.getByText(/Unfinished: /)).toBeInTheDocument();
+    expect(screen.getByText(/Shelf: /)).toBeInTheDocument();
+    expect(screen.getByText(/Woe's Hollow.*Next episode/)).toBeInTheDocument();
+  });
+  it("shows cached, queued, and failed shelf states", async () => {
+    const { fake } = renderApp("/cache/preloading");
+    expect(await screen.findByText("Preload selection", {}, WAIT)).toBeInTheDocument();
+    expect(screen.getByText("Shelf manifest")).toBeInTheDocument();
+    expect(screen.getAllByText("Cached").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Queued").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Failed").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Titles chosen for the local shelf/)).toBeInTheDocument();
+    expect(calls(fake, "GET", "/cache/").length).toBeGreaterThan(0);
   });
   it("refreshes explorer releases and totals without losing the filter", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });

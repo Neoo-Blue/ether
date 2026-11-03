@@ -460,11 +460,12 @@ func (c *fakeCatalog) Get(ctx context.Context, key core.RatingKey) (*core.Title,
 }
 
 type fakeCache struct {
-	mu     sync.Mutex
-	pins   map[string]map[string]bool
-	log    []string
-	budget int64
-	bytes  map[string]int64
+	mu         sync.Mutex
+	pins       map[string]map[string]bool
+	log        []string
+	budget     int64
+	bytes      map[string]int64
+	provenance []core.CacheProvenance
 }
 
 func newFakeCache() *fakeCache {
@@ -527,6 +528,35 @@ func (c *fakeCache) pinned(releaseID, reason string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.pins[releaseID][reason]
+}
+
+func (c *fakeCache) RecordProvenance(p core.CacheProvenance) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.provenance = append(c.provenance, p)
+}
+
+func (c *fakeCache) hasCause(releaseID, cause string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, p := range c.provenance {
+		if p.ReleaseID == releaseID && p.Cause == cause {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *fakeCache) provenanceFor(releaseID string) []core.CacheProvenance {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]core.CacheProvenance, 0)
+	for _, p := range c.provenance {
+		if p.ReleaseID == releaseID {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 type fakeState struct {

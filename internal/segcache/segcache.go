@@ -137,6 +137,13 @@ type ReleaseUsage struct {
 	Size       int64
 	Plays      int
 	LastPlayed time.Time
+
+	// Parsed provenance, rendered into Reason once retention is known.
+	file   string
+	source string
+	causes []core.CacheCause
+
+	Reason *ReleaseReason `json:"reason,omitempty"`
 }
 
 // Open opens (creating) a cache rooted at dir with a byte budget (<=0 means
@@ -530,15 +537,18 @@ func (c *Cache) Releases() []ReleaseUsage {
 			continue
 		}
 		seen[id] = true
-		u := ReleaseUsage{Title: r.experience.Title, Size: r.experience.Size, Plays: r.experience.Plays, LastPlayed: r.experience.LastPlayed, ReleaseID: id, Bytes: r.bytes, Segments: len(r.segs), Pins: sortedReasons(c.pins[id])}
+		u := ReleaseUsage{Title: r.experience.Title, Size: r.experience.Size, Plays: r.experience.Plays, LastPlayed: r.experience.LastPlayed, ReleaseID: id, Bytes: r.bytes, Segments: len(r.segs), Pins: sortedReasons(c.pins[id]), file: r.experience.File, source: r.experience.Source, causes: append([]core.CacheCause(nil), r.experience.Causes...)}
 		if r.lastUsed > 0 {
 			u.LastUsed = time.Unix(0, r.lastUsed)
 		}
+		u.Reason = reasonFor(&u, c.policy, c.now())
 		out = append(out, u)
 	}
 	for id, set := range c.pins {
 		if !seen[id] {
-			out = append(out, ReleaseUsage{ReleaseID: id, Pins: sortedReasons(set)})
+			u := ReleaseUsage{ReleaseID: id, Pins: sortedReasons(set)}
+			u.Reason = reasonFor(&u, c.policy, c.now())
+			out = append(out, u)
 		}
 	}
 	c.mu.Unlock()

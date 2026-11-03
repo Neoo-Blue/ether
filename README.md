@@ -74,9 +74,7 @@ Ether is a Plex server to one app and a Jellyfin server to another, at the same 
 
 ## Alongside your local library
 
-Keep Plex Media Server, Jellyfin, or Emby and the tools that curate the files you own. Ether runs alongside them for on-demand titles outside your local disk collection. Availability depends on your configured sources; an on-demand catalogue is not a durable local archive.
-
-The table maps familiar workflows to Ether's on-demand features. It does not claim feature parity with these projects. Clustering, virtual Live TV, hardware enhancement, and poster customization are optional integrations; ordinary playback needs none of them.
+Keep Plex Media Server, Jellyfin, or Emby and the tools that curate the files you own. Ether runs alongside them for on-demand titles outside your local disk collection. 
 
 | If you run today | What Ether does instead |
 | :--- | :--- |

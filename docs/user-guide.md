@@ -793,6 +793,18 @@ only updates the draft until you review and save.
   a rolling episode window around each active viewer's progress. Preloading
   pauses while anyone is streaming unless explicitly allowed, respects a
   bandwidth cap and free-space reserve, and never writes watch history.
+- **Explaining the cache:** **Streaming › Cache › Explorer** shows a **Reason**
+  column and the stored file name under each title; search also matches file
+  names. Filters cover **Watching now**, **Paused**, **Unfinished**, **Shelf**,
+  **Prefetched**, **Checked**, **Kept by you**, **Unexplained**, and
+  **Reclaimable**. Expand a row for **Fetched because**, **Kept because**,
+  bytes, play history, and source. Pin badges use the same human labels.
+- **Overview and shelf states:** Overview splits protected bytes by cause and
+  names the title and cause currently warming. **Preloading** lists the **Shelf
+  manifest** with **Cached**, **Queued**, or **Failed** per title, and
+  **Preload selection** explains each choice without untranslated server prose.
+  Releases cached before this version show **Unexplained** until a new cause is
+  recorded; nothing is guessed.
 - **Shared NAS storage:** Under **Edit policy → Where your cache lives → Shared
   NAS**, point a standalone server or every participating PostgreSQL cluster
   node at the same dedicated folder on an OS-mounted NFS or SMB share. Keep

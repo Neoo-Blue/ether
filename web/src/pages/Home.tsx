@@ -375,8 +375,16 @@ function SessionCard({ s }: { s: NowPlaying }) {
               <Meter
                 onScrim
                 value={s.progress}
+                buffered={s.buffered}
                 label={t("Started {time}", { time: relativeTime(s.startedAt) })}
-                valueLabel={t("{percent} watched", { percent: formatPercent(s.progress) })}
+                valueLabel={
+                  s.buffered > s.progress
+                    ? t("{watched} watched · {buffered} buffered", {
+                        watched: formatPercent(s.progress),
+                        buffered: formatPercent(s.buffered),
+                      })
+                    : t("{percent}% watched", { percent: Math.round(s.progress * 100) })
+                }
               />
             ) : (
               <p className="text-xs opacity-80">{t("Waiting for playback position")}</p>

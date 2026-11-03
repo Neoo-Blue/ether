@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"hash/crc32"
@@ -15,6 +16,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/store"
 )
 
@@ -26,6 +28,10 @@ CREATE INDEX segcache_segments_age ON segcache_segments(touched);
 CREATE TABLE segcache_releases (release_id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', size INTEGER NOT NULL DEFAULT 0, plays INTEGER NOT NULL DEFAULT 0, played INTEGER NOT NULL DEFAULT 0, bytes INTEGER NOT NULL DEFAULT 0, segments INTEGER NOT NULL DEFAULT 0, touched INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE segcache_pins (release_id TEXT NOT NULL, reason TEXT NOT NULL, owner TEXT NOT NULL, expires INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(release_id,reason,owner));
 CREATE TABLE segcache_files (file TEXT PRIMARY KEY, created INTEGER NOT NULL);
+`)
+	store.Register("segcache", 2, `
+ALTER TABLE segcache_releases ADD COLUMN file TEXT NOT NULL DEFAULT '';
+ALTER TABLE segcache_releases ADD COLUMN provenance TEXT NOT NULL DEFAULT '';
 `)
 	// Evicted bytes whose files are still being unlinked (one row per
 	// eviction pass), so free-space measurements on any node count them as
@@ -376,27 +382,63 @@ func (s *sharedCache) releaseBytes(id string) int64 {
 	s.log(s.db.QueryRowContext(ctx, `SELECT COALESCE((SELECT bytes FROM segcache_releases WHERE release_id=?),0)`, id).Scan(&n))
 	return n
 }
-func (s *sharedCache) describe(id, title string, size int64, play bool) {
+
+type sharedProvenance struct {
+	Source string            `json:"source,omitempty"`
+	Causes []core.CacheCause `json:"causes,omitempty"`
+}
+
+func (s *sharedCache) recordProvenance(p core.CacheProvenance) {
+	if p.ReleaseID == "" {
+		return
+	}
 	s.c.mu.Lock()
-	off := s.c.closed || (play && s.c.policy.Mode == "off")
+	off := s.c.closed || (p.Play && s.c.policy.Mode == "off")
+	now := s.c.now()
 	s.c.mu.Unlock()
 	if off {
 		return
 	}
 	ctx, cancel := s.context()
 	defer cancel()
-	n, at := 0, int64(0)
-	if play {
-		n = 1
-		at = time.Now().Unix()
-	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO segcache_releases(release_id,title,size,plays,played) VALUES(?,?,?,?,?) ON CONFLICT(release_id) DO UPDATE SET title=excluded.title,size=excluded.size,plays=segcache_releases.plays+excluded.plays,played=CASE WHEN excluded.played>0 THEN excluded.played ELSE segcache_releases.played END`, id, title, size, n, at)
+	err := s.tx(ctx, func(tx *sql.Tx) error {
+		var raw string
+		var plays, played int64
+		err := tx.QueryRowContext(ctx, `SELECT COALESCE(provenance,''),plays,played FROM segcache_releases WHERE release_id=?`, p.ReleaseID).Scan(&raw, &plays, &played)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		var prov sharedProvenance
+		if raw != "" {
+			if err := json.Unmarshal([]byte(raw), &prov); err != nil {
+				s.log(err)
+				prov = sharedProvenance{}
+			}
+		}
+		if p.Source != "" {
+			prov.Source = p.Source
+		}
+		if p.Cause != "" {
+			prov.Causes = mergeCause(prov.Causes, core.CacheCause{Code: p.Cause, FirstSeen: now, Shelf: p.Shelf})
+		}
+		body, err := json.Marshal(prov)
+		if err != nil {
+			return err
+		}
+		n, at := 0, int64(0)
+		if p.Play {
+			n = 1
+			at = now.Unix()
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO segcache_releases(release_id,title,size,plays,played,file,provenance) VALUES(?,?,?,?,?,?,?) ON CONFLICT(release_id) DO UPDATE SET title=CASE WHEN excluded.title<>'' THEN excluded.title ELSE segcache_releases.title END,size=CASE WHEN excluded.size>0 THEN excluded.size ELSE segcache_releases.size END,plays=segcache_releases.plays+excluded.plays,played=CASE WHEN excluded.played>0 THEN excluded.played ELSE segcache_releases.played END,file=CASE WHEN excluded.file<>'' THEN excluded.file ELSE segcache_releases.file END,provenance=excluded.provenance`, p.ReleaseID, p.Title, p.Size, n, at, p.File, string(body))
+		return err
+	})
 	s.log(err)
 }
 func (s *sharedCache) releases() []ReleaseUsage {
 	ctx, cancel := s.context()
 	defer cancel()
-	rows, err := s.db.QueryContext(ctx, `SELECT release_id,bytes,segments,touched,title,size,plays,played FROM segcache_releases WHERE segments>0 ORDER BY touched DESC`)
+	rows, err := s.db.QueryContext(ctx, `SELECT release_id,bytes,segments,touched,title,size,plays,played,file,provenance FROM segcache_releases WHERE segments>0 ORDER BY touched DESC`)
 	if err != nil {
 		s.log(err)
 		return nil
@@ -405,12 +447,22 @@ func (s *sharedCache) releases() []ReleaseUsage {
 	for rows.Next() {
 		var r ReleaseUsage
 		var touched, played int64
-		if err = rows.Scan(&r.ReleaseID, &r.Bytes, &r.Segments, &touched, &r.Title, &r.Size, &r.Plays, &played); err != nil {
+		var raw string
+		if err = rows.Scan(&r.ReleaseID, &r.Bytes, &r.Segments, &touched, &r.Title, &r.Size, &r.Plays, &played, &r.file, &raw); err != nil {
 			break
 		}
 		r.LastUsed = time.Unix(touched, 0)
 		if played > 0 {
 			r.LastPlayed = time.Unix(played, 0)
+		}
+		if raw != "" {
+			var prov sharedProvenance
+			if err := json.Unmarshal([]byte(raw), &prov); err != nil {
+				s.log(err)
+			} else {
+				r.source = prov.Source
+				r.causes = prov.Causes
+			}
 		}
 		out = append(out, r)
 	}
@@ -424,6 +476,12 @@ func (s *sharedCache) releases() []ReleaseUsage {
 	}
 	for id, p := range pins {
 		out = append(out, ReleaseUsage{ReleaseID: id, Pins: p})
+	}
+	s.c.mu.Lock()
+	policy, now := s.c.policy, s.c.now()
+	s.c.mu.Unlock()
+	for i := range out {
+		out[i].Reason = reasonFor(&out[i], policy, now)
 	}
 	return out
 }

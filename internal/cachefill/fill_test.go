@@ -112,6 +112,23 @@ func TestFillsPersistsAndReusesCompletedShelf(t *testing.T) {
 		if len(eng.cache.Pins()[it.ReleaseID]) != 1 {
 			t.Fatal("completed source unprotected")
 		}
+		if it.State != "cached" {
+			t.Fatalf("item state = %q", it.State)
+		}
+	}
+	for _, sel := range m.Status().Selection {
+		if sel.State != "cached" || len(sel.ReasonCodes) == 0 {
+			t.Fatalf("selection = %+v", sel)
+		}
+	}
+	for _, rel := range eng.cache.Releases() {
+		if rel.Reason == nil || len(rel.Reason.Causes) == 0 {
+			t.Fatalf("missing shelf reason: %+v", rel)
+		}
+		cause := rel.Reason.Causes[0]
+		if cause.Code != core.CacheCauseShelf || cause.Shelf == nil || cause.Shelf.State != "fetched" || rel.Reason.File == "" {
+			t.Fatalf("shelf reason = %+v", cause)
+		}
 	}
 	reopened, err := New(eng.cache.Directory(), m.deps)
 	if err != nil {
@@ -175,8 +192,22 @@ func TestFailedDurableWritesNeverBecomeReady(t *testing.T) {
 	if err := m.pass(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if s := m.Status(); s.Ready != 0 || s.Failed != 2 {
+	s := m.Status()
+	if s.Ready != 0 || s.Failed != 2 {
 		t.Fatalf("false completion: %+v", s)
+	}
+	if len(s.Items) != 2 {
+		t.Fatalf("failed titles missing from manifest: %+v", s.Items)
+	}
+	for _, it := range s.Items {
+		if it.State != "failed" {
+			t.Fatalf("item state = %q", it.State)
+		}
+	}
+	for _, sel := range s.Selection {
+		if sel.State != "failed" {
+			t.Fatalf("selection state = %q", sel.State)
+		}
 	}
 }
 func TestAllocationAndTitleLimits(t *testing.T) {

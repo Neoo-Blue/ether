@@ -138,7 +138,7 @@ func (m *Manager) Prewarm(_ context.Context, user *core.User, key core.RatingKey
 		return false
 	}
 	reason := opts.Reason
-	if reason != core.PrewarmTrailer && reason != core.PrewarmPostPlay && reason != core.PrewarmBrowse {
+	if reason != core.PrewarmTrailer && reason != core.PrewarmPostPlay && reason != core.PrewarmBrowse && reason != core.PrewarmNextEpisode {
 		reason = core.PrewarmDetail
 	}
 	cfg := m.config().Cache
@@ -311,6 +311,7 @@ func (m *Manager) Prewarm(_ context.Context, user *core.User, key core.RatingKey
 		if err != nil {
 			return
 		}
+		m.noteWarmCause(res, src, reason, cacheTitle(*title))
 		generation, err := m.probeGeneration(ctx, session, res, src, finish, func(size int64) core.MediaInfo {
 			info := EstimateInfo(title, caps, m.deps.SelectProfile(caps, &u))
 			info.Size = size

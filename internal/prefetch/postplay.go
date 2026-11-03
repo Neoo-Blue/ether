@@ -250,6 +250,7 @@ func (p *Prefetcher) firePostPlay(ctx context.Context, user *core.User, key core
 	if playable == nil {
 		return nil
 	}
+	p.setCurrent(episodeLabel(playable), core.CacheCausePostPlay)
 	log := p.log.With("user", user.ID, "after", key, "pick", playable.Key, "reason", picks[0].Reason)
 	if p.deps.Prewarmer != nil {
 		if p.deps.Prewarmer.Prewarm(ctx, user, playable.Key, caps, core.PrewarmOptions{
@@ -267,6 +268,7 @@ func (p *Prefetcher) firePostPlay(ctx context.Context, user *core.User, key core
 	if p.deps.Hints != nil {
 		if rp, err := p.deps.Hints.ResumeFor(ctx, user, playable.Key, caps); err == nil && rp != nil {
 			log.Info("pre-buffering post-play pick (stored release)")
+			p.noteCause(rp.ReleaseID(), core.CacheCausePostPlay, episodeLabel(playable))
 			return p.deps.Engine.Prefetch(ctx, rp.ReleaseID(), rp.NZB, 0, clampLen(0, length, rp.Size))
 		}
 	}
@@ -285,6 +287,7 @@ func (p *Prefetcher) firePostPlay(ctx context.Context, user *core.User, key core
 		}
 	}
 	log.Info("pre-buffering post-play pick", "release", res.Release.Name, "bytes", length)
+	p.noteCause(res.Release.ID, core.CacheCausePostPlay, episodeLabel(playable))
 	return p.deps.Engine.Prefetch(ctx, res.Release.ID, res.NZB, 0, clampLen(0, length, res.Release.Size))
 }
 

@@ -318,6 +318,57 @@ type flight struct {
 	err      error
 }
 
+// releaseLabel prefers the release name and falls back to the indexer.
+func releaseLabel(r core.Release) string {
+	if r.Name != "" {
+		return r.Name
+	}
+	return r.Indexer
+}
+
+// cacheTitle is the display title stored with cache metadata.
+func cacheTitle(t core.Title) string {
+	if t.Type == core.TypeEpisode {
+		return fmt.Sprintf("%s · S%02dE%02d · %s", t.ShowTitle, t.Season, t.Episode, t.Title)
+	}
+	return t.Title
+}
+
+// noteCause records a coarse cache reason when the cache supports provenance.
+func (m *Manager) noteCause(releaseID, cause string) {
+	if releaseID == "" {
+		return
+	}
+	if rec, ok := m.deps.Cache.(core.CacheProvenanceRecorder); ok {
+		rec.RecordProvenance(core.CacheProvenance{ReleaseID: releaseID, Cause: cause})
+	}
+}
+
+// noteWarmCause records the source and reason a speculative open established.
+func (m *Manager) noteWarmCause(res *core.Resolution, src core.MediaSource, reason, title string) {
+	if res == nil || src == nil {
+		return
+	}
+	var cause string
+	switch reason {
+	case core.PrewarmDetail:
+		cause = core.CacheCauseDetailWarm
+	case core.PrewarmTrailer:
+		cause = core.CacheCauseTrailerWarm
+	case core.PrewarmPostPlay:
+		cause = core.CacheCausePostPlay
+	case core.PrewarmBrowse:
+		cause = core.CacheCauseBrowseWarm
+	case core.PrewarmNextEpisode:
+		cause = core.CacheCauseNextEpisode
+	default:
+		return
+	}
+	if rec, ok := m.deps.Cache.(core.CacheProvenanceRecorder); ok {
+		rec.RecordProvenance(core.CacheProvenance{ReleaseID: res.Release.ID, File: src.Name(), Size: src.Size(), Source: releaseLabel(res.Release), Title: title, Cause: cause})
+	}
+}
+
 // Pin reasons used with core.SegmentCache.
 const (
 	PinReasonLive       = "playback:live"
@@ -985,12 +1036,10 @@ func (m *Manager) prepare(ctx context.Context, id identity, user *core.User, cap
 	}
 	m.reg.poke()
 	m.saveResume(ctx, s, g)
-	if c, ok := m.deps.Cache.(core.CachePlayRecorder); ok {
-		title := s.title.Title
-		if s.title.ShowTitle != "" {
-			title = s.title.ShowTitle + " · " + title
-		}
-		c.RecordPlay(g.releaseID(), title, g.src.Size())
+	if rec, ok := m.deps.Cache.(core.CacheProvenanceRecorder); ok {
+		rec.RecordProvenance(core.CacheProvenance{ReleaseID: g.releaseID(), File: g.src.Name(), Size: g.src.Size(), Source: releaseLabel(g.res.Release), Title: cacheTitle(*s.title), Cause: core.CacheCausePlaying, Play: true})
+	} else if c, ok := m.deps.Cache.(core.CachePlayRecorder); ok {
+		c.RecordPlay(g.releaseID(), cacheTitle(*s.title), g.src.Size())
 	}
 	ginfo := g.infoSnapshot()
 	log.Debug("playback session started", "session", s.id, "release", g.res.Release.Name,
@@ -1189,6 +1238,48 @@ func (m *Manager) setSurfacePrepared(id string, prepared bool) bool {
 	return true
 }
 
+// addBuffered reports how far media is ready ahead of the current playhead.
+// HLS sessions publish a decoded buffer; direct sources report downloaded
+// read-ahead bytes.
+func (m *Manager) addBuffered(ps *core.PlaySession) {
+	if ps == nil {
+		return
+	}
+	if m.deps.HLSLookup != nil {
+		if hls, ok := m.deps.HLSLookup(ps.ID); ok && hls != nil {
+			if src, ok := hls.(core.RecoveryBufferSource); ok {
+				b := src.RecoveryBuffer()
+				if b.ReadyUntil > b.Position {
+					ps.BufferedUntil = b.ReadyUntil
+					ps.BufferedBytes = bytesForDuration(ps.Info, b.ReadyUntil-b.Position)
+					return
+				}
+			}
+		}
+	}
+	src, ok := ps.Source.(core.BufferedSource)
+	if !ok {
+		return
+	}
+	ps.BufferedBytes = src.BufferedAhead()
+	if ps.BufferedBytes <= 0 || ps.Info.Size <= 0 || ps.Info.Duration <= 0 {
+		return
+	}
+	ahead := time.Duration(float64(ps.BufferedBytes) / float64(ps.Info.Size) * float64(ps.Info.Duration))
+	pos := time.Duration(0)
+	if ps.ViewOffset != nil {
+		pos = time.Duration(*ps.ViewOffset) * time.Millisecond
+	}
+	ps.BufferedUntil = pos + ahead
+}
+
+func bytesForDuration(info core.MediaInfo, d time.Duration) int64 {
+	if d <= 0 || info.Size <= 0 || info.Duration <= 0 {
+		return 0
+	}
+	return int64(float64(info.Size) * float64(d) / float64(info.Duration))
+}
+
 // Sessions returns snapshots of every live session, oldest first.
 func (m *Manager) Sessions() []*core.PlaySession {
 	m.mu.Lock()
@@ -1200,7 +1291,9 @@ func (m *Manager) Sessions() []*core.PlaySession {
 	now := m.now()
 	out := make([]*core.PlaySession, 0, len(list))
 	for _, s := range list {
-		out = append(out, m.snapshotWithEncoder(s, now))
+		ps := m.snapshotWithEncoder(s, now)
+		m.addBuffered(ps)
+		out = append(out, ps)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if !out[i].StartedAt.Equal(out[j].StartedAt) {

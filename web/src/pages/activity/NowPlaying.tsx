@@ -7,7 +7,7 @@ import { ErrorPanel, LoadingRows } from "../../components/feedback";
 import { Section } from "../../components/layout";
 import { apiFetch, errorMessage } from "../../lib/api";
 import { t, tn } from "../../i18n";
-import { formatRate, relativeTime } from "../../lib/format";
+import { formatPercent, formatRate, relativeTime } from "../../lib/format";
 import { decisionLabel, type NowPlaying as Stream } from "../../lib/health";
 import type { AsyncState } from "../../lib/hooks";
 import { useTitle } from "../../lib/titles";
@@ -54,8 +54,16 @@ function StreamRow({ s, stopping, onStop }: { s: Stream; stopping: boolean; onSt
           {s.progress !== null ? (
             <Meter
               value={s.progress}
+              buffered={s.buffered}
               label={t("Started {when}", { when: relativeTime(s.startedAt) })}
-              valueLabel={t("{percent}% watched", { percent: Math.round(s.progress * 100) })}
+              valueLabel={
+                s.buffered > s.progress
+                  ? t("{watched} watched · {buffered} buffered", {
+                      watched: formatPercent(s.progress),
+                      buffered: formatPercent(s.buffered),
+                    })
+                  : t("{percent}% watched", { percent: Math.round(s.progress * 100) })
+              }
             />
           ) : (
             <p className="text-xs text-fg-muted">{t("Waiting for playback position")}</p>

@@ -283,6 +283,7 @@ func (m *Manager) applyPins(recs []resumeRecord, desired, liveRel map[string]boo
 				m.log.Warn("cache pin failed", "release", id, "err", err)
 				continue
 			}
+			m.noteCause(id, core.CacheCauseUnfinished)
 			m.progressPins[id] = true
 		}
 	}

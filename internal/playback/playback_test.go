@@ -772,6 +772,9 @@ func TestFailoverUsesAlternatesWithFetchNZB(t *testing.T) {
 	if h.resolver.callCount() != calls || len(fetched) != 1 || fetched[0] != "B" {
 		t.Fatalf("resolver calls %d->%d fetched %v", calls, h.resolver.callCount(), fetched)
 	}
+	if !h.cache.hasCause("B", core.CacheCauseFailover) {
+		t.Fatalf("failover cause missing: %+v", h.cache.provenanceFor("B"))
+	}
 }
 
 func TestLoopbackReadFailureTriggersHLSFailover(t *testing.T) {

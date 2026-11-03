@@ -114,6 +114,26 @@ func (s *source) ReadAtContext(ctx context.Context, p []byte, off int64) (int, e
 	return s.readAt(ctx, p, off, true)
 }
 
+// BufferedAhead reports contiguous bytes completed ahead of the most recent
+// reader, bounded by playback read-ahead coverage.
+func (s *source) BufferedAhead() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var c *cursor
+	for _, cur := range s.cursors {
+		if cur.playNext <= cur.next {
+			continue
+		}
+		if c == nil || cur.used.After(c.used) {
+			c = cur
+		}
+	}
+	if c == nil {
+		return 0
+	}
+	return max(0, min(c.playNext, s.plan.size)-c.next)
+}
+
 // ReadAtPrefetchContext reads without speculative read-ahead and yields to
 // live playback by assigning every missing article background priority.
 func (s *source) ReadAtPrefetchContext(ctx context.Context, p []byte, off int64) (int, error) {

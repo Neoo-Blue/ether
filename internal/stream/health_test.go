@@ -13,6 +13,33 @@ import (
 	"github.com/braedonsaunders/ether/internal/nzb"
 )
 
+type recordingCache struct {
+	mu   sync.Mutex
+	seen []core.CacheProvenance
+}
+
+func (c *recordingCache) Get(string, int) ([]byte, bool) { return nil, false }
+func (c *recordingCache) Put(string, int, []byte) error  { return nil }
+func (c *recordingCache) Pin(string, string) error       { return nil }
+func (c *recordingCache) Unpin(string, string) error     { return nil }
+func (c *recordingCache) Usage() (int64, int64)          { return 0, 0 }
+func (c *recordingCache) RecordProvenance(p core.CacheProvenance) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.seen = append(c.seen, p)
+}
+
+func (c *recordingCache) has(releaseID, cause string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, p := range c.seen {
+		if p.ReleaseID == releaseID && p.Cause == cause {
+			return true
+		}
+	}
+	return false
+}
+
 func TestHealthSampleSpread(t *testing.T) {
 	mk := func(n int) *postedFile {
 		f := &nzb.File{Name: "v"}
@@ -45,6 +72,32 @@ func TestHealthSampleSpread(t *testing.T) {
 	}
 	if refs := healthSample([]*postedFile{mk(100)}, 1); len(refs) != 2 {
 		t.Fatalf("minimum sample = %d", len(refs))
+	}
+}
+
+func TestCheckReleaseRecordsQualityCause(t *testing.T) {
+	f := newFakeFetcher()
+	doc := post(t, f, 10_000, postFile{name: "h.mkv", data: mkvBytes(1, 1_000_000)})
+	cache := &recordingCache{}
+	e := newTestEngine(t, f, cache, Options{HealthSamples: 5})
+	if ok, err := e.CheckRelease(context.Background(), "health", doc); !ok || err != nil {
+		t.Fatalf("CheckRelease = %v %v", ok, err)
+	}
+	if !cache.has("health", core.CacheCauseQualityCheck) {
+		t.Fatalf("quality-check cause missing: %+v", cache.seen)
+	}
+	if len(cache.seen) != 1 || cache.seen[0].File != "h.mkv" || cache.seen[0].Size != 1_000_000 {
+		t.Fatalf("quality-check provenance = %+v", cache.seen)
+	}
+}
+
+func TestRepairRecordsCause(t *testing.T) {
+	cache := &recordingCache{}
+	e := newTestEngine(t, newFakeFetcher(), cache, Options{})
+	e.persistRepair("repair", 0, 1, &segData{data: []byte("x"), fileSize: 1, total: 2, name: "f.mkv"})
+	e.wg.Wait()
+	if !cache.has("repair", core.CacheCauseRepair) {
+		t.Fatalf("repair cause missing: %+v", cache.seen)
 	}
 }
 

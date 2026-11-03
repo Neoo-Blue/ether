@@ -65,6 +65,7 @@ type Item struct {
 	Score       float64        `json:"score,omitempty"`
 	StoredBytes int64          `json:"storedBytes"`
 	Updated     time.Time      `json:"updated"`
+	State       string         `json:"state,omitempty"` // cached | queued | failed
 }
 type Status struct {
 	State     string      `json:"state"`
@@ -151,9 +152,37 @@ func (m *Manager) Status() Status {
 				st.Ready++
 			}
 		}
+		applySelectionStates(st.Selection, itemStates(st.Items))
 		return st
 	}
 	return m.localStatus()
+}
+
+// itemStates normalizes each manifest entry and returns its state by title.
+func itemStates(items []Item) map[core.RatingKey]string {
+	states := make(map[core.RatingKey]string, len(items))
+	for i := range items {
+		it := &items[i]
+		switch {
+		case it.State == "failed":
+		case it.Complete:
+			it.State = "cached"
+		default:
+			it.State = "queued"
+		}
+		states[it.Key] = it.State
+	}
+	return states
+}
+
+func applySelectionStates(selection []Selection, states map[core.RatingKey]string) {
+	for i := range selection {
+		if state := states[selection[i].Key]; state != "" {
+			selection[i].State = state
+		} else {
+			selection[i].State = "queued"
+		}
+	}
 }
 func (m *Manager) localStatus() Status {
 	sizes := m.releaseSizes()
@@ -173,6 +202,7 @@ func (m *Manager) localStatus() Status {
 		}
 	}
 	sort.Slice(s.Items, func(i, j int) bool { return s.Items[i].Title < s.Items[j].Title })
+	applySelectionStates(s.Selection, itemStates(s.Items))
 	return s
 }
 
@@ -321,6 +351,42 @@ func (m *Manager) save() error {
 	}
 	return os.Rename(name, m.path)
 }
+func releaseLabel(r core.Release) string {
+	if r.Name != "" {
+		return r.Name
+	}
+	return r.Indexer
+}
+
+// noteShelf records the selection reason and file behind a shelf entry.
+func (m *Manager) noteShelf(r core.Release, file, title string, size int64, detail core.CacheShelfDetail) {
+	rec, ok := m.deps.Cache.(core.CacheProvenanceRecorder)
+	if !ok {
+		return
+	}
+	rec.RecordProvenance(core.CacheProvenance{ReleaseID: r.ID, File: file, Size: size, Source: releaseLabel(r), Title: title, Cause: core.CacheCauseShelf, Shelf: &detail})
+}
+
+// fail keeps a failed title in the manifest so the selection list can show it.
+func (m *Manager) fail(key core.RatingKey, c candidate) error {
+	m.mu.Lock()
+	it := m.items[key]
+	it.Key = key
+	it.Title = displayTitle(c.Title)
+	it.Reason = c.Reason
+	it.Score = c.Score
+	it.State = "failed"
+	it.Updated = time.Now()
+	m.items[key] = it
+	m.mu.Unlock()
+	if it.ReleaseID != "" {
+		if err := m.pin(it.ReleaseID, false); err != nil {
+			return err
+		}
+	}
+	return m.save()
+}
+
 func (m *Manager) forget(key core.RatingKey) error {
 	m.mu.Lock()
 	it := m.items[key]
@@ -437,7 +503,7 @@ func (m *Manager) pass(ctx context.Context) error {
 			break
 		}
 		job, cancel := context.WithTimeout(ctx, 6*time.Hour)
-		err = m.fill(job, owner, &title, limit, maxTitles, ranks)
+		err = m.fill(job, owner, &title, limit, maxTitles, ranks, core.CacheShelfDetail{ReasonCodes: candidate.ReasonCodes, Score: candidate.Score, State: "reserved"})
 		if err == nil {
 			m.mu.Lock()
 			it := m.items[title.Key]
@@ -456,7 +522,7 @@ func (m *Manager) pass(ctx context.Context) error {
 			m.status.Failed++
 			m.mu.Unlock()
 			m.deps.Logger.Debug("preload skipped", "key", title.Key, "err", err)
-			if dropErr := m.forget(title.Key); dropErr != nil {
+			if dropErr := m.fail(title.Key, candidate); dropErr != nil {
 				return dropErr
 			}
 		}
@@ -464,7 +530,7 @@ func (m *Manager) pass(ctx context.Context) error {
 	m.state("ready", "Catalogue pass finished; checking again in 15 minutes")
 	return nil
 }
-func (m *Manager) fill(ctx context.Context, owner *core.User, title *core.Title, limit int64, maxTitles int, ranks map[core.RatingKey]int) error {
+func (m *Manager) fill(ctx context.Context, owner *core.User, title *core.Title, limit int64, maxTitles int, ranks map[core.RatingKey]int, shelf core.CacheShelfDetail) error {
 	m.mu.Lock()
 	previous := m.items[title.Key]
 	m.status.Title = displayTitle(*title)
@@ -510,7 +576,7 @@ func (m *Manager) fill(ctx context.Context, owner *core.User, title *core.Title,
 	if err := m.pin(res.Release.ID, true); err != nil {
 		return err
 	}
-	it := Item{Key: title.Key, Title: displayTitle(*title), ReleaseID: res.Release.ID, Size: reservation, Updated: time.Now()}
+	it := Item{Key: title.Key, Title: displayTitle(*title), ReleaseID: res.Release.ID, Size: reservation, Updated: time.Now(), State: "queued"}
 	m.mu.Lock()
 	m.items[title.Key] = it
 	m.status.Size = size
@@ -519,7 +585,7 @@ func (m *Manager) fill(ctx context.Context, owner *core.User, title *core.Title,
 		_ = m.pin(res.Release.ID, false)
 		return err
 	}
-	m.deps.Cache.Describe(res.Release.ID, displayTitle(*title), size)
+	m.noteShelf(res.Release, src.Name(), displayTitle(*title), size, shelf)
 	m.state("filling", "Fetching complete source at background priority")
 	for off := int64(0); off < size; {
 		if err := ctx.Err(); err != nil {
@@ -556,6 +622,7 @@ func (m *Manager) fill(ctx context.Context, owner *core.User, title *core.Title,
 	// Prefetch failure is not a complete item. Successful coverage is protected
 	// by its preload pin; changing profiles may still select a different release.
 	it.Complete = true
+	it.State = "cached"
 	it.StoredBytes = m.deps.Cache.ReleaseBytes(it.ReleaseID)
 	it.Updated = time.Now()
 	m.mu.Lock()
@@ -564,6 +631,8 @@ func (m *Manager) fill(ctx context.Context, owner *core.User, title *core.Title,
 	if err := m.save(); err != nil {
 		return err
 	}
+	shelf.State = "fetched"
+	m.noteShelf(res.Release, src.Name(), displayTitle(*title), size, shelf)
 	if m.deps.Remember != nil {
 		if err := m.deps.Remember(ctx, owner, title.Key, caps, res); err != nil {
 			m.deps.Logger.Warn("remember preloaded source", "err", err)

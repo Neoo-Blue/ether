@@ -316,12 +316,15 @@ export function HourStrip({ peaks, ariaLabel }: { peaks: number[]; ariaLabel: st
 /** Thin horizontal meter (0..1) with a label and value. */
 export function Meter({
   value,
+  buffered,
   label,
   valueLabel,
   tone = "primary",
   onScrim = false,
 }: {
   value: number;
+  /** 0..1 read-ahead already downloaded beyond the playhead. */
+  buffered?: number;
   label?: string;
   valueLabel?: string;
   tone?: "primary" | "warning" | "danger";
@@ -330,6 +333,7 @@ export function Meter({
 }) {
   const id = useId();
   const v = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+  const b = Math.max(v, Math.min(1, Number.isFinite(buffered ?? NaN) ? (buffered as number) : v));
   return (
     <div>
       {label || valueLabel ? (
@@ -344,7 +348,7 @@ export function Meter({
       ) : null}
       <div
         className={cn(
-          "h-1.5 overflow-hidden rounded-full",
+          "relative h-1.5 overflow-hidden rounded-full",
           onScrim ? "bg-on-scrim/25" : "bg-bg-subtle ring-1 ring-inset ring-border-subtle",
         )}
         role="meter"
@@ -352,10 +356,20 @@ export function Meter({
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(v * 100)}
+        aria-valuetext={valueLabel}
       >
+        {b > v && (
+          <div
+            className={cn(
+              "absolute inset-y-0 left-0 rounded-full transition-[width] duration-500",
+              onScrim ? "bg-on-scrim/45" : "bg-primary/30",
+            )}
+            style={{ width: `${b * 100}%` }}
+          />
+        )}
         <div
           className={cn(
-            "h-full rounded-full transition-[width] duration-500",
+            "relative h-full rounded-full transition-[width] duration-500",
             tone === "primary" ? "bg-primary" : tone === "warning" ? "bg-warning" : "bg-danger",
           )}
           style={{ width: `${v * 100}%` }}

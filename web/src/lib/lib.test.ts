@@ -763,6 +763,14 @@ describe("health", () => {
       release: "Dune.2021.1080p",
     });
     expect(s!.progress).toBeCloseTo(0.5);
+    const [byBytes] = normalizeSessions([
+      { Info: { size: 100, duration: 7200e9 }, viewOffset: 3.6e6, BufferedBytes: 25 },
+    ]);
+    expect(byBytes!.buffered).toBeCloseTo(0.75);
+    const [byUntil] = normalizeSessions([
+      { Info: { size: 100, duration: 7200e9 }, BufferedUntil: 5.4e12 },
+    ]);
+    expect(byUntil!.buffered).toBeCloseTo(0.75);
     expect(normalizeSessions(null)).toEqual([]);
   });
   it("labels every now-playing decision kind", () => {
