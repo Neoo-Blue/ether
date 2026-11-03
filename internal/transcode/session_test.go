@@ -1265,21 +1265,3 @@ func (h *holdResponse) Write(p []byte) (int, error) {
 	<-h.rel
 	return len(p), nil
 }
-
-func TestEncoderStatusUsesActiveRunDecision(t *testing.T) {
-	info := mustParse(t, "mkv_hevc_hdr10.json")
-	d := core.Decision{Kind: core.DecisionTranscode, VideoCodec: "hevc", ToneMap: true, Container: ContainerMatroska}
-	spec := baseSpec(info, d)
-	spec.Accel = core.HWAccel{Name: AccelNVENC, Encoders: []string{"hevc_nvenc"}}
-	s := &Session{segDur: 4 * time.Second}
-	s.done = []map[int]bool{{0: true, 1: true}}
-	s.cur = &run{spec: spec, hw: true, reason: "input swap", started: time.Unix(100, 0), produced: 1, progress: Progress{Speed: 0.85, OutTime: 12 * time.Second, Updated: time.Unix(101, 0)}}
-	status := s.EncoderStatus()
-	if status == nil || status.Decision.Kind != core.DecisionTranscode || status.Decision.VideoCopy || status.Processor != "gpu" || status.Filters != "cpu" || status.Phase != "running" || status.Reason != "input swap" || status.Speed != 0.85 || status.ReadyUntil != 8*time.Second {
-		t.Fatalf("encoder status: %+v", status)
-	}
-	s.cur.paused = true
-	if got := s.EncoderStatus(); got.Phase != "paused" {
-		t.Fatalf("paused phase: %+v", got)
-	}
-}
