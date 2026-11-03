@@ -233,7 +233,7 @@ func parseGroup(raw string) (stem, group, container string) {
 	return stem, group, container
 }
 
-// overrideSource applies the CAM override to source: an explicit
+// overrideSource applies the CAM and screener overrides to source: an explicit
 // low-quality tag outranks a contradictory WEB/BD claim. Only release
 // metadata (spaced at or after floor) is inspected, never words in the
 // film's title.
@@ -241,6 +241,11 @@ func overrideSource(source core.Source, spaced string, floor int) core.Source {
 	metadata := " " + strings.ToUpper(spaced[max(floor, 0):]) + " "
 	if containsAny(metadata, " HDCAM", " HD CAM", " CAM ", " CAM-", "CAMRIP", " HQCAM", " HDTS", " HD-TS", " TSRIP", " HDTC", " HD-TC", " TELESYNC", " TELECINE", " HQ PRE ", " HQ-PRE ") {
 		return core.SourceCam
+	}
+	// Screeners, R5 retail telecines and workprints are pre-release copies
+	// whatever disc or web tag rides along ("Movie.2024.SCREENER.WEBRip").
+	if containsAny(metadata, "SCREENER", "DVDSCR", "BDSCR", "WEBSCR", " SCR ", " R5 ", " WORKPRINT ") {
+		return core.SourceScreener
 	}
 	return source
 }

@@ -307,6 +307,7 @@ export function createReleaseConsoleMock(catalog: FakeTitle[]) {
       Math.min(9, Math.log10((rel.grabs ?? 0) + 1) * 3);
     if (blocks.has(rel.id)) return { reason: "marked bad", score };
     if (info.source === "cam") return { reason: "cam not allowed", score };
+    if (info.source === "screener") return { reason: "screener not allowed", score };
     const max = profile === "4K" || profile === "none" ? 2160 : profile === "720p" ? 720 : 1080;
     if ((info.height ?? 0) > max) return { reason: "above profile max height", score };
     if (profile === "download" && info.audioCodec === "dtshd")

@@ -345,7 +345,8 @@ func (s *Service) qualityCfg() config.Quality {
 	return s.quality
 }
 
-// profileAllowsCam reports whether any quality profile plays cinema recordings.
+// profileAllowsCam reports whether any quality profile plays pre-release
+// copies (cinema recordings, screeners).
 func (s *Service) profileAllowsCam() bool {
 	for _, p := range s.qualityCfg().Profiles {
 		if p.AllowCam {
@@ -1199,8 +1200,8 @@ func (s *Service) rankCandidates(ctx context.Context, req core.ResolveRequest, s
 				// download or mobile profile still plays for others.
 				"size too small for runtime", "size too large for runtime":
 				clientRejected = true
-			case "cam not allowed":
-				// Another profile may allow cinema recordings. When none
+			case "cam not allowed", "screener not allowed":
+				// Another profile may allow pre-release copies. When none
 				// do, the title is unavailable for everyone.
 				if s.profileAllowsCam() {
 					clientRejected = true
@@ -1793,7 +1794,7 @@ func (s *Service) score(rel core.Release, profile core.QualityProfile, t *core.T
 	// Source / codec / audio preference order.
 	if v := indexScore(profile.PreferredSources, info.Source, 10); v > 0 {
 		sc += v
-	} else if info.Source != core.SourceUnknown && info.Source != core.SourceCam {
+	} else if info.Source != core.SourceUnknown && info.Source != core.SourceCam && info.Source != core.SourceScreener {
 		sc += 3
 	}
 	sc += indexScore(profile.PreferredCodecs, info.VideoCodec, 6)
