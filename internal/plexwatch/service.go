@@ -541,7 +541,7 @@ func (s *Service) Retry(ctx context.Context, userID, plexID int64) (Status, erro
 	if eligErr != nil && !errors.Is(eligErr, ErrNotEligible) && !errors.Is(eligErr, ErrRevoked) {
 		return Status{}, eligErr
 	}
-	reasons := []string{"missing_guid"}
+	reasons := []string{"missing_guid", "credential_forbidden"}
 	if eligErr == nil {
 		reasons = append(reasons, "not_eligible")
 	}

@@ -33,9 +33,10 @@ var ErrAccountMismatch = errors.New("plexwatch: plex account does not belong to 
 // ErrNotEligible means the viewer has not consented to watch-state sync.
 var ErrNotEligible = errors.New("plexwatch: account has not allowed watch-state sync")
 
-// ErrRevoked means the stored account token was rejected.
+// ErrCredentialForbidden means the credential lacks access to watch state.
 var ErrCredentialForbidden = errors.New("plexwatch: credential is not allowed to access watch state")
 
+// ErrRevoked means the stored account token was rejected.
 var ErrRevoked = errors.New("plexwatch: account token rejected")
 
 // StatusError is an HTTP result that is not success. Body is not retained.

@@ -72,6 +72,11 @@ func (s *Service) ImportCurrent(ctx context.Context, userID, plexID int64) (Stat
 	err = s.refreshEligibility(importCtx, userID, acct)
 	if err == nil {
 		err = s.importCurrent(importCtx, userID, plexID, acct.tokenGeneration)
+		if errors.Is(err, ErrRevoked) {
+			if revokeErr := s.revoke(importCtx, userID, acct.tokenGeneration); revokeErr != nil && !errors.Is(revokeErr, ErrRevoked) {
+				err = revokeErr
+			}
+		}
 	}
 	if importCtx.Err() != nil { // use a short independent context to release the lease after leadership loss
 		cleanup, cancel := context.WithTimeout(context.Background(), 2*time.Second)
