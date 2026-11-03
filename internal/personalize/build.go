@@ -933,6 +933,7 @@ func collectionRowID(row string) string {
 
 // ownerCandidate adapts an owner collection row for this screen.
 func (e *Engine) ownerCandidate(cr core.CollectionRow, section core.MediaType, user *core.User) *candRow {
+	const collectionMinItems = 3
 	if section == "" && !cr.HomeRow || section != "" && !cr.SectionRow {
 		return nil
 	}
@@ -940,6 +941,17 @@ func (e *Engine) ownerCandidate(cr core.CollectionRow, section core.MediaType, u
 		return nil
 	}
 	hub := cr.Hub
+	if section != "" {
+		hub.Items = make([]core.Title, 0, len(cr.Hub.Items))
+		for _, item := range cr.Hub.Items {
+			if item.Type == section {
+				hub.Items = append(hub.Items, item)
+			}
+		}
+		if len(hub.Items) < collectionMinItems {
+			return nil
+		}
+	}
 	if hub.ID == "" {
 		hub.ID = "collection." + cr.CollectionID
 	}
@@ -960,6 +972,6 @@ func (e *Engine) ownerCandidate(cr core.CollectionRow, section core.MediaType, u
 	desc := hub.Title
 	c := &candRow{kind: KindCollectionPrefix + cr.CollectionID, id: hub.ID, title: hub.Title,
 		reason: "Owner collection “" + desc + "”, targeted at this viewer.", context: "collection",
-		source: core.RowSourceOwner, items: items, minItems: 3, keepOrder: true, scale: 1, hub: &hub}
+		source: core.RowSourceOwner, items: items, minItems: collectionMinItems, keepOrder: true, scale: 1, hub: &hub}
 	return c
 }
