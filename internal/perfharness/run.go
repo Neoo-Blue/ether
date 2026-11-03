@@ -3,6 +3,7 @@ package perfharness
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"fmt"
 	"io"
@@ -26,6 +27,7 @@ type Result struct {
 	Tag     string        `json:"tag"`
 	Status  int           `json:"status"`
 	Bytes   int           `json:"bytes"`
+	BodySHA string        `json:"bodySha256,omitempty"`
 	Dur     time.Duration `json:"dur"`
 	Err     string        `json:"err,omitempty"`
 	Skipped string        `json:"skipped,omitempty"`
@@ -146,6 +148,9 @@ func (r *Runner) do(ctx context.Context, phase string, c Client, s *session, st 
 	resp.Body.Close()
 	res.Dur = time.Since(start)
 	res.Status, res.Bytes = resp.StatusCode, len(buf)
+	if err == nil {
+		res.BodySHA = fmt.Sprintf("%x", sha256.Sum256(buf))
+	}
 	if err != nil {
 		res.Err = err.Error()
 	} else if resp.StatusCode >= 400 && st.Class != classPlayback {

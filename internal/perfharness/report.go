@@ -43,6 +43,8 @@ type TraceRecord struct {
 	Rows       int64           `json:"rows"`
 	DBTime     time.Duration   `json:"dbTime"`
 	LockWait   time.Duration   `json:"lockWait"`
+	AllocBytes uint64          `json:"allocBytes"`
+	Allocs     uint64          `json:"allocs"`
 	Statements []statementStat `json:"statements"`
 }
 
@@ -84,6 +86,7 @@ type Row struct {
 	RowsBound                              int
 	Cold, WarmP50, WarmP95, ConcP95, BgP95 time.Duration
 	Queries, Writes, Rows                  int64
+	AllocBytes, Allocs                     int64
 	// The fewest and most statements and rows over the cold and warm
 	// passes. A pass may or may not be answered by a cache, so the gate
 	// compares the large library's least work with the small one's most.
@@ -95,6 +98,7 @@ type Row struct {
 	Errors                                   []string
 	samples                                  map[string][]time.Duration
 	queries, writes, rowsRead                []int64
+	allocBytes, allocs                       []int64
 	dbTimes, lockWaits                       []time.Duration
 }
 
@@ -155,6 +159,8 @@ func Summarize(results []Result, trace map[string]TraceRecord, order []Client) [
 			r.queries = append(r.queries, tr.Queries)
 			r.writes = append(r.writes, tr.Writes)
 			r.rowsRead = append(r.rowsRead, tr.Rows)
+			r.allocBytes = append(r.allocBytes, int64(tr.AllocBytes))
+			r.allocs = append(r.allocs, int64(tr.Allocs))
 			r.dbTimes = append(r.dbTimes, tr.DBTime)
 			r.lockWaits = append(r.lockWaits, tr.LockWait)
 		}
@@ -171,6 +177,7 @@ func Summarize(results []Result, trace map[string]TraceRecord, order []Client) [
 		r.ConcP95 = percentile(r.samples["concurrent"], 0.95)
 		r.BgP95 = percentile(r.samples["background"], 0.95)
 		r.Queries, r.Writes, r.Rows = median64(r.queries), median64(r.writes), median64(r.rowsRead)
+		r.AllocBytes, r.Allocs = median64(r.allocBytes), median64(r.allocs)
 		r.QueriesMin, r.QueriesMax = minMax(r.queries)
 		r.RowsMin, r.RowsMax = minMax(r.rowsRead)
 		r.DBTime = percentile(r.dbTimes, 0.5)
@@ -219,8 +226,10 @@ func WriteReport(w io.Writer, title string, meta []string, rows []*Row) (failed 
 		fmt.Fprintf(w, "- %s\n", m)
 	}
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "| client | step | class | cold | warm p50 | warm p95 | concurrent p95 | busy-writer p95 | queries | writes | rows read | db time | lock wait | result |")
-	fmt.Fprintln(w, "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|")
+	fmt.Fprintln(w, "Allocation counts and bytes are process-wide deltas during each request; concurrent background activity may contribute.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "| client | step | class | cold | warm p50 | warm p95 | concurrent p95 | busy-writer p95 | queries | writes | rows read | db time | lock wait | allocs | alloc bytes | result |")
+	fmt.Fprintln(w, "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|")
 	for _, r := range rows {
 		status := r.Status
 		if len(r.Fails) > 0 {
@@ -235,9 +244,9 @@ func WriteReport(w io.Writer, title string, meta []string, rows []*Row) (failed 
 		if r.Status == "FAIL" || r.Status == "ERROR" {
 			failed++
 		}
-		fmt.Fprintf(w, "| %s | %s | %s | %s | %s | %s | %s | %s | %d | %d | %d | %s | %s | %s |\n",
+		fmt.Fprintf(w, "| %s | %s | %s | %s | %s | %s | %s | %s | %d | %d | %d | %s | %s | %d | %d | %s |\n",
 			r.Client, strings.ReplaceAll(r.Step, "|", "/"), r.Class, ms(r.Cold), ms(r.WarmP50), ms(r.WarmP95), ms(r.ConcP95), ms(r.BgP95),
-			r.Queries, r.Writes, r.Rows, ms(r.DBTime), ms(r.LockWait), status)
+			r.Queries, r.Writes, r.Rows, ms(r.DBTime), ms(r.LockWait), r.Allocs, r.AllocBytes, status)
 	}
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Budgets (p95): ")

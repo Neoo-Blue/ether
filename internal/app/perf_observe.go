@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -95,6 +96,8 @@ type PerfTraceRecord struct {
 	Rows       int64                 `json:"rows"`
 	DBTime     time.Duration         `json:"dbTime"`
 	LockWait   time.Duration         `json:"lockWait"`
+	AllocBytes uint64                `json:"allocBytes,omitempty"`
+	Allocs     uint64                `json:"allocs,omitempty"`
 	Statements []store.StatementStat `json:"statements,omitempty"`
 }
 
@@ -119,13 +122,22 @@ func (p *perfObserver) wrap(surface string, next http.Handler) http.Handler {
 			recorder = middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			w = recorder
 		}
+		var before runtime.MemStats
+		if tracing && r.Header.Get(PerfTagHeader) != "" {
+			runtime.ReadMemStats(&before)
+		}
 		next.ServeHTTP(w, r.WithContext(ctx))
 		elapsed := time.Since(start)
 		if tracing {
+			var after runtime.MemStats
+			if r.Header.Get(PerfTagHeader) != "" {
+				runtime.ReadMemStats(&after)
+			}
 			p.writeTrace(PerfTraceRecord{
 				Tag: r.Header.Get(PerfTagHeader), Surface: surface, Method: r.Method, Path: r.URL.Path, Status: recorder.Status(), Bytes: recorder.BytesWritten(),
 				Start: start, Duration: elapsed, Queries: stats.Queries(), Writes: stats.Writes(), Rows: stats.Rows(), DBTime: stats.DBTime(), LockWait: stats.LockWait(),
 				Statements: stats.Statements(),
+				AllocBytes: after.TotalAlloc - before.TotalAlloc, Allocs: after.Mallocs - before.Mallocs,
 			})
 		}
 		p.budget(surface, r, w.Header().Get("Content-Type"), elapsed, stats)
