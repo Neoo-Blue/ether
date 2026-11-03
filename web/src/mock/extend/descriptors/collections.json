@@ -67,56 +67,76 @@
               "label": {
                 "source": "Trending today"
               },
-              "media": ["movie", "show"]
+              "media": [
+                "movie",
+                "show"
+              ]
             },
             {
               "value": "trending_week",
               "label": {
                 "source": "Trending this week"
               },
-              "media": ["movie", "show"]
+              "media": [
+                "movie",
+                "show"
+              ]
             },
             {
               "value": "popular",
               "label": {
                 "source": "Popular"
               },
-              "media": ["movie", "show"]
+              "media": [
+                "movie",
+                "show"
+              ]
             },
             {
               "value": "top_rated",
               "label": {
                 "source": "Top rated"
               },
-              "media": ["movie", "show"]
+              "media": [
+                "movie",
+                "show"
+              ]
             },
             {
               "value": "now_playing",
               "label": {
                 "source": "Now in cinemas"
               },
-              "media": ["movie"]
+              "media": [
+                "movie"
+              ]
             },
             {
               "value": "upcoming",
               "label": {
                 "source": "Upcoming"
               },
-              "media": ["movie"]
+              "media": [
+                "movie"
+              ]
             },
             {
               "value": "airing_today",
               "label": {
                 "source": "Airing today"
               },
-              "media": ["show"]
+              "media": [
+                "show"
+              ]
             },
             {
               "value": "on_the_air",
               "label": {
                 "source": "On the air"
               },
-              "media": ["show"]
+              "media": [
+                "show"
+              ]
             }
           ]
         }
@@ -125,6 +145,37 @@
       "defaults": {
         "list": "trending_week",
         "mediaType": "movie"
+      }
+    }
+  },
+  {
+    "kind": "collectionSource",
+    "id": "tmdbUserList",
+    "owner": "builtin",
+    "label": {
+      "source": "TMDB user list"
+    },
+    "hint": {
+      "source": "A public TMDB list URL or ID"
+    },
+    "icon": "list-video",
+    "order": 135,
+    "meta": {
+      "params": [
+        {
+          "name": "url",
+          "kind": "url",
+          "label": {
+            "source": "List URL"
+          },
+          "hint": {},
+          "required": true,
+          "placeholder": "https://www.themoviedb.org/list/123"
+        }
+      ],
+      "editor": "urlList",
+      "defaults": {
+        "url": ""
       }
     }
   },

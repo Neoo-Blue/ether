@@ -366,6 +366,12 @@ or place it in Home Designer. Each item opens its own movie or show page.
 Viewer access and age limits still apply; Movies and TV library pages keep their
 respective types.
 
+To follow a public TMDB user list, add the **TMDB user list** source and paste
+its list URL or numeric ID. Choose **Source** sort to keep the list order. Ether
+refreshes it on the collection’s chosen schedule and keeps up to 5,000 items.
+Private or missing lists cannot be read. Normal release-date and visibility
+rules still apply to titles in the list.
+
 Movies appear from their theatrical release date. Shows, seasons and episodes
 appear from their air dates. Items with no known release date stay hidden.
 Under **Upcoming content** in Catalog settings, **Show upcoming movies** and

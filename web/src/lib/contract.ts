@@ -122,6 +122,7 @@ export type Source =
   | { kind: "tmdbDiscover"; params: Record<string, string> }
   | { kind: LookupSourceKind; id: number; label?: string }
   | { kind: "watchProvider"; id: number; region?: string; label?: string }
+  | { kind: "tmdbUserList"; url: string }
   | { kind: "traktList"; url: string }
   | { kind: "letterboxdList"; url: string }
   | { kind: "mdblist"; url: string }

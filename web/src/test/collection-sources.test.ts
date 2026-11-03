@@ -32,6 +32,7 @@ describe("collection source kinds from the registry", () => {
         "tmdbList",
         "tmdbNetwork",
         "tmdbPerson",
+        "tmdbUserList",
         "traktList",
         "watchProvider",
       ].sort(),

@@ -545,6 +545,7 @@ export function newSourceFromDescriptor(
  * shape, not kind lists, decides, so plugin kinds work unchanged. */
 export function isSourceComplete(s: Source): boolean {
   const v = s as unknown as Record<string, unknown>;
+  if (s.kind === "tmdbUserList" && typeof v.url === "string") return /^(?:[1-9][0-9]*|https:\/\/(?:www\.)?themoviedb\.org\/list\/[0-9]+(?:-[^/?#]+)?(?:\/[^/?#]+)?\/?(?:[?#].*)?)$/.test(v.url.trim());
   if (typeof v.url === "string") return /^https?:\/\/\S+$/.test(v.url.trim());
   if (Array.isArray(v.keys)) return v.keys.length > 0;
   if (v.params && typeof v.params === "object") return Object.keys(v.params).length > 0;

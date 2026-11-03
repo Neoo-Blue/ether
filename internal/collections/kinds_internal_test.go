@@ -12,7 +12,7 @@ import (
 func TestBuiltinSourceKindsAllRegistered(t *testing.T) {
 	want := []string{"anilistList", "catalog", "letterboxdList", "mdblist", "stevenlu", "titles",
 		"tmdbCollection", "tmdbCompany", "tmdbDiscover", "tmdbKeyword", "tmdbList", "tmdbNetwork",
-		"tmdbPerson", "traktList", "watchProvider"}
+		"tmdbPerson", "tmdbUserList", "traktList", "watchProvider"}
 	reg := NewKindRegistry()
 	got := reg.IDs()
 	if len(got) != len(want) {
@@ -27,8 +27,8 @@ func TestBuiltinSourceKindsAllRegistered(t *testing.T) {
 
 func TestSourceKindDescriptors(t *testing.T) {
 	ds := BuiltinDescriptors()
-	if len(ds) != 15 {
-		t.Fatalf("descriptors = %d, want 15", len(ds))
+	if len(ds) != 16 {
+		t.Fatalf("descriptors = %d, want 16", len(ds))
 	}
 	seen := map[string]bool{}
 	for _, d := range ds {
