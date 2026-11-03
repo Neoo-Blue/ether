@@ -96,9 +96,16 @@ func (s *Service) importCurrent(ctx context.Context, userID, plexID int64, gener
 		if remote.EndCursor != "" {
 			cursor = remote.EndCursor
 		}
-		if _, err := s.db.ExecContext(ctx, `UPDATE plexwatch_account SET import_cursor=?, updated_at=? WHERE user_id=? AND plex_id=? AND token_generation=?`,
-			cursor, s.now().UnixNano(), userID, plexID, generation); err != nil {
+		res, err := s.db.ExecContext(ctx, `UPDATE plexwatch_account SET import_cursor=?, updated_at=? WHERE user_id=? AND plex_id=? AND token_generation=?`, cursor, s.now().UnixNano(), userID, plexID, generation)
+		if err != nil {
 			return err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if n != 1 {
+			return errStaleGeneration
 		}
 		if !remote.HasNextPage {
 			break

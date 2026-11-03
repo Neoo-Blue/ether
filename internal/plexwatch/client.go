@@ -30,7 +30,7 @@ const (
 // viewer's account.
 var ErrAccountMismatch = errors.New("plexwatch: plex account does not belong to this viewer")
 
-// ErrNotEligible means Plex refused watch-state sync for this account token.
+// ErrNotEligible means the viewer has not consented to watch-state sync.
 var ErrNotEligible = errors.New("plexwatch: account has not allowed watch-state sync")
 
 // ErrRevoked means the stored account token was rejected.
@@ -54,8 +54,6 @@ func (e *StatusError) Is(target error) bool {
 	switch target {
 	case ErrRevoked:
 		return e.Status == http.StatusUnauthorized
-	case ErrNotEligible:
-		return false
 	case ErrCredentialForbidden:
 		return e.Status == http.StatusForbidden
 	default:
@@ -195,8 +193,8 @@ func (c *Client) account(ctx context.Context, token string) (remoteAccount, erro
 // eligibility is the read-only view_state_sync check: the account's own
 // "Sync my watch state and ratings" consent, read with the viewer's account
 // token. (server/users/{id}/view_state_sync needs a Plex server token and
-// refuses every account token with 403 code 1080, #288.) Consent false or
-// HTTP 403 is ErrNotEligible; other statuses are returned.
+// refuses every account token with 403 code 1080, #288.) Only consent false
+// is ErrNotEligible; HTTP failures are returned separately.
 func (c *Client) eligibility(ctx context.Context, token string, plexID int64) error {
 	_ = plexID // the account endpoint is scoped by the token itself
 	var out struct {

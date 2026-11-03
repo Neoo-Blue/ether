@@ -3,6 +3,7 @@ package plexwatch
 import (
 	"context"
 	"errors"
+	"math"
 	"net/http"
 	"time"
 )
@@ -107,6 +108,13 @@ func (s *Service) ImportCurrent(ctx context.Context, userID, plexID int64) (Stat
 		}
 		if status != nil && status.Status == http.StatusTooManyRequests && status.RetryAfter > delay {
 			delay = status.RetryAfter
+		}
+		maxDelay := time.Unix(0, math.MaxInt64).Sub(now) - time.Minute
+		if maxDelay < 0 {
+			maxDelay = 0
+		}
+		if delay > maxDelay {
+			delay = maxDelay
 		}
 		nextAllowed = now.Add(delay).UnixNano()
 	} else {
