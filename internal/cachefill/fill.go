@@ -474,7 +474,8 @@ func (m *Manager) fill(ctx context.Context, owner *core.User, title *core.Title,
 	m.state("resolving", "Selecting a release using the owner's quality rules")
 	resolveCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	caps := core.ClientCaps{ClientID: "ether-managed-cache", Product: "Ether Managed Cache"}
-	res, err := m.deps.Resolver.Resolve(resolveCtx, core.ResolveRequest{Title: title, User: owner, Client: caps, Prefer: previous.ReleaseID})
+	// Nobody waits on a preload: fallback queries go one at a time.
+	res, err := m.deps.Resolver.Resolve(core.WithUnattendedSearch(resolveCtx), core.ResolveRequest{Title: title, User: owner, Client: caps, Prefer: previous.ReleaseID})
 	cancel()
 	if err != nil {
 		return err

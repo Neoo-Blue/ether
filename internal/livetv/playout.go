@@ -277,6 +277,7 @@ func (s *Service) TuneWithSession(ctx context.Context, u *core.User, channelID s
 		ss.view.Info.Duration = p.End.Sub(p.Start)
 	}
 	s.sessions[ss.info.ID] = ss
+	s.noteWatchedLocked(c.ID)
 	s.mu.Unlock()
 	if limiter, ok := s.o.Playback.(channelLimiter); ok {
 		if err = limiter.BeginChannel(u, caps, ss.info.ID); err != nil {

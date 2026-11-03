@@ -923,13 +923,25 @@ For a recent movie the feeds have not matched, Ether also looks the title up
 directly: once when it enters the window, again when its digital release date
 arrives, and at least weekly on every indexer. Between those, it skips an
 indexer whose feed has been polled without a gap since the last look; that
-feed would already have shown anything new. Scraper sites without a feed are
-still searched on the normal cadence. A movie with a suitable release is not
-looked up again for a month unless that release proves unplayable. At most ten
+feed would already have shown anything new. Of the scraper sites without a
+feed, routine lookups ask only the one that has returned releases most often in
+full lookups; Play still asks them all. A movie with a suitable release is
+available like any other title and is not looked up again in the background
+unless that release proves unplayable. At most ten
 of these lookups run per minute, so a restart never bursts every indexer at
 once. To keep background lookups on particular indexers while playback still
-uses all of them, list them in `availability.indexerIds`. Playback searches are
-unchanged. Optional background health verification has separate request,
+uses all of them, list them in `availability.indexerIds`.
+
+Indexer results are cached per title: six hours for titles out under a month,
+rising to a week for titles out over a year. A search that found nothing is
+cached for three minutes for a title out under a week, so a new episode is
+found soon after its upload, and thirty minutes otherwise. When the first,
+ID-based query finds nothing, a Play search fires its fallback queries
+(other IDs, title and year, alternative titles) at once. A search nobody is
+waiting on, such as a detail-page or next-episode warm-up, a watchlist check or
+a preload, tries them one at a time and stops at the first that finds
+releases. Live TV channels built from your collections pre-load upcoming
+programmes only while someone has watched the channel in the last two hours. Optional background health verification has separate request,
 grab and byte budgets and pauses during playback; it is disabled by default.
 
 A listing establishes that an eligible release was observed, not guaranteed

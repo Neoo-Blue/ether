@@ -188,3 +188,33 @@ func TestProbeSearchesEverywhereWhenDigitalDateArrives(t *testing.T) {
 		t.Fatalf("geek searched %d times around the digital date, want one more (%d)", counter.hits["geek"], before+1)
 	}
 }
+
+// Routine checks ask only the feedless source that has returned releases
+// most often in full searches; full searches still ask every source.
+func TestProbeAsksTheBestScraperOnly(t *testing.T) {
+	x, feed, _ := coverageFixture(t, 5)
+	feed.sources = append(feed.sources, core.ReleaseFeed{ID: "aggregator", Name: "Aggregator", Generation: "g", Supported: false})
+	hits := map[string]int{}
+	x.s.d.Search = func(ctx context.Context, req core.SearchRequest) ([]core.Release, error) {
+		for _, f := range feed.sources {
+			if !core.IndexerSkipped(ctx, f.ID) {
+				hits[f.ID]++
+			}
+		}
+		// The aggregator lists something (rejected as a cam, so titles keep
+		// waiting); the other scraper never does.
+		if core.IndexerSkipped(ctx, "aggregator") {
+			return nil, nil
+		}
+		return []core.Release{{ID: "x" + req.Title, Name: req.Title + ".CAM", Indexer: "Aggregator"}}, nil
+	}
+	x.v.reject = true
+	x.s.d.Validator = x.v
+	runFor(t, x, 24*time.Hour)
+	if hits["aggregator"] <= 40 {
+		t.Fatalf("aggregator asked %d times, want routine checks too (more than the 40 first looks)", hits["aggregator"])
+	}
+	if hits["addon"] != 40 {
+		t.Fatalf("addon asked %d times, want only the 40 full first looks", hits["addon"])
+	}
+}

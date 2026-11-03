@@ -18,6 +18,10 @@ func init() {
 	store.Register("availability_coverage", 1, `
 ALTER TABLE availability_feeds ADD COLUMN covered_since INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE availability_title_checks ADD COLUMN full_at INTEGER NOT NULL DEFAULT 0;`)
+	// How often each feedless source (a scraper or addon) returned anything
+	// when every source was searched, so routine checks ask the best one.
+	store.Register("availability_coverage", 2, `
+CREATE TABLE availability_source_yield (source_id TEXT PRIMARY KEY, searches INTEGER NOT NULL DEFAULT 0, found INTEGER NOT NULL DEFAULT 0);`)
 	store.Register("availability", 5, `
 ALTER TABLE availability_budget ADD COLUMN ceiling INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE availability_feeds ADD COLUMN catchup_oldest INTEGER NOT NULL DEFAULT 0;
