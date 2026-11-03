@@ -911,6 +911,9 @@ func (s *Service) CreateSmart(ctx context.Context, c core.Collection) (*core.Col
 	if c.Filter == nil {
 		return nil, fmt.Errorf("collections: smart collection needs a filter")
 	}
+	if c.Filter.Group != nil {
+		return nil, fmt.Errorf("collections: grouped smart collection filters are not supported")
+	}
 	sp := specFromFilter(c)
 	if err := Validate(&sp); err != nil {
 		return nil, err

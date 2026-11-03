@@ -181,7 +181,7 @@ func (s *Server) resolveURI(ctx context.Context, pr *Request, uri string) ([]cor
 			return nil, core.ErrNotFound
 		}
 		q, _ := url.ParseQuery(rawQuery)
-		br := s.parseBrowse(ctx, sec, sec.Type, pr.User, q)
+		br := s.parseBrowse(ctx, sec, sec.Type, pr.User, q, rawQuery)
 		br.q.Offset, br.q.Limit = 0, maxExpand
 		page, err := s.d.Catalog.Browse(ctx, br.q)
 		if err != nil {

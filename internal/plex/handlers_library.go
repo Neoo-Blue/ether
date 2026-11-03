@@ -1,7 +1,6 @@
 package plex
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"net/http"
@@ -548,9 +547,53 @@ func applyTimeFilter(op string, ts int64, dateOnly bool, after, before *int64) {
 }
 
 // parseBrowse converts Plex filter/sort params into a catalogue query.
-func (s *Server) parseBrowse(ctx context.Context, sec Section, t core.MediaType, u *core.User, q url.Values) browseRequest {
+func (s *Server) parseBrowse(ctx context.Context, sec Section, t core.MediaType, u *core.User, q url.Values, raw ...string) browseRequest {
 	br := browseRequest{}
-	f := core.Filter{Type: t}
+	var group *core.FilterGroup
+	if len(raw) > 0 && (q.Has("push") || q.Has("or") || q.Has("pop")) {
+		tree := parseQueryTree(raw[0], typeNumber(t), nil)
+		var convert func(*queryRule) *core.FilterGroup
+		convert = func(rule *queryRule) *core.FilterGroup {
+			if rule == nil {
+				return nil
+			}
+			if rule.Type == "composite" {
+				g := &core.FilterGroup{Operator: rule.Operator}
+				for i := range rule.Rule {
+					if child := convert(&rule.Rule[i]); child != nil {
+						g.Children = append(g.Children, *child)
+					}
+				}
+				if len(g.Children) == 0 {
+					return nil
+				}
+				return g
+			}
+			if rule.Value == nil {
+				return nil
+			}
+			key := rule.Field + strings.TrimSuffix(rule.Operator, "=")
+			parsed := s.parseBrowse(ctx, sec, t, nil, url.Values{key: []string{*rule.Value}})
+			if parsed.unwatched != nil || parsed.inProgress != nil || parsed.lastViewedAfter > 0 || parsed.lastViewedBefore > 0 {
+				var id int64
+				if u != nil && s.d.State != nil {
+					id = u.ID
+				}
+				return &core.FilterGroup{Unwatched: parsed.unwatched, InProgress: parsed.inProgress, LastViewedAfter: parsed.lastViewedAfter, LastViewedBefore: parsed.lastViewedBefore, UserID: id}
+			}
+			return &core.FilterGroup{Filter: &parsed.q.Filter}
+		}
+		group = convert(tree.Rule)
+		// Keep response-shaping arguments, but rules are represented by the tree.
+		reduced := url.Values{}
+		for k, v := range q {
+			if queryParamIgnored(k) || k == "type" || k == "sort" {
+				reduced[k] = v
+			}
+		}
+		q = reduced
+	}
+	f := core.Filter{Type: t, Group: group}
 	if u != nil {
 		f.MaxContentRating = u.MaxContentRating
 	}
@@ -988,32 +1031,6 @@ func titleSortKey(t core.Title) string {
 	return strings.ToLower(t.Title)
 }
 
-func compareTitlesBySpec(a, b core.Title, spec core.SortSpec, now time.Time) int {
-	var c int
-	switch spec.Sort {
-	case core.SortTitle:
-		c = cmp.Compare(titleSortKey(a), titleSortKey(b))
-	case core.SortYear:
-		c = cmp.Compare(a.Year, b.Year)
-	case core.SortReleased:
-		c = cmp.Compare(a.Released.Unix(), b.Released.Unix())
-	case core.SortAdded:
-		c = cmp.Compare(a.DateAdded(now).Unix(), b.DateAdded(now).Unix())
-	case core.SortUpdated:
-		c = cmp.Compare(a.UpdatedAt.Unix(), b.UpdatedAt.Unix())
-	case core.SortRating:
-		c = cmp.Compare(a.Rating, b.Rating)
-	case core.SortDuration:
-		c = cmp.Compare(a.Runtime, b.Runtime)
-	default:
-		c = cmp.Compare(a.Popularity, b.Popularity)
-	}
-	if spec.Desc {
-		return -c
-	}
-	return c
-}
-
 // browse runs a catalogue query honouring paging and watch-state filters.
 func (s *Server) browse(ctx context.Context, pr *Request, br browseRequest) ([]core.Title, int, int, error) {
 	offset, size := pr.pageOf(br.limit)
@@ -1023,12 +1040,34 @@ func (s *Server) browse(ctx context.Context, pr *Request, br browseRequest) ([]c
 	if br.none {
 		return nil, 0, offset, nil
 	}
+	// Apply watch predicates before catalogue pagination and counting.
+	if br.unwatched != nil || br.inProgress != nil || br.lastViewedAfter > 0 || br.lastViewedBefore > 0 {
+		var id int64
+		if pr.User != nil && s.d.State != nil {
+			id = pr.User.ID
+		}
+		state := core.FilterGroup{UserID: id, Unwatched: br.unwatched, InProgress: br.inProgress, LastViewedAfter: br.lastViewedAfter, LastViewedBefore: br.lastViewedBefore}
+		if br.q.Filter.Group == nil {
+			br.q.Filter.Group = &state
+		} else {
+			br.q.Filter.Group = &core.FilterGroup{Operator: "and", Children: []core.FilterGroup{*br.q.Filter.Group, state}}
+		}
+		br.unwatched, br.inProgress = nil, nil
+		br.lastViewedAfter, br.lastViewedBefore = 0, 0
+	}
+	if br.sortLastViewed {
+		br.q.SortLastViewed = true
+		br.q.Desc = br.lastViewedDesc
+		if pr.User != nil && s.d.State != nil {
+			br.q.SortViewerID = pr.User.ID
+		}
+		br.sortLastViewed = false
+	}
 	_, hasBrowseBlocks := s.d.AccessPolicy.(interface {
 		BrowseBlocks(*core.User) ([]string, []string)
 	})
 	needsPostPolicy := s.d.AccessPolicy != nil && !hasBrowseBlocks && s.viewerRestricted(pr.User)
-	needsStateScan := br.unwatched != nil || br.inProgress != nil || br.sortLastViewed || br.lastViewedAfter > 0 || br.lastViewedBefore > 0
-	if !needsStateScan && !needsPostPolicy {
+	if !needsPostPolicy {
 		q := br.q
 		q.Offset, q.Limit = offset, size
 		if size == 0 {
@@ -1048,11 +1087,9 @@ func (s *Server) browse(ctx context.Context, pr *Request, br browseRequest) ([]c
 		}
 		return items, total, offset, nil
 	}
-	// State-filtered or custom-policy browse: scan the catalogue in chunks.
+	// Custom policies without SQL predicates are evaluated in bounded chunks.
 	const chunk, maxScan = 200, 5000
 	var out []core.Title
-	var allMatched []core.Title
-	viewTimes := map[core.RatingKey]int64{}
 	matched, scanned, total := 0, 0, 0
 	for scanned < maxScan {
 		q := br.q
@@ -1065,80 +1102,20 @@ func (s *Server) browse(ctx context.Context, pr *Request, br browseRequest) ([]c
 		if len(page.Items) == 0 {
 			break
 		}
-		var st map[core.RatingKey]core.WatchStatus
-		if needsStateScan {
-			st = s.stateFor(ctx, pr, page.Items)
-		}
 		for _, t := range page.Items {
 			if needsPostPolicy && !s.visibleTitle(ctx, pr.User, &t) {
 				total--
 				continue
 			}
-			ws := st[t.Key]
-			if br.unwatched != nil {
-				isUnwatched := ws.ViewCount == 0
-				if isUnwatched != *br.unwatched {
-					total--
-					continue
-				}
-			}
-			if br.inProgress != nil {
-				isInProgress := ws.ViewOffset > 0
-				if isInProgress != *br.inProgress {
-					total--
-					continue
-				}
-			}
-			if br.lastViewedAfter > 0 || br.lastViewedBefore > 0 {
-				lv := unixOrZero(ws.LastViewedAt)
-				if lv <= 0 || (br.lastViewedAfter > 0 && lv < br.lastViewedAfter) || (br.lastViewedBefore > 0 && lv > br.lastViewedBefore) {
-					total--
-					continue
-				}
-			}
-			if br.sortLastViewed {
-				viewTimes[t.Key] = unixOrZero(ws.LastViewedAt)
-				allMatched = append(allMatched, t)
-			} else if matched >= offset && len(out) < size {
+			if matched >= offset && len(out) < size {
 				out = append(out, t)
 			}
 			matched++
 		}
 		scanned += len(page.Items)
-		if scanned >= page.Total || (!br.sortLastViewed && !needsPostPolicy && len(out) >= size && matched > offset+size) {
+		if scanned >= page.Total {
 			break
 		}
-	}
-	if br.sortLastViewed {
-		now := s.now()
-		isChildType := br.q.Filter.Type == core.TypeEpisode || br.q.Filter.Type == core.TypeSeason
-		sort.SliceStable(allMatched, func(i, j int) bool {
-			vi, vj := viewTimes[allMatched[i].Key], viewTimes[allMatched[j].Key]
-			if vi != vj {
-				if br.lastViewedDesc {
-					return vi > vj
-				}
-				return vi < vj
-			}
-			for _, spec := range br.q.SecondarySorts {
-				if c := compareTitlesBySpec(allMatched[i], allMatched[j], spec, now); c != 0 {
-					return c < 0
-				}
-			}
-			if !isChildType {
-				if c := cmp.Compare(titleSortKey(allMatched[i]), titleSortKey(allMatched[j])); c != 0 {
-					return c < 0
-				}
-			}
-			return allMatched[i].Key < allMatched[j].Key
-		})
-		total = len(allMatched)
-		if br.limit > 0 && total > br.limit {
-			total = br.limit
-		}
-		lo := min(offset, len(allMatched))
-		hi := min(lo+size, len(allMatched))
-		return allMatched[lo:hi], total, offset, nil
 	}
 	if total < matched {
 		total = matched
@@ -1253,7 +1230,7 @@ func (s *Server) sectionList(w http.ResponseWriter, r *http.Request, sec Section
 		s.write(w, r, mc)
 		return
 	}
-	br := s.parseBrowse(ctx, sec, t, pr.User, q)
+	br := s.parseBrowse(ctx, sec, t, pr.User, q, r.URL.RawQuery)
 	switch sub {
 	case "unwatched":
 		want := true
