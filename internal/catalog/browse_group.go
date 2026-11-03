@@ -38,13 +38,20 @@ func (c *Catalog) compileBrowseGroup(g *core.FilterGroup, alias string, kind cor
 			} else {
 				p := "EXISTS (SELECT 1 FROM state_watch w WHERE w.user_id=? AND w.rating_key=" + alias + ".key AND w.last_viewed_at>0"
 				args = append(args, g.UserID)
+				// state_watch timestamps are nanoseconds; Plex filter bounds
+				// and unixOrZero use whole seconds.
+				const maxSeconds = int64(9223372036)
 				if g.LastViewedAfter > 0 {
-					p += " AND w.last_viewed_at>=?"
-					args = append(args, g.LastViewedAfter)
+					if g.LastViewedAfter > maxSeconds {
+						p += " AND 1=0"
+					} else {
+						p += " AND w.last_viewed_at>=?"
+						args = append(args, g.LastViewedAfter*1_000_000_000)
+					}
 				}
-				if g.LastViewedBefore > 0 {
-					p += " AND w.last_viewed_at<=?"
-					args = append(args, g.LastViewedBefore)
+				if g.LastViewedBefore > 0 && g.LastViewedBefore < maxSeconds {
+					p += " AND w.last_viewed_at<?"
+					args = append(args, (g.LastViewedBefore+1)*1_000_000_000)
 				}
 				parts = append(parts, p+")")
 			}
