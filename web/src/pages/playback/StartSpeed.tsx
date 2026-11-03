@@ -1,3 +1,4 @@
+import { QualityHelp } from "../releases/QualityHelp";
 import { SearchSelect, SettingsSection, Switch } from "@braedonsaunders/appkit-ui";
 import { useMemo, useState } from "react";
 import { MoreOptions } from "../../components/ConfigSection";
@@ -50,9 +51,12 @@ export function StartSpeed() {
     <SettingsSection title={t("Start speed")}>
       <SettingsRow
         title={t("Start before the health check finishes")}
-        description={t(
-          "Plays the top release straight away. Missing articles still trigger failover.",
-        )}
+        description={
+          <QualityHelp
+            summary={t("Play the top release immediately.")}
+            detail={t("Missing articles still trigger failover.")}
+          />
+        }
         control={
           <Switch
             checked={draft.optimisticStart}
@@ -64,9 +68,12 @@ export function StartSpeed() {
       <MoreOptions label={t("More options: Start speed")}>
         <SettingsRow
           title={t("Concurrent checks")}
-          description={t(
-            "Checking several releases at once can use extra NZB downloads. Detail-page warming has its own small budget.",
-          )}
+          description={
+            <QualityHelp
+              summary={t("Check several releases at once.")}
+              detail={t("Uses extra NZB downloads. Detail-page warming has its own budget.")}
+            />
+          }
           control={
             <div className="w-48">
               <SearchSelect

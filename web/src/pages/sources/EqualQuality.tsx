@@ -1,3 +1,4 @@
+import { QualityHelp } from "../releases/QualityHelp";
 import { SearchSelect, SettingsSection, toast } from "@braedonsaunders/appkit-ui";
 import { useMemo, useState } from "react";
 import { ErrorPanel } from "../../components/feedback";
@@ -98,13 +99,12 @@ export function SourceOrderSection() {
       <SettingsRow
         title={t("Source order")}
         description={
-          <>
-            {t("Start fastest picks whichever source has been quicker to start.")}{" "}
-            {t(
-              "Usenet first and Debrid first only decide between equal releases. The Always choices use that source even when the other has a better release, and fall back to the other when it has nothing that plays.",
-            )}{" "}
-            <SourceStartupNote />
-          </>
+          <QualityHelp
+            summary={t("Prefer speed or a source.")}
+            detail={t(
+              "Start fastest picks whichever source has been quicker to start. Usenet first and Debrid first only decide between equal releases. The Always choices prefer that source regardless of quality, with fallback when nothing plays.",
+            )}
+          />
         }
         control={
           <div className="w-52">
@@ -119,6 +119,9 @@ export function SourceOrderSection() {
           </div>
         }
       />
+      <p className="px-5 pb-4 text-xs text-fg-muted">
+        <SourceStartupNote />
+      </p>
       <SaveBar
         dirty={dirty}
         saving={saving}

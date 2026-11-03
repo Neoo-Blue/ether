@@ -1,3 +1,5 @@
+import { createElement } from "react";
+import { QualityHelp } from "../releases/QualityHelp";
 import { localized, t } from "../../i18n";
 import type { FieldGroup } from "./SchemaForm";
 
@@ -353,9 +355,10 @@ export const PLAY_VERSIONS: FieldGroup[] = localized(() => [
         key: "offerHigherVersions",
         label: t("Offer higher versions"),
         kind: "bool",
-        help: t(
-          "Version menus can list releases taller than the profile. Off keeps the ceiling you set. HDR and file-size limits still apply.",
-        ),
+        help: createElement(QualityHelp, {
+          summary: t("Offer resolutions above the profile limit."),
+          detail: t("Off keeps the ceiling you set. HDR and file-size limits still apply."),
+        }),
       },
     ],
   },
@@ -366,8 +369,7 @@ export const RELEASE_SEARCH: FieldGroup[] = localized(() => [
   {
     title: t("How Ether searches"),
     description: t("The defaults are enough for a household."),
-    fields: [],
-    more: [
+    fields: [
       {
         key: "maxCandidates",
         label: t("Releases to keep ready"),

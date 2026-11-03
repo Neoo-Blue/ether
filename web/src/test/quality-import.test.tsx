@@ -11,6 +11,7 @@ const imports = (fake: Parameters<typeof calls>[0]) =>
   );
 
 async function openImport() {
+  fireEvent.click(await screen.findByRole("button", { name: "Add profile" }, WAIT));
   fireEvent.click(await screen.findByRole("button", { name: "Import from TRaSH Guides" }, WAIT));
   return screen.findByRole("dialog", { name: "Import from TRaSH Guides" }, WAIT);
 }
