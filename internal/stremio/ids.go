@@ -3,22 +3,9 @@ package stremio
 import (
 	"context"
 	"fmt"
-	"strings"
 
-	"github.com/braedonsaunders/ether/internal/animemap"
 	"github.com/braedonsaunders/ether/internal/core"
 )
-
-// AnimeIDs maps a TMDB request to an anime database id (Kitsu, MAL,
-// AniList, AniDB) for add-ons that look anime up only by those ids.
-// Implemented by *animemap.Service.
-type AnimeIDs interface {
-	Lookup(ctx context.Context, req core.SearchRequest, db string) (id int64, episode int, ok bool, err error)
-}
-
-// animeDatabases are the anime id prefixes Ether can map TMDB titles to,
-// in the order they are tried.
-var animeDatabases = []string{animemap.Kitsu, animemap.MAL, animemap.AniList, animemap.AniDB}
 
 // Lookup is how to ask an add-on's stream route about one search: its
 // content type ("movie" or "series") and id, whether only whole-season
@@ -101,18 +88,7 @@ func LookupStreams(ctx context.Context, m Manifest, req core.SearchRequest, anim
 }
 
 // IMDbID normalises an IMDb id to "tt" + digits, or "".
-func IMDbID(id string) string {
-	id = strings.TrimPrefix(strings.ToLower(strings.TrimSpace(id)), "tt")
-	if id == "" || len(id) > 10 {
-		return ""
-	}
-	for _, r := range id {
-		if r < '0' || r > '9' {
-			return ""
-		}
-	}
-	return "tt" + id
-}
+func IMDbID(id string) string { return imdbID(id) }
 
 // TitleID is the content id the protocol uses for a catalogue title:
 // IMDb when known, else tmdb:N. Episodes add ":season:episode" to their

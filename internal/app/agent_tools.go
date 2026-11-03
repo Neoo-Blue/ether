@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/url"
@@ -17,6 +19,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/frontend"
 	"github.com/braedonsaunders/ether/internal/plugins"
 	"github.com/braedonsaunders/ether/internal/resolver"
+	"github.com/braedonsaunders/ether/internal/stremio"
 )
 
 // registerBuiltinTools registers Ether's built-in agent tools (WS5) into the
@@ -431,7 +434,7 @@ func (s *appSourceService) Sources(ctx context.Context) ([]builtin.SourceInfo, e
 			kind = config.IndexerKindNewznab
 		}
 		class := "indexer"
-		if ix.IsAddon() {
+		if ix.IsStremio() {
 			class = "addon"
 		}
 		out = append(out, builtin.SourceInfo{
@@ -466,26 +469,34 @@ func (s *appSourceService) Sources(ctx context.Context) ([]builtin.SourceInfo, e
 }
 
 func (s *appSourceService) AddStremio(ctx context.Context, addonURL string) (builtin.SourceInfo, error) {
-	if _, _, err := plugins.StremioInstallID(addonURL); err != nil {
-		return builtin.SourceInfo{}, tools.Userf("%s", err.Error())
-	}
-	rec, err := s.a.installAddon(ctx, plugins.AddonInstall{Link: addonURL, Roles: []plugins.Capability{plugins.CapStreamSource}})
+	base, err := stremio.BaseURL(addonURL)
 	if err != nil {
 		return builtin.SourceInfo{}, tools.Userf("%s", err.Error())
 	}
-	if err := s.a.syncAddonIndexers(ctx); err != nil {
+	var b [4]byte
+	_, _ = rand.Read(b[:])
+	id := "stremio-" + hex.EncodeToString(b[:])
+	name := base.Host
+	ix := config.Indexer{
+		ID:       id,
+		Name:     name,
+		URL:      base.String(),
+		Kind:     config.IndexerKindStremio,
+		Protocol: "torrent",
+		Enabled:  true,
+	}
+	if err := s.a.cfg.Update(func(c *config.Config) error {
+		c.Indexers = append(c.Indexers, ix)
+		return nil
+	}); err != nil {
 		return builtin.SourceInfo{}, err
 	}
-	host := ""
-	if u, err := url.Parse(rec.SourceURL); err == nil {
-		host = u.Hostname()
-	}
 	return builtin.SourceInfo{
-		Name:    rec.Name,
-		Kind:    config.IndexerKindAddon,
+		Name:    name,
+		Kind:    config.IndexerKindStremio,
 		Class:   "addon",
-		Enabled: rec.Enabled,
-		Host:    host,
+		Enabled: true,
+		Host:    base.Host,
 		Health:  "unknown",
 	}, nil
 }

@@ -5,7 +5,6 @@ import {
   EmptyState,
   SearchSelect,
   SettingsSection,
-  Switch,
   confirmDialog,
   toast,
 } from "@braedonsaunders/appkit-ui";
@@ -49,8 +48,7 @@ import {
 } from "./form";
 import { PluginSourceCards, SourceCard } from "./cards";
 import { StremioMark } from "./marks";
-import { AddAddonDrawer } from "../../components/addons/AddAddonDrawer";
-import { addonsApi } from "../../components/addons/addons";
+import { normalizeAddonUrl, addonUrlHasDebridKey } from "../../components/addons/addons";
 import {
   MissingDefinition,
   SiteDefinitionRow,
@@ -80,9 +78,24 @@ function blankIndexer(priority: number): Indexer {
   };
 }
 
-/** An installed add-on's streams (its row names the add-on, not a link). */
-export function isAddon(ix: { kind?: string }) {
-  return ix.kind === "addon";
+/** A Stremio stream addon: torrent results streamed through debrid. */
+function blankStremioIndexer(priority: number): Indexer {
+  return { ...blankIndexer(priority), kind: "stremio", protocol: "torrent" };
+}
+
+export function isStremio(ix: { kind?: string }) {
+  return ix.kind === "stremio";
+}
+
+export { addonUrlHasDebridKey, normalizeAddonUrl } from "../../components/addons/addons";
+
+/** The addon's host, shown instead of a URL whose path may hold settings. */
+function addonHost(url: string): string {
+  try {
+    return new URL(normalizeAddonUrl(url)).host;
+  } catch {
+    return url;
+  }
 }
 
 const PROTOCOLS: { value: IndexerProtocol; label: string }[] = localized(() => [
@@ -109,7 +122,11 @@ function hostOf(url: string): string {
 }
 
 function indexerName(ix: Indexer, i: number) {
-  return ix.name || (isAddon(ix) ? "" : ix.url) || t("Indexer {number}", { number: i + 1 });
+  return (
+    ix.name ||
+    (isStremio(ix) && ix.url ? addonHost(ix.url) : ix.url) ||
+    t("Indexer {number}", { number: i + 1 })
+  );
 }
 
 /** A site's test: result count and a few sample titles, or the error. */
@@ -164,27 +181,6 @@ export function IndexerList({
   const statuses = useAsync(() => api.sites.status().catch(() => []), [version, sitesVersion]);
   const [editing, setEditing] = useState<{ index: number; draft: Indexer } | null>(null);
   const [picking, setPicking] = useState(false);
-  const [adding, setAdding] = useState(false);
-  const [togglingRole, setTogglingRole] = useState(false);
-  const addons = useAsync(() => addonsApi.list().catch(() => []), [version]);
-  const toggleStreams = async (ix: Indexer, on: boolean) => {
-    const a = addons.data?.find((x) => x.id === ix.plugin);
-    if (!a) return;
-    setTogglingRole(true);
-    try {
-      const off = (a.roles ?? [])
-        .filter((r) => (r.role === "stream_source" ? !on : !r.on))
-        .map((r) => r.role);
-      await addonsApi.setRoles(a.id, off);
-      await addons.reload();
-      void refreshDashboard();
-      toast.success(on ? t("Streams on") : t("Streams off"));
-    } catch (e) {
-      toast.error(t("That didn't work"), { description: errorMessage(e) });
-    } finally {
-      setTogglingRole(false);
-    }
-  };
   /** Uploading a definition: "add" continues to a new indexer for it. */
   const [uploading, setUploading] = useState<"add" | "install" | null>(null);
   const [errors, setErrors] = useState<Errors>({});
@@ -247,19 +243,25 @@ export function IndexerList({
       setPicking(true);
       return;
     }
-    if (addRequest.type === "stremio") {
-      setEditing(null);
-      setAdding(true);
-      return;
-    }
-    open(indexers.length, blankIndexer(indexers.length));
+    open(
+      indexers.length,
+      addRequest.type === "stremio"
+        ? blankStremioIndexer(indexers.length)
+        : blankIndexer(indexers.length),
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addRequest, cfg, indexers.length]);
 
   async function save() {
     if (!editing) return;
     const { index } = editing;
-    const draft = editing.draft;
+    const draft = isStremio(editing.draft)
+      ? {
+          ...editing.draft,
+          url: normalizeAddonUrl(editing.draft.url),
+          protocol: "torrent" as const,
+        }
+      : editing.draft;
     const list =
       index < indexers.length
         ? indexers.map((ix, j) => (j === index ? draft : ix))
@@ -338,11 +340,7 @@ export function IndexerList({
   const used = Number(stat?.hitsUsed ?? 0);
   const needsDebrid = indexers.some((ix) => isTorrent(ix) && ix.enabled) && !hasUsableDebrid(cfg);
   const builtin = draft ? isBuiltin(draft) : false;
-  const addon = draft ? isAddon(draft) : false;
-  const addonOf = (ix: Indexer) => addons.data?.find((a) => a.id === ix.plugin);
-  const streamsOn = (ix: Indexer) =>
-    addonOf(ix)?.enabled !== false &&
-    (addonOf(ix)?.roles ?? []).some((r) => r.role === "stream_source" && r.on);
+  const stremio = draft ? isStremio(draft) : false;
   const draftDef = draft && builtin ? defFor(draft) : undefined;
 
   return (
@@ -386,12 +384,9 @@ export function IndexerList({
               },
               {
                 key: "stremio",
-                label: t("Stremio add-on…"),
+                label: t("Stremio addon URL…"),
                 icon: Puzzle,
-                onSelect: () => {
-                  setEditing(null);
-                  setAdding(true);
-                },
+                onSelect: () => open(indexers.length, blankStremioIndexer(indexers.length)),
               },
             ]}
           >
@@ -421,12 +416,12 @@ export function IndexerList({
               const site = isBuiltin(ix);
               const def = site ? defFor(ix) : undefined;
               const tested = site ? statusFor(ix) : undefined;
-              const countsSearches = site || isAddon(ix);
+              const countsSearches = site || isStremio(ix);
               return (
                 <SourceCard
                   name={label}
                   position={i + 1}
-                  logo={isAddon(ix) ? <StremioMark /> : undefined}
+                  logo={isStremio(ix) ? <StremioMark /> : undefined}
                   description={[
                     i === 0 ? t("Searched first") : t("Priority {number}", { number: i + 1 }),
                     site && ix.url ? hostOf(ix.url) : "",
@@ -491,14 +486,12 @@ export function IndexerList({
                             </Badge>
                           ) : null}
                         </>
-                      ) : isAddon(ix) ? (
-                        <Badge variant="outline">{t("Add-on")}</Badge>
+                      ) : isStremio(ix) ? (
+                        <Badge variant="outline">{t("Stremio addon")}</Badge>
                       ) : (
                         <Badge variant="outline">{protocolLabel(ix)}</Badge>
                       )}
-                      {(isAddon(ix) ? addons.data && !streamsOn(ix) : !ix.enabled) ? (
-                        <Badge variant="secondary">{t("Off")}</Badge>
-                      ) : null}
+                      {!ix.enabled ? <Badge variant="secondary">{t("Off")}</Badge> : null}
                       {s && Number(s.retryAt ?? 0) > Date.now() / 1000 ? (
                         <Badge variant="warning">
                           {t("Waiting for service · retries automatically")}
@@ -596,7 +589,9 @@ export function IndexerList({
           isNew
             ? builtin
               ? (draftDef?.name ?? t("New site"))
-              : t("New indexer")
+              : stremio
+                ? t("New Stremio addon")
+                : t("New indexer")
             : draft && editing
               ? indexerName(draft, editing.index)
               : ""
@@ -605,8 +600,8 @@ export function IndexerList({
           draft
             ? builtin
               ? siteKindLabel(draft.protocol)
-              : addon
-                ? t("Add-on streams")
+              : stremio
+                ? t("Stremio addon · Torrent")
                 : isTorrent(draft)
                   ? t("Torznab indexer")
                   : t("Newznab indexer")
@@ -615,7 +610,7 @@ export function IndexerList({
         onSave={() => void save()}
         saving={saving}
         saveLabel={t("Save indexer")}
-        onRemove={isNew || addon ? undefined : () => void remove()}
+        onRemove={isNew ? undefined : () => void remove()}
         removeLabel={t("Remove indexer")}
         error={error}
         tools={
@@ -629,8 +624,16 @@ export function IndexerList({
             ) : (
               <TestButton
                 state={tests[draft.id] ?? { status: "idle" }}
-                onTest={() => runTest(draft.id, () => api.testIndexer(draft))}
-                disabled={!addon && !draft.url}
+                onTest={() =>
+                  runTest(draft.id, () =>
+                    api.testIndexer(
+                      stremio
+                        ? { ...draft, url: normalizeAddonUrl(draft.url), protocol: "torrent" }
+                        : draft,
+                    ),
+                  )
+                }
+                disabled={!draft.url}
               />
             )
           ) : null
@@ -695,33 +698,41 @@ export function IndexerList({
                   onChange={(v) => set({ enabled: v })}
                 />
               </SettingsSection>
-            ) : addon ? (
-              <SettingsSection title={t("Add-on")}>
+            ) : stremio ? (
+              <SettingsSection title={t("Addon")}>
                 <TextRow label={t("Name")} value={draft.name} onChange={(v) => set({ name: v })} />
-                <SettingsRow
-                  title={t("Streams")}
-                  description={
-                    addonOf(draft)?.host
-                      ? t("Searches {host} when someone presses Play.", {
-                          host: addonOf(draft)!.host!,
-                        })
-                      : t("Searches this add-on when someone presses Play.")
-                  }
-                  control={
-                    <Switch
-                      aria-label={t("Streams")}
-                      checked={streamsOn(draft)}
-                      disabled={!addonOf(draft) || togglingRole}
-                      onChange={(e) => void toggleStreams(draft, e.currentTarget.checked)}
-                    />
-                  }
+                <TextRow
+                  label={t("Addon URL")}
+                  type="url"
+                  value={draft.url}
+                  placeholder="https://addon.example/manifest.json"
+                  help={t(
+                    "Paste the addon's install link. Choose an addon that exposes torrent results; direct or proxied playback links alone are not supported. Ether streams through your configured debrid accounts.",
+                  )}
+                  error={errors.url}
+                  onChange={(v) => set({ url: v })}
                 />
-                <p className="px-5 pb-3 text-sm text-fg-muted">
-                  {t("Its install link and its other roles are managed with the add-on.")}{" "}
-                  <Link to="/plugins" className="font-medium underline underline-offset-2">
-                    {t("Open in Plugins")}
-                  </Link>
-                </p>
+                {draft.url.includes("torrentio.strem.fun") ? (
+                  <p className="px-5 text-sm text-fg-muted">
+                    {t(
+                      "Lookups go to torrentio.strem.fun. Prefer your own? Use Torznab (Prowlarr, Jackett, Zilean).",
+                    )}
+                  </p>
+                ) : null}
+                {addonUrlHasDebridKey(draft.url) ? (
+                  <Alert variant="warning" role="status">
+                    <AlertDescription>
+                      {t(
+                        "This link includes a debrid API key. Ether checks your debrid accounts itself, so the addon doesn't need it: a key only adds cached hints, and it is then also stored in this link on this server.",
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+                <BoolRow
+                  label={t("Enabled")}
+                  value={draft.enabled}
+                  onChange={(v) => set({ enabled: v })}
+                />
               </SettingsSection>
             ) : (
               <>
@@ -810,7 +821,7 @@ export function IndexerList({
                     ? t(
                         "Sites report no limits to Ether. Add a cap if the site restricts how often you search or download.",
                       )
-                    : addon
+                    : stremio
                       ? t(
                           "Ether follows the addon's rate limit responses automatically. Add a cap if you want fewer searches.",
                         )
@@ -820,18 +831,18 @@ export function IndexerList({
                 }
               >
                 <NumRow
-                  label={builtin || addon ? t("Searches per day") : t("API requests per day")}
+                  label={builtin || stremio ? t("Searches per day") : t("API requests per day")}
                   value={draft.dailyLimit}
                   min={0}
                   help={
-                    builtin || addon
+                    builtin || stremio
                       ? t("0 = no cap.")
                       : t("0 = automatic. Includes searches and capability checks.")
                   }
                   error={errors.dailyLimit}
                   onChange={(n) => set({ dailyLimit: n })}
                 />
-                {addon ? null : (
+                {stremio ? null : (
                   <NumRow
                     label={
                       isTorrent(draft) ? t("Torrent downloads per day") : t("NZB downloads per day")
@@ -846,7 +857,7 @@ export function IndexerList({
                   />
                 )}
               </SettingsSection>
-              {builtin || addon ? null : (
+              {builtin || stremio ? null : (
                 <SettingsSection title={t("Categories")}>
                   <SettingsRow
                     stacked
@@ -883,16 +894,6 @@ export function IndexerList({
           </>
         ) : null}
       </RecordDrawer>
-      <AddAddonDrawer
-        open={adding}
-        role="stream_source"
-        onClose={() => setAdding(false)}
-        onAdded={() => {
-          void config.reload();
-          void addons.reload();
-          void refreshDashboard();
-        }}
-      />
     </>
   );
 }

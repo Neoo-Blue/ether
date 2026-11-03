@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-const manifestJSON = `{"id":"org.example.streams","version":"1.0.0","name":"Example","resources":[{"name":"stream","types":["movie","series"],"idPrefixes":["tt","kitsu"]}],"types":["movie","series"],"catalogs":[]}`
 
 func TestNormalizeURL(t *testing.T) {
 	for raw, want := range map[string]string{

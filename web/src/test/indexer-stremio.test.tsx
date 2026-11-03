@@ -1,72 +1,61 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { addonUrlHasDebridKey, normalizeAddonUrl } from "../components/addons/addons";
+import type { Indexer } from "../lib/types";
+import { addonUrlHasDebridKey, normalizeAddonUrl } from "../pages/sources/Indexers";
 import { calls, renderApp } from "./harness";
 
 const WAIT = { timeout: 4000 };
 
 async function openAddAddon() {
   fireEvent.click(await screen.findByRole("button", { name: /Add indexer/ }, WAIT));
-  fireEvent.click(await screen.findByRole("menuitem", { name: "Stremio add-on…" }));
-  return screen.findByRole("dialog", { name: "Add a Stremio add-on" });
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Stremio addon URL…" }));
+  return screen.findByRole("dialog", { name: "New Stremio addon" });
 }
 
-describe("Sources › Indexers Stremio add-ons", () => {
-  it("adds an add-on for its streams only, through the shared add-on flow", async () => {
+describe("Sources › Indexers Stremio addons", () => {
+  it("adds an addon from its stremio:// install link as a torrent source", async () => {
     const { fake } = renderApp("/sources/indexers");
     const drawer = await openAddAddon();
-    fireEvent.change(within(drawer).getByLabelText("Install link"), {
-      target: { value: "stremio://streams.example/opts=1/manifest.json" },
+    expect(within(drawer).getByText("Stremio addon · Torrent")).toBeInTheDocument();
+    expect(within(drawer).queryByLabelText("API key")).toBeNull();
+    expect(within(drawer).queryByText("Movie categories")).toBeNull();
+    fireEvent.change(within(drawer).getByLabelText("Name"), { target: { value: "My Addon" } });
+    fireEvent.change(within(drawer).getByLabelText("Addon URL"), {
+      target: { value: "  stremio://addon.example/opts=1/manifest.json " },
     });
     expect(within(drawer).queryByText(/includes a debrid API key/)).toBeNull();
-    fireEvent.click(within(drawer).getByRole("button", { name: "Continue" }));
-    // The page's role starts on; the add-on's other roles start off.
-    const streams = await within(drawer).findByRole("switch", { name: "Streams to play" });
-    expect(streams).toBeChecked();
-    expect(
-      within(drawer).getByRole("switch", { name: "Catalogs for collections and Home rows" }),
-    ).not.toBeChecked();
-    fireEvent.click(within(drawer).getByRole("button", { name: "Add add-on" }));
-    const installs = () =>
-      calls(fake, "POST", "/plugins/addons").filter((c) => c.path === "/plugins/addons");
-    await waitFor(() => expect(installs()).toHaveLength(1));
-    expect(installs()[0]!.body).toMatchObject({
-      url: "stremio://streams.example/opts=1/manifest.json",
-      roles: ["stream_source"],
-    });
-    // No link is ever written into the indexer list.
-    expect(calls(fake, "PUT", "/config/indexers")).toHaveLength(0);
-  });
 
-  it("shows an add-on row by name and switches its streams with the add-on", async () => {
-    const { fake } = renderApp("/sources/indexers");
-    const list = await screen.findByRole("region", { name: "Indexers" }, WAIT);
-    expect(await within(list).findByText("Add-on")).toBeInTheDocument();
-    fireEvent.click(within(list).getByRole("button", { name: "Edit Stream Addon" }));
-    const drawer = await screen.findByRole("dialog", { name: "Stream Addon" });
-    expect(within(drawer).queryByLabelText(/URL|link/i)).toBeNull();
-    expect(within(drawer).getByText(/Searches addon\.example/)).toBeInTheDocument();
-    const toggle = within(drawer).getByRole("switch", { name: "Streams" });
-    await waitFor(() => expect(toggle).toBeChecked());
-    fireEvent.click(toggle);
-    await waitFor(() =>
-      expect(calls(fake, "PUT", "/plugins/addon.mockstreams/roles")).toHaveLength(1),
-    );
-    expect(calls(fake, "PUT", "/plugins/addon.mockstreams/roles")[0]!.body).toMatchObject({
-      off: expect.arrayContaining(["stream_source", "list_source"]),
+    fireEvent.click(within(drawer).getByRole("button", { name: /Test/ }));
+    await waitFor(() => expect(calls(fake, "POST", "/test/indexer")).toHaveLength(1));
+    expect(calls(fake, "POST", "/test/indexer")[0]!.body).toMatchObject({
+      kind: "stremio",
+      url: "https://addon.example/opts=1/manifest.json",
     });
+
+    fireEvent.click(within(drawer).getByRole("button", { name: "Save indexer" }));
+    await waitFor(() => expect(calls(fake, "PUT", "/config/indexers")).toHaveLength(1));
+    const body = calls(fake, "PUT", "/config/indexers")[0]!.body as Indexer[];
+    expect(body.at(-1)).toMatchObject({
+      name: "My Addon",
+      kind: "stremio",
+      protocol: "torrent",
+      url: "https://addon.example/opts=1/manifest.json",
+      enabled: true,
+    });
+    const list = screen.getByRole("region", { name: "Indexers" });
+    await waitFor(() => expect(within(list).getAllByText("Stremio addon")).toHaveLength(2));
   });
 
   it("warns when the link embeds a debrid key", async () => {
     renderApp("/sources/indexers");
     const drawer = await openAddAddon();
-    fireEvent.change(within(drawer).getByLabelText("Install link"), {
+    fireEvent.change(within(drawer).getByLabelText("Addon URL"), {
       target: { value: "https://addon.example/sort=size|realdebrid=ABC123/manifest.json" },
     });
     expect(await within(drawer).findByText(/includes a debrid API key/)).toBeVisible();
   });
 
-  it("detects keys in plain and base64 add-on configurations", () => {
+  it("detects keys in plain and base64 addon configurations", () => {
     const config = btoa(JSON.stringify({ debridService: "torbox", debridApiKey: "k-123" }));
     expect(addonUrlHasDebridKey(`https://addon.example/${config}/manifest.json`)).toBe(true);
     const urlSafe = config.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");

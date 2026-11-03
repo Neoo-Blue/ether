@@ -249,8 +249,7 @@ function defaultConfig(): EtherConfig {
       {
         id: "i4",
         name: "Stream Addon",
-        url: "",
-        plugin: "addon.mockstreams",
+        url: "https://addon.example/manifest.json",
         apiKey: "",
         dailyLimit: 0,
         dailyGrabs: 0,
@@ -259,7 +258,7 @@ function defaultConfig(): EtherConfig {
         movieCategories: null,
         tvCategories: null,
         protocol: "torrent",
-        kind: "addon",
+        kind: "stremio",
       },
     ],
     debrid: {
@@ -1857,7 +1856,7 @@ export function createFakeServer(opts: FakeOptions = {}) {
           grabsLimit: ix.dailyGrabs,
           grabsRemaining: ix.dailyGrabs - 3,
           enabled: ix.enabled,
-          torrent: ix.protocol === "torrent" || ix.kind === "addon",
+          torrent: ix.protocol === "torrent" || ix.kind === "stremio",
         })),
         providers: (state.config.usenet.providers ?? []).map((p, i) => ({
           id: p.id,

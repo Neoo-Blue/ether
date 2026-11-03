@@ -217,18 +217,15 @@ func ValidateConfig(cfg config.Config) []FieldError {
 
 	for i, ix := range cfg.Indexers {
 		f := fmt.Sprintf("indexers[%d]", i)
-		if ix.IsAddon() {
-			if strings.TrimSpace(ix.Plugin) == "" {
-				v.add(f+".plugin", "names the installed add-on")
-			}
-		} else {
-			v.httpURL(f+".url", ix.URL, true)
-		}
+		v.httpURL(f+".url", ix.URL, true)
 		if ix.ClientIdentity != "" && !config.ValidSearchIdentity(ix.ClientIdentity) {
 			v.add(f+".clientIdentity", "must be a client that searches or empty to inherit")
 		}
 		if ix.Kind != "" {
-			v.oneOf(f+".kind", ix.Kind, config.IndexerKindNewznab, config.IndexerKindCardigann, config.IndexerKindAddon)
+			v.oneOf(f+".kind", ix.Kind, config.IndexerKindNewznab, config.IndexerKindCardigann, config.IndexerKindStremio)
+		}
+		if ix.IsStremio() && ix.Protocol != "" && ix.Protocol != "torrent" {
+			v.add(f+".protocol", "must be torrent for a Stremio addon")
 		}
 		if ix.IsBuiltin() && strings.TrimSpace(ix.Definition) == "" {
 			v.add(f+".definition", "is required for a built-in site")

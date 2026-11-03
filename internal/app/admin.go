@@ -85,8 +85,8 @@ func (a *App) buildAdmin() http.Handler {
 			return usenet.TestProvider(ctx, p)
 		},
 		TestIndexer: func(ctx context.Context, ix config.Indexer) error {
-			if ix.IsAddon() {
-				return a.testAddonStreams(ctx, ix.Plugin)
+			if ix.IsStremio() {
+				return a.addons.Test(ctx, ix)
 			}
 			if ix.IsBuiltin() {
 				if res := a.sites.Test(ctx, ix, false); !res.OK {

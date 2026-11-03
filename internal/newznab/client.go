@@ -1138,7 +1138,7 @@ func (c *Client) SearchRescue(ctx context.Context, req core.SearchRequest) ([]co
 				}
 			}
 		}
-		if !cfg.IsAddon() && req.OriginalTitle != "" && !releaseparse.TitlesMatch(req.OriginalTitle, req.Title) {
+		if !cfg.IsStremio() && !cfg.IsAddon() && req.OriginalTitle != "" && !releaseparse.TitlesMatch(req.OriginalTitle, req.Title) {
 			alt := req
 			alt.Title, alt.OriginalTitle = req.OriginalTitle, ""
 			if rs, err := c.backendSearch(ctx, alt); err == nil {

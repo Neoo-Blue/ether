@@ -200,13 +200,7 @@ function renderWizard(configure?: (fake: ReturnType<typeof createFakeServer>) =>
             p.host.trim() ? [] : [{ field: `usenet.providers[${i}].host`, message: "is required" }],
           ),
           ...(config.indexers ?? []).flatMap((ix: Indexer, i: number) =>
-            ix.kind === "addon"
-              ? ix.plugin
-                ? []
-                : [{ field: `indexers[${i}].plugin`, message: "names the installed add-on" }]
-              : ix.url.trim()
-                ? []
-                : [{ field: `indexers[${i}].url`, message: "is required" }],
+            ix.url.trim() ? [] : [{ field: `indexers[${i}].url`, message: "is required" }],
           ),
         ];
         if (fields.length)
@@ -469,35 +463,26 @@ describe("setup wizard", () => {
     ]);
     expect(fake.state.config.usenet.providers).toEqual([]);
 
-    // A debrid-only server starts its first indexer as a Stremio add-on.
+    // A debrid-only server starts its first indexer as a Stremio addon.
     fireEvent.click(screen.getByRole("button", { name: "Add indexer" }));
     expect(screen.queryByLabelText("API key")).not.toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText("https://addon.example/manifest.json"), {
       target: { value: " stremio://addon.example/manifest.json " },
     });
-    // Testing reads the add-on without installing it.
     fireEvent.click(screen.getByRole("button", { name: /^Test$/ }));
-    await waitFor(() => expect(calls(fake, "POST", "/plugins/addons/preview")).toHaveLength(1));
-    expect(calls(fake, "POST", "/plugins/addons/preview")[0]?.body).toMatchObject({
+    await waitFor(() => expect(calls(fake, "POST", "/test/indexer")).toHaveLength(1));
+    expect(calls(fake, "POST", "/test/indexer")[0]?.body).toMatchObject({
+      kind: "stremio",
+      protocol: "torrent",
       url: "https://addon.example/manifest.json",
     });
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Save and continue" })).toBeEnabled(),
     );
-    // Saving installs it as an add-on with its streams on; the indexer row
-    // names the add-on and keeps no link.
     fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
     await screen.findByRole("heading", { name: "Cache folder and disk budget" });
-    const installs = calls(fake, "POST", "/plugins/addons").filter(
-      (c) => c.path === "/plugins/addons",
-    );
-    expect(installs).toHaveLength(1);
-    expect(installs[0]?.body).toMatchObject({
-      url: "https://addon.example/manifest.json",
-      roles: ["stream_source"],
-    });
     expect(fake.state.config.indexers).toMatchObject([
-      { kind: "addon", plugin: "addon.addonexample", url: "" },
+      { kind: "stremio", protocol: "torrent", url: "https://addon.example/manifest.json" },
     ]);
   });
 
@@ -548,11 +533,9 @@ describe("setup wizard", () => {
             "Lookups go to torrentio.strem.fun. Prefer your own? Use Torznab (Prowlarr, Jackett, Zilean).",
           ),
         ).not.toBeInTheDocument();
-        // Torrentio was installed as an add-on when the step was saved.
-        expect(
-          screen.getByText("Add-on added. Its streams are searched like an indexer."),
-        ).toBeInTheDocument();
-        fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+        fireEvent.change(screen.getByDisplayValue("https://torrentio.strem.fun/manifest.json"), {
+          target: { value: "" },
+        });
         fireEvent.click(screen.getByRole("button", { name: "Add indexer" }));
       } else {
         fireEvent.click(screen.getByRole("button", { name: /Usenet provider/ }));
@@ -1052,15 +1035,14 @@ describe("setup wizard", () => {
     expect(screen.getByRole("button", { name: "Save and continue" })).toBeEnabled();
   });
 
-  it("keeps a saved add-on row without another test", async () => {
+  it("keeps a saved indexer without another test", async () => {
     renderWizard((f) => {
       sessionStorage.setItem(SETUP_STEP_KEY, "4");
       f.state.config.indexers = [
         {
           id: "t1",
           name: "Torrentio",
-          url: "",
-          plugin: "addon.torrentio",
+          url: "https://torrentio.strem.fun/manifest.json",
           apiKey: "",
           dailyLimit: 0,
           dailyGrabs: 0,
@@ -1069,18 +1051,19 @@ describe("setup wizard", () => {
           movieCategories: null,
           tvCategories: null,
           protocol: "torrent",
-          kind: "addon",
+          kind: "stremio",
         },
       ];
     });
     expect(await screen.findByRole("heading", { name: "Indexers and addons" })).toBeInTheDocument();
-    // An installed add-on row needs no test and shows no link.
-    expect(
-      screen.getByText("Add-on added. Its streams are searched like an indexer."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Done")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Test$/ })).not.toBeInTheDocument();
-    expect(screen.queryByDisplayValue(/torrentio/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save and continue" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.change(screen.getByDisplayValue("https://torrentio.strem.fun/manifest.json"), {
+      target: { value: "https://other.example/manifest.json" },
+    });
+    expect(screen.getByRole("button", { name: "Save and continue" })).toBeDisabled();
   });
 });
 

@@ -62,7 +62,7 @@ func (c *Client) cacheSecrets() []cacheSecret {
 	add("apikey", cfg.APIKey)
 	// A Stremio addon's settings, often including its debrid key, live in
 	// its install path, and its stream and NZB links repeat them.
-	if cfg.IsAddon() {
+	if (cfg.IsStremio() || cfg.IsAddon()) {
 		if u, err := url.Parse(strings.TrimSpace(cfg.URL)); err == nil {
 			n := 0
 			for _, seg := range strings.Split(u.EscapedPath(), "/") {

@@ -161,8 +161,7 @@ func TestCachedAddonStreamLinksDropAddonSecrets(t *testing.T) {
 	}
 	defer db.Close()
 	const key = "rdkey-0123456789ABCDEF"
-	// An add-on row carries its add-on's link in memory (never saved).
-	cfg := config.Indexer{ID: "addon1", Kind: config.IndexerKindAddon, Plugin: "addon.x", URL: "https://addon.example/realdebrid=" + key + "/manifest.json", Enabled: true}
+	cfg := config.Indexer{ID: "addon1", Kind: config.IndexerKindStremio, URL: "https://addon.example/realdebrid=" + key + "/manifest.json", Enabled: true}
 	c := New(cfg, db, Options{})
 	rel := core.Release{ID: "h", Protocol: core.ProtocolHTTP,
 		StreamURL:     "https://addon.example/resolve/realdebrid/" + key + "/abc/0/Movie.mkv",

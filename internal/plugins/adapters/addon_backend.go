@@ -1,15 +1,12 @@
 package adapters
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,11 +14,9 @@ import (
 
 	"github.com/braedonsaunders/ether/internal/config"
 	"github.com/braedonsaunders/ether/internal/core"
-	"github.com/braedonsaunders/ether/internal/egress"
 	"github.com/braedonsaunders/ether/internal/newznab"
 	"github.com/braedonsaunders/ether/internal/plugins"
 	"github.com/braedonsaunders/ether/internal/releaseparse"
-	"github.com/braedonsaunders/ether/internal/safefetch"
 	"github.com/braedonsaunders/ether/internal/stremio"
 )
 
@@ -35,9 +30,6 @@ import (
 const (
 	// skipWarnInterval throttles the skipped-streams warning per add-on.
 	skipWarnInterval = time.Hour
-	nzbTimeout       = 60 * time.Second
-	maxNZB           = 64 << 20
-	userAgent        = "Ether (+https://github.com/braedonsaunders/ether)"
 )
 
 // Backend returns the search backend of an add-on indexer row
@@ -271,65 +263,23 @@ func (b *addonBackend) ResolveTorrent(_ context.Context, r core.Release, _ func(
 	return r, nil
 }
 
-// FetchNZB implements newznab.Backend for an add-on's Usenet streams. The
-// add-on's own origin is trusted (a self-hosted add-on on the LAN); any
-// other host, and every redirect hop, must be public. Whatever the server
-// answers is transient (core.ErrSourceUnavailable); only a release without
-// a usable NZB link is rejected.
+// FetchNZB implements newznab.Backend for an add-on's Usenet streams,
+// exactly as for an add-on entered on the Indexers page.
 func (b *addonBackend) FetchNZB(ctx context.Context, r core.Release, reserve func(context.Context, string) error) ([]byte, error) {
-	if r.Protocol != core.ProtocolUsenet || r.NZBURL == "" {
-		return nil, fmt.Errorf("add-on release %q has no NZB to fetch: %w", r.Name, core.ErrReleaseRejected)
-	}
-	link, err := url.Parse(r.NZBURL)
-	if err != nil || (link.Scheme != "http" && link.Scheme != "https") || link.Host == "" {
-		return nil, fmt.Errorf("add-on release %q has an invalid NZB link: %w", r.Name, core.ErrReleaseRejected)
-	}
 	_, rec, err := b.record(ctx)
 	if err != nil {
-		return nil, err
-	}
-	if err := reserve(ctx, "grab"); err != nil {
-		return nil, err
-	}
-	if err := b.s.spendGrab(ctx, rec.ID); err != nil {
 		return nil, err
 	}
 	origin := ""
 	if u, err := stremio.NormalizeURL(rec.SourceURL); err == nil {
 		origin = stremio.Origin(u)
 	}
-	req, err := http.NewRequestWithContext(safefetch.WithTrustedOriginFor(ctx, origin, r.NZBURL), http.MethodGet, r.NZBURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("NZB from %s: invalid request", link.Host)
-	}
-	req.Header.Set("User-Agent", userAgent)
-	resp, err := b.s.nzbClient().Do(req)
-	if err != nil {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
+	return stremio.FetchNZB(ctx, b.s.nzbClient(), origin, r, func(ctx context.Context, kind string) error {
+		if err := reserve(ctx, kind); err != nil {
+			return err
 		}
-		var ue *url.Error
-		if errors.As(err, &ue) {
-			err = ue.Err
-		}
-		return nil, fmt.Errorf("NZB from %s: %w: %v", link.Host, core.ErrSourceUnavailable, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
-		return nil, fmt.Errorf("NZB from %s: HTTP %d: %w", link.Host, resp.StatusCode, core.ErrSourceUnavailable)
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxNZB+1))
-	if err != nil {
-		return nil, fmt.Errorf("NZB from %s: %w: %v", link.Host, core.ErrSourceUnavailable, err)
-	}
-	if len(body) > maxNZB {
-		return nil, fmt.Errorf("NZB from %s is larger than %d bytes: %w", link.Host, maxNZB, core.ErrSourceUnavailable)
-	}
-	if !bytes.Contains(bytes.ToLower(body[:min(len(body), 64<<10)]), []byte("<nzb")) {
-		return nil, fmt.Errorf("%s did not answer with an NZB: %w", link.Host, core.ErrSourceUnavailable)
-	}
-	return body, nil
+		return b.s.spendGrab(ctx, rec.ID)
+	})
 }
 
 func (s *StreamSources) nzbClient() *http.Client {
@@ -342,7 +292,7 @@ func (s *StreamSources) nzbClient() *http.Client {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.nzb == nil {
-		s.nzb = defaultNZBClient()
+		s.nzb = stremio.DefaultNZBClient()
 	}
 	return s.nzb
 }
@@ -460,35 +410,33 @@ func directStream(guid string) (plugin, kind, ref string, ok bool) {
 	return "", "", "", false
 }
 
-// defaultNZBClient downloads add-on NZBs: guarded (public addresses only,
-// except the add-on's own trusted origin per request), proxied like every
-// add-on call.
-func defaultNZBClient() *http.Client {
-	return (&safefetch.Guard{}).Client(egress.Client(egress.CapPlugins, nzbTimeout))
-}
-
-// ExpandAddonIndexers prepares the indexer list for the running search
-// manager: an add-on row searches when its add-on is installed, enabled
-// and its stream role is on, and carries the add-on's link in memory only
-// (search-cache identity and secret scrubbing), never in the saved config.
+// ExpandAddonIndexers is the indexer list the running search manager
+// searches: the owner's rows, then one row per installed plugin that serves
+// streams (an Ether source plugin, or a Stremio add-on installed from
+// Plugins with its streams on). Plugin rows are never saved: the plugin is
+// their configuration, and the Indexers page stays the owner's own list.
 func ExpandAddonIndexers(ctx context.Context, mgr *plugins.Manager, rows []config.Indexer) []config.Indexer {
-	out := make([]config.Indexer, len(rows))
-	copy(out, rows)
-	for i := range out {
-		if !out[i].IsAddon() {
+	out := make([]config.Indexer, 0, len(rows))
+	for _, ix := range rows {
+		if !ix.IsAddon() {
+			out = append(out, ix)
+		}
+	}
+	if mgr == nil {
+		return out
+	}
+	recs, err := mgr.List(ctx)
+	if err != nil {
+		return out
+	}
+	for _, r := range recs {
+		if !r.Enabled || !r.Manifest.HasCapability(plugins.CapStreamSource) {
 			continue
 		}
-		out[i].Enabled = false
-		if mgr == nil || out[i].Plugin == "" {
-			continue
-		}
-		rec, err := mgr.Get(ctx, out[i].Plugin)
-		if err != nil {
-			continue
-		}
-		out[i].URL = rec.SourceURL
-		out[i].Protocol = "torrent"
-		out[i].Enabled = rec.Enabled && rec.Manifest.HasCapability(plugins.CapStreamSource)
+		out = append(out, config.Indexer{
+			ID: "plugin:" + r.ID, Name: r.Name, Kind: config.IndexerKindAddon, Plugin: r.ID,
+			URL: r.SourceURL, Protocol: "torrent", Enabled: true, Priority: 1 << 20,
+		})
 	}
 	return out
 }

@@ -38,7 +38,7 @@ func TestManagerSourceInventory(t *testing.T) {
 	}
 	for _, ix := range []config.Indexer{
 		{ID: "tz", Name: "tz", URL: "http://tz.invalid", Protocol: "torrent", Enabled: true},
-		{ID: "addon", Name: "addon", URL: "http://addon.invalid/manifest.json", Kind: config.IndexerKindAddon, Plugin: "addon.x", Enabled: true},
+		{ID: "addon", Name: "addon", URL: "http://addon.invalid/manifest.json", Kind: config.IndexerKindStremio, Enabled: true},
 		{ID: "site", Name: "site", URL: "http://site.invalid", Kind: config.IndexerKindCardigann, Protocol: "torrent", Enabled: true},
 	} {
 		m.Reload([]config.Indexer{ix})

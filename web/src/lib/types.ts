@@ -34,13 +34,10 @@ export interface Indexer {
   /** "usenet" (Newznab, the default when empty or absent) or "torrent" (Torznab). */
   protocol?: IndexerProtocol | "";
   /**
-   * "cardigann" for a built-in site, "addon" for an installed add-on's
-   * streams (named by plugin, no URL); empty or "newznab" for a
-   * Newznab/Torznab URL.
+   * "cardigann" for a built-in site, "stremio" for a Stremio stream addon
+   * (always protocol "torrent"); empty or "newznab" for a Newznab/Torznab URL.
    */
   kind?: IndexerKind | "";
-  /** The installed add-on an "addon" row searches. */
-  plugin?: string;
   /** Installed definition id of a built-in site. */
   definition?: string;
   /** A built-in site's setting values by name. */
@@ -66,7 +63,7 @@ export interface ClientIdentityConfig {
 }
 
 export type IndexerProtocol = "usenet" | "torrent";
-export type IndexerKind = "newznab" | "cardigann" | "addon";
+export type IndexerKind = "newznab" | "cardigann" | "stremio";
 
 /** Definitions source and FlareSolverr for built-in sites (config.indexerSites). */
 export interface IndexerSitesConfig {
