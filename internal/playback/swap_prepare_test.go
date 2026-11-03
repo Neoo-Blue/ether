@@ -16,6 +16,28 @@ type blockedSwapHLS struct {
 	resume  chan struct{}
 }
 
+type synchronizedHLSLookup struct {
+	core.Transcoder
+	mu  sync.Mutex
+	hls core.HLSSession
+}
+
+func (t *synchronizedHLSLookup) Session(id string) (core.HLSSession, bool) {
+	t.mu.Lock()
+	hls := t.hls
+	t.mu.Unlock()
+	if hls != nil && hls.ID() == id {
+		return hls, true
+	}
+	return t.Transcoder.Session(id)
+}
+
+func (t *synchronizedHLSLookup) set(hls core.HLSSession) {
+	t.mu.Lock()
+	t.hls = hls
+	t.mu.Unlock()
+}
+
 type pendingOutputHLS struct {
 	*fakeHLS
 	mu       sync.Mutex
@@ -69,8 +91,12 @@ func (e *contextEngine) Open(ctx context.Context, id string, nzb []byte) (core.M
 func TestFailedReplacementRollsBackOnlyToViableSource(t *testing.T) {
 	for _, viable := range []bool{true, false} {
 		t.Run(map[bool]string{true: "viable", false: "failed"}[viable], func(t *testing.T) {
-			h := newHarness(t, []*fakeRelease{mkv("A", 100_000, time.Minute), mkv("B", 20_000, time.Minute)}, []string{"A", "B"})
-			h.m.deps.Engine = &contextEngine{h.engine}
+			var lookup *synchronizedHLSLookup
+			h := newHarness(t, []*fakeRelease{mkv("A", 100_000, time.Minute), mkv("B", 20_000, time.Minute)}, []string{"A", "B"}, func(h *harness, _ *Options) {
+				h.testEngine = &contextEngine{h.engine}
+				lookup = &synchronizedHLSLookup{Transcoder: h.tr}
+				h.testTranscode = lookup
+			})
 			ps := h.prepare(owner, movieKey, "rollback")
 			s := h.m.lookup(ps.ID)
 			old := s.current()
@@ -78,7 +104,7 @@ func TestFailedReplacementRollsBackOnlyToViableSource(t *testing.T) {
 				old.noteReadFailure(core.ErrArticleMissing)
 			}
 			f := &pendingOutputHLS{fakeHLS: h.tr.addHLS(ps.ID), waiting: make(chan struct{}), released: make(chan struct{}), fail: errors.New("replacement failed")}
-			h.m.deps.HLSLookup = func(string) (core.HLSSession, bool) { return f, true }
+			lookup.set(f)
 			done := make(chan error, 1)
 			go func() { _, err := h.m.failoverWith(t.Context(), s, old, 0, failoverOpts{down: true}); done <- err }()
 			<-f.waiting
@@ -101,12 +127,16 @@ func TestFailedReplacementRollsBackOnlyToViableSource(t *testing.T) {
 func TestHandoffRetainsOldSourceWhileReplacementOutputIsPending(t *testing.T) {
 	for _, stop := range []bool{false, true} {
 		t.Run(map[bool]string{false: "publish", true: "stop"}[stop], func(t *testing.T) {
-			h := newHarness(t, []*fakeRelease{mkv("A", 100_000, time.Minute), mkv("B", 100_000, time.Minute)}, []string{"A", "B"})
+			var lookup *synchronizedHLSLookup
+			h := newHarness(t, []*fakeRelease{mkv("A", 100_000, time.Minute), mkv("B", 100_000, time.Minute)}, []string{"A", "B"}, func(h *harness, _ *Options) {
+				lookup = &synchronizedHLSLookup{Transcoder: h.tr}
+				h.testTranscode = lookup
+			})
 			ps := h.prepare(owner, movieKey, "output-pending")
 			s := h.m.lookup(ps.ID)
 			old := s.current()
 			f := &pendingOutputHLS{fakeHLS: h.tr.addHLS(ps.ID), waiting: make(chan struct{}), released: make(chan struct{})}
-			h.m.deps.HLSLookup = func(string) (core.HLSSession, bool) { return f, true }
+			lookup.set(f)
 			done := make(chan error, 1)
 			go func() { _, err := h.m.failoverWith(t.Context(), s, old, 0, failoverOpts{}); done <- err }()
 			<-f.waiting
@@ -148,12 +178,16 @@ func (h *blockedSwapHLS) SwapInput(ctx context.Context, _ string, _ core.MediaIn
 }
 
 func TestHandoffKeepsOldGenerationUntilSwapReturns(t *testing.T) {
-	h := newHarness(t, []*fakeRelease{mkv("A", 100_000, time.Minute), mkv("B", 100_000, time.Minute)}, []string{"A", "B"})
+	var lookup *synchronizedHLSLookup
+	h := newHarness(t, []*fakeRelease{mkv("A", 100_000, time.Minute), mkv("B", 100_000, time.Minute)}, []string{"A", "B"}, func(h *harness, _ *Options) {
+		lookup = &synchronizedHLSLookup{Transcoder: h.tr}
+		h.testTranscode = lookup
+	})
 	ps := h.prepare(owner, movieKey, "prepare-swap")
 	s := h.m.lookup(ps.ID)
 	old := s.current()
 	f := &blockedSwapHLS{fakeHLS: h.tr.addHLS(ps.ID), entered: make(chan struct{}), resume: make(chan struct{})}
-	h.m.deps.HLSLookup = func(string) (core.HLSSession, bool) { return f, true }
+	lookup.set(f)
 	done := make(chan error, 1)
 	go func() { _, err := h.m.failoverWith(t.Context(), s, old, 0, failoverOpts{}); done <- err }()
 	select {
