@@ -247,7 +247,8 @@ func (p *searchPreparation) searchLive(ctx context.Context, indexer core.Streami
 	// Detach from Play cancel so a first healthy hit can start while the
 	// remaining indexers finish into the search cache (better versions and
 	// failover). Close still cancels and joins via bgCtx/bgWG.
-	searchCtx, cancel := context.WithCancel(p.svc.bgCtx)
+	searchCtx, cancel := context.WithCancel(core.CarrySearchCoverage(p.svc.bgCtx, ctx))
+	coverage := core.SearchCoverageFrom(ctx)
 	type answer struct {
 		releases []core.Release
 		err      error
@@ -266,7 +267,7 @@ func (p *searchPreparation) searchLive(ctx context.Context, indexer core.Streami
 		defer cancel()
 		r, e := indexer.SearchWith(searchCtx, req, p.arrived)
 		done <- answer{r, e}
-		if p.partial.Load() && e == nil && len(r) > 0 {
+		if p.partial.Load() && e == nil && len(r) > 0 && !coverage.Incomplete() {
 			p.svc.rememberSearchResults(req, r)
 		}
 	}()

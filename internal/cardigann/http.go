@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/egress"
 
 	"golang.org/x/text/encoding"
@@ -35,6 +36,14 @@ const (
 // ErrCloudflare reports a site behind a Cloudflare (or similar) browser
 // challenge that could not be passed.
 var ErrCloudflare = errors.New("site is protected by a browser challenge")
+
+// unavailable marks a failure that means the site did not answer usefully
+// (a challenge it could not pass, a server error) as transient, so the
+// indexer client's breaker pauses the site after repeated failures. The
+// message is unchanged.
+type unavailable struct{ error }
+
+func (e unavailable) Unwrap() []error { return []error{e.error, core.ErrSourceUnavailable} }
 
 // ErrCaptcha reports a login that needs a captcha.
 var ErrCaptcha = errors.New("the site's sign-in requires a captcha, which Ether cannot solve")
@@ -193,7 +202,7 @@ func (s *httpSession) do(ctx context.Context, req request) (*response, error) {
 		flare = strings.TrimSpace(s.flare())
 	}
 	if flare == "" {
-		return nil, fmt.Errorf("%s: %w; set a FlareSolverr URL under Sources › Indexers to reach it", s.site, ErrCloudflare)
+		return nil, unavailable{fmt.Errorf("%s: %w; set a FlareSolverr URL under Sources › Indexers to reach it", s.site, ErrCloudflare)}
 	}
 	target := req.url
 	if resp.url != nil {
@@ -215,7 +224,7 @@ func (s *httpSession) do(ctx context.Context, req request) (*response, error) {
 				return &response{status: http.StatusOK, header: http.Header{"Content-Type": {"text/html; charset=utf-8"}}, body: []byte(solved.Response), url: resp.url}, nil
 			}
 		}
-		return nil, fmt.Errorf("%s: %w even after FlareSolverr solved it", s.site, ErrCloudflare)
+		return nil, unavailable{fmt.Errorf("%s: %w even after FlareSolverr solved it", s.site, ErrCloudflare)}
 	}
 	return resp, nil
 }

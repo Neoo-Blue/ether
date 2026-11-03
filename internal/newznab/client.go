@@ -107,6 +107,7 @@ type Client struct {
 	cacheMu  sync.RWMutex
 	memCache map[string]memCacheEntry
 	torrents torrentDescriptorCache
+	br       breaker
 
 	capsMu     sync.Mutex
 	caps       *Caps
@@ -847,6 +848,9 @@ func (c *Client) searchAttempts(req core.SearchRequest, caps *Caps, id config.Id
 }
 
 func (c *Client) doSearch(ctx context.Context, params url.Values, id config.Identity) ([]core.Release, error) {
+	if err := c.searchPaused(); err != nil {
+		return nil, err
+	}
 	if err := c.reserve(ctx, "hit"); err != nil {
 		return nil, err
 	}
@@ -854,16 +858,16 @@ func (c *Client) doSearch(ctx context.Context, params url.Values, id config.Iden
 	if err != nil {
 		return nil, err
 	}
-	var results []core.Release
-	if emit, ok := ctx.Value(searchArrivalKey{}).(func([]core.Release)); ok {
-		results, err = c.getSearchStream(ctx, u, emit, id)
-	} else {
-		var body []byte
-		body, err = c.get(ctx, u, 20<<20, id)
-		if err == nil {
-			results, err = parseFeed(body, c.Name())
+	results, err := c.guardSearch(ctx, true, defaultHTTPTimeout, func(ctx context.Context) ([]core.Release, error) {
+		if emit, ok := ctx.Value(searchArrivalKey{}).(func([]core.Release)); ok {
+			return c.getSearchStream(ctx, u, emit, id)
 		}
-	}
+		body, err := c.get(ctx, u, 20<<20, id)
+		if err != nil {
+			return nil, err
+		}
+		return parseFeed(body, c.Name())
+	})
 	if err == nil && c.Config().IsTorrent() {
 		// A Torznab indexer's results are torrents even when an item
 		// carries only a .torrent download link.
@@ -888,6 +892,9 @@ func (c *Client) Search(ctx context.Context, req core.SearchRequest) ([]core.Rel
 	if c.Exhausted(ctx) {
 		return nil, fmt.Errorf("indexer %q: %w", c.Name(), core.ErrBudgetExhausted)
 	}
+	if err := c.searchPaused(); err != nil {
+		return nil, err
+	}
 	if c.Config().UsesBackend() {
 		results, err := c.backendSearch(ctx, req)
 		if err != nil {
@@ -910,6 +917,11 @@ func (c *Client) Search(ctx context.Context, req core.SearchRequest) ([]core.Rel
 		}
 		firstErr = err
 		c.log.Debug("newznab search attempt failed", "indexer", c.Name(), "t", attempts[0].Get("t"), "err", err)
+		if transientFailure(err) {
+			// The indexer did not answer at all (timeout, outage, 5xx):
+			// the fallback queries would each wait out the same failure.
+			return nil, err
+		}
 	} else if len(results) > 0 {
 		c.cachePut(ctx, key, results)
 		return results, nil
@@ -959,6 +971,7 @@ func (c *Client) Search(ctx context.Context, req core.SearchRequest) ([]core.Rel
 			var merged []core.Release
 			seen := map[string]bool{}
 			var budgetErr error
+			down := false
 			for _, s := range slots {
 				if s.err != nil {
 					if errors.Is(s.err, core.ErrBudgetExhausted) && budgetErr == nil {
@@ -966,6 +979,7 @@ func (c *Client) Search(ctx context.Context, req core.SearchRequest) ([]core.Rel
 					} else if firstErr == nil {
 						firstErr = s.err
 					}
+					down = down || transientFailure(s.err)
 					continue
 				}
 				for _, r := range s.res {
@@ -986,6 +1000,9 @@ func (c *Client) Search(ctx context.Context, req core.SearchRequest) ([]core.Rel
 			if budgetErr != nil {
 				return nil, budgetErr
 			}
+			if down {
+				return nil, firstErr
+			}
 		}
 	} else {
 		for _, params := range rest {
@@ -1001,6 +1018,9 @@ func (c *Client) Search(ctx context.Context, req core.SearchRequest) ([]core.Rel
 					firstErr = err
 				}
 				c.log.Debug("newznab search attempt failed", "indexer", c.Name(), "t", params.Get("t"), "err", err)
+				if transientFailure(err) {
+					return nil, err
+				}
 				continue
 			}
 			if len(results) > 0 {
@@ -1120,6 +1140,9 @@ func (c *Client) SearchRescue(ctx context.Context, req core.SearchRequest) ([]co
 	if c.Exhausted(ctx) {
 		return nil, fmt.Errorf("indexer %q: %w", c.Name(), core.ErrBudgetExhausted)
 	}
+	if err := c.searchPaused(); err != nil {
+		return nil, err
+	}
 	if cfg := c.Config(); cfg.UsesBackend() {
 		// Built-in sites and addons: if Episode > 0, rescue via season-level
 		// search; built-in sites also via OriginalTitle/aliases (an addon
@@ -1212,6 +1235,9 @@ func (c *Client) SearchRescue(ctx context.Context, req core.SearchRequest) ([]co
 				}
 				if firstErr == nil {
 					firstErr = err
+				}
+				if transientFailure(err) {
+					break
 				}
 				continue
 			}
@@ -1467,7 +1493,9 @@ func (c *Client) backendSearch(ctx context.Context, req core.SearchRequest) ([]c
 	if err != nil {
 		return nil, err
 	}
-	results, err := b.Search(ctx, req, c.reserve)
+	results, err := c.guardSearch(ctx, false, 0, func(ctx context.Context) ([]core.Release, error) {
+		return b.Search(ctx, req, c.reserve)
+	})
 	if err != nil {
 		var rl *RateLimitError
 		if errors.As(err, &rl) {

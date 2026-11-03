@@ -579,11 +579,14 @@ func (r *Runner) searchPath(ctx context.Context, p SearchPath, v vars, reserve R
 func (r *Runner) readResponse(resp *response, p SearchPath, v vars) ([]found, error) {
 	switch {
 	case resp.status == http.StatusTooManyRequests:
-		return nil, fmt.Errorf("%s: the site is rate limiting requests (HTTP 429)", r.def.Name)
+		// The indexer client pauses the site until Retry-After.
+		return nil, &newznab.RateLimitError{RetryAfter: resp.header.Get("Retry-After"), Err: fmt.Errorf("%s: the site is rate limiting requests (HTTP 429)", r.def.Name)}
 	case resp.status == http.StatusUnauthorized || resp.status == http.StatusForbidden:
 		return nil, fmt.Errorf("%s: %w: HTTP %d", r.def.Name, ErrLogin, resp.status)
 	case resp.redirected():
 		return nil, fmt.Errorf("%s: search was redirected", r.def.Name)
+	case resp.status/100 == 5:
+		return nil, unavailable{fmt.Errorf("%s: search returned HTTP %d", r.def.Name, resp.status)}
 	case resp.status/100 != 2:
 		return nil, fmt.Errorf("%s: search returned HTTP %d", r.def.Name, resp.status)
 	}

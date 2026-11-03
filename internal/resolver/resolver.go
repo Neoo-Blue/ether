@@ -604,6 +604,9 @@ func (s *Service) Resolve(ctx context.Context, req core.ResolveRequest) (*core.R
 
 func (s *Service) resolve(ctx context.Context, req core.ResolveRequest, profile core.QualityProfile) (*core.Resolution, error) {
 	started := time.Now()
+	// An indexer that was paused or did not answer leaves the search
+	// incomplete; nothing found then does not prove the title unavailable.
+	ctx, coverage := core.WithSearchCoverage(ctx)
 	t := req.Title
 	trace := Trace{TitleKey: t.Key, TitleName: consoleTitleName(t), Profile: profile.Name, At: s.now(), Failover: len(req.Exclude) > 0}
 	trace.Limits = &TraceLimits{ProfileMinHeight: profile.MinHeight, ProfileMaxHeight: profile.MaxHeight, ProfileConfiguredMaxHeight: traceConfiguredMaxHeight(profile), ClientMaxHeight: req.Client.MaxHeight, ClientMaxBitrateKbps: req.Client.MaxBitrateKbps, AllowHDR: profile.AllowHDR, AllowDolbyVision: profile.AllowDolbyVision}
@@ -797,7 +800,7 @@ func (s *Service) resolve(ctx context.Context, req core.ResolveRequest, profile 
 		}
 		// Client/profile restrictions and temporary source skips do not prove
 		// that the title is unavailable for everyone.
-		if !clientRejected && len(req.Exclude) == 0 && searchErr == nil {
+		if !clientRejected && len(req.Exclude) == 0 && searchErr == nil && !coverage.Incomplete() {
 			s.setAvailability(ctx, int64(t.Key), false, s.cooloffFor(t))
 		}
 		if isFreshRelease(t, s.now()) {
@@ -944,7 +947,7 @@ func (s *Service) resolve(ctx context.Context, req core.ResolveRequest, profile 
 		return nil, failed(nil)
 	}
 	// A capped warm-up did not check every candidate, so it proves nothing.
-	if !clientRejected && len(req.Exclude) == 0 && len(cands) <= maxHealthAttempts && !(core.IsSpeculative(ctx) && len(cands) > speculativeHealthAttempts) {
+	if !clientRejected && len(req.Exclude) == 0 && len(cands) <= maxHealthAttempts && !(core.IsSpeculative(ctx) && len(cands) > speculativeHealthAttempts) && !coverage.Incomplete() {
 		s.setAvailability(ctx, int64(t.Key), false, min(s.cooloff(), failedHealthTTL))
 	}
 	trace.Err = "no healthy candidates"
@@ -1001,7 +1004,13 @@ func (s *Service) searchRescue(ctx context.Context, req core.SearchRequest) ([]c
 	if ok && s.now().Before(e.expires) {
 		return append([]core.Release(nil), e.results...), "cache"
 	}
-	results, err := rs.SearchRescue(ctx, req)
+	rctx, coverage := core.WithSearchCoverage(ctx)
+	results, err := rs.SearchRescue(rctx, req)
+	if coverage.Incomplete() {
+		// An indexer was paused or did not answer: whatever came back
+		// neither proves absence nor stands as the fleet's answer.
+		core.NoteSearchIncomplete(ctx)
+	}
 	if err != nil {
 		return nil, ""
 	}
@@ -1010,6 +1019,9 @@ func (s *Service) searchRescue(ctx context.Context, req core.SearchRequest) ([]c
 			results[i].Info = releaseparse.Parse(results[i].Name)
 		}
 		results[i] = withTarget(results[i], req)
+	}
+	if coverage.Incomplete() {
+		return results, "live-complete"
 	}
 	s.mu.Lock()
 	now := s.now()
@@ -1063,6 +1075,10 @@ func (s *Service) searchCached(ctx context.Context, req core.SearchRequest, fres
 	if ok && !fresh && s.now().Before(e.expires) {
 		return append([]core.Release(nil), e.results...), true, nil
 	}
+	coverage := core.SearchCoverageFrom(ctx)
+	if coverage == nil {
+		ctx, coverage = core.WithSearchCoverage(ctx)
+	}
 	partial := false
 	if early, ok := ctx.Value(searchPreparationKey{}).(*searchPreparation); ok {
 		if streaming, ok := s.indexer.(core.StreamingIndexer); ok {
@@ -1077,9 +1093,11 @@ func (s *Service) searchCached(ctx context.Context, req core.SearchRequest, fres
 		return nil, false, err
 	}
 	s.normalizeSearchResults(req, results)
-	if partial {
+	if partial || coverage.Incomplete() {
+		// Never cache an incomplete fleet answer: an early Play start,
+		// or an indexer that was paused or did not answer.
 		return results, false, nil
-	} // Never cache an incomplete fleet answer.
+	}
 	s.storeSearchCache(req, results)
 	return results, false, nil
 }
