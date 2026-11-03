@@ -76,6 +76,7 @@ type Event struct {
 	Status           int
 	Duration         time.Duration
 	Query            string
+	Cancelled        bool
 	DBQueries        int64
 	DBTime           time.Duration
 	Response         *ResponseSummary

@@ -79,7 +79,7 @@ func (r *Recorder) Finish(token, id string, in FinishIn) (CaptureView, error) {
 		view: r.viewLocked(c), limit: r.testArchiveLimit,
 	}
 	for _, e := range snap.events {
-		if e.ViewerID == 0 {
+		if e.Kind != KindRequest || e.ViewerID == 0 {
 			continue
 		}
 		if snap.viewerID == 0 {
@@ -141,6 +141,7 @@ type finishSnap struct {
 	limit           int
 	viewerID        int64
 	viewerAmbiguous bool
+	findings        []Finding
 }
 
 func buildZip(snap finishSnap, extra []archived, coverage []Gap, uses []secretUse) ([]byte, []string, IdentityPreview, []Gap) {
@@ -178,6 +179,9 @@ func buildZip(snap finishSnap, extra []archived, coverage []Gap, uses []secretUs
 	} else {
 		add("events.jsonl", []byte(eventsBody))
 	}
+	rows, findings := analyzeJournal(eventsBody)
+	snap.findings = findings
+	add("REPORT.md", reportMarkdown(rows, findings, extra))
 	files = append(files, extra...)
 	base := append(append([]Gap{}, coverage...), pre...)
 	packed, added := sealArchive(files, base, snap, uses)
@@ -213,6 +217,7 @@ func summaryBytes(snap finishSnap, ident IdentityPreview, uses []secretUse) []by
 	return mustMarshal(map[string]any{
 		"observations": snap.view.Observations,
 		"hypotheses":   snap.view.Hypotheses,
+		"findings":     snap.findings,
 		"identity":     ident,
 		"uncorrelated": snap.uncorr,
 	}, uses)
@@ -290,6 +295,15 @@ func retainedIdentity(files []archived, flags [3]bool) IdentityPreview {
 	body := map[string][]byte{}
 	for _, f := range files {
 		body[f.name] = f.body
+	}
+	if b, ok := body["REPORT.md"]; ok && flags[0] {
+		for _, line := range strings.Split(string(b), "\n") {
+			if strings.HasPrefix(line, "  - item: ") {
+				if title, err := strconv.Unquote(strings.TrimPrefix(line, "  - item: ")); err == nil {
+					p.Titles = mergeStrings(p.Titles, []string{title})
+				}
+			}
+		}
 	}
 	if b, ok := body["events.jsonl"]; ok {
 		collectJSONLIdentity(b, flags, &p)
@@ -535,6 +549,7 @@ type exportEvent struct {
 	Query         string            `json:"query,omitempty"`
 	DurationMS    int64             `json:"durationMs,omitempty"`
 	DBQueries     int64             `json:"dbQueries"`
+	Cancelled     bool              `json:"cancelled,omitempty"`
 	DBTimeMS      int64             `json:"dbTimeMs"`
 	Product       string            `json:"product,omitempty"`
 	Platform      string            `json:"platform,omitempty"`
@@ -574,6 +589,7 @@ func eventsJSONL(events []Event, flags [3]bool, captureID string, uses []secretU
 			Method:       redactString(e.Method, uses),
 			Route:        redactString(e.Route, uses),
 			Query:        redactString(e.Query, uses),
+			Cancelled:    e.Cancelled,
 			DurationMS:   e.Duration.Milliseconds(), DBQueries: e.DBQueries, DBTimeMS: e.DBTime.Milliseconds(),
 			Product: redactString(e.Product, uses), Platform: redactString(e.Platform, uses), Model: redactString(e.Model, uses), DeviceType: redactString(e.Device, uses), AppVersion: redactString(e.AppVersion, uses),
 			Decision:      redactString(e.Decision, uses),
