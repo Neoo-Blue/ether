@@ -62,3 +62,21 @@ func InheritBackground(dst, src context.Context) context.Context {
 	}
 	return dst
 }
+
+type indexerSkipKey struct{}
+
+// WithIndexerSkip marks the indexers (by feed source id, core.ReleaseFeed.ID)
+// a search should leave out: a background probe skips indexers whose
+// release feed has already shown it everything new.
+func WithIndexerSkip(ctx context.Context, ids map[string]bool) context.Context {
+	if len(ids) == 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, indexerSkipKey{}, ids)
+}
+
+// IndexerSkipped reports whether ctx's search leaves out the indexer id.
+func IndexerSkipped(ctx context.Context, id string) bool {
+	ids, _ := ctx.Value(indexerSkipKey{}).(map[string]bool)
+	return ids[id]
+}

@@ -45,6 +45,18 @@ func (s *Service) probeDue(ctx context.Context) error {
 			}
 		}
 	}
+	// Titles whose release has since been found unplayable are looked for
+	// again, whatever their cadence.
+	unavailable := map[core.RatingKey]time.Time{}
+	if v, ok := s.d.Validator.(interface {
+		KnownUnavailableSince(context.Context, []core.RatingKey) map[core.RatingKey]time.Time
+	}); ok {
+		keys := make([]core.RatingKey, len(movies))
+		for i := range movies {
+			keys[i] = movies[i].Key
+		}
+		unavailable = v.KnownUnavailableSince(ctx, keys)
+	}
 	watch := map[core.RatingKey]bool{}
 	if s.d.Watchlist != nil {
 		if keys, e := s.d.Watchlist(ctx); e == nil {
@@ -54,22 +66,26 @@ func (s *Service) probeDue(ctx context.Context) error {
 	type item struct {
 		t     core.Title
 		score float64
-		next  time.Time
+		check titleCheck
 	}
 	var due []item
 	for _, t := range movies {
 		if !t.IsReleased(s.now()) {
 			continue
 		}
-		next, state, err := s.titleCheck(ctx, t.Key)
+		check, err := s.titleCheck(ctx, t.Key)
 		if err != nil {
 			return err
 		}
+		state, next := check.state, check.next
 		digital := time.Time{}
 		if checked[t.Key] {
 			digital = homes[t.Key]
 		}
 		dueNow := state == "" || !s.now().Before(next)
+		if since, ok := unavailable[t.Key]; ok && state == "found" && since.After(check.checked) {
+			dueNow = true
+		}
 		// A digital or physical date that has arrived is due immediately,
 		// even when an earlier check is still inside its cadence.
 		if !digital.IsZero() && !digital.After(s.now()) && (state == "" || next.Before(digital)) {
@@ -87,14 +103,30 @@ func (s *Service) probeDue(ctx context.Context) error {
 		} else if !digital.IsZero() && digital.Sub(s.now()) < 72*time.Hour {
 			score += 800
 		}
-		due = append(due, item{t, score, next})
+		due = append(due, item{t, score, check})
 	}
 	sort.SliceStable(due, func(i, j int) bool { return due[i].score > due[j].score })
+	covered, err := s.coveredFeeds(ctx)
+	if err != nil {
+		return err
+	}
+	// At most probeBatch searches per one-minute cycle, most important
+	// first: a backlog (a first start, a long stop) drains over minutes
+	// instead of bursting at every indexer at once. Titles the feeds cover
+	// cost no search and do not count.
+	searches := 0
 	for _, it := range due {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if err := s.probeOne(ctx, it.t, homes[it.t.Key], checked[it.t.Key]); err != nil {
+		if searches >= probeBatch {
+			break
+		}
+		searched, err := s.probeOne(ctx, it.t, homes[it.t.Key], checked[it.t.Key], it.check, covered)
+		if searched {
+			searches++
+		}
+		if err != nil {
 			if benign(err) {
 				return err
 			}
@@ -108,15 +140,35 @@ func (s *Service) probeDue(ctx context.Context) error {
 // every few minutes; a probe only catches what a feed missed, so it runs on
 // hours, never on the one-minute monitor cycle.
 const (
-	probeFound         = 24 * time.Hour // evidence held: re-confirm daily
-	probeDigitalFresh  = 3 * time.Hour  // digital date passed within probeFreshWindow
+	// Evidence is kept for a year and playback searches for itself, so a
+	// found title is not searched again for a month, unless its release
+	// turns out unplayable (probeDue).
+	probeFound = 30 * 24 * time.Hour
+	// probeFullEvery is the longest a waiting title goes without a search
+	// of every indexer, feed coverage aside: a release a feed listed under
+	// a name the catalogue could not match is still found.
+	probeFullEvery = 7 * 24 * time.Hour
+	// probeBatch bounds the probe searches per monitor cycle (a minute).
+	probeBatch         = 10
+	probeDigitalFresh  = 3 * time.Hour // digital date passed within probeFreshWindow
 	probeFreshWindow   = 72 * time.Hour
 	probeNew           = 6 * time.Hour  // no digital date, released in the last two weeks
 	probeWaiting       = 12 * time.Hour // no digital date, or it passed long ago
 	probeBeforeDigital = 72 * time.Hour // longest wait while a digital date is ahead
 )
 
+// probeWhen is when to look for t again, spread by up to a tenth of the
+// wait per title so titles first checked together do not stay in step.
 func (s *Service) probeWhen(t core.Title, digital time.Time, known, found bool) time.Time {
+	next := s.probeCadence(t, digital, known, found)
+	wait := next.Sub(s.now())
+	if wait <= 0 {
+		return next
+	}
+	return next.Add(time.Duration(uint64(t.Key)*2654435761%1000) * wait / 10000)
+}
+
+func (s *Service) probeCadence(t core.Title, digital time.Time, known, found bool) time.Time {
 	now := s.now()
 	if found {
 		return now.Add(probeFound)
@@ -142,9 +194,42 @@ func (s *Service) probeWhen(t core.Title, digital time.Time, known, found bool) 
 	return now.Add(probeWaiting)
 }
 
-func (s *Service) probeOne(ctx context.Context, t core.Title, digital time.Time, known bool) error {
+func (s *Service) probeOne(ctx context.Context, t core.Title, digital time.Time, known bool, last titleCheck, covered map[string]time.Time) (bool, error) {
 	req := core.SearchRequest{Type: t.Type, IDs: t.IDs, Title: t.Title, OriginalTitle: t.OriginalTitle, Year: t.Year, AlternativeTitles: t.AlternativeTitles}
-	bctx, cancel := context.WithTimeout(s.budgetContext(ctx, true), 25*time.Second)
+	// A title already looked for skips every indexer whose feed has shown
+	// all releases since that look: the feed would have matched anything
+	// new. A first look, an unplayable found release, the look when the
+	// digital date arrives, and the weekly full look search everywhere.
+	// The digital date arriving since the last look is when releases land,
+	// so that look searches everywhere too.
+	digitalArrived := known && !digital.IsZero() && !digital.After(s.now()) && digital.After(last.checked)
+	full := last.state == "" || last.state == "found" || digitalArrived || last.full.IsZero() || s.now().Sub(last.full) >= probeFullEvery
+	skip := map[string]bool{}
+	// Background work stays on the indexers the owner gave it
+	// (Availability.IndexerIDs); playback still searches every indexer.
+	sources := s.d.Feeds.FeedSources()
+	if ids := s.cfg().Availability.IndexerIDs; len(ids) > 0 {
+		for _, f := range sources {
+			if !selected(ids, f.ID) {
+				skip[f.ID] = true
+			}
+		}
+	}
+	if !full {
+		for id, since := range covered {
+			if !since.After(last.checked) {
+				skip[id] = true
+			}
+		}
+		if len(skip) > 0 && everyIndexer(sources, skip) {
+			return false, s.saveTitleCheckFull(ctx, t.Key, last.state, last.reason, s.probeWhen(t, digital, known, false), last.full)
+		}
+	}
+	fullAt := last.full
+	if full {
+		fullAt = s.now()
+	}
+	bctx, cancel := context.WithTimeout(core.WithIndexerSkip(s.budgetContext(ctx, true), skip), 25*time.Second)
 	releases, err := s.d.Search(bctx, req)
 	cancel()
 	if err != nil && len(releases) == 0 {
@@ -153,9 +238,9 @@ func (s *Service) probeOne(ctx context.Context, t core.Title, digital time.Time,
 		// result, though: retrying it on the next minute's cycle would
 		// search the same title over and over.
 		if errors.Is(err, core.ErrBudgetExhausted) || errors.Is(err, context.Canceled) || ctx.Err() != nil {
-			return err
+			return true, err
 		}
-		return s.saveTitleCheck(ctx, t.Key, "none", "Search could not be completed", s.probeWhen(t, digital, known, false))
+		return true, s.saveTitleCheckFull(ctx, t.Key, "none", "Search could not be completed", s.probeWhen(t, digital, known, false), last.full)
 	}
 	releases = s.cachedTorrents(ctx, releases)
 	policy := s.policy()
@@ -167,7 +252,7 @@ func (s *Service) probeOne(ctx context.Context, t core.Title, digital time.Time,
 	for _, r := range releases {
 		accepted, reason, e := s.d.Validator.FeedCandidate(ctx, &t, r)
 		if e != nil {
-			return e
+			return true, e
 		}
 		if reason != "" {
 			if quality == "" {
@@ -180,14 +265,14 @@ func (s *Service) probeOne(ctx context.Context, t core.Title, digital time.Time,
 			f = core.ReleaseFeed{ID: "probe", Name: accepted.Indexer, Generation: "probe", Supported: true}
 		}
 		if e = s.remember(ctx, f, t, accepted, policy); e != nil {
-			return e
+			return true, e
 		}
-		return s.saveTitleCheck(ctx, t.Key, "found", "", s.probeWhen(t, digital, known, true))
+		return true, s.saveTitleCheckFull(ctx, t.Key, "found", "", s.probeWhen(t, digital, known, true), fullAt)
 	}
 	if quality != "" {
-		return s.saveTitleCheck(ctx, t.Key, "quality", quality, s.probeWhen(t, digital, known, false))
+		return true, s.saveTitleCheckFull(ctx, t.Key, "quality", quality, s.probeWhen(t, digital, known, false), fullAt)
 	}
-	return s.saveTitleCheck(ctx, t.Key, "none", "", s.probeWhen(t, digital, known, false))
+	return true, s.saveTitleCheckFull(ctx, t.Key, "none", "", s.probeWhen(t, digital, known, false), fullAt)
 }
 
 func (s *Service) cachedTorrents(ctx context.Context, rs []core.Release) []core.Release {
@@ -228,24 +313,55 @@ func feedFor(feeds []core.ReleaseFeed, r core.Release) core.ReleaseFeed {
 	return core.ReleaseFeed{}
 }
 
-func (s *Service) titleCheck(ctx context.Context, key core.RatingKey) (time.Time, string, error) {
-	var at int64
-	var state string
-	err := s.db.QueryRowContext(ctx, `SELECT next_check,state FROM availability_title_checks WHERE rating_key=?`, int64(key)).Scan(&at, &state)
+// titleCheck is a title's last probe: when, what it found, and when every
+// indexer was last searched for it.
+type titleCheck struct {
+	checked, next, full time.Time
+	state, reason       string
+}
+
+func (s *Service) titleCheck(ctx context.Context, key core.RatingKey) (titleCheck, error) {
+	var checked, next, full int64
+	var c titleCheck
+	err := s.db.QueryRowContext(ctx, `SELECT checked_at,next_check,full_at,state,reason FROM availability_title_checks WHERE rating_key=?`, int64(key)).Scan(&checked, &next, &full, &c.state, &c.reason)
 	if errors.Is(err, sql.ErrNoRows) {
-		return time.Time{}, "", nil
+		return titleCheck{}, nil
 	}
 	if err != nil {
-		return time.Time{}, "", err
+		return titleCheck{}, err
 	}
-	return time.Unix(at, 0), state, nil
+	c.checked, c.next = time.Unix(checked, 0), time.Unix(next, 0)
+	if full > 0 {
+		c.full = time.Unix(full, 0)
+	}
+	return c, nil
 }
 
 func (s *Service) saveTitleCheck(ctx context.Context, key core.RatingKey, state, reason string, next time.Time) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO availability_title_checks(rating_key,checked_at,next_check,state,reason) VALUES(?,?,?,?,?)
- ON CONFLICT(rating_key) DO UPDATE SET checked_at=excluded.checked_at,next_check=excluded.next_check,state=excluded.state,reason=excluded.reason`,
-		int64(key), s.now().Unix(), next.Unix(), state, reason)
+	return s.saveTitleCheckFull(ctx, key, state, reason, next, time.Time{})
+}
+
+// saveTitleCheckFull records a probe; full is when every indexer was last
+// searched for the title (zero keeps none recorded).
+func (s *Service) saveTitleCheckFull(ctx context.Context, key core.RatingKey, state, reason string, next, full time.Time) error {
+	fullAt := int64(0)
+	if !full.IsZero() {
+		fullAt = full.Unix()
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO availability_title_checks(rating_key,checked_at,next_check,state,reason,full_at) VALUES(?,?,?,?,?,?)
+ ON CONFLICT(rating_key) DO UPDATE SET checked_at=excluded.checked_at,next_check=excluded.next_check,state=excluded.state,reason=excluded.reason,full_at=excluded.full_at`,
+		int64(key), s.now().Unix(), next.Unix(), state, reason, fullAt)
 	return err
+}
+
+// everyIndexer reports whether skip leaves out every searchable source.
+func everyIndexer(sources []core.ReleaseFeed, skip map[string]bool) bool {
+	for _, f := range sources {
+		if !skip[f.ID] {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Service) acceptDigitalReleases(ctx context.Context, keys []core.RatingKey, now time.Time, acceptable map[core.RatingKey]bool) {

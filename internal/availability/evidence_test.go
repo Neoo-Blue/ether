@@ -190,6 +190,11 @@ func TestProbeUnlocksPlayableReleaseAndKeepsGate(t *testing.T) {
 	}
 	found = "web"
 	x.now = x.now.Add(7 * time.Hour)
+	// The feed lost continuity meanwhile (more uploads than a page), so it
+	// no longer vouches for the indexer and the probe searches again.
+	if _, err := x.s.db.Exec(`UPDATE availability_feeds SET covered_since=0`); err != nil {
+		t.Fatal(err)
+	}
 	if err := x.s.Cycle(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -274,8 +279,17 @@ func TestProbeProcessesEveryInWindowTitle(t *testing.T) {
 		}
 		return nil, nil
 	}
-	if err := x.s.Cycle(t.Context()); err != nil {
-		t.Fatal(err)
+	// A backlog drains probeBatch searches per one-minute cycle, never as
+	// one burst, and every in-window title is reached.
+	for cycle := 0; len(searched) < 520 && cycle < 520; cycle++ {
+		before := len(searched)
+		if err := x.s.Cycle(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		if n := len(searched) - before; n > probeBatch {
+			t.Fatalf("cycle %d searched %d titles, want at most %d", cycle, n, probeBatch)
+		}
+		x.now = x.now.Add(time.Minute)
 	}
 	if len(searched) != 520 {
 		t.Fatalf("probed %d titles, want every in-window title", len(searched))
