@@ -7,10 +7,11 @@ import {
   ListPlus,
   Plus,
 } from "lucide-react";
+import { useState } from "react";
 import { ActionMenu } from "../../components/ActionMenu";
 import { SectionHeading } from "../../components/feedback";
 import { ChipGroup, Field, NumberInput, Segmented } from "../../components/fields";
-import type { CollectionSpec, Rule, RuleField } from "../../lib/contract";
+import type { CollectionSpec, Rule, RuleField, Source } from "../../lib/contract";
 import { t, tx } from "../../i18n";
 import { isPluginDescriptor, textOf, useRegistry } from "../../lib/extend";
 import {
@@ -22,6 +23,7 @@ import {
   type CollectionSourceMeta,
   type SourceDescriptor,
 } from "../../lib/rules";
+import { AddonCatalogDrawer, type AddonCatalogChoice } from "./AddonCatalogDrawer";
 import { RuleRow } from "./RuleRow";
 import { SourceEditor } from "./SourceEditor";
 
@@ -44,11 +46,15 @@ export function BuildPanel({
   spec,
   update,
   region,
+  pickAddonCatalog = false,
 }: {
   spec: CollectionSpec;
   update: SpecUpdate;
   region: string;
+  /** Open the Stremio add-on catalog picker straight away. */
+  pickAddonCatalog?: boolean;
 }) {
+  const [addonCatalogs, setAddonCatalogs] = useState(pickAddonCatalog);
   const setRules = (key: "rules" | "exclude", rules: Rule[]) => update({ [key]: rules });
   // Source kinds come from the descriptor registry (built-ins and plugins
   // in one list); the console keeps no kind list of its own.
@@ -56,26 +62,44 @@ export function BuildPanel({
   const descriptors: SourceDescriptor[] = registry.descriptors;
   // The whole catalogue already contains every other source, so adding a
   // specific source replaces a lone "Whole catalogue".
+  const loneCatalog = spec.sources.length === 1 && spec.sources[0]?.kind === "catalog";
   const addSource = (d: SourceDescriptor) => {
-    const keep =
-      spec.sources.length === 1 && spec.sources[0]?.kind === "catalog" && d.id !== "catalog"
-        ? []
-        : spec.sources;
+    const keep = loneCatalog && d.id !== "catalog" ? [] : spec.sources;
     update({
       sources: [...keep, newSourceFromDescriptor(d, spec.mediaType, region)],
       ...(d.id !== "catalog" ? { localOnly: false } : {}),
     });
   };
-  const sourceItems: ContextMenuEntry[] = descriptors
-    .filter((d) => d.id !== "stremioCatalog")
-    .filter((d) => d.id !== "catalog" || !spec.sources.some((s) => s.kind === "catalog"))
-    .map((d) => ({
-      key: d.id,
-      label: isPluginDescriptor(d)
-        ? t("{label} (from {owner})", { label: textOf(d.label), owner: d.group || d.owner })
-        : textOf(d.label),
-      onSelect: () => addSource(d),
-    }));
+  // A catalog added with its add-on may reach the registry after the pick,
+  // so it is added by kind; a new collection takes the catalog's media type.
+  const addAddonCatalog = (c: AddonCatalogChoice) => {
+    const d = sourceDescriptor(descriptors, c.kind);
+    const src = d
+      ? newSourceFromDescriptor(d, spec.mediaType, region)
+      : ({ kind: c.kind } as unknown as Source);
+    update({
+      sources: [...(loneCatalog ? [] : spec.sources), src],
+      localOnly: false,
+      ...(loneCatalog && c.mediaType ? { mediaType: c.mediaType } : {}),
+    });
+  };
+  const sourceItems: ContextMenuEntry[] = [
+    ...descriptors
+      .filter((d) => d.id !== "catalog" || !spec.sources.some((s) => s.kind === "catalog"))
+      .map((d) => ({
+        key: d.id,
+        label: isPluginDescriptor(d)
+          ? t("{label} (from {owner})", { label: textOf(d.label), owner: d.group || d.owner })
+          : textOf(d.label),
+        onSelect: () => addSource(d),
+      })),
+    { key: "addon-catalog-sep", separator: true },
+    {
+      key: "addon-catalog",
+      label: t("Stremio add-on catalog…"),
+      onSelect: () => setAddonCatalogs(true),
+    },
+  ];
   const limitPresets = [25, 50, 100, 0];
 
   return (
@@ -171,7 +195,6 @@ export function BuildPanel({
               key={i}
               index={i}
               source={s}
-              collectionId={spec.id}
               region={region}
               removable={spec.sources.length > 1}
               descriptor={sourceDescriptor(descriptors, s.kind)}
@@ -191,6 +214,11 @@ export function BuildPanel({
             />
           ))}
         </div>
+        <AddonCatalogDrawer
+          open={addonCatalogs}
+          onClose={() => setAddonCatalogs(false)}
+          onPick={addAddonCatalog}
+        />
       </section>
 
       <section aria-labelledby="rules-h">

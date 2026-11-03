@@ -394,7 +394,7 @@ export interface EtherConfig {
   };
   liveTV?: { logoIndexUrl?: string; healthSweepMinutes?: number };
   subtitles?: {
-    providers?: { id: string; kind: string; name?: string; url?: string; enabled: boolean }[];
+    providers?: { id: string; kind: string; name?: string; enabled: boolean }[];
   };
   openSubtitles: {
     enabled: boolean;

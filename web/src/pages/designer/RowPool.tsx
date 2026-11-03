@@ -202,17 +202,12 @@ export function RowPool({
           className="h-8 pl-8"
         />
       </div>
-      {registry.descriptors
-        .filter((d) => d.meta?.collectionSource === "stremioCatalog")
-        .map((d) => (
-          <Link
-            key={d.id}
-            to={newCollectionHref({ source: "stremioCatalog" })}
-            className="block rounded-lg border border-border bg-surface p-3 text-sm text-primary"
-          >
-            {t("Create a Home row from a Stremio catalog")}
-          </Link>
-        ))}
+      <Link
+        to={newCollectionHref({ source: "addonCatalog" })}
+        className="block rounded-lg border border-border bg-surface p-3 text-sm text-primary"
+      >
+        {t("Create a Home row from a Stremio catalog")}
+      </Link>
       {GROUPS.map((g) => {
         const rows = shown.filter((e) => e.group === g.key);
         if (!rows.length) return null;
