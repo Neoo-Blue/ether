@@ -459,3 +459,19 @@ type offlineTransport struct{}
 func (offlineTransport) RoundTrip(*http.Request) (*http.Response, error) {
 	return nil, errors.New("offline in tests")
 }
+
+// The showcase templates install as they come, even offline: a draft the
+// owner has not touched must never fail the install check.
+func TestNativeTemplatesPassInstallCheck(t *testing.T) {
+	s, _, _ := newTestStudio(t)
+	ctx := context.Background()
+	for _, tpl := range []string{"channels", "video_source"} {
+		p, err := s.CreateProject(ctx, CreateProjectOptions{Template: tpl, Name: "Check " + tpl})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.PreviewInstallProject(ctx, p.ID); err != nil {
+			t.Errorf("%s install check: %v", tpl, err)
+		}
+	}
+}

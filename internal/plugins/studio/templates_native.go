@@ -181,10 +181,16 @@ export function handle(req: Request) {
     const id = decodeURIComponent(req.path.slice("/ether/guide/".length, -5));
     const from = q(req, "from") || new Date().toISOString();
     const to = q(req, "to") || new Date(Date.now() + 86400000).toISOString();
-    const ch = getJSON(
-      API + "/v2/channels/" + encodeURIComponent(id) + "?start=" + encodeURIComponent(from) +
-        "&stop=" + encodeURIComponent(to) + "&marketingRegion=" + encodeURIComponent(region(req)),
-    ) as PlutoChannel;
+    let ch: PlutoChannel;
+    try {
+      ch = getJSON(
+        API + "/v2/channels/" + encodeURIComponent(id) + "?start=" + encodeURIComponent(from) +
+          "&stop=" + encodeURIComponent(to) + "&marketingRegion=" + encodeURIComponent(region(req)),
+      ) as PlutoChannel;
+    } catch (e) {
+      // An unknown channel or an unreachable service has no guide yet.
+      return { status: 200, body: { programmes: [] } };
+    }
     const programmes = (ch.timelines || [])
       .filter((t) => t.start && t.stop && t.title)
       .map((t) => ({ id: t._id, channelId: id, title: t.title, start: t.start, stop: t.stop, description: t.episode?.description }));
@@ -192,7 +198,11 @@ export function handle(req: Request) {
   }
   if (req.path.startsWith("/stream/tv/") && req.path.endsWith(".json")) {
     const id = decodeURIComponent(req.path.slice("/stream/tv/".length, -5));
-    return { status: 200, body: { streams: [{ name: "Pluto TV", url: streamURL(id) }] } };
+    try {
+      return { status: 200, body: { streams: [{ name: "Pluto TV", url: streamURL(id) }] } };
+    } catch (e) {
+      return { status: 200, body: { streams: [] } };
+    }
   }
   if (req.path === "/ether/view/lineup") {
     let list: PlutoChannel[] = [];
