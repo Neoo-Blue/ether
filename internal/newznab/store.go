@@ -247,7 +247,8 @@ func (c *Client) cacheGet(ctx context.Context, key string) ([]core.Release, bool
 const emptySearchCacheTTL = 3 * time.Minute
 
 func (c *Client) cachePut(ctx context.Context, key string, results []core.Release) {
-	ttl := searchCacheTTL(c.ttl(), cacheAge(ctx), c.now(), len(results) == 0)
+	// The owner's "Remember searches for" is a hard cap: age may only shorten it.
+	ttl := min(searchCacheTTL(c.ttl(), cacheAge(ctx), c.now(), len(results) == 0), c.ttl())
 	if ttl <= 0 {
 		return
 	}

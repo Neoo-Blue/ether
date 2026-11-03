@@ -1031,6 +1031,14 @@ func (c *Client) Search(ctx context.Context, req core.SearchRequest) ([]core.Rel
 				continue
 			}
 			if len(results) > 0 {
+				if core.IsUnattendedSearch(ctx) && c.Config().DailyLimit == 0 {
+					// An unattended search stopped at its first fallback hit;
+					// Play would have merged a whole burst. Keep that partial
+					// answer out of the cache Play reads, and tell the resolver
+					// the fleet answer is incomplete so it is not stored there.
+					core.NoteSearchIncomplete(ctx)
+					return results, nil
+				}
 				c.cachePut(ctx, key, results)
 				return results, nil
 			}
