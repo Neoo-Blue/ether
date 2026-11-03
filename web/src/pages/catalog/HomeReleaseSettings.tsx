@@ -2,7 +2,7 @@ import { useAsync, useInterval } from "../../lib/hooks";
 import { localized, t } from "../../i18n";
 import { apiFetch } from "../../lib/api";
 import { Activity, CheckCheck, Plus } from "lucide-react";
-import { formatNumber, relativeTime } from "../../lib/format";
+import { formatNumber } from "../../lib/format";
 import type { FieldGroup } from "../settings/SchemaForm";
 
 export const UpcomingEpisodeSettings: FieldGroup = localized(() => ({
@@ -73,11 +73,7 @@ export function CatalogActivity() {
               </dd>
             </div>
           </dl>
-          <p className="mt-3 text-xs text-fg-muted">
-            {sync?.running
-              ? t("Syncing now")
-              : t("Synced {when}", { when: relativeTime(completed) })}
-          </p>
+          {sync?.running ? <p className="mt-3 text-xs text-fg-muted">{t("Syncing now")}</p> : null}
         </>
       ) : (
         <p className="mt-3 text-sm text-fg-muted">{t("No sync activity yet")}</p>

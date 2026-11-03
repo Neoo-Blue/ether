@@ -15,6 +15,7 @@ describe("Catalog recent activity", () => {
     expect(activity.getByText("42")).toBeInTheDocument();
     expect(activity.getByText("Checked in last sync")).toBeInTheDocument();
     expect(activity.getByText("1,234")).toBeInTheDocument();
+    expect(activity.queryByText(/^Synced /)).not.toBeInTheDocument();
   });
 
   it("does not fabricate activity before the first sync", async () => {
