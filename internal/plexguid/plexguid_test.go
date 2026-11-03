@@ -12,6 +12,13 @@ import (
 	"testing"
 )
 
+func boolInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}
+
 func TestExactIdentityRequiredAndCached(t *testing.T) {
 	for _, tc := range []struct{ name, ids, want string }{{"exact", `[{"id":"tmdb://550"}]`, "plex://movie/5d7768265af944001f1f6976"}, {"mismatch", `[{"id":"tmdb://551"}]`, ""}, {"absent", `[]`, ""}} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -24,7 +31,7 @@ func TestExactIdentityRequiredAndCached(t *testing.T) {
 			calls := 0
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				calls++
-				if r.URL.Query().Get("guid") != "tmdb://550" || r.Header.Get("X-Plex-Token") != "fixture" {
+				if (r.URL.Path == "/library/metadata/matches" && r.URL.Query().Get("guid") != "tmdb://550") || r.Header.Get("X-Plex-Token") != "fixture" {
 					t.Fatal("request identity")
 				}
 				if r.Header.Get("X-Plex-Client-Identifier") != "install-id" {
@@ -40,7 +47,7 @@ func TestExactIdentityRequiredAndCached(t *testing.T) {
 					t.Fatal(guid, e)
 				}
 			}
-			if calls != 1 || s.Cached(ctx, core.MovieKey(550)) != tc.want {
+			if calls != 1+boolInt(tc.want != "") || s.Cached(ctx, core.MovieKey(550)) != tc.want {
 				t.Fatal("cache", calls)
 			}
 		})
@@ -123,6 +130,8 @@ func TestSeasonAndEpisodeResolutionAndCachedMany(t *testing.T) {
 				return
 			}
 			w.Write([]byte(`{"MediaContainer":{"Metadata":[]}}`))
+		case "/library/metadata/5d9c086c46115600200aa2fe":
+			w.Write([]byte(`{"MediaContainer":{"Metadata":[{"guid":"` + showGUID + `","type":"show","Guid":[{"id":"tmdb://1396"}]}]}}`))
 		case "/library/metadata/5d9c086c46115600200aa2fe/children":
 			w.Write([]byte(`{"MediaContainer":{"Metadata":[{"guid":"` + seasonGUID + `","type":"season","index":1}]}}`))
 		case "/library/metadata/602e5e2194f08e002d001122/children":
@@ -179,6 +188,8 @@ func TestChildrenPaging120Episodes(t *testing.T) {
 				return
 			}
 			w.Write([]byte(`{"MediaContainer":{"Metadata":[]}}`))
+		case "/library/metadata/5d9c086c46115600200aa2fe":
+			w.Write([]byte(`{"MediaContainer":{"Metadata":[{"guid":"` + showGUID + `","type":"show","Guid":[{"id":"tmdb://456"}]}]}}`))
 		case "/library/metadata/5d9c086c46115600200aa2fe/children":
 			if r.URL.Query().Get("X-Plex-Container-Size") != "50" || r.URL.Query().Get("X-Plex-Container-Start") != "0" {
 				t.Fatalf("season children query = %v", r.URL.Query())
