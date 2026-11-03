@@ -368,3 +368,25 @@ func TestContractPreservesAnamorphicSARAndColour(t *testing.T) {
 	fd := adaptToContract(copyMKV(), hd, full, ContainerMatroska, yc)
 	mustContain(t, []string{strings.Join(buildArgs(contractSpec(t, full, fd, yc)), " ")}, "rin=full:t=bt709:p=bt709:m=bt709:r=limited")
 }
+
+func TestSwapWouldCopyVideoUsesDeliveredContract(t *testing.T) {
+	orig, _ := yellowstone()
+	c, _ := contractOf(orig, copyMKV())
+	m := &Manager{feat: testFeatures()}
+	s := &Session{m: m}
+	s.contract, s.info, s.decision, s.container = c, orig, copyMKV(), ContainerMatroska
+	same := orig
+	same.Streams = append([]core.StreamInfo(nil), orig.Streams...)
+	if !s.SwapWouldCopyVideo(same) {
+		t.Fatal("matching contract would encode")
+	}
+	same.Video().BitDepth = 8
+	if s.SwapWouldCopyVideo(same) {
+		t.Fatal("different bit depth would copy")
+	}
+	same.Video().BitDepth = 10
+	same.Video().ColorTransfer = "smpte2084"
+	if s.SwapWouldCopyVideo(same) {
+		t.Fatal("HDR would copy into SDR contract")
+	}
+}

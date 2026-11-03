@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"time"
 
 	"github.com/braedonsaunders/ether/internal/core"
 )
@@ -25,7 +26,7 @@ type raceResult struct {
 // flight, and returns the first that opens. Releases that failed are
 // returned so the caller does not try them again. Late successes are
 // dropped in the background.
-func (m *Manager) raceAlternates(ctx context.Context, s *session, tried []string, alternates []core.Release, fallback func(int64) core.MediaInfo, width int, accept ...func(*generation) error) (*generation, []string, error) {
+func (m *Manager) raceAlternates(ctx context.Context, s *session, tried []string, alternates []core.Release, fallback func(int64) core.MediaInfo, width int, accept func(*generation) error, prefer func(*generation) bool) (*generation, []string, error) {
 	var cands []core.Release
 	for _, alt := range alternates {
 		if alt.ID != "" && !slices.Contains(tried, alt.ID) && releaseMatchesTitle(alt, s.title) {
@@ -56,8 +57,8 @@ func (m *Manager) raceAlternates(ctx context.Context, s *session, tried []string
 					g, err = nil, perr
 				}
 			}
-			if err == nil && len(accept) > 0 && accept[0] != nil {
-				if e := accept[0](g); e != nil {
+			if err == nil && accept != nil {
+				if e := accept(g); e != nil {
 					m.dropGeneration(g)
 					g = nil
 					err = e
@@ -71,11 +72,49 @@ func (m *Manager) raceAlternates(ctx context.Context, s *session, tried []string
 	}
 	var failed []string
 	var lastErr error
+	var held *generation
+	var timer *time.Timer
+	var deadline <-chan time.Time
+	defer func() {
+		if timer != nil {
+			timer.Stop()
+		}
+	}()
 	for running > 0 {
-		r := <-results
+		var r raceResult
+		select {
+		case r = <-results:
+		case <-deadline:
+			cancel()
+			m.drainRace(s, results, running)
+			return held, failed, nil
+		case <-ctx.Done():
+			cancel()
+			m.drainRace(s, results, running)
+			if held != nil {
+				m.dropGeneration(held)
+			}
+			return nil, failed, ctx.Err()
+		}
 		running--
 		if r.err == nil {
+			if prefer != nil && !prefer(r.g) {
+				if held == nil {
+					held = r.g
+					timer = time.NewTimer(500 * time.Millisecond)
+					deadline = timer.C
+				} else {
+					m.dropGeneration(r.g)
+				}
+				if next < len(cands) && next < m.opts.MaxAttempts {
+					launch()
+				}
+				continue
+			}
 			cancel() // the rest are no longer needed
+			if held != nil {
+				m.dropGeneration(held)
+			}
 			if running > 0 {
 				m.drainRace(s, results, running)
 			}
@@ -84,16 +123,22 @@ func (m *Manager) raceAlternates(ctx context.Context, s *session, tried []string
 		if ctx.Err() != nil {
 			cancel()
 			m.drainRace(s, results, running)
+			if held != nil {
+				m.dropGeneration(held)
+			}
 			return nil, failed, ctx.Err()
 		}
 		failed = append(failed, r.alt.ID)
 		lastErr = r.err
 		m.log.Warn("failover candidate failed", "session", s.id, "release", r.alt.Name, "err", r.err)
-		if next < len(cands) {
+		if next < len(cands) && (held == nil || next < m.opts.MaxAttempts) {
 			launch()
 		}
 	}
 	cancel()
+	if held != nil {
+		return held, failed, nil
+	}
 	return nil, failed, lastErr
 }
 

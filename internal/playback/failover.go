@@ -758,6 +758,12 @@ func (m *Manager) failoverWith(ctx context.Context, s *session, observed *genera
 		var failed []string
 		width := failoverRaceWidth
 		var accept func(*generation) error
+		var prefer func(*generation) bool
+		if hls, ok := m.deps.HLSLookup(s.id); ok && hls != nil {
+			if p, ok := hls.(interface{ SwapWouldCopyVideo(core.MediaInfo) bool }); ok {
+				prefer = func(next *generation) bool { return p.SwapWouldCopyVideo(next.infoSnapshot()) }
+			}
+		}
 		if fo.down {
 			width = 2
 			accept = func(next *generation) error {
@@ -768,7 +774,7 @@ func (m *Manager) failoverWith(ctx context.Context, s *session, observed *genera
 				return nil
 			}
 		}
-		g, failed, lastErr = m.raceAlternates(ctx, s, tried, alternates, fallback, width, accept)
+		g, failed, lastErr = m.raceAlternates(ctx, s, tried, alternates, fallback, width, accept, prefer)
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
