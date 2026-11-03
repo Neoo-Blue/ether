@@ -1,15 +1,7 @@
+import { SubtabNav } from "../../components/layout";
 import { Drawer } from "../../components/Drawer";
 import { DashboardPanel } from "@braedonsaunders/appkit-dashboard/primitives";
-import {
-  Avatar,
-  Badge,
-  Button,
-  EmptyState,
-  Slider,
-  SubtabNav,
-  toast,
-  cn,
-} from "@braedonsaunders/appkit-ui";
+import { Avatar, Badge, Button, EmptyState, Slider, toast, cn } from "@braedonsaunders/appkit-ui";
 import {
   Brain,
   CalendarRange,
@@ -90,7 +82,7 @@ const PERSONAL_ROW_KINDS = new Set([
   "up-next",
 ]);
 
-function extractTopPicks(preview: ViewerHome | null | undefined, limit = 10): RankedPick[] {
+export function extractTopPicks(preview: ViewerHome | null | undefined, limit = 10): RankedPick[] {
   if (!preview?.rows) return [];
   const seen = new Set<string>();
   const out: RankedPick[] = [];

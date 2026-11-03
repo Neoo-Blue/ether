@@ -78,11 +78,11 @@ func TestResolveShowParentsMatchesGet(t *testing.T) {
 	}
 }
 
-func TestResolveShowParentsPreservesHomeAdmission(t *testing.T) {
+func TestResolveShowParentsRequiresKnownHomeRelease(t *testing.T) {
 	ctx := context.Background()
 	db := store.OpenTest(t)
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	c, err := New(db, nil, config.Catalog{GateMoviesByHomeRelease: true}, nil, WithNow(func() time.Time { return now }))
+	c, err := New(db, nil, config.Catalog{ReleaseMode: config.ModeDigital}, nil, WithNow(func() time.Time { return now }))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestResolveShowParentsPreservesHomeAdmission(t *testing.T) {
 	if err = c.UpsertTitle(ctx, movie, true); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = db.ExecContext(ctx, `INSERT INTO catalog_home_release(key,checked,earliest_ts,fallback_admitted,attempted_at) VALUES(?,1,0,0,0)`, int64(key)); err != nil {
+	if _, err = db.ExecContext(ctx, `INSERT INTO catalog_home_release(key,checked,earliest_ts,fallback_admitted,attempted_at) VALUES(?,1,?,0,0)`, int64(key), now.Add(-time.Hour).Unix()); err != nil {
 		t.Fatal(err)
 	}
 	got, err := c.ResolveShowParents(ctx, []core.RatingKey{key})
@@ -99,7 +99,7 @@ func TestResolveShowParentsPreservesHomeAdmission(t *testing.T) {
 		t.Fatalf("eligible %+v %v", got, err)
 	}
 	var admitted int
-	if err = db.QueryRowContext(ctx, `SELECT fallback_admitted FROM catalog_home_release WHERE key=?`, int64(key)).Scan(&admitted); err != nil || admitted != 1 {
+	if err = db.QueryRowContext(ctx, `SELECT fallback_admitted FROM catalog_home_release WHERE key=?`, int64(key)).Scan(&admitted); err != nil || admitted != 0 {
 		t.Fatalf("admission=%d err=%v", admitted, err)
 	}
 	legacy, err := c.Get(ctx, key)

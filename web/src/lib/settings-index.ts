@@ -73,11 +73,27 @@ export function settingsIndex(): SettingHit[] {
   const plex = "Plex";
   const away = t("Away from home");
   return [
+    {
+      title: t("Poster source"),
+      where: t("Artwork"),
+      href: "/metadata/artwork",
+      keywords: "TMDB RPDB Custom PostersPlus XRDB BetterPosters",
+    },
+    ...["PostersPlus", "XRDB", "BetterPosters", "RPDB"].map((title) => ({
+      title,
+      where: t("Integrations"),
+      href: "/services/overview",
+      keywords: "poster API key",
+    })),
     // General
     ...groupHits(S.SERVER, "/server", general),
     ...rows("/server", general, [
       t("Send indexers, debrid and Usenet through a proxy"),
       t("Proxy address"),
+      t("How apps connect"),
+      t("Port"),
+      t("Local URL"),
+      t("Remote URL"),
     ]),
     ...rows(
       "/server",
@@ -106,7 +122,6 @@ export function settingsIndex(): SettingHit[] {
     ...groupHits([UpcomingEpisodeSettings], "/catalog/settings", catalog),
     ...rows("/catalog/settings", catalog, [
       t("Hide obscure titles"),
-      t("Wait for digital or physical release"),
       t("Watchlist monitoring"),
       t("Plex watchlists"),
       t("Trakt watchlists"),
@@ -118,6 +133,7 @@ export function settingsIndex(): SettingHit[] {
       t("On digital release"),
       t("Right away"),
     ]),
+    ...rows("/catalog/rules", catalog, [t("Rules"), t("Hide"), t("Show")]),
     // Sources
     ...groupHits(S.DEBRID, "/sources/debrid", t("Debrid"), () => t("More options")),
     ...rows(
@@ -135,6 +151,7 @@ export function settingsIndex(): SettingHit[] {
     // Quality
     ...rows("/quality/profiles", `${quality} › ${away}`, [t("Away profile"), t("Bitrate limit")]),
     ...rows("/quality/profiles", quality, [t("Source order")]),
+    ...rows("/quality/check", quality, [t("Check quality")]),
     ...groupHits(S.PLAY_VERSIONS, "/quality/profiles", quality),
     ...rows("/quality/searching", `${quality} › ${t("Start speed")}`, [
       t("Start before the health check finishes"),

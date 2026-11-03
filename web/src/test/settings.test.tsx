@@ -20,6 +20,48 @@ afterEach(async () => {
 });
 
 describe("Settings", () => {
+  it("fills a proxy suggestion and tests the connection inline", async () => {
+    const { fake } = renderApp("/server");
+    fireEvent.click(
+      await screen.findByLabelText("Send indexers, debrid and Usenet through a proxy", {}, WAIT),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Common proxy setups" }));
+    fireEvent.click(
+      within(await screen.findByRole("listbox", { hidden: true })).getByText(
+        "VPN container (Gluetun) on a shared Docker network",
+      ),
+    );
+    expect(screen.getByLabelText("Proxy address")).toHaveValue("http://gluetun:8888");
+    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+    expect(await screen.findByText("Split tunnel working", {}, WAIT)).toBeVisible();
+    expect(calls(fake, "POST", "/outbound/check")[0]?.body).toMatchObject({
+      enabled: true,
+      url: "http://gluetun:8888",
+    });
+  });
+  it("shows enabled app addresses and saves a non-Plex port from General", async () => {
+    const { fake } = renderApp("/server", {}, (f) => {
+      f.state.config.frontends = {
+        plex: { enabled: true },
+        jellyfin: { enabled: true },
+        emby: { enabled: false },
+      };
+    });
+    const port = await screen.findByLabelText("Jellyfin port", {}, WAIT);
+    await waitFor(() => expect(port).toHaveValue(8096), WAIT);
+    expect(screen.queryByLabelText("Emby port")).toBeNull();
+    expect(screen.getByText("http://192.168.1.20:8096")).toBeVisible();
+    expect(screen.getByText("https://jellyfin.example.com")).toBeVisible();
+    fireEvent.change(port, { target: { value: "8098" } });
+    fireEvent.click(screen.getByRole("button", { name: /Save changes/ }));
+    await waitFor(
+      () =>
+        expect(calls(fake, "PUT", "/frontends/jellyfin/settings")[0]?.body).toMatchObject({
+          port: 8098,
+        }),
+      WAIT,
+    );
+  });
   it("shows and filters client families reported by other protocols", async () => {
     renderApp("/playback/devices");
     expect(await screen.findByText("Stremio TV", {}, WAIT)).toBeInTheDocument();
@@ -87,10 +129,7 @@ describe("Settings", () => {
     const required = await screen.findByRole("region", { name: "Required" }, WAIT);
     expect(screen.queryByRole("region", { name: "Essentials" })).toBeNull();
     expect(within(required).getByRole("listitem", { name: "TMDB" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Set up TMDB" })).toHaveAttribute(
-      "href",
-      "/services/tmdb",
-    );
+    expect(screen.getByRole("button", { name: "Set up TMDB" })).toBeEnabled();
     const artwork = screen.getByRole("region", { name: "Artwork and ratings" });
     const posters = await within(artwork).findByRole("listitem", { name: "PostersPlus" }, WAIT);
     const ratings = within(artwork).getByRole("listitem", { name: "OMDb and MDBList" });
@@ -101,7 +140,7 @@ describe("Settings", () => {
       expect(screen.queryByRole("link", { name })).toBeNull();
     for (const [name, href] of [
       [/Set up Trakt/, "/services/trakt"],
-      [/Manage language model/, "/services/llm"],
+      [/Manage Language model/, "/services/llm"],
       [/Set up OpenSubtitles/, "/services/opensubtitles"],
     ] as const)
       expect(screen.getByRole("link", { name })).toHaveAttribute("href", href);
@@ -111,10 +150,12 @@ describe("Settings", () => {
       ["TheIntroDB", "/services/introdb"],
     ] as const) {
       const item = screen.getByRole("listitem", { name: card });
-      expect(within(item).getByRole("link", { name: "Manage" })).toHaveAttribute("href", href);
-      expect(within(item).queryByRole("switch")).toBeNull();
+      expect(
+        within(item).getByRole("link", { name: new RegExp(`^(Manage|Set up) ${card}$`) }),
+      ).toHaveAttribute("href", href);
+      expect(within(item).getByRole("switch")).toBeInTheDocument();
     }
-    expect(within(posters).queryByRole("switch")).toBeNull();
+    expect(within(posters).getByRole("switch")).toBeInTheDocument();
     expect(within(screen.getByRole("listitem", { name: "Language model" })).getByText("On"));
     expect(screen.queryByRole("button", { name: "Test Trakt" })).toBeNull();
     expect(screen.getByRole("listitem", { name: "TheIntroDB" })).toBeInTheDocument();
@@ -125,7 +166,7 @@ describe("Settings", () => {
 
   it("keeps the TheIntroDB key, health and test on its integration tab", async () => {
     const { fake } = renderApp("/services/introdb", {}, (f) => {
-      f.state.config.markers = { theIntroDb: true, apiKey: "" };
+      f.state.config.markers = { accountEnabled: true, theIntroDb: true, apiKey: "" };
     });
     expect(await screen.findByLabelText("Optional TheIntroDB key", {}, WAIT)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Test TheIntroDB" })).toBeInTheDocument();
@@ -170,8 +211,9 @@ describe("Settings", () => {
     });
     fireEvent.click(screen.getByRole("tab", { name: "Overview" }));
     fireEvent.click(await screen.findByRole("switch", { name: "OpenSubtitles enabled" }, WAIT));
+    fireEvent.click(await screen.findByRole("button", { name: "Save and enable" }));
     await waitFor(() => expect(calls(fake, "PUT", "/config/opensubtitles")).toHaveLength(1), WAIT);
-    expect(calls(fake, "PUT", "/config/opensubtitles")[0]!.body).toEqual({ enabled: true });
+    expect(calls(fake, "PUT", "/config/opensubtitles")[0]!.body).toMatchObject({ enabled: true });
     expect(calls(fake, "PUT", "/config/trakt")).toHaveLength(0);
     fireEvent.click(screen.getByRole("tab", { name: "Trakt" }));
     expect(await screen.findByLabelText("Client ID", {}, WAIT)).toHaveValue("my-client");
@@ -239,7 +281,7 @@ describe("Settings", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Save and enable" }));
     expect((await screen.findAllByText("looks malformed", {}, WAIT)).length).toBeGreaterThan(0);
     expect(screen.getByRole("dialog", { name: "Set up Trakt" })).toBeInTheDocument();
-    expect(screen.getByRole("switch", { name: "Trakt enabled" })).not.toBeChecked();
+    expect(screen.getByRole("switch", { name: "Trakt enabled", hidden: true })).not.toBeChecked();
     expect(screen.queryByRole("tab", { name: "Trakt" })).toBeNull();
     expect(calls(fake, "PUT", "/config/trakt")).toHaveLength(1);
   });
@@ -436,7 +478,7 @@ describe("Settings", () => {
     for (const name of ["Server", "Simkl", "Availability", "Shared Cache", "Downloads"])
       expect(screen.queryByRole("tab", { name })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "How Ether reaches the internet" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Setup" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Run setup wizard" })).toBeVisible();
   });
 
   it("keeps unknown config off General and tucks power options under More options", async () => {
@@ -447,7 +489,7 @@ describe("Settings", () => {
       } as never;
     });
     expect(await screen.findByLabelText("Server name", {}, WAIT)).toBeInTheDocument();
-    expect(screen.getByLabelText("Port")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Plex port", {}, WAIT)).toBeInTheDocument();
     expect(screen.getByText("Living Room Ether is ready for viewers.")).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Experiments" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Listen address")).not.toBeInTheDocument();
@@ -522,7 +564,7 @@ describe("Settings", () => {
   it("keeps Plex account and connection settings inside its enabled app tab", async () => {
     renderApp("/apps/plex");
     expect(await screen.findByRole("button", { name: "Sign out of Plex" }, WAIT)).toBeVisible();
-    expect(screen.getAllByText("Claimed by the Plex account owner.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Claimed by Plex account Braedon").length).toBeGreaterThan(0);
     expect(screen.queryByRole("switch", { name: "Claimed" })).toBeNull();
     expect(screen.queryByLabelText("Owner token")).toBeNull();
     expect(screen.queryByLabelText("Allow remote access")).toBeNull();
@@ -599,13 +641,16 @@ describe("Settings", () => {
     renderApp("/apps/jellyfin", {}, (f) => {
       f.state.config.frontends = { jellyfin: { enabled: true }, silo: { enabled: true } };
     });
-    fireEvent.change(await screen.findByRole("spinbutton", { name: "Port" }, WAIT), {
-      target: { value: "8095" },
-    });
+    const quick = await screen.findByRole("switch", { name: "Quick Connect" }, WAIT);
+    const before = (quick as HTMLInputElement).checked;
+    fireEvent.click(quick);
     fireEvent.click(screen.getByRole("tab", { name: "Silo" }));
-    await screen.findByRole("spinbutton", { name: "Port" }, WAIT);
-    fireEvent.click(screen.getByRole("tab", { name: "Jellyfin" }));
-    expect(await screen.findByRole("spinbutton", { name: "Port" }, WAIT)).toHaveValue(8095);
+    fireEvent.click(await screen.findByRole("tab", { name: "Jellyfin" }, WAIT));
+    expect(
+      ((await screen.findByRole("switch", { name: "Quick Connect" }, WAIT)) as HTMLInputElement)
+        .checked,
+    ).toBe(!before);
+    expect(screen.queryByRole("spinbutton", { name: "Port" })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Server name" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Unsaved changes" })).toBeVisible();
   });
@@ -693,6 +738,7 @@ describe("Settings", () => {
     await waitFor(() => expect(simklSwitch()).toBeEnabled(), WAIT);
     expect(screen.queryByRole("tab", { name: "Simkl" })).toBeNull();
     fireEvent.click(simklSwitch());
+    fireEvent.click(await screen.findByRole("button", { name: "Save and enable" }));
     await waitFor(() => expect(calls(fake, "PUT", "/config/simkl")).toHaveLength(2), WAIT);
     expect(calls(fake, "PUT", "/config/simkl")[1]!.body).toMatchObject({
       enabled: true,
@@ -718,7 +764,7 @@ describe("Settings", () => {
     expect(screen.getByRole("switch", { name: "Simkl enabled" })).toBeChecked();
     expect(await screen.findByRole("tab", { name: "Simkl" }, WAIT)).toBeInTheDocument();
 
-    expect(screen.queryByRole("switch", { name: "OMDb and MDBList enabled" })).toBeNull();
+    expect(screen.getByRole("switch", { name: "OMDb and MDBList enabled" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Ratings" }));
     fireEvent.change(await screen.findByLabelText("API key", {}, WAIT), {
       target: { value: "omdb-key" },
@@ -737,7 +783,7 @@ describe("Settings", () => {
     expect(calls(fake, "PUT", "/discovery/ratings/settings")[0]!.body).toMatchObject({
       apiKey: "omdb-key",
     });
-    expect(screen.queryByText(/^Connected/)).toBeNull();
+    expect(screen.getByText("Connected")).toBeInTheDocument();
   });
 
   it("shows ratings status on its card and keeps score choices off Integrations", async () => {
@@ -759,7 +805,7 @@ describe("Settings", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Overview" }));
     const card = await screen.findByRole("listitem", { name: "OMDb and MDBList" }, WAIT);
     expect(within(card).getByText("Configured")).toBeInTheDocument();
-    expect(within(card).queryByRole("switch")).toBeNull();
+    expect(within(card).getByRole("switch")).toBeInTheDocument();
     expect(calls(fake, "PUT", "/discovery/ratings/settings")).toHaveLength(0);
   });
 

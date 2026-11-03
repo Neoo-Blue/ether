@@ -3,6 +3,18 @@ import { destinations, PAGES } from "./sitemap";
 import { settingsIndex } from "./settings-index";
 
 describe("sitemap", () => {
+  it("indexes Rules and upcoming content without the retired gate", () => {
+    const hrefs = destinations().map((d) => d.href);
+    expect(hrefs).toContain("/catalog/rules");
+    expect(hrefs).not.toContain("/catalog/visibility");
+    expect(settingsIndex().some((s) => s.title === "Wait for digital or physical release")).toBe(
+      false,
+    );
+    expect(settingsIndex().find((s) => s.title === "Show upcoming movies")?.href).toBe(
+      "/catalog/settings",
+    );
+  });
+
   it("gives every destination exactly one home", () => {
     const hrefs = destinations().map((d) => d.href);
     expect(new Set(hrefs).size).toBe(hrefs.length);
@@ -26,6 +38,9 @@ describe("sitemap", () => {
         .map((d) => [d.title, d.href]),
     );
     for (const [title, card] of [
+      ["RPDB", "rpdb"],
+      ["PostersPlus", "postersplus"],
+      ["Custom posters", "custom"],
       ["Trakt", "trakt"],
       ["Simkl", "simkl"],
       ["Language model", "llm"],

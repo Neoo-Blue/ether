@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/braedonsaunders/ether/internal/libraryfilter"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/braedonsaunders/ether/internal/core"
+	"github.com/braedonsaunders/ether/internal/libraryfilter"
 )
 
 // Catalogue helpers for the Collection Studio and the TMDB image proxy.
@@ -40,6 +40,22 @@ func (h *Handler) handleCatalogBrowse(w http.ResponseWriter, r *http.Request) {
 	}
 	p := r.URL.Query()
 	q := core.BrowseQuery{Limit: 48, Sort: core.SortPopularity, Desc: true}
+	if visibility := p.Get("ruleVisibility"); visibility != "" {
+		if visibility != "shown" && visibility != "hidden" {
+			writeError(w, 400, "invalid_filter", "Invalid visibility")
+			return
+		}
+		q.Filter.RuleVisibility = visibility
+		q.Filter.PreviewFallback = p.Get("ruleFallback")
+		if err := json.Unmarshal([]byte(p.Get("rules")), &q.Filter.PreviewRules); err != nil {
+			writeError(w, 400, "invalid_filter", "Invalid rules")
+			return
+		}
+		if _, err := libraryfilter.CompilePolicy(q.Filter.PreviewRules, q.Filter.PreviewFallback); err != nil {
+			writeError(w, 400, "invalid_filter", "Invalid rules")
+			return
+		}
+	}
 	q.Filter.Type = mediaTypeParam(p.Get("type"))
 	q.Filter.Query = strings.TrimSpace(p.Get("q"))
 	if genre := p.Get("genre"); genre != "" {

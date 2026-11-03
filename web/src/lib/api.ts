@@ -444,6 +444,9 @@ export const api = {
   // ---- Catalogue helpers ---------------------------------------------------------
   browseCatalog: (
     params: {
+      ruleVisibility?: string;
+      rules?: string;
+      ruleFallback?: string;
       q?: string;
       type?: string;
       genre?: string;

@@ -29,7 +29,10 @@ describe("Apps mock API", () => {
       method: "PUT",
       body: JSON.stringify({ enabled: true }),
     });
-    expect(await (await fake.fetch("/ether/api/me/apps")).json()).toEqual({ apps: ["stremio"] });
+    // Plex is on by default in the mock and is listed like any other enabled app.
+    expect(await (await fake.fetch("/ether/api/me/apps")).json()).toEqual({
+      apps: ["plex", "stremio"],
+    });
     const created = await (
       await fake.fetch("/ether/api/me/apps/stremio", { method: "POST" })
     ).json();

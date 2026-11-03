@@ -25,6 +25,9 @@ func evidenceWindow(t core.Title, now time.Time, cfg config.Availability) bool {
 	age := now.Sub(t.Released)
 	switch t.Type {
 	case core.TypeMovie:
+		if cfg.EffectiveMode() == config.ModeDigital {
+			return true
+		}
 		return !cfg.DisableMovieEvidenceGate && age < time.Duration(cfg.EffectiveMovieEvidenceDays())*24*time.Hour
 	case core.TypeEpisode, core.TypeShow:
 		return age < 24*time.Hour
@@ -39,7 +42,7 @@ func (s *Service) filterReleaseDiscovery(ctx context.Context, items []core.Title
 	keys := []core.RatingKey{}
 	for i := range items {
 		t := &items[i]
-		if evidenceWindow(*t, input.now, input.availability) && titles[t.Key] == nil {
+		if !input.upcomingMovie(*t) && evidenceWindow(*t, input.now, input.availability) && titles[t.Key] == nil {
 			keys = append(keys, t.Key)
 			titles[t.Key] = t
 		}
@@ -105,6 +108,9 @@ func (s *Service) filterReleaseDiscovery(ctx context.Context, items []core.Title
 	}
 	// Close the cursor before policy checks, which may read the same database.
 	for _, o := range observations {
+		if input.availability.EffectiveMode() == config.ModeDigital && titles[o.key].Type == core.TypeMovie {
+			continue
+		}
 		if acceptable[o.key] || (o.state == "unknown" && o.revision > 0) || o.state == "unavailable" {
 			continue
 		}

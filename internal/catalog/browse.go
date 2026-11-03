@@ -4,21 +4,20 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"github.com/braedonsaunders/ether/internal/config"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/braedonsaunders/ether/internal/contentrating"
 	"github.com/braedonsaunders/ether/internal/core"
+	"github.com/braedonsaunders/ether/internal/libraryfilter"
 )
 
 // Browse queries the browsable mirror entirely in SQL, with generation-stamped
 // in-memory count and page caching so repeated library/recommendation reads
 // return without hitting disk.
 func (c *Catalog) Browse(ctx context.Context, q core.BrowseQuery) (core.Page, error) {
-	if err := c.admitFallbacks(ctx); err != nil {
-		return core.Page{}, err
-	}
 	switch q.Filter.Type {
 	case core.TypeEpisode:
 		return c.BrowseStoredEpisodes(ctx, q)
@@ -48,7 +47,7 @@ func (c *Catalog) Browse(ctx context.Context, q core.BrowseQuery) (core.Page, er
 	}
 	gen := c.writeGen.Load()
 	minBucket := c.minuteBucket()
-	ckey := browseFilterKey(q.Filter)
+	ckey := browseFilterKey(q.Filter) + fmt.Sprintf("|rules:%s:%#v:%s", q.Filter.RuleVisibility, q.Filter.PreviewRules, q.Filter.PreviewFallback)
 	bkey := fmt.Sprintf("%s|%s|%v|%v|%d|%d|%v", ckey, q.Sort, q.Desc, q.SecondarySorts, offset, limit, q.NoTotal)
 	c.cacheMu.RLock()
 	if ent, ok := c.browseCache[bkey]; ok && ent.gen == gen && ent.minute == minBucket {
@@ -350,7 +349,12 @@ func (c *Catalog) browseWhere(f core.Filter) (string, []any, error) {
 	var conds []string
 	var args []any
 	nowTS := c.now().Unix()
-	conds = append(conds, "t.browsable=1", "t.adult=0")
+	if cfg := c.config(); cfg.ShowUpcomingMovies && f.RuleVisibility == "" {
+		conds = append(conds, "(t.browsable=1 OR (t.type='movie' AND t.release_known=1 AND t.released_ts>? AND ((?<=0 AND ?<=0) OR (?>0 AND t.popularity>=?) OR (?>0 AND t.vote_count>=?))))", "t.adult=0")
+		args = append(args, nowTS, cfg.MinPopularity, cfg.MinVotes, cfg.MinPopularity, cfg.MinPopularity, cfg.MinVotes, cfg.MinVotes)
+	} else {
+		conds = append(conds, "t.browsable=1", "t.adult=0")
+	}
 	if f.KnownAddedDate {
 		// Same membership as airAddedSQL<>0. Browse already requires the
 		// title's own premiere to be known and not in the future, and that
@@ -360,14 +364,32 @@ func (c *Catalog) browseWhere(f core.Filter) (string, []any, error) {
 		conds = append(conds, "t.release_known=1 AND t.released_ts<=?")
 		args = append(args, nowTS)
 	}
-	if f := c.visibilityFilter(); f != nil {
+	if f.RuleVisibility != "" {
+		policy, err := libraryfilter.CompilePolicy(f.PreviewRules, f.PreviewFallback)
+		if err != nil {
+			return "", nil, err
+		}
+		clause, values := policy.SQLHidden()
+		if f.RuleVisibility == "shown" {
+			clause = "NOT (" + clause + ")"
+		}
+		conds = append(conds, "("+clause+")")
+		args = append(args, values...)
+	} else if f := c.visibilityFilter(); f != nil {
 		q, a := f.SQLHidden()
 		conds = append(conds, "NOT ("+q+")")
 		args = append(args, a...)
 	}
-	if c.config().GateMoviesByHomeRelease && f.IncludeKeys == nil {
-		conds = append(conds, homeReleaseSQL("t"))
-		args = append(args, nowTS, nowTS-int64(homeReleaseGrace.Seconds()))
+	// Rule browsing gates like everything else: its totals must match the
+	// titles queryTitles hands back, which never include ungated movies.
+	if (c.config().ReleaseMode == config.ModeDigital) && f.IncludeKeys == nil {
+		gateSQL := homeReleaseSQL("t")
+		if c.config().ShowUpcomingMovies {
+			gateSQL = "(t.type='movie' AND t.release_known=1 AND t.released_ts>? OR (" + gateSQL + "))"
+			args = append(args, nowTS)
+		}
+		conds = append(conds, gateSQL)
+		args = append(args, nowTS)
 	}
 	if f.IncludeKeys != nil {
 		if len(f.IncludeKeys) == 0 {
@@ -709,8 +731,14 @@ func (c *Catalog) browseWhere(f core.Filter) (string, []any, error) {
 			}
 		}
 	}
-	conds = append(conds, "t.release_known=1 AND t.released_ts<=?")
-	args = append(args, nowTS)
+	if f.RuleVisibility == "" {
+		if c.config().ShowUpcomingMovies {
+			conds = append(conds, "t.release_known=1 AND (t.type='movie' OR t.released_ts<=?)")
+		} else {
+			conds = append(conds, "t.release_known=1 AND t.released_ts<=?")
+		}
+		args = append(args, nowTS)
+	}
 	return strings.Join(conds, " AND "), args, nil
 }
 
@@ -753,9 +781,6 @@ func (c *Catalog) Facet(ctx context.Context, t core.MediaType, facet string) ([]
 
 // FacetFilter returns value counts over the browsable set matching f.
 func (c *Catalog) FacetFilter(ctx context.Context, f core.Filter, facet string) ([]core.FacetValue, error) {
-	if err := c.admitFallbacks(ctx); err != nil {
-		return nil, err
-	}
 	if facet == "firstCharacter" {
 		f.FirstCharacter = ""
 	}

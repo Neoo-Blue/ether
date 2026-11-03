@@ -59,6 +59,7 @@ type source struct {
 	raPending bool // coalesced foreground/completion wakeup
 
 	playRate    atomic.Int64  // playback bytes per second; 0 = unknown
+	lastRead    atomic.Int64  // UnixNano of the last demand read
 	playWake    chan struct{} // coalesced wakeups of the playback read-ahead loop
 	playRunning bool          // protected by mu
 }
@@ -299,6 +300,7 @@ func (s *source) readAhead(off, n int64) {
 	c.requestBegin = off
 	c.window = min(c.window, windowCap)
 	c.used = now
+	s.lastRead.Store(now.UnixNano())
 	c.blocked = false // a new demand read permits retrying a failed layout check
 	s.mu.Unlock()
 	s.kickReadAhead()

@@ -28,7 +28,7 @@ func TestCatalogMatchesInstalledPolicyConfig(t *testing.T) {
 		t.Fatal("rejected config was reported installed")
 	}
 	next := initial
-	next.GateMoviesByHomeRelease = true
+	next.ReleaseMode = config.ModeDigital
 	c.UpdateConfig(next)
 	if !c.MatchesConfig(next) || c.MatchesConfig(initial) {
 		t.Fatal("installed replacement not observed")

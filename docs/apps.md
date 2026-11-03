@@ -165,7 +165,8 @@ See [the threat model](../design.md) for credential, proxy and cluster boundarie
 Its requirements must be checked against the final build and security receipts;
 they are not a claim that mixed-version or lifecycle acceptance is complete.
 
-The Apps overview enables protocols and reports status. Its **Away from home**
+The Apps overview enables protocols and reports status. Ports are set under
+**Server › General › How apps connect**, not on app pages. The **Away from home**
 section (public host name, public port, custom server URLs and your own
 certificate) applies to every app, not only Plex. Enabled protocols expose
 configuration tabs, with changes edited in place. Drawers are for records. There

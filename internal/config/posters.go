@@ -8,16 +8,73 @@ import (
 
 // Posters configures optional owner-supplied artwork. Templates are secrets:
 // exported provider URLs can embed account configuration and credentials.
-type Posters struct {
+type PosterAccount struct {
 	Enabled     bool   `json:"enabled"`
-	Source      string `json:"source"`
 	BaseURL     string `json:"baseUrl"`
 	APIKey      string `json:"apiKey"`
 	URLTemplate string `json:"urlTemplate"`
 	Profile     string `json:"profile"`
 }
+type PosterAccounts struct {
+	PostersPlus   PosterAccount `json:"postersplus"`
+	XRDB          PosterAccount `json:"xrdb"`
+	BetterPosters PosterAccount `json:"betterposters"`
+	RPDB          PosterAccount `json:"rpdb"`
+	Custom        PosterAccount `json:"custom"`
+}
 
+func (p *PosterAccounts) Entries() map[string]*PosterAccount {
+	return map[string]*PosterAccount{"postersplus": &p.PostersPlus, "xrdb": &p.XRDB, "betterposters": &p.BetterPosters, "rpdb": &p.RPDB, "custom": &p.Custom}
+}
+
+type Posters struct {
+	Accounts    PosterAccounts `json:"accounts"`
+	Version     int            `json:"version,omitempty"`
+	Enabled     bool           `json:"enabled"`
+	Source      string         `json:"source"`
+	BaseURL     string         `json:"baseUrl"`
+	APIKey      string         `json:"apiKey"`
+	URLTemplate string         `json:"urlTemplate"`
+	Profile     string         `json:"profile"`
+}
+
+// Normalize migrates the original single-provider settings without activating unused credentials.
+func (p Posters) Normalize() Posters {
+	if p.Version == 0 {
+		if a := p.Accounts.Entries()[p.Source]; a != nil && p.Enabled {
+			*a = PosterAccount{true, p.BaseURL, p.APIKey, p.URLTemplate, p.Profile}
+		} else {
+			p.Source = "tmdb"
+		}
+		p.Version = 1
+		p.Enabled = false
+		p.BaseURL, p.APIKey, p.URLTemplate, p.Profile = "", "", "", ""
+	}
+	return p
+}
+func (p Posters) Selected() Posters {
+	p = p.Normalize()
+	a := p.Accounts.Entries()[p.Source]
+	if a == nil || !a.Enabled {
+		return Posters{}
+	}
+	return Posters{Enabled: true, Source: p.Source, BaseURL: a.BaseURL, APIKey: a.APIKey, URLTemplate: a.URLTemplate, Profile: a.Profile}
+}
 func (p Posters) Validate() error {
+	if p.Version > 0 {
+		for source, a := range p.Accounts.Entries() {
+			if err := (Posters{Enabled: a.Enabled, Source: source, BaseURL: a.BaseURL, APIKey: a.APIKey, URLTemplate: a.URLTemplate, Profile: a.Profile}).Validate(); err != nil {
+				return err
+			}
+		}
+		if p.Source != "" && p.Source != "tmdb" {
+			a := p.Accounts.Entries()[p.Source]
+			if a == nil || !a.Enabled {
+				return errors.New("choose a configured poster source")
+			}
+		}
+		return nil
+	}
 	if len(p.URLTemplate) > 8192 || len(p.APIKey) > 2048 || len(p.BaseURL) > 2048 || len(p.Profile) > 256 {
 		return errors.New("poster settings exceed length limit")
 	}

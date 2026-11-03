@@ -222,6 +222,8 @@ export interface DebridProviderStatus {
 }
 
 export interface PosterProviderConfig {
+  version?: number;
+  accounts?: Record<string, PosterProviderConfig>;
   enabled: boolean;
   source: string;
   baseUrl: string;
@@ -379,7 +381,13 @@ export interface EtherConfig {
   };
   trakt: { enabled: boolean; clientId: string; clientSecret: string };
   simkl?: { enabled: boolean; clientId: string; clientSecret: string };
-  markers?: { theIntroDb: boolean; apiKey: string; skipIntro?: boolean; skipCredits?: boolean };
+  markers?: {
+    accountEnabled?: boolean;
+    theIntroDb: boolean;
+    apiKey: string;
+    skipIntro?: boolean;
+    skipCredits?: boolean;
+  };
   openSubtitles: {
     enabled: boolean;
     apiKey: string;

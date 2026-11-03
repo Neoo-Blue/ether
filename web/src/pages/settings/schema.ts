@@ -1,3 +1,5 @@
+import { createElement } from "react";
+import { QualityHelp } from "../releases/QualityHelp";
 import { localized, t } from "../../i18n";
 import type { FieldGroup } from "./SchemaForm";
 
@@ -31,16 +33,8 @@ export const SERVER: FieldGroup[] = localized(() => [
     id: "connect",
     title: t("How apps connect"),
     description: t("The address apps use to reach this computer."),
-    fields: [
-      {
-        key: "port",
-        label: t("Port"),
-        kind: "number",
-        min: 1,
-        max: 65535,
-        step: 1,
-        help: t("Plex apps expect 32400. A restart is needed after changing it."),
-      },
+    fields: [],
+    more: [
       {
         key: "allowRemoteConsole",
         label: t("Open this console from outside your network"),
@@ -49,8 +43,6 @@ export const SERVER: FieldGroup[] = localized(() => [
           "For reaching this console through your own domain or reverse proxy when you're away. Only the Plex account that owns this server can sign in. Off keeps it to your home network and VPN.",
         ),
       },
-    ],
-    more: [
       {
         key: "bindAddress",
         label: t("Listen address"),
@@ -363,9 +355,10 @@ export const PLAY_VERSIONS: FieldGroup[] = localized(() => [
         key: "offerHigherVersions",
         label: t("Offer higher versions"),
         kind: "bool",
-        help: t(
-          "Version menus can list releases taller than the profile. Off keeps the ceiling you set. HDR and file-size limits still apply.",
-        ),
+        help: createElement(QualityHelp, {
+          summary: t("Offer resolutions above the profile limit."),
+          detail: t("Off keeps the ceiling you set. HDR and file-size limits still apply."),
+        }),
       },
     ],
   },
@@ -376,8 +369,7 @@ export const RELEASE_SEARCH: FieldGroup[] = localized(() => [
   {
     title: t("How Ether searches"),
     description: t("The defaults are enough for a household."),
-    fields: [],
-    more: [
+    fields: [
       {
         key: "maxCandidates",
         label: t("Releases to keep ready"),

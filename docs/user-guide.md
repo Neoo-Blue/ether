@@ -65,7 +65,8 @@ matrix. Ether does not provide or emulate an Emby Premiere entitlement.
 ## Silo apps
 
 Silo support is in development. Ether's Silo surface uses port 8090 by default;
-if that port is occupied, check the Apps page for the actual listening address.
+if that port is occupied, check **Server › General › How apps connect** for the
+actual listening address.
 Add that address in the Silo app and sign in with an Ether viewer account, or
 approve the device's code in the viewer portal. A dash means the feature has
 not yet been verified on the named client. Direct, remux, and transcode are
@@ -97,7 +98,9 @@ seek; this has not yet been verified on the physical devices.
 ## Apps and client support
 
 Enable an app on **Apps**, then edit its configuration in its enabled app tab.
-Use the listening address shown there rather than assuming a default port.
+Ports are set only under **Server › General › How apps connect**, which lists
+each enabled app's port, local address and remote address. Use those addresses
+rather than assuming a default port.
 Press ⌘K to jump to any page or individual setting; the console opens **More
 options** if the setting is inside one and highlights the row.
 Client names below identify intended connection methods; native-device
@@ -131,8 +134,8 @@ open **Quality › Profiles**. Under **Away from home**, choose an **Away profil
 to cap people watching away from home (for example the 1080p profile), or set a
 **Bitrate limit** in Mbps (0 means no limit). To limit one device, app or viewer,
 add a rule under **Quality › Rules**. A rule wins over the Away profile.
-**Who gets what**, on **Quality › Profiles**, shows the quality a viewer gets in
-an app, at home or away, and which rule decided.
+**Check quality**, its own tab under **Quality**, shows the quality a viewer gets
+in an app, at home or away, and which rule decided.
 Ether supplies no media, provider accounts or indexer access.
 
 ## Stream torrents through debrid
@@ -314,9 +317,11 @@ cookie sign-in, paste the cookie from a signed-in browser instead.
 ## Share with viewers
 
 Use Plex library sharing to invite people or remove their access. They appear
-in Ether's **Viewers** page after signing in. Open a viewer to see their taste,
-activity and Home, or set content and playback limits. Each viewer keeps their
-own history and recommendations.
+in Ether's **Viewers** page after signing in. A viewer's page has the tabs
+**Overview**, **Home**, **Taste**, **Recent activity**, **Audio & subtitles**,
+**Limits**, **Sign-in & devices** and **Lists & alerts**. Use **Limits** for
+content and playback limits. To cap one viewer's quality, add a rule under
+**Quality › Rules**. Each viewer keeps their own history and recommendations.
 
 ## Libraries, catalogue and Home
 
@@ -333,7 +338,7 @@ not merge or replace them. Plex Home can show rows from multiple pinned
 libraries, so check the server name beneath a row and pin the Ether libraries
 you want to browse in your Plex app.
 
-Use **Catalog › Settings › Visibility** to control what Ether exposes, and
+Use **Catalog › Settings › Rules** to control what Ether exposes, and
 **Catalog › Settings › General** to configure the catalogue. **Collections**
 groups titles within those libraries. **Home** arranges recommendation rows;
 changing a Home row does not delete a library or remove a title from the
@@ -363,6 +368,8 @@ respective types.
 
 Movies appear from their theatrical release date. Shows, seasons and episodes
 appear from their air dates. Items with no known release date stay hidden.
+Under **Upcoming content** in Catalog settings, **Show upcoming movies** and
+**Show upcoming episodes** list unreleased titles early; both are off by default.
 
 ### Choose Home rows
 
@@ -431,7 +438,8 @@ what you want to change:
 | Change one viewer's track preferences | **Viewers › viewer › Audio & subtitles** |
 | Change household audio and subtitles | **Playback › Audio & subtitles** |
 | Arrange rows in Plex | **Home** |
-| Change artwork providers | **Metadata › Artwork** |
+| Set up poster providers | **Integrations** |
+| Pick the poster source | **Metadata › Artwork** |
 
 A playback attempt can fail before Activity history begins. Quality history
 records source-selection results, including failures; open its details for
@@ -657,14 +665,13 @@ being retried. The channel keeps its number, favourites, sharing and programme
 guide when its input changes. A running stream stays on its selected input;
 retuning after an interruption can select a healthy backup.
 
-Who can watch each channel is one list per viewer. Edit it on the viewer's
-page (**Limits › Live TV › Allowed channels**) or on a channel's **Viewers**
-tab; both change the same setting. A viewer allowed on all channels also gets
-channels you add later. Switching them off for one channel keeps them on the
-current other channels only, so new channels stay hidden until you allow them.
-Turn on **Private** on a channel's **Viewers** tab to keep it from everyone you
-have not given it to, including people you add later; switching a viewer on
-there, or on their page, gives it to them.
+Who can watch a channel is set on the channel's **Viewers** tab. A viewer
+allowed on all channels also gets channels you add later. Switching them off for
+one channel keeps them on the current other channels only, so new channels stay
+hidden until you allow them. Turn on **Private** on that tab to keep the channel
+from everyone you have not given it to, including people you add later;
+switching a viewer on there gives it to them. A viewer's page only has
+**Disable Live TV for this viewer**.
 
 Programme guides can come from separate XMLTV sources, including compressed
 `.xml.gz` feeds. Map each channel to its matching guide. URL sources refresh
@@ -807,16 +814,20 @@ Most; exact minimum popularity and votes are under **More options**), adult
 content option, and catalog health. Settings apply without a restart. Catalog
 is at **Catalog**; Metadata no longer keeps a catalogue alias.
 
-**Show scheduled episodes** in Catalog settings is off by default. When enabled,
-a season that has already started can list unaired episodes with known air dates.
+**Show upcoming episodes**, under **Upcoming content** in Catalog settings, is
+off by default. When enabled, a season that has already started can list unaired
+episodes with known air dates.
 They show an **Unaired** label and the scheduled date in their description, with
 no playable media. Unknown dates and wholly future seasons stay hidden. Autoplay,
 Continue Watching and alternate episode-order lists keep their released episodes.
 Turning the option off removes access to these placeholders and their artwork.
+**Show upcoming movies**, also off by default, lists movies before their release date.
 
 ## Metadata artwork
 
 **Metadata → Artwork** previews real catalogue posters with your unsaved design.
+Its **Poster source** picks TMDB (the default) or a poster provider you have set
+up under **Integrations**.
 Use the refresh button to try another title, or compare your design with the
 original. The canvas stays fitted to the window; the controls scroll separately.
 
@@ -868,7 +879,8 @@ Monitoring defaults on for new installs. Existing
 owners can enable it under Sources > Availability. Turning monitoring off stops
 polling, but local evidence and the recent-release visibility rules still apply.
 
-Before the release or air date, titles remain hidden. From release until 60 days
+Before the release or air date, titles remain hidden unless you turn on
+**Upcoming content**. From release until 60 days
 for movies, and until 24 hours for individual episodes, an eligible observed
 release is required for Plex discovery, library lists, search and detail pages.
 A suitable upload unlocks the item immediately: these are evidence windows, not
@@ -876,6 +888,9 @@ waiting periods. Older titles keep normal catalogue visibility without scanning
 the back catalogue. The age cutoffs are assumptions, not availability guarantees.
 A missing new episode does not remove the show's older seasons or episodes.
 Watch history and saved lists are retained even when an item is temporarily hidden.
+This is the **When they can play** mode under **New releases** in Catalog settings.
+**On digital release** shows a movie once its digital or physical release date has
+passed, and **Right away** shows every new movie.
 
 Feeds, existing search-cache entries, requested searches and successful playback
 checks share local evidence. Entries arriving before an episode's metadata are
@@ -915,8 +930,9 @@ Version choice can select a different dub; the global CAM restriction still appl
 Ether blocks framing by default. To embed its web interface in Organizr or
 another trusted dashboard, set `server.webFrameOrigins` to that dashboard's
 exact origins, for example `["http://dashboard.example:8090"]`, through the
-owner-authenticated server settings API or in `config.json` while Ether is
-stopped. Include the scheme and port, but no path or wildcard. API changes take
+owner-authenticated server settings API, in `config.json` while Ether is
+stopped, or under **Server › General › How apps connect › More options › Sites
+that may embed this page**. Include the scheme and port, but no path or wildcard. API changes take
 effect immediately. Point the dashboard tab at Ether's `/ether/` URL.
 
 Only those origins may frame Ether; Plex sign-in and owner authentication remain
@@ -949,17 +965,19 @@ apply, and an actual enhancement failure falls back to ordinary transcoding.
 
 ### Library visibility and discovery collections
 
-**Catalog › Settings › Visibility** controls which titles Ether exposes to Plex.
-Add named exclusion groups, choose movies, TV, or both, and combine conditions
-with **Match all** or **Match any**. Any matching group hides the title across
-browsing, search, recommendations and collections. To keep titles out of
+**Catalog › Settings › Rules** controls which titles Ether exposes to Plex.
+Add ordered rules that show or hide titles, choose movies, TV, or both, and
+combine conditions with **All** or **Any**. The first matching rule wins, and
+**Everything else** sets what no rule matches. A hidden title leaves browsing,
+search, recommendations and collections. To keep titles out of
 browsing without hiding them from search, set a hide rule to **Hide from
 browsing only**: matching titles leave library browsing, Home and hub rows,
 recommendations, New Releases, Trending and catalogue collections, but anyone
 can still search for them, open them and play them. For example, **Hide ·
 Country is not United States · Browsing only** keeps discovery to US titles
-while a foreign film stays one search away. The preview uses only the
-local catalogue; it does not search indexers or fetch every title's details.
+while a foreign film stays one search away. The page shows the catalogue going
+in, your rules, and the result, and its **Browse** drawers list exactly what is
+shown or hidden. It uses only the local catalogue; it does not search indexers or fetch every title's details.
 Saving preserves metadata and watch history, and clearing the rules restores
 visibility subject to the normal release, availability and viewer restrictions.
 

@@ -1,5 +1,11 @@
-import { PageContainer, PageHeader, SubtabNav, cn } from "@braedonsaunders/appkit-ui";
-import type { ReactNode } from "react";
+import {
+  PageContainer,
+  PageHeader,
+  SubtabNav as AppKitSubtabNav,
+  cn,
+} from "@braedonsaunders/appkit-ui";
+import { useRef, type ReactNode, type ComponentProps, type RefObject } from "react";
+import { OverflowTabs } from "./OverflowTabs";
 import { useNavigate, useParams } from "react-router-dom";
 import { t } from "../i18n";
 
@@ -47,16 +53,17 @@ export function DomainPage({
   className?: string;
 }) {
   const navigate = useNavigate();
+  const tabsRoot = useRef<HTMLDivElement>(null);
   return (
     <PageContainer className={cn("space-y-6", className)}>
       <PageHeader title={title} description={description} actions={actions} />
       {status}
       {tabs && tabs.length > 1 ? (
-        <div className="border-b border-border">
-          <SubtabNav
+        <div ref={tabsRoot} className="border-b border-border">
+          <OverflowTabs
             ariaLabel={t("{page} sections", { page: title })}
             active={active ?? tabs[0]!.key}
-            onSelect={(key) => navigate(`${base}/${key}`)}
+            onSelect={(key) => keepScroll(tabsRoot, () => navigate(`${base}/${key}`))}
             tabs={tabs.map((x) => ({ key: x.key, label: x.label, count: x.count }))}
           />
         </div>
@@ -117,4 +124,51 @@ export function Section({
       ) : null}
     </section>
   );
+}
+
+// All page tabs share spacing and retain their scroll container during selection.
+/**
+ * Run a tab switch without moving the viewport: every scroll ancestor of
+ * `root` keeps its offset, and Chrome's scroll anchoring is turned off on the
+ * app scroller so a shorter panel can't pull the page to the top.
+ */
+function keepScroll(root: RefObject<HTMLElement | null>, change: () => void) {
+  const positions: [HTMLElement, number][] = [];
+  let node: HTMLElement | null = root.current;
+  while (node) {
+    if (node.classList.contains("app-scroll")) node.style.overflowAnchor = "none";
+    positions.push([node, node.scrollTop]);
+    node = node.parentElement;
+  }
+  change();
+  requestAnimationFrame(() => {
+    for (const [element, top] of positions) element.scrollTop = top;
+  });
+}
+
+export function SubtabNav(props: ComponentProps<typeof AppKitSubtabNav>) {
+  const root = useRef<HTMLDivElement>(null);
+  return (
+    <div ref={root} className="mb-6">
+      <AppKitSubtabNav
+        {...props}
+        onSelect={(key) => keepScroll(root, () => props.onSelect?.(key))}
+      />
+    </div>
+  );
+}
+
+/** URL-backed sections within a page, on the shared sub-tab template. */
+export function PageSubtabs({
+  active,
+  onSelect,
+  tabs,
+  ariaLabel,
+}: {
+  active: string;
+  onSelect: (key: string) => void;
+  tabs: PageTab[];
+  ariaLabel: string;
+}) {
+  return <SubtabNav active={active} onSelect={onSelect} tabs={tabs} ariaLabel={ariaLabel} />;
 }

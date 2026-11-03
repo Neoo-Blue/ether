@@ -1,5 +1,7 @@
-import { Button } from "@braedonsaunders/appkit-ui";
+import { Button, SettingsSection } from "@braedonsaunders/appkit-ui";
 import { useCallback, useEffect, useState } from "react";
+import { Artwork } from "../../components/Artwork";
+import { EyeOff } from "lucide-react";
 import { t } from "../../i18n";
 
 export type NotInterestedEntry = {
@@ -7,6 +9,7 @@ export type NotInterestedEntry = {
   unavailable: boolean;
   title?: string;
   year?: number;
+  poster?: string;
 };
 
 type Props = {
@@ -54,49 +57,58 @@ export function NotInterested({ load, restore }: Props) {
   );
 
   return (
-    <section className="space-y-2">
-      <h2 className="font-medium">{t("Not interested")}</h2>
-      <p className="text-sm text-fg-muted">
-        {t("Titles you have hidden from recommendations appear here.")}
-      </p>
-      {error && <p role="alert">{t("The request could not be completed. Try again.")}</p>}
-      {!entries && !error && <p role="status">{t("Loading…")}</p>}
-      {!entries && error && (
-        <Button type="button" variant="outline" onClick={() => setAttempt((n) => n + 1)}>
-          {t("Retry")}
-        </Button>
-      )}
-      {entries?.length === 0 && (
-        <p className="text-sm text-fg-muted">{t("No hidden recommendations.")}</p>
-      )}
-      {entries && entries.length > 0 && (
-        <ul className="divide-y divide-border">
-          {entries.map((entry) => {
-            const label = entry.unavailable || !entry.title ? t("Unavailable title") : entry.title;
-            return (
-              <li
-                key={entry.handle}
-                className="flex flex-wrap items-center justify-between gap-3 py-2"
-              >
-                <span className="text-sm">
-                  {label}
-                  {!entry.unavailable && entry.year ? ` (${entry.year})` : ""}
-                </span>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={busy !== undefined}
-                  aria-label={t("Show {title} in recommendations", { title: label })}
-                  onClick={() => void show(entry.handle)}
+    <SettingsSection title={t("Not interested")}>
+      <div className="space-y-2 px-5 py-4">
+        {error && <p role="alert">{t("The request could not be completed. Try again.")}</p>}
+        {!entries && !error && <p role="status">{t("Loading…")}</p>}
+        {!entries && error && (
+          <Button type="button" variant="outline" onClick={() => setAttempt((n) => n + 1)}>
+            {t("Retry")}
+          </Button>
+        )}
+        {entries?.length === 0 && (
+          <div className="flex items-center gap-2 text-sm text-fg-muted">
+            <EyeOff size={16} />
+            {t("Nothing hidden from recommendations")}
+          </div>
+        )}
+        {entries && entries.length > 0 && (
+          <ul className="max-h-[60dvh] overflow-y-auto divide-y divide-border">
+            {entries.map((entry) => {
+              const label =
+                entry.unavailable || !entry.title ? t("Unavailable title") : entry.title;
+              return (
+                <li
+                  key={entry.handle}
+                  className="flex flex-wrap items-center justify-between gap-3 py-2"
                 >
-                  {t("Show in recommendations")}
-                </Button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </section>
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <Artwork
+                      src={entry.unavailable ? undefined : entry.poster}
+                      alt=""
+                      className="w-10 aspect-[2/3] shrink-0 rounded"
+                    />
+                    <span className="text-sm">
+                      {label}
+                      {!entry.unavailable && entry.year ? ` (${entry.year})` : ""}
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={busy !== undefined}
+                    aria-label={t("Show {title} in recommendations", { title: label })}
+                    onClick={() => void show(entry.handle)}
+                  >
+                    {t("Restore")}
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </SettingsSection>
   );
 }

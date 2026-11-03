@@ -440,6 +440,9 @@ func (r *frontendRuntime) plexStatus(ctx context.Context) frontend.Status {
 		st.ConnectURLs = connectionURLs(addr.String(), "", addresses)
 	}
 	if r.app.registrar != nil {
+		for _, connection := range r.app.registrar.Status().Connections {
+			st.ConnectURLs = append(st.ConnectURLs, connection.URI)
+		}
 		if reachable := r.app.registrar.Status().PlexReachable; reachable != nil {
 			if *reachable {
 				st.WAN = "reachable"

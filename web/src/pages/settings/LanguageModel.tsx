@@ -50,7 +50,7 @@ export function LanguageModelSettings({
     <>
       <div id="language-model">
         <SettingsSection
-          title={t("Language model")}
+          title={undefined}
           description={t(
             "Powers “Describe it” in Collection Studio, themed Home rows, and the language features below.",
           )}

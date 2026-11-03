@@ -13,11 +13,12 @@ import (
 // Config must return an isolated value (as config.Store.Get does). Keep background
 // admission on its live settings path so owner pauses still take effect promptly.
 type discoverySnapshot struct {
-	now             time.Time
-	availability    config.Availability
-	policy          string
-	feeds           []core.ReleaseFeed
-	usenet, torrent bool
+	showUpcomingMovies bool
+	now                time.Time
+	availability       config.Availability
+	policy             string
+	feeds              []core.ReleaseFeed
+	usenet, torrent    bool
 }
 
 func (s *Service) discoverySnapshot() discoverySnapshot {
@@ -29,7 +30,7 @@ func (s *Service) discoverySnapshot() discoverySnapshot {
 	a := c.Availability
 	a.IndexerIDs = slices.Clone(a.IndexerIDs)
 	return discoverySnapshot{
-		now: s.now(), availability: a, policy: settingsPolicy(c), feeds: feeds,
+		showUpcomingMovies: c.Catalog.ShowUpcomingMovies, now: s.now(), availability: a, policy: settingsPolicy(c), feeds: feeds,
 		usenet: settingsUsable(c, ""), torrent: settingsUsable(c, core.ProtocolTorrent),
 	}
 }
@@ -43,4 +44,8 @@ func (input discoverySnapshot) usable(protocol string) bool {
 
 func (input discoverySnapshot) retentionCutoff() time.Time {
 	return input.now.Add(-367 * 24 * time.Hour)
+}
+
+func (input discoverySnapshot) upcomingMovie(t core.Title) bool {
+	return input.showUpcomingMovies && t.Type == core.TypeMovie && !t.Released.IsZero() && t.Released.After(input.now)
 }

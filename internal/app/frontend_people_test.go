@@ -625,7 +625,9 @@ func TestSiloPortraitRejectsStaleMovieThumbBeforeEpochCapture(t *testing.T) {
 		if attempt == 5 {
 			t.Fatalf("fixture lost stale StoredTitle %+v %v", cached, err)
 		}
-		if _, err := a.db.ExecContext(ctx, `UPDATE catalog_credits SET thumb='/old.jpg' WHERE key=? AND person_tmdb=30`, int64(key)); err != nil {
+		// Re-store the old credits the way the fixture did: a raw UPDATE
+		// back would leave the cache holding the new thumb it just read.
+		if err := a.catalog.UpsertTitle(ctx, title, false); err != nil {
 			t.Fatal(err)
 		}
 		if warm, err := a.catalog.CachedGet(ctx, key); err != nil || len(warm.Cast) != 1 || warm.Cast[0].ThumbPath != "/old.jpg" {

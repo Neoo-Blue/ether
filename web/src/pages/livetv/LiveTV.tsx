@@ -1,9 +1,9 @@
+import { SubtabNav } from "../../components/layout";
 import {
   Badge,
   Button,
   Input,
   Popover,
-  SubtabNav,
   confirmDialog,
   cn,
   toast,

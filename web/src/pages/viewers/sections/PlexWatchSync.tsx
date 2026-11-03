@@ -1,8 +1,15 @@
-import { Button, SettingsSection, Spinner, Switch, toast } from "@braedonsaunders/appkit-ui";
+import {
+  Button,
+  SettingsSection,
+  Spinner,
+  Switch,
+  Tooltip,
+  toast,
+} from "@braedonsaunders/appkit-ui";
 import { useState } from "react";
 import { ErrorPanel } from "../../../components/feedback";
 import { SettingsRow } from "../../../components/SettingsRow";
-import { t } from "../../../i18n";
+import { t, tn } from "../../../i18n";
 import { apiFetch, errorMessage } from "../../../lib/api";
 import { useAsync } from "../../../lib/hooks";
 
@@ -25,19 +32,6 @@ type PlexWatchStatus = {
   pinExpires?: string;
   accountMatch: boolean;
 };
-
-function eligibilityCopy(value: string) {
-  switch (value) {
-    case "allowed":
-      return t("Plex allows watch-state sync for this account.");
-    case "refused":
-      return t("Plex has not allowed watch-state sync for this account.");
-    case "unauthorized":
-      return t("Plex rejected the saved token. Connect again.");
-    default:
-      return t("Ether has not confirmed whether Plex allows watch-state sync for this account.");
-  }
-}
 
 /** Per-viewer Plex account watch state, on Limits & preferences. */
 export function PlexWatchSync({ viewerId, plexId }: { viewerId: number; plexId: number }) {
@@ -62,16 +56,7 @@ export function PlexWatchSync({ viewerId, plexId }: { viewerId: number; plexId: 
     }
   };
 
-  if (plexId <= 0) {
-    return (
-      <SettingsSection
-        title={t("Plex account watch state")}
-        description={t("This viewer has no Plex account id, so account sync cannot be connected.")}
-      >
-        {null}
-      </SettingsSection>
-    );
-  }
+  if (plexId <= 0) return null;
   if (status.error) return <ErrorPanel error={status.error} onRetry={() => void status.reload()} />;
   if (!status.data) {
     return (
@@ -83,33 +68,21 @@ export function PlexWatchSync({ viewerId, plexId }: { viewerId: number; plexId: 
 
   const st = status.data;
   return (
-    <SettingsSection
-      title={t("Plex account watch state")}
-      description={t(
-        "Optional. Sends this viewer's future watched and unwatched marks, and whole-star ratings, to their own Plex account. Playback progress stays on this server.",
-      )}
-    >
-      <p className="text-sm text-muted">
-        {t(
-          "Ether sends only watched or unwatched marks and ratings of 1, 2, 3, 4, or 5 whole stars. Clears, fractions, and other values stay here. Episodes are sent only when an exact Plex episode id is already known. A successful send does not create a Discover Activity card. Ether does not turn on Plex's watch-state setting. Ether does not use server or shared-account tokens for this.",
-        )}
-      </p>
-      <p className="text-sm text-muted">
-        {t(
-          "This is not continuous two-way sync. Ether delivers future changes in the background only while sync is on. Import runs only when you use the button.",
-        )}
-      </p>
+    <SettingsSection>
+      <h2 className="flex items-center gap-2 px-5 py-4 text-sm font-semibold">
+        {t("Plex account watch state")}
+        <Tooltip
+          content={t(
+            "Connect this viewer's Plex account to import watched marks and ratings or export current state. Send future changes enables exports and ongoing updates; it does not upload existing history. Playback progress stays here.",
+          )}
+        >
+          <button type="button" aria-label={t("About Plex watch state")} className="text-fg-muted">
+            ?
+          </button>
+        </Tooltip>
+      </h2>
       <SettingsRow
         title={t("Connection")}
-        description={
-          st.connected
-            ? t(
-                "This viewer's own Plex account is connected. Sync sends future changes only until you ask for an export.",
-              )
-            : t(
-                "The person who approves the code must be this viewer. Connecting a different Plex account, including the owner, is rejected.",
-              )
-        }
         control={
           st.connected ? (
             <Button disabled={busy} onClick={() => void run("/disconnect", "POST")}>
@@ -125,9 +98,6 @@ export function PlexWatchSync({ viewerId, plexId }: { viewerId: number; plexId: 
       {st.pinCode ? (
         <SettingsRow
           title={t("Approval code")}
-          description={t(
-            "Approve this code while signed in as this viewer. Then check approval. The code is not a password Ether stores in the page after it expires.",
-          )}
           control={
             <div className="flex items-center gap-2">
               <code>{st.pinCode}</code>
@@ -150,9 +120,6 @@ export function PlexWatchSync({ viewerId, plexId }: { viewerId: number; plexId: 
       ) : null}
       <SettingsRow
         title={t("Send future changes")}
-        description={t(
-          "Off by default. Turning this on does not upload existing history. Playback continues if Plex is unreachable.",
-        )}
         control={
           <Switch
             aria-label={t("Send future changes")}
@@ -162,76 +129,71 @@ export function PlexWatchSync({ viewerId, plexId }: { viewerId: number; plexId: 
           />
         }
       />
-      <SettingsRow
-        title={t("Plex eligibility")}
-        description={t(
-          "Allowed means Plex answered that this account may sync. Refused leaves sync off. Unchecked means Ether has not confirmed it.",
-        )}
-      />
-      <p className="text-sm">
-        {st.revoked
-          ? t("Plex rejected the saved token. Connect again.")
-          : eligibilityCopy(st.eligibility)}
-      </p>
-      {st.inFlight ? (
-        <p className="text-sm">
-          {t(
-            "A send is still in progress. Turning sync off stops queued changes. An update already being sent may still finish.",
-          )}
-        </p>
-      ) : null}
-      {st.held > 0 ? (
-        <SettingsRow
-          title={t("Held sends: {count}", { count: st.held })}
-          description={
-            st.heldLegacy > 0
-              ? t("Legacy undelivered changes are held until checked against Plex.")
-              : t("Unconfirmed sends are held until checked against Plex.")
-          }
-          control={
-            <Button disabled={busy || !st.connected} onClick={() => void run("/resolve", "POST")}>
-              {t("Resolve")}
+      <div className="flex flex-wrap gap-2 px-5 py-4">
+        {(
+          [
+            ["/import", t("Import from Plex")],
+            ["/export", t("Export current state")],
+          ] as const
+        ).map(([path, label]) => {
+          const disabled = busy || !st.connected || (path === "/export" && !st.enabled);
+          const button = (
+            <Button
+              variant={disabled ? "outline" : "default"}
+              disabled={disabled}
+              onClick={() => void run(path, "POST")}
+            >
+              {label}
             </Button>
-          }
-        />
-      ) : null}
-      {st.skipped > 0 ? (
-        <p className="text-sm">
-          {t(
-            "Some titles from Plex could not be matched yet. Retry checks them again. A database error does not skip ahead in the import.",
-          )}
-        </p>
-      ) : null}
-      {(st.pending > 0 || st.dead > 0 || st.skipped > 0) && (
-        <SettingsRow
-          title={t("Delivery")}
-          description={t("Failed items stay queued until you retry them or disconnect.")}
-          control={
-            <Button disabled={busy || !st.connected} onClick={() => void run("/retry", "POST")}>
-              {t("Retry failed items")}
-            </Button>
-          }
-        />
-      )}
-      <details>
-        <summary>{t("Import or export history")}</summary>
-        <p className="text-sm text-muted">
-          {t(
-            "Import copies Plex's current watched marks and whole-star ratings onto this viewer when they are newer. Export queues this viewer's current watched marks and whole-star ratings. Neither sends playback progress, and neither runs until you use these buttons.",
-          )}
-        </p>
-        <div className="flex gap-2">
-          <Button disabled={busy || !st.connected} onClick={() => void run("/import", "POST")}>
-            {t("Import from Plex")}
-          </Button>
-          <Button
-            disabled={busy || !st.connected || !st.enabled}
-            onClick={() => void run("/export", "POST")}
+          );
+          return disabled ? (
+            <Tooltip
+              key={path}
+              content={
+                !st.connected
+                  ? t("Connect the Plex account first")
+                  : !st.enabled && path === "/export"
+                    ? t("Turn on Send future changes first")
+                    : t("Please wait")
+              }
+            >
+              <span tabIndex={0}>{button}</span>
+            </Tooltip>
+          ) : (
+            <span key={path}>{button}</span>
+          );
+        })}
+        {/* Recovery actions appear only while something is stuck. Legacy holds
+            have no Plex id, so only a manual Resolve can release them. */}
+        {st.held > 0 ? (
+          <Tooltip
+            content={
+              st.heldLegacy > 0
+                ? t("Older changes are held until they are checked against Plex.")
+                : t("Unconfirmed changes are held until they are checked against Plex.")
+            }
           >
-            {t("Export current state")}
+            <span tabIndex={0}>
+              <Button
+                variant="outline"
+                disabled={busy || !st.connected}
+                onClick={() => void run("/resolve", "POST")}
+              >
+                {tn(st.held, "Resolve {count} held change", "Resolve {count} held changes")}
+              </Button>
+            </span>
+          </Tooltip>
+        ) : null}
+        {st.pending > 0 || st.dead > 0 || st.skipped > 0 ? (
+          <Button
+            variant="outline"
+            disabled={busy || !st.connected}
+            onClick={() => void run("/retry", "POST")}
+          >
+            {t("Retry failed items")}
           </Button>
-        </div>
-      </details>
+        ) : null}
+      </div>
     </SettingsSection>
   );
 }

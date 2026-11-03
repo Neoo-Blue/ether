@@ -286,8 +286,9 @@ type Cache struct {
 type Catalog struct {
 	// ShowUpcomingEpisodes adds metadata-only scheduled episodes to airing seasons.
 	ShowUpcomingEpisodes bool `json:"showUpcomingEpisodes"`
-	// GateMoviesByHomeRelease waits for a worldwide digital or physical release.
-	GateMoviesByHomeRelease bool `json:"gateMoviesByHomeRelease"`
+	ShowUpcomingMovies   bool `json:"showUpcomingMovies"`
+	// ReleaseMode is derived from availability, never an independent persisted setting.
+	ReleaseMode string `json:"-"`
 	// HideFranchiseCollections hides automatic TMDB groups from Plex's
 	// Collections tab. The zero value preserves existing libraries.
 	HideFranchiseCollections bool `json:"hideFranchiseCollections"`
@@ -716,7 +717,30 @@ func decodeOverDefaults(defaults Config, b []byte) (Config, bool, error) {
 	}
 	dropped := stripFrontendServerNames(file)
 	doc := toDoc(defaults)
+	if av, ok := file["availability"].(map[string]any); ok {
+		if _, present := av["mode"]; !present {
+			if _, a := av["disableMovieEvidenceGate"]; a {
+				doc["availability"].(map[string]any)["mode"] = ""
+			} else if _, b := av["digitalDateEvidence"]; b {
+				doc["availability"].(map[string]any)["mode"] = ""
+			}
+		}
+	}
 	mergeDoc(doc, file)
+	if cat, ok := doc["catalog"].(map[string]any); ok {
+		if gate, exists := cat["gateMoviesByHomeRelease"]; exists {
+			if gate == true {
+				provisional, _ := fromDoc(doc)
+				if provisional.Availability.EffectiveMode() == ModeImmediate {
+					provisional.Availability.Mode = ModeDigital
+					provisional.Availability.ApplyMode()
+					doc["availability"] = toDoc(provisional)["availability"]
+				}
+			}
+			delete(cat, "gateMoviesByHomeRelease")
+			dropped = true
+		}
+	}
 	cfg, err := fromDoc(doc)
 	if err == nil {
 		for i := range cfg.Quality.Profiles {

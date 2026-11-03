@@ -31,6 +31,10 @@ func isRedacted(s string) bool { return s == RedactedSecret }
 // "unset" from "set". The input is not modified.
 func RedactConfig(cfg config.Config) config.Config {
 	out := cfg
+	for _, a := range out.Posters.Accounts.Entries() {
+		a.APIKey = redact(a.APIKey)
+		a.URLTemplate = redact(a.URLTemplate)
+	}
 	out.Posters.APIKey = redact(out.Posters.APIKey)
 	out.Posters.URLTemplate = redact(out.Posters.URLTemplate)
 	out.Markers.APIKey = redact(out.Markers.APIKey)
@@ -211,6 +215,13 @@ func llmIdentity(l config.LLM) string {
 func UnredactConfig(next, prev config.Config) (config.Config, []FieldError) {
 	var errs placeholderErrors
 	out := next
+	for id, a := range out.Posters.Accounts.Entries() {
+		old := prev.Posters.Normalize().Accounts
+		prior := old.Entries()[id]
+		same := a.BaseURL == prior.BaseURL
+		a.URLTemplate = errs.restore("posters.accounts."+id+".urlTemplate", a.URLTemplate, prior.URLTemplate, same)
+		a.APIKey = errs.restore("posters.accounts."+id+".apiKey", a.APIKey, prior.APIKey, same && a.URLTemplate == prior.URLTemplate)
+	}
 	samePosterDestination := next.Posters.Source == prev.Posters.Source && next.Posters.BaseURL == prev.Posters.BaseURL
 	out.Posters.URLTemplate = errs.restore("posters.urlTemplate", next.Posters.URLTemplate, prev.Posters.URLTemplate, samePosterDestination)
 	out.Posters.APIKey = errs.restore("posters.apiKey", next.Posters.APIKey, prev.Posters.APIKey, samePosterDestination && out.Posters.URLTemplate == prev.Posters.URLTemplate)

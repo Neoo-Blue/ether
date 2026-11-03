@@ -145,18 +145,18 @@ Everything is managed through `/ether/`, a fast, keyboard-friendly web console w
 
 The sidebar groups everything by what you are doing:
 - **Overview, Activity & Viewers** at the top for live sessions, 30-day playback history, and household accounts.
-- **Library:** **Catalog** (browser, three New releases modes, and ordered show/hide visibility rules), **Collections**, **Home** (Home Designer), **Live TV**, **Calendar**, and **Metadata** (Ratings, Artwork, Episode order).
-- **Streaming:** **Sources** (Debrid, Usenet, Indexers, Stats on one level), **Quality** (Profiles, Rules, Searching, Blocklist, Pinned, History), **Cache**, and **Playback**.
-- **Server:** **General** (including optional outbound HTTP/SOCKS5 proxy for source traffic), **Apps**, **Integrations**, **Notifications**, **Cluster**, and **Maintenance** (Backups & import, Updates, Health, Logs). Press ⌘K (Ctrl+K elsewhere) to search pages and individual settings; choosing a setting opens its page, expands **More options** if needed, and highlights the row.
+- **Library:** **Catalog** (browser, three New releases modes, and ordered show/hide **Rules**), **Collections**, **Home** (Home Designer), **Live TV**, **Calendar**, and **Metadata** (Ratings, Artwork, Episode order).
+- **Streaming:** **Sources** (Debrid, Usenet, Indexers, Stats on one level), **Quality** (Profiles, Rules, Check quality, Searching, Blocklist, Pinned, History), **Cache**, and **Playback**.
+- **Server:** **General** (every app's port and address under **How apps connect**, plus an optional outbound HTTP/SOCKS5 proxy for source traffic), **Apps**, **Integrations**, **Notifications**, **Cluster**, and **Maintenance** (Backups & import, Updates, Health, Logs). Press ⌘K (Ctrl+K elsewhere) to search pages and individual settings; choosing a setting opens its page, expands **More options** if needed, and highlights the row.
 
 ### Release profiles, sources, and new-release modes
 In **Quality › Profiles**, each profile opens in a drawer organized in the order Ether evaluates candidates:
 1. **Never play:** resolution and runtime-based size bounds for movies and episodes, *Allow CAM*, *Allow HDR*, *Allow Dolby Vision*, and *Only play* / *Never play* rules.
 2. **What matters most:** a single numbered, drag-to-reorder ranking ladder (*Prefer* rules, *Audio language*, *Connection fit*, *Resolution*, *Release type*, *HDR*, *Played fine recently*, *Video codec*, *Audio format*, *Larger file*).
 
-Below the profile list, **Who gets what** shows the quality a viewer gets in a given app, at home or away, and which rule decided. **Away from home** sets the Away profile and a bitrate limit in Mbps. **Which source goes first** applies to every profile: *Start fastest*, *Usenet first*, *Debrid first*, *Always Usenet*, or *Always cached debrid*. The **Version menu** sets how many same-quality versions to offer.
+**Check quality**, a tab of its own, shows the quality a viewer gets in a given app, at home or away, and which rule decided. Below the profile list, **Away from home** sets the Away profile and a bitrate limit in Mbps. **Which source goes first** applies to every profile: *Start fastest*, *Usenet first*, *Debrid first*, *Always Usenet*, or *Always cached debrid*. The **Version menu** sets how many same-quality versions to offer.
 
-In **Catalog › Settings**, **New releases** offers three modes: **When they can play** (recommended: new movies appear once Ether finds a playable release matching your quality profile), **On digital release**, or **Right away**. Content ratings across **Catalog › Visibility** and viewer content rating limits use a unified age-level model so equivalent ratings (`PG`, `TV-PG`, regional `6+`/`7+`) match together.
+In **Catalog › Settings**, **New releases** offers three modes: **When they can play** (recommended: new movies appear once Ether finds a playable release matching your quality profile), **On digital release** (a digital or physical release date has passed), or **Right away**. **Upcoming content** lists unreleased movies and episodes, and is off by default. Content ratings across **Catalog › Settings › Rules** and viewer content rating limits use a unified age-level model so equivalent ratings (`PG`, `TV-PG`, regional `6+`/`7+`) match together.
 
 ### Taste intelligence and viewer accounts
 Inspect what the personalization engine has learned for each viewer alongside age-level rating limits, time windows, stream limits, cross-app subtitle preferences, and read-only **From Plex** defaults (language preferences, share filters, and download permissions synced from `plex.tv`). Add local viewers or share one-time invite links from the **Add viewer** drawer.
@@ -191,7 +191,7 @@ Compose your server's Home screen with global rules and per-viewer overrides, pr
 </table>
 
 ### Live poster studio and 24/7 Live TV guide
-Design versioned poster overlays (`Cinema`, `Spotlight`, `Essential`) with IMDb, Rotten Tomatoes, Letterboxd, and TMDB scores, or connect self-hosted PostersPlus, XRDB, BetterPosters, Rating Poster Database (RPDB), or a custom URL template under **Metadata › Artwork**. For claimed Plex servers, **Apps › Plex › Account** also offers an optional **Use Plex's metadata for Plex apps** toggle (off by default). In **Live TV**, combine M3U/XMLTV and Xtream feeds with 24/7 virtual channels built in a single drawer with a paintable weekly schedule grid in your timezone, playout modes (in order, shuffle, random, marathon, newest first), repeat-avoidance windows, and bumpers.
+Design versioned poster overlays (`Cinema`, `Spotlight`, `Essential`) with IMDb, Rotten Tomatoes, Letterboxd, and TMDB scores, or connect self-hosted PostersPlus, XRDB, BetterPosters, Rating Poster Database (RPDB), or a custom URL template, each set up under **Integrations** and picked as the **Poster source** under **Metadata › Artwork**. For claimed Plex servers, **Apps › Plex › Account** also offers an optional **Use Plex's metadata for Plex apps** toggle (off by default). In **Live TV**, combine M3U/XMLTV and Xtream feeds with 24/7 virtual channels built in a single drawer with a paintable weekly schedule grid in your timezone, playout modes (in order, shuffle, random, marathon, newest first), repeat-avoidance windows, and bumpers.
 
 <table>
   <tr>

@@ -1,4 +1,13 @@
-import { Button, Input, SettingsSection, Spinner, Switch, toast } from "@braedonsaunders/appkit-ui";
+import {
+  Badge,
+  Button,
+  Input,
+  SearchSelect,
+  SettingsSection,
+  Spinner,
+  Switch,
+  toast,
+} from "@braedonsaunders/appkit-ui";
 import { useMemo, useState } from "react";
 import { ErrorPanel } from "../../components/feedback";
 import { ListInput, SecretInput } from "../../components/fields";
@@ -32,8 +41,6 @@ export interface OutboundCheck {
   remoteAccess?: boolean;
   proxyEnabled?: boolean;
 }
-
-const SUGGESTIONS = ["http://127.0.0.1:8888", "http://gluetun:8888", "socks5://gluetun:1080"];
 
 function defaults(saved: EtherConfig["outbound"]): OutboundConfig {
   return {
@@ -135,14 +142,9 @@ export function OutboundInternet({ hidden = false }: { hidden?: boolean }) {
     <SettingsSection
       title={t("How Ether reaches the internet")}
       description={t(
-        "Send indexers, Stremio addons, debrid and Usenet through a proxy on this computer. Plex, updates and your router stay on your normal connection.",
+        "Use a proxy from your VPN container for sources. Plex, updates and your router stay on your normal connection.",
       )}
     >
-      <p className="px-4 pb-3 text-sm text-fg-muted">
-        {t(
-          "A VPN container such as gluetun can publish a proxy while Ether stays on your normal network, so Plex and remote access stay at home. On the host network that address is usually http://127.0.0.1:8888, because Docker names are not visible there. On a shared Docker network it is usually http://gluetun:8888. Gluetun's usual proxy is HTTP on port 8888; use a SOCKS address only if you turned one on. If the whole stack shares the VPN container's network instead, leave this off and publish Ether's ports on that container. Indexer names are looked up on this computer. If your provider's DNS blocks them, point this computer's resolver at the VPN.",
-        )}
-      </p>
       <SettingsRow
         title={t("Send indexers, debrid and Usenet through a proxy")}
         description={t(
@@ -156,71 +158,55 @@ export function OutboundInternet({ hidden = false }: { hidden?: boolean }) {
           />
         }
       />
-      <SettingsRow
-        title={t("Proxy address")}
-        description={fields["outbound.url"]}
-        control={
-          <div className="flex w-full max-w-md flex-col gap-2">
-            <div
-              className="flex flex-wrap gap-2"
-              role="group"
-              aria-label={t("Proxy address suggestions")}
-            >
-              <Button
-                type="button"
-                size="sm"
-                variant={draft.preset === "gluetun" ? "default" : "outline"}
-                onClick={() => patch({ preset: "gluetun" })}
-              >
-                {t("Use a VPN container (gluetun)")}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={draft.preset === "custom" ? "default" : "outline"}
-                onClick={() => patch({ preset: "custom" })}
-              >
-                {t("Custom address")}
-              </Button>
-            </div>
-            <Input
-              aria-label={t("Proxy address")}
-              aria-invalid={Boolean(fields["outbound.url"]) || undefined}
-              value={draft.url}
-              placeholder="http://127.0.0.1:8888"
-              spellCheck={false}
-              onChange={(e) =>
-                patch({ url: e.currentTarget.value, preset: draft.preset || "custom" })
-              }
-            />
-            <div className="flex flex-wrap gap-2">
-              {SUGGESTIONS.map((url) => (
-                <Button
-                  key={url}
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => patch({ url, preset: "gluetun" })}
-                >
-                  {url}
-                </Button>
-              ))}
-            </div>
-            <div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={checking}
-                onClick={() => void runCheck()}
-              >
-                {checking ? t("Checking…") : t("Check")}
-              </Button>
-            </div>
-            {check ? <CheckResult result={check} /> : null}
-          </div>
-        }
-      />
+      <div className="space-y-3 border-t border-border p-4">
+        <label htmlFor="outbound-proxy" className="block text-sm font-medium">
+          {t("Proxy address")}
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            id="outbound-proxy"
+            className="min-w-48 flex-1"
+            aria-label={t("Proxy address")}
+            aria-invalid={Boolean(fields["outbound.url"]) || undefined}
+            value={draft.url}
+            placeholder="http://127.0.0.1:8888"
+            spellCheck={false}
+            onChange={(e) =>
+              patch({ url: e.currentTarget.value, preset: draft.preset || "custom" })
+            }
+          />
+          <SearchSelect
+            ariaLabel={t("Common proxy setups")}
+            value=""
+            placeholder={t("Common setups")}
+            searchable={false}
+            onChange={(url) => patch({ url, preset: "gluetun" })}
+            options={[
+              { value: "http://127.0.0.1:8888", label: t("VPN container on this computer") },
+              {
+                value: "http://gluetun:8888",
+                label: t("VPN container (Gluetun) on a shared Docker network"),
+              },
+              { value: "socks5://gluetun:1080", label: t("Gluetun with SOCKS enabled") },
+            ]}
+          />
+        </div>
+        {fields["outbound.url"] ? (
+          <p role="alert" className="text-sm">
+            {fields["outbound.url"]}
+          </p>
+        ) : null}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={checking}
+          onClick={() => void runCheck()}
+        >
+          {checking ? t("Checking…") : t("Test connection")}
+        </Button>
+        {check ? <CheckResult result={check} /> : null}
+      </div>
       <MoreOptions label={t("More options: How Ether reaches the internet")}>
         <SettingsRow
           title={t("Username")}
@@ -314,7 +300,14 @@ function RouteSwitch({
 function CheckResult({ result }: { result: OutboundCheck }) {
   const verdict = outboundVerdict(result);
   return (
-    <div className="space-y-1 text-sm" role="status">
+    <div className="space-y-2 rounded-lg border border-border bg-surface p-3 text-sm" role="status">
+      <Badge>
+        {verdict === "down"
+          ? t("Connection failed")
+          : verdict === "off"
+            ? t("Proxy is off")
+            : t("Connection successful")}
+      </Badge>
       {result.publishedIp ? <p>{t("Plex publishes {ip}", { ip: result.publishedIp })}</p> : null}
       {result.publishedError ? <p>{result.publishedError}</p> : null}
       {result.sourceIp ? <p>{t("Sources will use {ip}", { ip: result.sourceIp })}</p> : null}

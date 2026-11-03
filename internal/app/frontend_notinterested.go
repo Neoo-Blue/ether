@@ -73,6 +73,10 @@ func (p notInterestedPortal) ListNotInterested(ctx context.Context, u *core.User
 			allowed, e := p.app.notInterested.Has(ctx, u, entry.Key)
 			if err == nil && title != nil && title.Key == entry.Key && e == nil && allowed {
 				out.Title = title.Title
+				out.PosterPath = title.PosterPath
+				if !title.Released.IsZero() {
+					out.Year = title.Released.Year()
+				}
 				out.Key = entry.Key.String()
 			}
 		}

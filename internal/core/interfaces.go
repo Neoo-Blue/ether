@@ -55,7 +55,10 @@ type CreditFilter struct {
 
 // Filter narrows a browse or a smart collection. Zero values mean "any".
 type Filter struct {
-	KnownAddedDate bool `json:"-"` // only released/aired titles, before pagination
+	RuleVisibility  string             `json:"-"` // owner-only rules browser: hidden or shown
+	PreviewRules    []LibraryExclusion `json:"-"`
+	PreviewFallback string             `json:"-"`
+	KnownAddedDate  bool               `json:"-"` // only released/aired titles, before pagination
 	// ExcludeKeys applies local visibility policy before counting and pagination.
 	ExcludeKeys []RatingKey `json:"-"`
 	// IncludeKeys, when set, restricts the page to these keys before

@@ -50,7 +50,7 @@ func TestCatalogBrowse(t *testing.T) {
 	if body.Total != 107 || len(body.Items) != 1 || body.Items[0].Title != "Seven" || body.Items[0].Poster != admin.ImageURL("/seven.jpg", 342) {
 		t.Fatalf("wrong response: %+v", body)
 	}
-	for _, query := range []string{"limit=101", "offset=-1", "offset=nope", "limit=0", "decade=1997", "decade=nope", "sort=invalid"} {
+	for _, query := range []string{"limit=101", "offset=-1", "offset=nope", "limit=0", "decade=1997", "decade=nope", "sort=invalid", "ruleVisibility=invalid", "ruleVisibility=hidden&rules=bad", "ruleVisibility=shown&rules=%5B%5D&ruleFallback=invalid"} {
 		t.Run(query, func(t *testing.T) {
 			rec := serve(h, authed(req(http.MethodGet, "/ether/api/catalog/browse?"+query, "")))
 			if rec.Code != http.StatusBadRequest {

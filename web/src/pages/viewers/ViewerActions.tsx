@@ -2,6 +2,7 @@ import {
   Button,
   Input,
   Label,
+  SearchSelect,
   confirmDialog,
   toast,
   type ContextMenuEntry,
@@ -27,6 +28,7 @@ import { ActionMenu } from "../../components/ActionMenu";
 import { Drawer } from "../../components/Drawer";
 import { PasswordInput } from "../../components/fields";
 import { viewerName } from "../../components/pickers";
+import { searchSelectLabels } from "../../i18n/appkit-labels";
 import { t, tn } from "../../i18n";
 import { api, apiFetch, errorMessage } from "../../lib/api";
 import type { Viewer } from "../../lib/contract";
@@ -316,12 +318,23 @@ function ResetPasswordPanel({
   onClose: () => void;
 }) {
   const [username, setUsername] = useState(viewer.username);
+  const [confirm, setConfirm] = useState("");
+  const identities = useAsync(
+    () =>
+      open
+        ? apiFetch<{ identities: { provider: string; display: string }[] }>(
+            `/users/${viewer.id}/identities`,
+          )
+        : Promise.resolve({ identities: [] }),
+    [open, viewer.id],
+  );
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     if (open) {
       setUsername(viewer.username);
+      setConfirm("");
       setPassword("");
       setError("");
     }
@@ -329,6 +342,10 @@ function ResetPasswordPanel({
   const tooShort = password !== "" && password.length < MIN_LOCAL_PASSWORD;
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (password !== confirm) {
+      setError(t("Passwords do not match."));
+      return;
+    }
     if (password.length < MIN_LOCAL_PASSWORD) {
       setError(t("Password must be at least 12 characters."));
       return;
@@ -353,12 +370,22 @@ function ResetPasswordPanel({
       <form className="space-y-4" onSubmit={(e) => void submit(e)}>
         <div>
           <Label htmlFor="reset-username">{t("Username")}</Label>
-          <Input
-            id="reset-username"
+          <SearchSelect
+            ariaLabel={t("Username")}
             value={username}
-            onChange={(e) => setUsername(e.currentTarget.value)}
-            autoComplete="username"
-            required
+            onChange={setUsername}
+            searchable
+            options={[
+              ...new Set([
+                viewer.username,
+                ...(identities.data?.identities ?? [])
+                  .filter((i) => i.provider === "local")
+                  .map((i) => i.display),
+              ]),
+            ]
+              .filter(Boolean)
+              .map((value) => ({ value, label: value }))}
+            {...searchSelectLabels()}
           />
         </div>
         <div>
@@ -381,6 +408,22 @@ function ResetPasswordPanel({
             <p className="mt-1 text-xs text-fg-muted">{t("Use at least 12 characters.")}</p>
           )}
         </div>
+        <div>
+          <Label htmlFor="reset-confirm">{t("Confirm new password")}</Label>
+          <PasswordInput
+            id="reset-confirm"
+            aria-label={t("Confirm new password")}
+            value={confirm}
+            onChange={(e) => setConfirm(e.currentTarget.value)}
+            autoComplete="new-password"
+            required
+          />
+          {confirm && confirm !== password ? (
+            <p role="alert" className="mt-1 text-xs text-danger">
+              {t("Passwords do not match.")}
+            </p>
+          ) : null}
+        </div>
         {error ? (
           <p role="alert" className="text-sm text-danger">
             {error}
@@ -390,7 +433,7 @@ function ResetPasswordPanel({
           <Button type="button" variant="ghost" onClick={onClose}>
             {t("Cancel")}
           </Button>
-          <Button type="submit" disabled={busy || tooShort}>
+          <Button type="submit" disabled={busy || tooShort || !password || password !== confirm}>
             {t("Set or reset password")}
           </Button>
         </div>

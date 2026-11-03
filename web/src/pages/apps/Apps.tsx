@@ -1,8 +1,8 @@
 import {
-  Badge,
   Button,
   Input,
   SettingsSection,
+  SearchSelect,
   Switch,
   confirmDialog,
 } from "@braedonsaunders/appkit-ui";
@@ -23,7 +23,7 @@ import { MoreOptions } from "../../components/ConfigSection";
 import { DomainPage, useRouteTab } from "../../components/layout";
 import { SaveBar, useDraft } from "../../components/SaveBar";
 import { SettingsRow } from "../../components/SettingsRow";
-import { t, tx } from "../../i18n";
+import { t } from "../../i18n";
 import { useOwnerViewerPath } from "../../components/pickers";
 import { API_BASE, api, apiBlob, apiFetch } from "../../lib/api";
 import { isPlainObject } from "../../lib/format";
@@ -32,6 +32,13 @@ import { viewerStatus } from "../viewers/ViewerStatus";
 import { AwayFromHome } from "./AwayFromHome";
 import { PlexApp } from "./PlexApp";
 import { appLabel, appPath, appPurpose, appRank } from "./catalog";
+import { LevelBadge } from "../../components/status";
+import {
+  StatusRow,
+  AddressChip,
+  ConnectionStatusRow,
+  StatusHelp,
+} from "../../components/AppStatusList";
 import { HomeStatusRow } from "./HomeStatus";
 import { awaySummary, usableAddresses } from "./reachability";
 
@@ -204,15 +211,19 @@ function ConnectDevice({
   if (!info.enabled) return null;
   if (["stremio", "webdav", "m3u"].includes(info.descriptor.id)) {
     return (
-      <Link className="text-primary underline" to="/me">
-        {t("Connect a device")}
-      </Link>
+      <Button asChild variant="outline">
+        <Link to="/me">{t("Connect a device")}</Link>
+      </Button>
     );
   }
   if (!url) return null;
   return (
     <div>
-      {open ? null : <Button onClick={() => setOpen(true)}>{t("Connect a device")}</Button>}
+      {open ? null : (
+        <Button variant="outline" onClick={() => setOpen(true)}>
+          {t("Connect a device")}
+        </Button>
+      )}
       {open ? (
         <div className="space-y-2 pt-3">
           <p>{t("Enter this server address in a supported app:")}</p>
@@ -277,7 +288,6 @@ function ProtocolSettings({
   info?: FrontendInfo;
   hidden: boolean;
 }) {
-  const { boot } = useApp();
   const state = useAsync(() => apiFetch<Settings>(`/frontends/${id}/settings`), [id]);
   const { draft, setDraft, dirty, reset } = useDraft(state.data);
   const [saving, setSaving] = useState(false);
@@ -287,7 +297,7 @@ function ProtocolSettings({
     setSaving(true);
     setError(undefined);
     try {
-      const { serverName: _serverName, ...body } = draft;
+      const { serverName: _serverName, port: _port, ...body } = draft;
       await apiFetch(`/frontends/${id}/settings`, { method: "PUT", body: JSON.stringify(body) });
       await state.reload();
     } catch (err) {
@@ -329,7 +339,7 @@ function ProtocolSettings({
           : "";
   return (
     <>
-      <div hidden={hidden}>
+      <div hidden={hidden} className="space-y-6">
         {["jellyfin", "emby", "silo"].includes(id) ? (
           <SignInSection
             info={info}
@@ -346,9 +356,9 @@ function ProtocolSettings({
         {shared ? (
           <SettingsSection title={t("Connect")} description={shared}>
             <div className="px-5 py-3">
-              <Link className="text-primary underline" to="/me">
-                {t("Open your account")}
-              </Link>
+              <Button asChild variant="outline">
+                <Link to="/me">{t("Open your account")}</Link>
+              </Button>
             </div>
           </SettingsSection>
         ) : null}
@@ -428,7 +438,7 @@ function ProtocolSettings({
             </MoreOptions>
           </SettingsSection>
         ) : null}
-        {named || draft.port !== undefined ? (
+        {named ? (
           <SettingsSection
             title={id === "dlna" ? t("What the TV shows") : t("Find this server")}
             description={
@@ -437,37 +447,6 @@ function ProtocolSettings({
                 : t("How {app} apps find this server.", { app: protocolName(id) })
             }
           >
-            {named ? (
-              <SettingsRow
-                title={t("Server name")}
-                description={
-                  <>
-                    <span>{boot.serverName?.trim() || "Ether"}</span>
-                    {" · "}
-                    <Link className="underline" to="/server">
-                      {t("General settings")}
-                    </Link>
-                  </>
-                }
-              />
-            ) : null}
-            {draft.port !== undefined ? (
-              <SettingsRow
-                title={<label htmlFor={`${id}-port`}>{t("Port")}</label>}
-                description={portHelp(id)}
-                control={
-                  <Input
-                    id={`${id}-port`}
-                    aria-label={t("Port")}
-                    type="number"
-                    min={1}
-                    max={65535}
-                    value={draft.port}
-                    onChange={(e) => setDraft({ ...draft, port: Number(e.currentTarget.value) })}
-                  />
-                }
-              />
-            ) : null}
             {id === "dlna" ? (
               <DLNAViewer
                 value={draft.viewerId}
@@ -519,25 +498,6 @@ function protocolName(id: string): string {
   }
 }
 
-function portHelp(id: string): string {
-  switch (id) {
-    case "jellyfin":
-      return t(
-        "Use the address on this page. The port is part of that address. Leave this at 8096 unless another server already uses it.",
-      );
-    case "emby":
-      return t(
-        "Use the address on this page. The port is part of that address. Leave this at 8097 unless another server already uses it.",
-      );
-    case "silo":
-      return t(
-        "Use the address on this page. The port is part of that address. Leave this at 8090 unless another server already uses it.",
-      );
-    default:
-      return t("Change this only if the usual port is already in use.");
-  }
-}
-
 function DLNAViewer({ value, onChange }: { value?: number; onChange: (id?: number) => void }) {
   const viewers = useAsync(() => api.viewers(), []);
   const [busy, setBusy] = useState(false);
@@ -567,25 +527,18 @@ function DLNAViewer({ value, onChange }: { value?: number; onChange: (id?: numbe
     }
   }
   return (
-    <div className="space-y-2">
-      <label className="flex flex-col gap-1 text-sm">
-        {t("Browse as")}
-        <select
-          value={value ?? ""}
-          onChange={(e) =>
-            onChange(e.currentTarget.value ? Number(e.currentTarget.value) : undefined)
-          }
-        >
-          <option value="">{t("No viewer selected")}</option>
-          {(viewers.data ?? [])
-            .filter((v) => ["owner", "active"].includes(viewerStatus(v)))
-            .map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.title || v.username}
-              </option>
-            ))}
-        </select>
-      </label>
+    <div className="space-y-3 px-5 py-4">
+      <SearchSelect
+        ariaLabel={t("Browse as")}
+        placeholder={t("No viewer selected")}
+        value={value == null ? "" : String(value)}
+        onChange={(next) => onChange(next ? Number(next) : undefined)}
+        clearable
+        searchable
+        options={(viewers.data ?? [])
+          .filter((v) => ["owner", "active"].includes(viewerStatus(v)))
+          .map((v) => ({ value: String(v.id), label: v.title || v.username }))}
+      />
       <Button disabled={busy} onClick={() => void createGuest()}>
         {t("Create a living-room guest")}
       </Button>
@@ -597,9 +550,10 @@ function DLNAViewer({ value, onChange }: { value?: number; onChange: (id?: numbe
 function AppStatus({ info }: { info: FrontendInfo }) {
   return (
     <>
-      <Badge variant={info.enabled ? "success" : "secondary"}>
-        {info.enabled ? t("On") : t("Off")}
-      </Badge>
+      <LevelBadge
+        level={info.status.error ? "error" : info.enabled ? "ok" : "off"}
+        label={info.enabled ? t("On") : t("Off")}
+      />
       {info.status.error ? <span className="text-danger">{info.status.error}</span> : null}
     </>
   );
@@ -616,45 +570,51 @@ function SignInSection({
   const ownerPath = useOwnerViewerPath();
   const portalURL = viewerPortalAddress(info ? usableAddresses(info.status)[0] : undefined);
   return (
-    <SettingsSection
-      title={t("How people sign in")}
-      description={t("Infuse needs an app password. The Emby for TV app isn't supported.")}
-      footer={
-        <div className="flex flex-wrap items-center gap-3">
-          <p className="w-full text-sm text-fg-muted">
-            {tx("People sign in with their Ether viewer account. Manage them under {viewers}.", {
-              viewers: (
-                <Link className="font-medium text-primary underline" to="/viewers">
-                  {t("Viewers")}
-                </Link>
-              ),
-            })}
-          </p>
-          <Link className="text-sm font-medium text-primary underline" to={ownerPath}>
-            {t("Open my account")}
-          </Link>
-          <Link className="text-sm text-fg-muted underline" to="/me">
-            {t("Viewer portal")}
-          </Link>
-        </div>
-      }
-    >
+    <SettingsSection title={t("How people sign in")}>
       <SettingsRow
-        title={t("Quick Connect")}
-        description={t("Quick Connect: approve the code at {url}", { url: portalURL })}
+        title={t("Viewer accounts")}
+        description={t("People sign in with their Ether viewer account.")}
         control={
-          quickConnect ? (
-            <Switch
-              checked={quickConnect.checked}
-              aria-label={t("Quick Connect")}
-              onChange={(e) => quickConnect.onChange(e.currentTarget.checked)}
-            />
-          ) : undefined
+          <Button asChild variant="outline" size="sm">
+            <Link to="/viewers">{t("Viewers")}</Link>
+          </Button>
         }
       />
       <SettingsRow
-        title={t("App password")}
-        description={t("App password: from Connect apps at {url}", { url: portalURL })}
+        title={t("Quick Connect")}
+        description={t("Approve the code in the viewer portal.")}
+        control={
+          <div className="flex flex-wrap items-center gap-3">
+            <AddressChip address={portalURL} />
+            {quickConnect ? (
+              <Switch
+                checked={quickConnect.checked}
+                aria-label={t("Quick Connect")}
+                onChange={(e) => quickConnect.onChange(e.currentTarget.checked)}
+              />
+            ) : null}
+          </div>
+        }
+      />
+      <SettingsRow
+        title={
+          <span className="flex items-center gap-2">
+            {t("App password")}
+            <StatusHelp
+              text={
+                info?.descriptor.id === "emby"
+                  ? t("The Emby for TV app isn't supported.")
+                  : t("Infuse needs an app password.")
+              }
+            />
+          </span>
+        }
+        description={t("Create an app password under Connect apps in your account.")}
+        control={
+          <Button asChild variant="outline" size="sm">
+            <Link to={ownerPath}>{t("Open your account")}</Link>
+          </Button>
+        }
       />
     </SettingsSection>
   );
@@ -669,14 +629,21 @@ function AppDetail({ info, startOpen = false }: { info: FrontendInfo; startOpen?
     <div className="space-y-6 pb-6">
       <SettingsSection title={t("Status")}>
         <HomeStatusRow status={info.status} address={chosen} />
-        <SettingsRow title={away.title} description={away.detail} />
+        <ConnectionStatusRow state={info.status.wan} title={away.title} detail={away.detail} />
         {info.status.error ? (
-          <p className="px-5 py-3 text-sm text-danger">{info.status.error}</p>
+          <StatusRow
+            state="unreachable"
+            title={t("Connection problem")}
+            description={info.status.error}
+          />
         ) : null}
         {info.status.warnings?.map((warning) => (
-          <p key={warning} className="px-5 py-3 text-sm text-fg-muted">
-            {frontendWarning(warning)}
-          </p>
+          <StatusRow
+            key={warning}
+            state="unknown"
+            title={t("Needs attention")}
+            description={frontendWarning(warning)}
+          />
         ))}
         <div className="px-5 py-3">
           <ConnectDevice

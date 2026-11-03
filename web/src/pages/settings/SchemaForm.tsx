@@ -1,15 +1,17 @@
+import { SubtabNav } from "../../components/layout";
+import { parseDuration, formatDuration, type DurationUnit } from "./duration";
 import { SettingsRow } from "../../components/SettingsRow";
 import {
   Input,
+  Select,
   SearchSelect,
   SettingsSection,
-  SubtabNav,
   Switch,
   Textarea,
 } from "@braedonsaunders/appkit-ui";
 import { useEffect, useState, type ReactNode } from "react";
 import { ListInput, MapInput, NumberInput, SecretInput } from "../../components/fields";
-import { t } from "../../i18n";
+import { t, tn } from "../../i18n";
 import { humanizeKey, isPlainObject } from "../../lib/format";
 import { REDACTED } from "../../lib/types";
 
@@ -267,6 +269,21 @@ export function SchemaField({
           />
         </SettingsRow>
       );
+    case "duration":
+      return (
+        <SettingsRow
+          title={<label htmlFor={id}>{def.label}</label>}
+          description={description}
+          control={
+            <DurationControl
+              id={id}
+              label={def.label}
+              value={String(value ?? "")}
+              onChange={onChange}
+            />
+          }
+        />
+      );
     case "readonly":
       return (
         <SettingsRow
@@ -289,9 +306,7 @@ export function SchemaField({
           aria-label={def.label}
           aria-invalid={error ? true : undefined}
           value={String(value ?? "")}
-          placeholder={
-            def.placeholder ?? (def.kind === "duration" ? t("e.g. 24h or 30m") : undefined)
-          }
+          placeholder={def.placeholder}
           onChange={(e) => onChange(e.currentTarget.value)}
           className={def.wide ? undefined : "sm:w-72"}
           spellCheck={false}
@@ -511,4 +526,48 @@ function JsonRow({
 
 export function asObj(v: unknown): Obj {
   return isPlainObject(v) ? v : {};
+}
+
+function DurationControl({
+  id,
+  label,
+  value,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [draft, setDraft] = useState(() => ({ ...parseDuration(value), raw: value }));
+  const current = draft.raw === value ? draft : { ...parseDuration(value), raw: value };
+  function update(amount: string, unit: DurationUnit) {
+    const raw = formatDuration(amount, unit);
+    setDraft({ amount, unit, raw });
+    onChange(raw);
+  }
+  const count = Number(current.amount) || 0;
+  return (
+    <span className="flex items-center gap-2">
+      <Input
+        id={id}
+        aria-label={label}
+        type="number"
+        min="0"
+        step="any"
+        value={current.amount}
+        className="w-24"
+        onChange={(e) => update(e.currentTarget.value, current.unit)}
+      />
+      <Select
+        aria-label={t("{label} unit", { label })}
+        value={current.unit}
+        onChange={(e) => update(current.amount, e.currentTarget.value as DurationUnit)}
+      >
+        <option value="m">{tn(count, "Minute", "Minutes")}</option>
+        <option value="h">{tn(count, "Hour", "Hours")}</option>
+        <option value="d">{tn(count, "Day", "Days")}</option>
+      </Select>
+    </span>
+  );
 }

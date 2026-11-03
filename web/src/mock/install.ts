@@ -22,6 +22,50 @@ export function installMockBackend(): void {
     cacheRestart: params.has("cacheRestart"),
     restore: params.get("restore") ?? undefined,
   });
+  fake.state.config.frontends = Object.fromEntries(
+    ["plex", "jellyfin", "emby", "silo", "stremio", "webdav", "m3u", "dlna"].map((id) => [
+      id,
+      { enabled: true },
+    ]),
+  );
+  // Deterministic account workspaces for owner-console visual review.
+  if (params.get("integrations") === "all") {
+    const c = fake.state.config;
+    c.catalog.tmdbKey = "[configured]";
+    c.trakt = { enabled: true, clientId: "ether-trakt", clientSecret: "[configured]" };
+    c.simkl = { enabled: true, clientId: "ether-simkl", clientSecret: "[configured]" };
+    c.openSubtitles = {
+      enabled: true,
+      apiKey: "[configured]",
+      username: "ether",
+      password: "[configured]",
+    };
+    c.markers = { ...c.markers, theIntroDb: true, accountEnabled: true, apiKey: "[configured]" };
+    c.posters = {
+      version: 1,
+      enabled: false,
+      source: "rpdb",
+      baseUrl: "",
+      apiKey: "",
+      urlTemplate: "",
+      accounts: Object.fromEntries(
+        ["postersplus", "xrdb", "betterposters", "rpdb", "custom"].map((id) => [
+          id,
+          {
+            enabled: true,
+            source: id,
+            baseUrl: id === "xrdb" ? "https://xrdb.example" : "http://postersplus:8000",
+            apiKey: "[configured]",
+            urlTemplate: id === "custom" ? "https://posters.example/{type}/{tmdb_id}" : "",
+            profile: id === "xrdb" ? "family" : "",
+          },
+        ]),
+      ),
+    };
+  } else if (params.get("integrations") === "fresh") {
+    fake.state.config.posters = undefined;
+    fake.state.config.trakt.enabled = false;
+  }
   const real = window.fetch.bind(window);
   window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(

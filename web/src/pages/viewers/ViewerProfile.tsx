@@ -1,26 +1,22 @@
+import { SubtabNav } from "../../components/layout";
 import {
-  Alert,
-  AlertDescription,
   Avatar,
   Badge,
-  Button,
   DetailPageLayout,
   EmptyState,
-  SettingsSection,
   Spinner,
-  SubtabNav,
   toast,
 } from "@braedonsaunders/appkit-ui";
 import { ArrowLeft, CheckCircle2, History } from "lucide-react";
 import { useCallback, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { PageSubtabs } from "../../components/layout";
 import { Artwork } from "../../components/Artwork";
 import { Meter } from "../../components/charts";
 import { ErrorPanel, LoadingRows } from "../../components/feedback";
 import { titleSubtitle } from "../../components/Poster";
 import { viewerName } from "../../components/pickers";
-import { SettingsRow } from "../../components/SettingsRow";
-import { t, tn } from "../../i18n";
+import { t } from "../../i18n";
 import SignInMethods from "../me/SignInMethods";
 import { FavoritesMirror } from "../me/FavoritesMirror";
 import { ConnectApps } from "../me/ConnectApps";
@@ -29,19 +25,29 @@ import { NotInterested, type NotInterestedEntry } from "../me/NotInterested";
 import { getToken } from "../../lib/api";
 import { api, apiFetch, errorMessage } from "../../lib/api";
 import type { Viewer, ViewerDetail } from "../../lib/contract";
-import { formatDateTime, formatNumber, formatPercent, relativeTime } from "../../lib/format";
+import { formatDateTime, formatPercent, relativeTime } from "../../lib/format";
 import { useAsync } from "../../lib/hooks";
 import { EMPTY_LAYOUT } from "../../lib/layout";
 import { ContextBar, type ViewContext } from "../designer/ContextBar";
 import { HomeCanvas } from "../designer/HomeCanvas";
 import { ViewerWatchlist } from "./sections/ViewerWatchlist";
 import { TasteView } from "./TasteView";
+import { ViewerDashboard } from "./ViewerDashboard";
 import { ViewerAccess } from "./ViewerAccess";
 import { ViewerActions } from "./ViewerActions";
 import { ViewerPlayback } from "./ViewerPlayback";
 import { ViewerStatus, viewerLifecycle, viewerStatus } from "./ViewerStatus";
 
-const TABS = ["overview", "limits", "playback", "home-taste", "sign-in"] as const;
+const TABS = [
+  "overview",
+  "home",
+  "taste",
+  "activity",
+  "playback",
+  "limits",
+  "sign-in",
+  "lists",
+] as const;
 type Tab = (typeof TABS)[number];
 function asTab(raw: string | undefined): Tab | undefined {
   return raw && (TABS as readonly string[]).includes(raw) ? (raw as Tab) : undefined;
@@ -52,6 +58,10 @@ export default function ViewerProfile() {
   const id = Number(raw);
   const tab: Tab = asTab(routeTab) ?? "overview";
   const navigate = useNavigate();
+  const [search, setSearch] = useSearchParams();
+  const listTab = ["alerts", "hidden"].includes(search.get("list") ?? "")
+    ? search.get("list")!
+    : "watchlist";
 
   const viewer = useAsync<ViewerDetail | null>(() => api.viewer(id), [id]);
   const taste = useAsync(() => api.taste(id), [id]);
@@ -73,12 +83,22 @@ export default function ViewerProfile() {
     [id],
   );
   const loadHidden = useCallback(async (): Promise<NotInterestedEntry[]> => {
-    const result = await apiFetch<{ items: { handle: string; title?: string }[] }>(
-      `/viewers/${id}/not-interested`,
-    );
+    const result = await apiFetch<{
+      items: {
+        handle: string;
+        title?: string;
+        year?: number;
+        poster?: string;
+        posterPath?: string;
+      }[];
+    }>(`/viewers/${id}/not-interested`);
     return (result.items ?? []).map((item) => ({
       handle: item.handle,
       title: item.title,
+      year: item.year,
+      poster:
+        item.poster ??
+        (item.posterPath ? `https://image.tmdb.org/t/p/w92${item.posterPath}` : undefined),
       unavailable: !item.title,
     }));
   }, [id]);
@@ -145,13 +165,7 @@ export default function ViewerProfile() {
                 {life.managedBy === "plex" ? <Badge>{t("Managed on plex.tv")}</Badge> : null}
               </h1>
               <p className="text-sm text-fg-muted">
-                {v.username} · {t("active {time}", { time: relativeTime(v.lastActive) })} ·{" "}
-                {tn(
-                  v.plays30d,
-                  "{count} play and {hours} hours in 30 days",
-                  "{count} plays and {hours} hours in 30 days",
-                  { hours: formatNumber(v.hoursWatched30d, 1) },
-                )}
+                {v.username} · {t("Active {time}", { time: relativeTime(v.lastActive) })}
               </p>
             </div>
             <ViewerActions
@@ -159,14 +173,9 @@ export default function ViewerProfile() {
               onChange={() => void viewer.reload()}
               onRebuild={() => void refresh()}
               rebuilding={refreshing}
-              onPreviewHome={() => setTab("home-taste")}
+              onPreviewHome={() => setTab("home")}
             />
           </div>
-          {life.managedBy === "plex" ? (
-            <p className="mt-3 text-sm text-fg-muted">
-              {t("Managed on plex.tv. Access changes happen there, not in Ether.")}
-            </p>
-          ) : null}
         </div>
       }
       subtabs={
@@ -176,16 +185,19 @@ export default function ViewerProfile() {
           onSelect={setTab}
           tabs={[
             { key: "overview", label: t("Overview") },
-            { key: "limits", label: t("Limits") },
+            { key: "home", label: t("Home") },
+            { key: "taste", label: t("Taste") },
+            { key: "activity", label: t("Recent activity") },
             { key: "playback", label: t("Audio & subtitles") },
-            { key: "home-taste", label: t("Home & taste") },
+            { key: "limits", label: t("Limits") },
             { key: "sign-in", label: t("Sign-in & devices") },
+            ...(serverAccess ? [{ key: "lists", label: t("Lists & alerts") }] : []),
           ]}
         />
       }
     >
       {tab === "overview" ? (
-        <Overview viewer={v} onChange={() => void viewer.reload()} />
+        <ViewerDashboard viewer={v} taste={taste.data} />
       ) : tab === "limits" ? (
         <ViewerAccess key={id} viewer={v} />
       ) : tab === "playback" ? (
@@ -195,9 +207,12 @@ export default function ViewerProfile() {
           <SignInMethods base={`/users/${id}`} token={getToken()} owner showInvite={!v.isOwner} />
           {serverAccess ? <ConnectApps base={`/viewers/${id}`} token={getToken()} /> : null}
         </div>
-      ) : (
+      ) : tab === "home" ? (
+        <TheirHome viewer={v} />
+      ) : tab === "activity" ? (
+        <Activity viewer={v} />
+      ) : tab === "taste" ? (
         <div className="space-y-8">
-          <TheirHome viewer={v} />
           {taste.error ? (
             <ErrorPanel error={taste.error} onRetry={() => void taste.reload()} />
           ) : !taste.data ? (
@@ -205,16 +220,39 @@ export default function ViewerProfile() {
           ) : (
             <TasteView userId={id} taste={taste.data} onChange={(next) => taste.setData(next)} />
           )}
+        </div>
+      ) : (
+        <div className="space-y-6">
           {serverAccess ? (
             <>
-              <div className="space-y-6">
-                <FavoritesMirror load={loadFavorites} save={saveFavorites} />
-                <ViewerWatchlist viewerId={id} />
-              </div>
-              <div className="space-y-6">
+              <PageSubtabs
+                ariaLabel={t("Lists and alerts sections")}
+                active={listTab}
+                onSelect={(next) =>
+                  setSearch(
+                    (previous) => {
+                      previous.set("list", next);
+                      return previous;
+                    },
+                    { preventScrollReset: true },
+                  )
+                }
+                tabs={[
+                  { key: "watchlist", label: t("Watchlist") },
+                  { key: "alerts", label: t("Alerts") },
+                  { key: "hidden", label: t("Not interested") },
+                ]}
+              />
+              {listTab === "watchlist" ? (
+                <>
+                  <ViewerWatchlist viewerId={id} />
+                  <FavoritesMirror load={loadFavorites} save={saveFavorites} />
+                </>
+              ) : listTab === "alerts" ? (
                 <FavoriteEpisodeAlerts load={loadAlerts} />
+              ) : (
                 <NotInterested load={loadHidden} restore={restoreHidden} />
-              </div>
+              )}
             </>
           ) : null}
         </div>
@@ -234,173 +272,6 @@ function BackLink() {
   );
 }
 
-type SignInMethod = { id: number; provider: string; display: string };
-type DeviceGrant = {
-  hash: string;
-  surface: string;
-  client: string;
-  product: string;
-  version: string;
-  lastUsed: string | number;
-};
-
-function sourceLabel(source: ReturnType<typeof viewerLifecycle>["source"]): string {
-  switch (source) {
-    case "owner":
-      return t("Owner");
-    case "local":
-      return t("Username & password");
-    case "invite":
-      return t("Invite link");
-    case "plexHome":
-      return t("Plex Home");
-    case "dlnaGuest":
-      return t("DLNA guest");
-    default:
-      return "Plex";
-  }
-}
-
-function Overview({ viewer: v, onChange }: { viewer: ViewerDetail; onChange: () => void }) {
-  const life = viewerLifecycle(v);
-  const name = viewerName(v);
-  const [resuming, setResuming] = useState(false);
-  const signIn = useAsync(
-    async (signal) => {
-      const [methods, devices] = await Promise.all([
-        apiFetch<{ identities: SignInMethod[] | null }>(`/users/${v.id}/identities`, { signal }),
-        apiFetch<{ devices: DeviceGrant[] | null }>(`/users/${v.id}/devices`, { signal }),
-      ]);
-      return { methods: methods.identities ?? [], devices: devices.devices ?? [] };
-    },
-    [v.id],
-  );
-
-  async function resume() {
-    setResuming(true);
-    try {
-      await apiFetch(`/users/${v.id}/resume`, {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
-      toast.success(t("Access resumed"));
-      onChange();
-    } catch (e) {
-      toast.error(t("Couldn't resume access"), { description: errorMessage(e) });
-    } finally {
-      setResuming(false);
-    }
-  }
-
-  return (
-    <div className="max-w-3xl space-y-6">
-      {life.paused ? (
-        <Alert role="status">
-          <AlertDescription>
-            <span className="flex flex-wrap items-center gap-3">
-              <span className="flex-1">
-                {t("Access is paused. {name} keeps everything, but can't sign in anywhere.", {
-                  name,
-                })}
-              </span>
-              {life.canPause ? (
-                <Button size="sm" disabled={resuming} onClick={() => void resume()}>
-                  {t("Resume access")}
-                </Button>
-              ) : null}
-            </span>
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      <SettingsSection title={t("Status")}>
-        <SettingsRow
-          title={t("Access")}
-          control={
-            life.paused ? (
-              <Badge variant="warning">{t("Paused")}</Badge>
-            ) : (
-              <Badge variant="success">{t("Active")}</Badge>
-            )
-          }
-        />
-        <SettingsRow
-          title={t("How they joined")}
-          control={<span className="text-sm text-fg-muted">{sourceLabel(life.source)}</span>}
-        />
-        {life.managedBy === "plex" || life.source === "plex" || life.source === "plexHome" ? (
-          <SettingsRow
-            title={t("Plex sharing")}
-            control={
-              <span className="text-sm text-fg-muted">
-                {life.plexShared ? t("Shared on plex.tv") : t("No longer shared")}
-              </span>
-            }
-          />
-        ) : null}
-        <SettingsRow
-          title={t("Last active")}
-          control={
-            <span className="text-sm text-fg-muted" title={formatDateTime(v.lastActive)}>
-              {relativeTime(v.lastActive)}
-            </span>
-          }
-        />
-      </SettingsSection>
-      <SettingsSection title={t("How they sign in")}>
-        {signIn.error ? (
-          <div className="px-5 py-4">
-            <ErrorPanel error={signIn.error} onRetry={() => void signIn.reload()} />
-          </div>
-        ) : !signIn.data ? (
-          <div className="px-5 py-4">
-            <LoadingRows rows={2} />
-          </div>
-        ) : signIn.data.methods.length ? (
-          signIn.data.methods.map((m) => (
-            <SettingsRow
-              key={m.id}
-              title={m.display || m.provider}
-              description={
-                m.provider === "plex"
-                  ? "Plex"
-                  : m.provider === "local"
-                    ? t("Username & password")
-                    : m.provider
-              }
-            />
-          ))
-        ) : (
-          <p className="px-5 py-4 text-sm text-fg-muted">{t("No sign-in method yet")}</p>
-        )}
-      </SettingsSection>
-      <SettingsSection title={t("Devices")}>
-        {!signIn.data ? (
-          <div className="px-5 py-4">
-            <LoadingRows rows={1} />
-          </div>
-        ) : signIn.data.devices.length ? (
-          signIn.data.devices.map((d) => (
-            <SettingsRow
-              key={d.hash}
-              title={d.client || d.product || d.surface || t("Device")}
-              description={d.product && d.product !== d.client ? d.product : undefined}
-              control={<span className="text-xs text-fg-subtle">{relativeTime(d.lastUsed)}</span>}
-            />
-          ))
-        ) : (
-          <p className="px-5 py-4 text-sm text-fg-muted">
-            {t("Nothing is signed in with this account yet.")}
-          </p>
-        )}
-      </SettingsSection>
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-fg">{t("Recent activity")}</h2>
-        <Activity viewer={v} />
-      </section>
-    </div>
-  );
-}
-
 function Activity({ viewer }: { viewer: ViewerDetail }) {
   const recent = viewer.recent ?? [];
   if (recent.length === 0)
@@ -412,43 +283,60 @@ function Activity({ viewer }: { viewer: ViewerDetail }) {
       />
     );
   return (
-    <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
-      {recent.map((r, i) => (
-        <li key={`${r.title.key}-${i}`} className="flex items-center gap-4 p-3">
-          <Artwork
-            src={r.title.poster}
-            alt=""
-            title={r.title.title}
-            className="aspect-[2/3] w-12 shrink-0 rounded"
-          />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-fg">{r.title.title}</p>
-            <p className="truncate text-xs text-fg-muted">{titleSubtitle(r.title)}</p>
-            {!r.completed ? (
-              <div className="mt-1.5 max-w-xs">
-                <Meter
-                  value={r.progress}
-                  valueLabel={formatPercent(r.progress)}
-                  label={t("Stopped at")}
-                />
-              </div>
-            ) : null}
-          </div>
-          <div className="shrink-0 text-right">
-            {r.completed ? (
-              <Badge variant="success">
-                <CheckCircle2 size={11} /> {t("Finished")}
-              </Badge>
-            ) : (
-              <Badge variant="warning">{t("In progress")}</Badge>
-            )}
-            <p className="mt-1 text-xs text-fg-subtle" title={formatDateTime(r.at)}>
-              {relativeTime(r.at)}
-            </p>
-          </div>
-        </li>
-      ))}
-    </ul>
+    <div className="overflow-auto rounded-xl border border-border bg-surface">
+      <table className="w-full text-left">
+        <thead className="bg-bg-subtle text-xs text-fg-muted">
+          <tr>
+            <th className="p-3">{t("Title")}</th>
+            <th className="p-3">{t("Progress")}</th>
+            <th className="p-3 text-right">{t("Last watched")}</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {recent.map((r, i) => (
+            <tr key={`${r.title.key}-${i}`}>
+              <td className="p-3">
+                <div className="flex items-center gap-3">
+                  <Artwork
+                    src={r.title.poster}
+                    alt=""
+                    title={r.title.title}
+                    className="aspect-[2/3] w-12 shrink-0 rounded"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-fg">{r.title.title}</p>
+                    <p className="truncate text-xs text-fg-muted">{titleSubtitle(r.title)}</p>
+                  </div>
+                </div>
+              </td>
+              <td className="p-3">
+                {!r.completed ? (
+                  <div className="mt-1.5 max-w-xs">
+                    <Meter
+                      value={r.progress}
+                      valueLabel={formatPercent(r.progress)}
+                      label={t("Stopped at")}
+                    />
+                  </div>
+                ) : null}
+              </td>
+              <td className="p-3 text-right">
+                {r.completed ? (
+                  <Badge variant="success">
+                    <CheckCircle2 size={11} /> {t("Finished")}
+                  </Badge>
+                ) : (
+                  <Badge variant="warning">{t("In progress")}</Badge>
+                )}
+                <p className="mt-1 text-xs text-fg-subtle" title={formatDateTime(r.at)}>
+                  {relativeTime(r.at)}
+                </p>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -470,7 +358,7 @@ function TheirHome({ viewer }: { viewer: Viewer }) {
           {t("Shape it in Home →")}
         </Link>
       </div>
-      <div className="rounded-xl bg-bg p-2 sm:p-4">
+      <div>
         <HomeCanvas
           readOnly
           draft={EMPTY_LAYOUT}

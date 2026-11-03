@@ -35,7 +35,13 @@ export function TrendingStatus() {
                 {c.mediaType === "movie" ? t("Movies") : t("TV shows")} ·{" "}
                 {c.window === "day" ? t("Today") : t("This week")}
               </span>
-              <Badge variant="secondary">{c.state}</Badge>
+              <Badge variant={c.state === "fresh" ? "success" : "secondary"}>
+                {c.state === "fresh"
+                  ? t("Up to date")
+                  : c.state === "stale"
+                    ? t("Awaiting refresh")
+                    : t("Not checked yet")}
+              </Badge>
             </div>
             <p className="mt-1 text-xs text-fg-muted">
               {tn(c.titles, "{count} title · updated {when}", "{count} titles · updated {when}", {

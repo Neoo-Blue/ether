@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/braedonsaunders/ether/internal/config"
 	"strconv"
 	"strings"
 	"sync"
@@ -82,9 +83,6 @@ func (c *Catalog) fresh(st *storedTitle) bool {
 
 // Get returns a title from the mirror, fetching on demand when missing/stale.
 func (c *Catalog) Get(ctx context.Context, key core.RatingKey) (*core.Title, error) {
-	if err := c.admitFallbacks(ctx); err != nil {
-		return nil, err
-	}
 	t, err := c.get(ctx, key)
 	if err == nil && !c.visibleTitle(t) {
 		return nil, core.ErrNotFound
@@ -97,8 +95,13 @@ func (c *Catalog) Get(ctx context.Context, key core.RatingKey) (*core.Title, err
 	return t, err
 }
 
+// upcomingMovie permits metadata browsing only; playback still enforces release availability.
+func (c *Catalog) upcomingMovie(t *core.Title) bool {
+	return t != nil && c.config().ShowUpcomingMovies && t.Type == core.TypeMovie && !t.Released.IsZero() && t.Released.After(c.now())
+}
+
 func (c *Catalog) visibleTitle(t *core.Title) bool {
-	return t != nil && !t.Adult && t.IsReleased(c.now()) && (!c.config().GateMoviesByHomeRelease || c.homeVisible(t)) && (t.Type != core.TypeSeason || listableSeason(t, c.now()))
+	return t != nil && !t.Adult && (c.upcomingMovie(t) || (t.IsReleased(c.now()) && (!(c.config().ReleaseMode == config.ModeDigital) || c.homeVisible(t)))) && (t.Type != core.TypeSeason || listableSeason(t, c.now()))
 }
 
 // CachedGet applies the same catalogue visibility gates as Get without a
@@ -172,7 +175,7 @@ func (c *Catalog) getMovie(ctx context.Context, id int64) (*core.Title, error) {
 			return err
 		}
 		t := c.movieDetailsToTitle(ctx, d)
-		if err := c.upsert(ctx, t, upsertOpts{browsable: c.meetsThreshold(t), detail: true, releaseDates: d.ReleaseDates, gateEnabled: c.config().GateMoviesByHomeRelease}); err != nil {
+		if err := c.upsert(ctx, t, upsertOpts{browsable: c.meetsThreshold(t), detail: true, releaseDates: d.ReleaseDates}); err != nil {
 			return err
 		}
 		c.harvestMovieCrowd(ctx, key, d.Recommendations)
@@ -871,7 +874,7 @@ func (c *Catalog) RefreshTitle(ctx context.Context, key core.RatingKey, persist 
 		}
 		t = c.movieDetailsToTitle(ctx, d)
 		if persist {
-			if err := c.upsert(ctx, t, upsertOpts{browsable: c.meetsThreshold(t), detail: true, releaseDates: d.ReleaseDates, gateEnabled: c.config().GateMoviesByHomeRelease}); err != nil {
+			if err := c.upsert(ctx, t, upsertOpts{browsable: c.meetsThreshold(t), detail: true, releaseDates: d.ReleaseDates}); err != nil {
 				return nil, err
 			}
 		}

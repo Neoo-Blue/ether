@@ -9,9 +9,11 @@ import (
 )
 
 type NotInterestedEntry struct {
-	Handle string `json:"handle"`
-	Title  string `json:"title,omitempty"`
-	Key    string `json:"key,omitempty"`
+	Year       int    `json:"year,omitempty"`
+	PosterPath string `json:"posterPath,omitempty"`
+	Handle     string `json:"handle"`
+	Title      string `json:"title,omitempty"`
+	Key        string `json:"key,omitempty"`
 }
 type NotInterestedPortal interface {
 	ListNotInterested(context.Context, *core.User) ([]NotInterestedEntry, error)

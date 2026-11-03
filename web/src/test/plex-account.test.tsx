@@ -23,6 +23,14 @@ describe("plex account status", () => {
 });
 
 describe("plex claim actions", () => {
+  it("falls back to owner only when the claimed account has no name", async () => {
+    renderApp("/apps/plex", {}, (server) => {
+      server.state.config.plex.ownerUsername = "";
+    });
+    expect(await screen.findByText("Claimed by owner", {}, WAIT)).toBeInTheDocument();
+    expect(screen.queryByText(/Claimed by Plex account/)).not.toBeInTheDocument();
+  });
+
   it("signs in and claims from the account page", async () => {
     const open = vi.spyOn(window, "open").mockReturnValue(null);
     const { fake } = renderApp("/apps/plex", {}, (server) => {
@@ -35,7 +43,7 @@ describe("plex claim actions", () => {
     await waitFor(() => expect(calls(fake, "POST", "/plex/claim")).toHaveLength(1), WAIT);
     expect(calls(fake, "POST", "/plex/pin")).toHaveLength(1);
     expect(
-      (await screen.findAllByText("Claimed by the Plex account owner.", {}, WAIT)).length,
+      (await screen.findAllByText("Claimed by Plex account Braedon", {}, WAIT)).length,
     ).toBeGreaterThan(0);
     expect(screen.queryByRole("switch", { name: "Claimed" })).toBeNull();
     expect(screen.queryByLabelText("Owner token")).toBeNull();
@@ -73,7 +81,7 @@ describe("plex claim actions", () => {
     const dialog = await screen.findByRole("dialog", {}, WAIT);
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(calls(fake, "PUT", "/config/plex")).toHaveLength(0);
-    expect(screen.getAllByText("Claimed by the Plex account owner.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Claimed by Plex account Braedon").length).toBeGreaterThan(0);
   });
 
   it("signs the server out after confirmation", async () => {
@@ -96,10 +104,7 @@ describe("plex claim actions", () => {
     const before = (remote as HTMLInputElement).checked;
     fireEvent.click(remote);
     expect(screen.queryByRole("spinbutton", { name: "Port" })).toBeNull();
-    expect(screen.getByRole("link", { name: "General settings" })).toHaveAttribute(
-      "href",
-      "/server",
-    );
+    expect(screen.queryByText("Server identity")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Account" }));
     expect(
       await screen.findByRole("button", { name: "Sign out of Plex" }, WAIT),

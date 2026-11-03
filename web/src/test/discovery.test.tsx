@@ -125,7 +125,7 @@ describe("Warm up new arrivals (Cache › Preloading)", () => {
 describe("A viewer's watchlist (viewer profile › Watchlist)", () => {
   it("lists watched-for titles and syncs, checks and removes them", async () => {
     const { fake } = renderAppWith(
-      "/viewers/2/home-taste",
+      "/viewers/2/lists",
       discoveryRoutes({
         enabled: true,
         items: [

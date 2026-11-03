@@ -128,7 +128,7 @@ func TestPre1970MoviePassesHomeReleaseGate(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
 	db := store.OpenTest(t)
-	c, err := New(db, nil, config.Catalog{GateMoviesByHomeRelease: true}, nil, WithNow(func() time.Time { return now }))
+	c, err := New(db, nil, config.Catalog{ReleaseMode: config.ModeDigital}, nil, WithNow(func() time.Time { return now }))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,6 +149,10 @@ func TestPre1970MoviePassesHomeReleaseGate(t *testing.T) {
 		if _, err := db.ExecContext(ctx, `INSERT INTO catalog_home_release(key, checked, earliest_ts, fallback_admitted, attempted_at) VALUES(?,1,0,0,?)`, int64(key), now.Unix()); err != nil {
 			t.Fatal(err)
 		}
+	}
+	// A known home date, including a pre-epoch date, admits the classic.
+	if _, err := db.ExecContext(ctx, `UPDATE catalog_home_release SET earliest_ts=? WHERE key=?`, time.Date(1960, 1, 1, 0, 0, 0, 0, time.UTC).Unix(), int64(classic)); err != nil {
+		t.Fatal(err)
 	}
 	page, err := c.Browse(ctx, core.BrowseQuery{Filter: core.Filter{Type: core.TypeMovie}, Sort: core.SortReleased, Desc: false, Limit: 10})
 	if err != nil || len(page.Items) != 1 || page.Items[0].Key != classic {

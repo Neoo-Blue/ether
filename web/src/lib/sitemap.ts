@@ -73,7 +73,11 @@ export const PAGES = localized<PageDef[]>(() => [
     href: "/viewers",
     title: t("Viewers"),
     sections: [],
-    keywords: searchTerms(msg("users friends accounts people")),
+    keywords: searchTerms(
+      msg(
+        "users friends accounts people overview home taste recent activity audio subtitles limits sign-in devices lists alerts",
+      ),
+    ),
   },
   {
     href: "/home",
@@ -117,8 +121,8 @@ export const PAGES = localized<PageDef[]>(() => [
     title: t("Catalog"),
     sections: [
       {
-        key: "visibility",
-        title: t("Visibility"),
+        key: "rules",
+        title: t("Rules"),
         keywords: searchTerms(msg("hide show rules library exclusions")),
       },
       {
@@ -195,7 +199,7 @@ export const PAGES = localized<PageDef[]>(() => [
         title: t("Profiles"),
         keywords: searchTerms(
           msg(
-            "quality profiles resolution 4k 1080p remote away bitrate cam scoring trash custom formats ranking source order usenet debrid versions who gets what",
+            "quality profiles resolution 4k 1080p remote away bitrate cam scoring trash custom formats ranking source order usenet debrid versions",
           ),
         ),
       },
@@ -203,6 +207,11 @@ export const PAGES = localized<PageDef[]>(() => [
         key: "rules",
         title: t("Rules"),
         keywords: searchTerms(msg("device client viewer profile max quality limit")),
+      },
+      {
+        key: "check",
+        title: t("Check quality"),
+        keywords: searchTerms(msg("who gets what viewer app device resolution hdr bitrate")),
       },
       {
         key: "searching",
@@ -273,7 +282,9 @@ export const PAGES = localized<PageDef[]>(() => [
     href: "/server",
     title: t("General"),
     sections: [],
-    keywords: searchTerms(msg("settings server name port listen proxy vpn setup wizard")),
+    keywords: searchTerms(
+      msg("settings server name app ports local remote URLs listen proxy vpn setup wizard"),
+    ),
   },
   {
     href: "/apps",
@@ -314,6 +325,11 @@ export const PAGES = localized<PageDef[]>(() => [
         title: t("Integrations"),
         keywords: searchTerms(msg("status tmdb debrid prowlarr ratings")),
       },
+      { key: "postersplus", href: "/services/overview#postersplus", title: "PostersPlus" },
+      { key: "xrdb", href: "/services/overview#xrdb", title: "XRDB" },
+      { key: "betterposters", href: "/services/overview#betterposters", title: "BetterPosters" },
+      { key: "rpdb", href: "/services/overview#rpdb", title: "RPDB" },
+      { key: "custom", href: "/services/overview#custom", title: t("Custom posters") },
       { key: "tmdb", title: "TMDB", keywords: searchTerms(msg("tmdb api key catalogue")) },
       // Tabs for these only exist once the service is on, so ⌘K lands on the
       // overview card where it can be enabled or configured.

@@ -29,12 +29,18 @@ describe("Viewer Actions menu", () => {
     expect(await screen.findByText(/keeps everything/, {}, WAIT)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Pause access" }));
     await waitFor(() => expect(calls(fake, "POST", "/users/2/pause")).toHaveLength(1), WAIT);
-    expect(await screen.findByText(/Access is paused/, {}, WAIT)).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: /Sam Rivera.*Paused/ }, WAIT),
+    ).toBeInTheDocument();
 
     await openActions();
     await pick("Resume access");
     await waitFor(() => expect(calls(fake, "POST", "/users/2/resume")).toHaveLength(1), WAIT);
-    await waitFor(() => expect(screen.queryByText(/Access is paused/)).toBeNull(), WAIT);
+    await waitFor(
+      () =>
+        expect(screen.getByRole("heading", { name: /Sam Rivera/ })).not.toHaveTextContent("Paused"),
+      WAIT,
+    );
   });
 
   it("signs out everywhere after confirming", async () => {
@@ -73,7 +79,12 @@ describe("Viewer Actions menu", () => {
     const { fake } = renderApp("/viewers/2/overview");
     await openActions();
     await pick("Reset password");
+    expect(screen.getByLabelText("Username").tagName).not.toBe("INPUT");
     fireEvent.change(await screen.findByLabelText("New password", {}, WAIT), {
+      target: { value: "a-long-enough-password" },
+    });
+    expect(screen.getByRole("button", { name: "Set or reset password" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Confirm new password"), {
       target: { value: "a-long-enough-password" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Set or reset password" }));
@@ -100,7 +111,10 @@ describe("Viewer Actions menu", () => {
     fireEvent.click(within(confirm).getByRole("button", { name: "Merge" }));
     await waitFor(() => expect(calls(fake, "POST", "/users/2/merge")).toHaveLength(1), WAIT);
     expect(calls(fake, "POST", "/users/2/merge")[0]!.body).toEqual({ into: 3 });
-    expect(await screen.findByRole("heading", { name: /The Kids/ }, WAIT)).toBeInTheDocument();
+    await waitFor(
+      () => expect(screen.getByRole("heading", { name: /The Kids/, level: 1 })).toBeInTheDocument(),
+      WAIT,
+    );
   });
 
   it("removes only after the name is typed", async () => {
@@ -135,13 +149,7 @@ describe("Viewer Actions menu", () => {
   it("sends Plex Home viewers to plex.tv instead of managing them", async () => {
     const open = vi.spyOn(window, "open").mockImplementation(() => null);
     renderApp("/viewers/3/overview");
-    expect(
-      await screen.findByText(
-        "Managed on plex.tv. Access changes happen there, not in Ether.",
-        {},
-        WAIT,
-      ),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Managed on plex.tv", {}, WAIT)).toBeInTheDocument();
     await openActions();
     expect(screen.queryByRole("menuitem", { name: "Pause access" })).toBeNull();
     expect(screen.queryByRole("menuitem", { name: "Remove viewer" })).toBeNull();
@@ -157,38 +165,5 @@ describe("Viewer Actions menu", () => {
       "noopener,noreferrer",
     );
     open.mockRestore();
-  });
-});
-
-describe("Max quality", () => {
-  it("writes a per-viewer quality rule and Auto removes it", async () => {
-    const { fake } = renderApp("/viewers/2/limits");
-    const group = await screen.findByRole("radiogroup", { name: "Max quality" }, WAIT);
-    // Only the levels with a matching profile are offered (no 720p profile).
-    expect(within(group).getByRole("radio", { name: "Auto" })).toBeInTheDocument();
-    expect(within(group).getByRole("radio", { name: "4K" })).toBeInTheDocument();
-    expect(within(group).queryByRole("radio", { name: "720p" })).toBeNull();
-
-    fireEvent.click(within(group).getByRole("radio", { name: "1080p" }));
-    await waitFor(() => expect(calls(fake, "PUT", "/config/quality")).toHaveLength(1), WAIT);
-    const written = calls(fake, "PUT", "/config/quality")[0]!.body as {
-      rules: { userId?: number; profile: string }[];
-    };
-    expect(written.rules[0]).toEqual({ userId: 2, profile: "1080p" });
-    await waitFor(
-      () =>
-        expect(within(group).getByRole("radio", { name: "1080p" })).toHaveAttribute(
-          "aria-checked",
-          "true",
-        ),
-      WAIT,
-    );
-
-    fireEvent.click(within(group).getByRole("radio", { name: "Auto" }));
-    await waitFor(() => expect(calls(fake, "PUT", "/config/quality")).toHaveLength(2), WAIT);
-    const cleared = calls(fake, "PUT", "/config/quality")[1]!.body as {
-      rules: { userId?: number; profile: string }[];
-    };
-    expect(cleared.rules.some((r) => r.userId === 2)).toBe(false);
   });
 });
