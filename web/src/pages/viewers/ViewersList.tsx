@@ -60,7 +60,7 @@ function limitsSummary(u: EtherUser | undefined): string {
 function People() {
   const navigate = useNavigate();
   const plexConnected = useAppOptional()?.boot.plexEnabled !== false;
-  const [status, setStatus] = useState<PeopleFilter>("all");
+  const [status, setStatus] = useState<PeopleFilter>("active");
   const state = useAsync(() => loadViewers(true), []);
   // Limits come from the user records; the list still works without them.
   const users = useAsync(() => api.users().catch(() => [] as EtherUser[]), []);
@@ -78,11 +78,11 @@ function People() {
           : fromPlex(v),
   );
   const filters: { value: PeopleFilter; label: string }[] = [
-    { value: "all", label: t("All ({count})", { count: viewers.length }) },
     {
       value: "active",
       label: t("Active ({count})", { count: viewers.filter(isActiveViewer).length }),
     },
+    { value: "all", label: t("All ({count})", { count: viewers.length }) },
     { value: "paused", label: t("Paused ({count})", { count: viewers.filter(isPaused).length }) },
     ...(plexConnected
       ? [
