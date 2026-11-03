@@ -865,6 +865,7 @@ export interface QualityClient {
 export interface QualityQuestion {
   userId: number;
   clientId?: string;
+  titleKey?: string;
   client?: { product: string; platform?: string; device?: string };
   remote: boolean;
 }

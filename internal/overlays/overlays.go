@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/braedonsaunders/ether/internal/artwork"
 	"github.com/braedonsaunders/ether/internal/contentrating"
 	"github.com/braedonsaunders/ether/internal/core"
@@ -34,17 +35,19 @@ func init() {
 }
 
 type Settings struct {
-	Enabled     bool   `json:"enabled"`
-	Status      bool   `json:"status"`
-	Quality     bool   `json:"quality"`
-	Ratings     bool   `json:"ratings"`
-	Details     bool   `json:"details"`
-	Personalize bool   `json:"personalize"`
-	Localize    bool   `json:"localize"`
-	Style       string `json:"style"`
-	Position    string `json:"position"`
-	Accent      string `json:"accent"`
-	Size        string `json:"size"`
+	Enabled         bool   `json:"enabled"`
+	Status          bool   `json:"status"`
+	Quality         bool   `json:"quality"`
+	Ratings         bool   `json:"ratings"`
+	Details         bool   `json:"details"`
+	Personalize     bool   `json:"personalize"`
+	Localize        bool   `json:"localize"`
+	Style           string `json:"style"`
+	Position        string `json:"position"`
+	Accent          string `json:"accent"`
+	Size            string `json:"size"`
+	HideDenominator bool   `json:"hideDenominator"`
+	HideDot         bool   `json:"hideDot"`
 }
 type Variant struct {
 	Path     string   `json:"path"`
@@ -325,7 +328,7 @@ func (s *Service) Version(ctx context.Context, u *core.User, t *core.Title, lang
 	p, b := s.Paths(ctx, u, t, lang)
 	labels := visibleLabels(s.presentation(ctx, u, t, cfg).Labels)
 	// Viewer identity and unrelated catalogue updates do not change pixels.
-	raw, _ := json.Marshal([]any{s.posterVersion(), p, b, t.LogoPath, labels, pixelStyle(cfg, len(labels) > 0), "compositor-v4"})
+	raw, _ := json.Marshal([]any{s.posterVersion(), p, b, t.LogoPath, labels, pixelStyle(cfg, len(labels) > 0), "compositor-v5"})
 	hash := sha256.Sum256(raw)
 	return hex.EncodeToString(hash[:8])
 }
@@ -375,7 +378,7 @@ func (s *Service) compositeContext(ctx context.Context, data []byte, labels []st
 	// Hash incrementally; never duplicate the source image on a warm request.
 	hash := sha256.New()
 	_, _ = hash.Write(data)
-	_ = json.NewEncoder(hash).Encode([]any{labels, pixelStyle(settings, len(labels) > 0), "compositor-v4"})
+	_ = json.NewEncoder(hash).Encode([]any{labels, pixelStyle(settings, len(labels) > 0), "compositor-v5"})
 	key := hex.EncodeToString(hash.Sum(nil))
 	result, err := s.generated.get(ctx, key, func(workCtx context.Context) ([]byte, error) {
 		return s.renderPoster(workCtx, data, labels, settings)
@@ -385,11 +388,11 @@ func (s *Service) compositeContext(ctx context.Context, data []byte, labels []st
 
 // Only visual inputs belong in a generated-image key. Localization, taste and
 // evidence toggles have already resolved to source bytes and visible labels.
-func pixelStyle(v Settings, hasLabels bool) [4]string {
+func pixelStyle(v Settings, hasLabels bool) [5]string {
 	if !hasLabels {
-		return [4]string{}
+		return [5]string{}
 	}
-	return [4]string{v.Style, v.Position, v.Accent, v.Size}
+	return [5]string{v.Style, v.Position, v.Accent, v.Size, fmt.Sprint(v.HideDot)}
 }
 func visibleLabels(labels []string) []string {
 	out := make([]string, min(len(labels), 6))

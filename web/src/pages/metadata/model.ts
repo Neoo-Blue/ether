@@ -11,7 +11,9 @@ export type Overlays = {
   style: "glass" | "solid" | "minimal";
   position: "bottom" | "top";
   accent: string;
-  size: "small" | "medium" | "large";
+  size: "small" | "medium" | "large" | "extra-large";
+  hideDenominator: boolean;
+  hideDot: boolean;
 };
 export const normalizeOverlays = (s: Partial<Overlays>): Overlays => ({
   enabled: false,
@@ -21,6 +23,8 @@ export const normalizeOverlays = (s: Partial<Overlays>): Overlays => ({
   details: false,
   personalize: false,
   localize: false,
+  hideDenominator: false,
+  hideDot: false,
   ...s,
   style: s.style || "glass",
   position: s.position || "bottom",
