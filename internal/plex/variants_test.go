@@ -901,8 +901,7 @@ func TestPlexWebVersionKeepsTracksAndIndexDuringPlayback(t *testing.T) {
 	}
 }
 
-// Only Plex Web keeps the full version list during a session (#267). The
-// other apps keep seeing the playing version alone, as before.
+// Native clients also keep their chosen version index during playback.
 func TestNonWebClientsSeeThePlayingVersionDuringPlayback(t *testing.T) {
 	f, pb := newVariantPlaybackFixture(t)
 	path := "/library/metadata/" + fightClub.Key.String()
@@ -929,7 +928,7 @@ func TestNonWebClientsSeeThePlayingVersionDuringPlayback(t *testing.T) {
 	if rec.Code != http.StatusOK || len(pb.variantCalls) != 1 {
 		t.Fatalf("decision: %d %v", rec.Code, pb.variantCalls)
 	}
-	if n := count(); n != 1 {
-		t.Fatalf("during playback: %d media, want the playing version alone", n)
+	if n := count(); n != 3 {
+		t.Fatalf("during playback: %d media, want the full version list", n)
 	}
 }

@@ -600,13 +600,8 @@ func (s *Server) mediaFor(ctx context.Context, pr *Request, t *core.Title, withS
 	if stamp <= 0 {
 		stamp = 1
 	}
-	// VIDAA caches playback settings for the item and can fail if a later
-	// response introduces a version picker. Keep its Auto choice stable;
-	// playback quality controls remain independent of the version picker.
-	// Only Plex Web keeps the version list during a live session (it reads
-	// Media[index] again after a subtitle download, #267); other apps keep
-	// the single playing version they have always seen.
-	if withVariants && withStreams && (ps == nil || browserClient(pr)) && !strings.EqualFold(strings.TrimSpace(pr.Product), "Plex for VIDAA") {
+	// VIDAA has always received a single version, including before playback.
+	if withVariants && withStreams && !strings.EqualFold(strings.TrimSpace(pr.Product), "Plex for VIDAA") {
 		probed, probedRelease := core.MediaInfo{Estimated: true}, ""
 		if ps != nil {
 			// A client keeps the Media index it chose before playback
