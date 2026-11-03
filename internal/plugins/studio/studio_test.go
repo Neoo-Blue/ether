@@ -289,3 +289,60 @@ func TestActionSlotScaffold(t *testing.T) {
 		})
 	}
 }
+
+func TestDraftsSurviveRestartAndFailedSave(t *testing.T) {
+	ctx := context.Background()
+	db := store.OpenTest(t)
+	first := New(Deps{})
+	defer first.Close()
+	if err := first.OpenStorage(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	p, err := first.CreateProject(ctx, CreateProjectOptions{Template: "page", Name: "Saved page"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft := "export function handle() { const unfinished = ; }"
+	if _, comp, err := first.SaveFiles(ctx, p.ID, map[string]string{"src/plugin.ts": draft}, nil, nil); err != nil || comp.OK {
+		t.Fatalf("save invalid draft: %v ok=%v", err, comp.OK)
+	}
+	second := New(Deps{})
+	defer second.Close()
+	if err := second.OpenStorage(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := second.GetProject(ctx, p.ID)
+	if err != nil || restored.Files["src/plugin.ts"] != draft {
+		t.Fatalf("lost draft: %v", err)
+	}
+	duplicate, err := second.CreateProject(ctx, CreateProjectOptions{Template: "page", Name: "Saved page"})
+	if err != nil || duplicate.ID == p.ID {
+		t.Fatalf("project identity collision: %v", err)
+	}
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, _, err := second.SaveFiles(cancelled, p.ID, map[string]string{"src/plugin.ts": "changed"}, nil, nil); err == nil {
+		t.Fatal("failed persistence reported success")
+	}
+	restored, err = second.GetProject(ctx, p.ID)
+	if err != nil || restored.Files["src/plugin.ts"] != draft {
+		t.Fatal("failed save mutated published draft")
+	}
+	if err = second.DeleteProject(ctx, p.ID); err != nil {
+		t.Fatal(err)
+	}
+	third := New(Deps{})
+	defer third.Close()
+	if err = third.OpenStorage(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	for _, summary := range third.ListProjects(ctx) {
+		if summary.ID == p.ID {
+			t.Fatal("deleted draft restored")
+		}
+	}
+	if len(third.ListProjects(ctx)) != 1 {
+		t.Fatal("deleting one draft affected another")
+	}
+
+}

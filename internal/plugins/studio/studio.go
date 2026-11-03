@@ -2,6 +2,7 @@ package studio
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -144,6 +145,7 @@ type PreviewResponse struct {
 
 // Studio manages in-console plugin development projects and dev instances.
 type Studio struct {
+	db        *sql.DB
 	mgr       *plugins.Manager
 	eng       *wasm.Engine
 	ownEngine bool
@@ -192,7 +194,7 @@ func (s *Studio) Close() error {
 }
 
 // CreateProject scaffolds a new Studio project from one of the 8 templates.
-func (s *Studio) CreateProject(_ context.Context, opts CreateProjectOptions) (*Project, error) {
+func (s *Studio) CreateProject(ctx context.Context, opts CreateProjectOptions) (*Project, error) {
 	tplID := strings.TrimSpace(opts.Template)
 	if tplID == "" {
 		tplID = "channels"
@@ -208,7 +210,8 @@ func (s *Studio) CreateProject(_ context.Context, opts CreateProjectOptions) (*P
 	defer s.mu.Unlock()
 	s.seq++
 	projID := pluginID
-	if _, exists := s.projects[projID]; exists {
+	for s.projects[projID] != nil {
+		s.seq++
 		projID = fmt.Sprintf("%s-%d", pluginID, s.seq)
 	}
 	now := s.now()
@@ -233,6 +236,9 @@ func (s *Studio) CreateProject(_ context.Context, opts CreateProjectOptions) (*P
 		journal:     []plugins.JournalEntry{},
 		collections: map[string]json.RawMessage{},
 		watchState:  map[string]bool{},
+	}
+	if err := s.persistLocked(ctx, p); err != nil {
+		return nil, err
 	}
 	s.projects[p.ID] = p
 	return cloneProject(p), nil
@@ -309,6 +315,7 @@ func (s *Studio) SaveFiles(
 		s.mu.Unlock()
 		return nil, CompileResult{}, ErrProjectNotFound
 	}
+	p = cloneProject(p)
 	merged := make(map[string]string, len(p.Files)+len(files))
 	for k, v := range p.Files {
 		merged[k] = v
@@ -340,6 +347,11 @@ func (s *Studio) SaveFiles(
 	comp := s.CompileFiles(p.Files, "")
 	p.Diagnostics = comp.Diagnostics
 	p.UpdatedAt = s.now()
+	if err := s.persistLocked(ctx, p); err != nil {
+		s.mu.Unlock()
+		return nil, CompileResult{}, err
+	}
+	s.projects[p.ID] = p
 	cloned := cloneProject(p)
 	s.mu.Unlock()
 
@@ -355,12 +367,17 @@ func (s *Studio) SaveFiles(
 }
 
 // DeleteProject removes a project from Studio.
-func (s *Studio) DeleteProject(_ context.Context, id string) error {
+func (s *Studio) DeleteProject(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	p, ok := s.lookupLocked(id)
 	if !ok {
 		return ErrProjectNotFound
+	}
+	if s.db != nil {
+		if _, err := s.db.ExecContext(ctx, "DELETE FROM plugin_studio_projects WHERE id=?", p.ID); err != nil {
+			return err
+		}
 	}
 	delete(s.projects, p.ID)
 	return nil

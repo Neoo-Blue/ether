@@ -8,6 +8,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/agent/tools"
 	"github.com/braedonsaunders/ether/internal/config"
 	"github.com/braedonsaunders/ether/internal/extend"
+	"github.com/braedonsaunders/ether/internal/plugins/studio"
 )
 
 // extendRuntime owns the descriptor registry and the tool catalogue that the
@@ -35,6 +36,9 @@ func (a *App) buildExtensibility(ctx context.Context, cfg config.Config) error {
 	}
 	if a.pluginsRT, err = a.buildPlugins(ctx, cfg); err != nil {
 		return fmt.Errorf("plugins: %w", err)
+	}
+	if err := studio.RegisterTools(a.extendRT.tools, studio.ToolDeps{Registry: a.extendRT.registry, TextResolver: a.pluginTextResolver(), Manager: a.pluginsRT.mgr}); err != nil {
+		return fmt.Errorf("Studio tools: %w", err)
 	}
 	if a.agentRT, err = a.buildAgent(ctx, cfg); err != nil {
 		return fmt.Errorf("agent: %w", err)
