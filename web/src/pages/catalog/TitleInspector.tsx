@@ -402,6 +402,7 @@ function MovieDates({
       <div>
         <span>{t("At home")}</span>
         <strong>{home ? shortDate(home, today) : t("Not announced")}</strong>
+        {title.homeReleaseAgeAdmitted && <p>{t("In cinemas over 120 days ago")}</p>}
       </div>
       <button type="button" onClick={onMore}>
         {t("All release dates")}

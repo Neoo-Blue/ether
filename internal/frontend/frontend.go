@@ -52,19 +52,21 @@ type ListenerSpec struct {
 	Shared bool `json:"shared,omitempty"`
 }
 type Status struct {
-	Mounted          bool     `json:"mounted"`
-	Addresses        []string `json:"addresses"`
-	ConnectURLs      []string `json:"connectUrls,omitempty"`
-	LAN              string   `json:"lan"`
-	WAN              string   `json:"wan"`
-	Clients24h       int      `json:"clients24h"`
-	Clients24hKnown  bool     `json:"clients24hKnown"`
-	LiveStreams      int      `json:"liveStreams"`
-	LiveStreamsKnown bool     `json:"liveStreamsKnown"`
-	TargetVersion    string   `json:"targetVersion"`
-	Conformance      string   `json:"conformance"`
-	Error            string   `json:"error,omitempty"`
-	Warnings         []string `json:"warnings,omitempty"`
+	Mounted          bool      `json:"mounted"`
+	Addresses        []string  `json:"addresses"`
+	ConnectURLs      []string  `json:"connectUrls,omitempty"`
+	LAN              string    `json:"lan"`
+	LANReason        string    `json:"lanReason,omitempty"`
+	LANCheckedAt     time.Time `json:"lanCheckedAt,omitzero"`
+	WAN              string    `json:"wan"`
+	Clients24h       int       `json:"clients24h"`
+	Clients24hKnown  bool      `json:"clients24hKnown"`
+	LiveStreams      int       `json:"liveStreams"`
+	LiveStreamsKnown bool      `json:"liveStreamsKnown"`
+	TargetVersion    string    `json:"targetVersion"`
+	Conformance      string    `json:"conformance"`
+	Error            string    `json:"error,omitempty"`
+	Warnings         []string  `json:"warnings,omitempty"`
 }
 type Announcer interface {
 	Start(context.Context) error

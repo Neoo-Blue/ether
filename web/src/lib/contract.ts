@@ -41,6 +41,7 @@ export interface TitleDetail extends TitleCard {
   /** YYYY-MM-DD: first air date or theatrical release. */
   releaseDate?: string;
   homeReleaseDate?: string;
+  homeReleaseAgeAdmitted?: boolean;
   lastAirDate?: string;
   seasonCount?: number;
   episodeCount?: number;

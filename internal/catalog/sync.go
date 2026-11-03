@@ -230,7 +230,7 @@ func (c *Catalog) Run(ctx context.Context) {
 		if warm.Remaining(c.now()) == 0 {
 			if !c.syncing.Load() {
 				if c.config().ReleaseMode == config.ModeDigital {
-					_, _ = c.BackfillHomeReleases(ctx, 15)
+					_, _ = c.BackfillHomeReleases(ctx, 150)
 					_, _ = c.WarmDetails(ctx, 10)
 				} else {
 					_, _ = c.WarmDetails(ctx, 25)

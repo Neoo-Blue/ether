@@ -17,9 +17,10 @@ import (
 )
 
 type condition struct {
-	field, op string
-	values    []string
-	nums      []float64
+	field, op    string
+	allCountries bool
+	values       []string
+	nums         []float64
 	// levels are a content-rating rule's age levels. Unrated is the explicit
 	// "Not rated" choice. gte and lte hold exactly one rated level.
 	levels []contentrating.Level
@@ -90,6 +91,7 @@ func CompilePolicy(specs []core.LibraryExclusion, fallback string) (*Filter, err
 			if err != nil {
 				return nil, err
 			}
+			c.allCountries = action == "hide" && c.field == "country" && (c.op == "in" || c.op == "is")
 			g.rules = append(g.rules, c)
 		}
 		f.rules = append(f.rules, g)
@@ -408,11 +410,17 @@ func (c condition) matches(t *core.Title) bool {
 	}
 	yes := false
 	for _, v := range values {
+		matched := false
 		for _, w := range c.values {
 			if strings.EqualFold(v, w) {
-				yes = true
+				matched = true
+				break
 			}
 		}
+		if c.allCountries && !matched {
+			return false
+		}
+		yes = yes || matched
 	}
 	if c.op == "notIn" || c.op == "isNot" {
 		return !yes
@@ -597,6 +605,9 @@ func (c condition) sql() (string, []any) {
 	}
 	switch c.field {
 	case "country", "genre", "studio", "keyword":
+		if c.allCountries {
+			return "EXISTS (SELECT 1 FROM catalog_countries co WHERE co.key=t.key) AND NOT EXISTS (SELECT 1 FROM catalog_countries co WHERE co.key=t.key AND LOWER(co.country) NOT IN (" + ph + "))", args
+		}
 		// Key sets, not a correlated EXISTS per title. The database builds
 		// each set once and probes it by rowid.
 		table, col := "catalog_countries", "country"

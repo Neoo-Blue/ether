@@ -49,6 +49,9 @@ func (a *App) diagnosticsHandler() http.Handler {
 	})
 	m.HandleFunc("POST /refresh", func(w http.ResponseWriter, r *http.Request) {
 		a.registrar.Trigger()
+		if a.frontends != nil {
+			a.frontends.refreshLAN()
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
 		_ = json.NewEncoder(w).Encode(map[string]bool{"scheduled": true})

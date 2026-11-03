@@ -5,6 +5,8 @@ export type ReachabilityStatus = {
   addresses?: string[] | null;
   connectUrls?: string[];
   lan?: string;
+  lanReason?: string;
+  lanCheckedAt?: string;
   wan?: string;
 };
 

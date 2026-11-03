@@ -191,8 +191,8 @@ func TestHomeReleaseGateBackfillAndCorrections(t *testing.T) {
 func TestHomeReleaseBoundary(t *testing.T) {
 	start := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	t1 := core.Title{Type: core.TypeMovie, Released: start, HomeReleaseChecked: true}
-	if homeReleaseVisible(&t1, start.Add(10*365*24*time.Hour)) {
-		t.Fatal("age alone admitted an unknown home date")
+	if homeReleaseVisible(&t1, start.Add(120*24*time.Hour)) || !homeReleaseVisible(&t1, start.Add(120*24*time.Hour+time.Second)) {
+		t.Fatal("cinema age boundary")
 	}
 	t1.HomeReleased = start.Add(100 * 24 * time.Hour)
 	if homeReleaseVisible(&t1, start.Add(90*24*time.Hour)) || !homeReleaseVisible(&t1, t1.HomeReleased) {
@@ -235,7 +235,7 @@ func TestCachedGetManyDoesNotFetchOrAdmitFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := c.CachedGetMany(ctx, []core.RatingKey{movie.Key, before.Key, known.Key, unknown.Key, core.MovieKey(999)})
-	if err != nil || len(got) != 1 || got[known.Key].Key != known.Key {
+	if err != nil || len(got) != 3 || got[known.Key].Key != known.Key || got[movie.Key].Key != movie.Key || got[unknown.Key].Key != unknown.Key {
 		t.Fatalf("eligibility: %v %v", got, err)
 	}
 	var admitted int

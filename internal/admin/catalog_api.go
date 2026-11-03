@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/braedonsaunders/ether/internal/catalog"
+	"github.com/braedonsaunders/ether/internal/config"
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/libraryfilter"
 )
@@ -272,17 +274,18 @@ type titleDetail struct {
 		Name string `json:"name"`
 	} `json:"collection"`
 	// Facts for the drawer's overview; dates are YYYY-MM-DD.
-	Tagline       string   `json:"tagline,omitempty"`
-	OriginalTitle string   `json:"originalTitle,omitempty"`
-	Language      string   `json:"language,omitempty"`
-	Status        string   `json:"status,omitempty"`
-	Studios       []string `json:"studios,omitempty"`
-	Countries     []string `json:"countries,omitempty"`
-	ReleaseDate   string   `json:"releaseDate,omitempty"`
-	HomeRelease   string   `json:"homeReleaseDate,omitempty"`
-	LastAirDate   string   `json:"lastAirDate,omitempty"`
-	Seasons       int      `json:"seasonCount,omitempty"`
-	Episodes      int      `json:"episodeCount,omitempty"`
+	Tagline                string   `json:"tagline,omitempty"`
+	OriginalTitle          string   `json:"originalTitle,omitempty"`
+	Language               string   `json:"language,omitempty"`
+	Status                 string   `json:"status,omitempty"`
+	Studios                []string `json:"studios,omitempty"`
+	Countries              []string `json:"countries,omitempty"`
+	ReleaseDate            string   `json:"releaseDate,omitempty"`
+	HomeRelease            string   `json:"homeReleaseDate,omitempty"`
+	HomeReleaseAgeAdmitted bool     `json:"homeReleaseAgeAdmitted,omitempty"`
+	LastAirDate            string   `json:"lastAirDate,omitempty"`
+	Seasons                int      `json:"seasonCount,omitempty"`
+	Episodes               int      `json:"episodeCount,omitempty"`
 }
 
 func people(ps []core.Person, max int) []personCard {
@@ -311,6 +314,7 @@ func (h *Handler) handleCatalogTitle(w http.ResponseWriter, r *http.Request) {
 		Tagline: t.Tagline, Language: t.Language, Status: t.Status, Studios: t.Studios, Countries: t.Countries,
 		ReleaseDate: airDate(t.Released), HomeRelease: airDate(t.HomeReleased), LastAirDate: airDate(t.LastAirDate),
 		Seasons: t.ChildCount, Episodes: t.LeafCount}
+	d.HomeReleaseAgeAdmitted = h.deps.Config.Get().Availability.EffectiveMode() == config.ModeDigital && catalog.HomeReleaseAgeAdmitted(t, time.Now()) && (!t.HomeReleaseChecked || t.HomeReleased.IsZero() || t.HomeReleased.After(time.Now()))
 	if t.OriginalTitle != t.Title {
 		d.OriginalTitle = t.OriginalTitle
 	}
