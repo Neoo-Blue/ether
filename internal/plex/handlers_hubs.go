@@ -1146,17 +1146,21 @@ func (s *Server) searchTypes(u *core.User, sectionID int) []core.MediaType {
 }
 
 func (s *Server) searchExperience() experience.Search {
-	searcher := s.d.VibeSearch
-	if searcher == nil {
-		searcher, _ = s.d.Collections.(core.VibeSearcher)
-	}
 	unrestricted := func(u *core.User) bool { return !s.viewerRestricted(u) }
-	return experience.Search{
-		Visibility: s.visibility(), Unrestricted: unrestricted,
-		Natural: experience.DiscoverySearch(s.d.Discovery), Catalog: s.d.Catalog.Search,
-		Familiar: experience.FamiliarFrom(s.d.State),
-		Vibe:     experience.VibeSearch{Source: searcher, Visibility: s.visibility(), Unrestricted: unrestricted},
+	src := s.d.Search
+	if src.Catalog == nil {
+		// A server built outside the app (tests, spike mode) searches its
+		// own dependencies the same way.
+		searcher := s.d.VibeSearch
+		if searcher == nil {
+			searcher, _ = s.d.Collections.(core.VibeSearcher)
+		}
+		src = experience.SearchSources{Catalog: s.d.Catalog.Search, Natural: experience.DiscoverySearch(s.d.Discovery), Familiar: experience.FamiliarFrom(s.d.State)}
+		if searcher != nil {
+			src.Vibe = searcher
+		}
 	}
+	return src.For(s.visibility(), unrestricted)
 }
 
 func (s *Server) runSearch(ctx context.Context, pr *Request, query string, sectionID, limit int) ([]core.Title, error) {

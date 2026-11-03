@@ -44,18 +44,30 @@ func (a *App) groupedShows(ctx context.Context, viewer *core.User, shows []core.
 }
 
 func (a *App) experienceSearch(vis experience.Visibility) experience.Search {
-	var source experience.VibeSource
-	if a.collections != nil {
-		source = a.collections
-	}
 	unrestricted := func(viewer *core.User) bool {
 		return a.safety != nil && viewer != nil && !a.safety.Restricted(viewer)
 	}
-	search := experience.Search{Catalog: a.catalog.Search, Visibility: vis, Unrestricted: unrestricted, Vibe: experience.VibeSearch{Source: source, Visibility: vis, Unrestricted: unrestricted}}
-	if a.state != nil {
-		search.Familiar = experience.FamiliarFrom(a.state)
+	return a.searchSources().For(vis, unrestricted)
+}
+
+// searchSources is the one search every frontend uses (Plex included):
+// the catalogue with the owner's availability rules, natural-language
+// search, viewer affinity and collection readings.
+func (a *App) searchSources() experience.SearchSources {
+	src := experience.SearchSources{Catalog: a.catalog.Search}
+	if a.availability != nil && !a.cfg.Read().Spike.Enabled {
+		src.Catalog = (&availabilityCatalog{Catalog: a.catalog, availability: a.availability}).Search
 	}
-	return search
+	if a.discoveryFeatures != nil {
+		src.Natural = experience.DiscoverySearch(a.discoveryFeatures)
+	}
+	if a.state != nil {
+		src.Familiar = experience.FamiliarFrom(a.state)
+	}
+	if a.collections != nil {
+		src.Vibe = a.collections
+	}
+	return src
 }
 
 // peopleIndex adapts the catalogue's people-name index to experience.
