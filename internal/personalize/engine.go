@@ -51,6 +51,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/clusterbus"
 	"github.com/braedonsaunders/ether/internal/contentrating"
 	"github.com/braedonsaunders/ether/internal/core"
+	"github.com/braedonsaunders/ether/internal/homefilter"
 	"github.com/braedonsaunders/ether/internal/recommend"
 	"github.com/braedonsaunders/ether/internal/state"
 )
@@ -673,8 +674,8 @@ func (e *Engine) homeWithPolicy(ctx context.Context, user *core.User, hc core.Hu
 			}
 		}
 		if e.opts.FilterAvailable != nil {
-			for _, t := range e.opts.FilterAvailable(ctx, pool) {
-				delete(hidden, t.Key)
+			for k := range homefilter.Allowed(ctx, pool, e.opts.FilterAvailable) {
+				delete(hidden, k)
 			}
 		}
 		if allow != nil {

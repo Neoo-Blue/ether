@@ -18,6 +18,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/experience"
 	"github.com/braedonsaunders/ether/internal/frontend"
+	"github.com/braedonsaunders/ether/internal/homefilter"
 	"github.com/braedonsaunders/ether/internal/plex/model"
 )
 
@@ -151,7 +152,7 @@ const (
 // continueHub builds a Continue Watching hub.
 func (s *Server) continueHub(ctx context.Context, pr *Request, v cwVariant, sec Section, count int) hubSpec {
 	t := core.MediaType("")
-	if v == cwSection {
+	if sec.ID != 0 {
 		t = sec.Type
 	}
 	items, state, more := s.continueExperience(pr).Shelf(ctx, pr.User, t, s.saferFetchCount(pr.User, count))
@@ -179,8 +180,15 @@ func (s *Server) continueHub(ctx context.Context, pr *Request, v cwVariant, sec 
 }
 
 func (s *Server) recentlyAddedHub(ctx context.Context, pr *Request, sec Section, count int) (hubSpec, error) {
+	return s.recentlyAddedHubPage(ctx, pr, sec, count, false)
+}
+
+func (s *Server) recentlyAddedHubPage(ctx context.Context, pr *Request, sec Section, count int, noTotal bool) (hubSpec, error) {
 	recent := experience.Recent{Visibility: s.visibility(), Unrestricted: func(u *core.User) bool { return !s.viewerRestricted(u) }}
-	items, more, err := recent.Added(ctx, pr.User, sec.Type, count, s.catalogBrowse)
+	items, more, err := recent.Added(ctx, pr.User, sec.Type, count, func(ctx context.Context, q core.BrowseQuery) (core.Page, error) {
+		q.NoTotal = noTotal
+		return s.catalogBrowse(ctx, q)
+	})
 	if err != nil {
 		return hubSpec{}, err
 	}
@@ -227,10 +235,39 @@ func (s *Server) homeHubs(w http.ResponseWriter, r *http.Request, promotedOnly b
 	q := r.URL.Query()
 	count := countParam(r, 12)
 	sections := parseSectionList(q.Get("contentDirectoryID"))
+	directory := strings.TrimSpace(q.Get("contentDirectoryID"))
+	perDirectory := directory != "" && !strings.Contains(directory, ",")
+	first := strings.TrimSpace(strings.Split(q.Get("pinnedContentDirectoryID"), ",")[0])
+	if first == "" {
+		first = directory
+	}
+	var directorySection Section
+	if perDirectory && directory != "playlists" {
+		id, err := strconv.Atoi(directory)
+		var ok bool
+		if err == nil {
+			directorySection, ok = s.sectionByID(id)
+		}
+		if !ok || !s.canSeeSection(pr.User, id) {
+			s.write(w, r, hubContainer())
+			return
+		}
+	}
 	hc := s.hubContext(pr, 0)
 	mc := hubContainer()
 	var hubs []core.Hub
-	if s.d.Recommender != nil {
+	var sharedDiscovery []core.Hub
+	if perDirectory {
+		var err error
+		var filter *homefilter.Snapshot
+		hubs, sharedDiscovery, filter, err = s.sharedHome(ctx, pr, hc, directory, q.Get("pinnedContentDirectoryID"), s.saferFetchCount(pr.User, count), count)
+		if filter != nil {
+			ctx = homefilter.With(ctx, filter)
+		}
+		if err != nil {
+			s.log.Warn("home hubs", "err", err)
+		}
+	} else if s.d.Recommender != nil {
 		var err error
 		if hubs, err = s.recommendHome(ctx, pr, hc, s.saferFetchCount(pr.User, count)); err != nil {
 			s.log.Warn("home hubs", "err", err)
@@ -246,19 +283,61 @@ func (s *Server) homeHubs(w http.ResponseWriter, r *http.Request, promotedOnly b
 		}
 	}
 	assembly := experience.HomeAssembly[model.Hub]{
-		Render:      func(hub core.Hub) model.Hub { return s.renderHub(ctx, pr, hubSpec{Hub: hub}, hubCtx{}) },
+		Render: func(hub core.Hub) model.Hub {
+			owner := first
+			if hub.ID == "home.playlists" {
+				owner = "playlists"
+			} else if sec := s.homeDirectoryForHub(hub.ID); sec != "" {
+				owner = sec
+			}
+			if perDirectory && owner != directory {
+				// The layout needs the same painted item count, but the client
+				// will never receive this row's expensive metadata projection.
+				items := (experience.RowSelection{Visibility: s.visibility(), PrioritizeAvailable: s.d.PrioritizeAvailable,
+					SameDayUnavailable: func(ctx context.Context, t *core.Title) bool { return s.sameDayUnavailable(ctx, pr, t) },
+				}).Items(ctx, pr.User, hub)
+				items = s.availableForViewer(ctx, pr.User, s.visibleTitles(pr.User, items))
+				typ := string(hub.Type)
+				if typ == "" {
+					typ = "mixed"
+				}
+				contextName := hub.Context
+				if contextName == "" {
+					contextName = "hub." + hub.ID
+				}
+				return model.Hub{HubIdentifier: hub.ID, Title: hub.Title, Type: typ, Context: contextName, Size: len(items)}
+			}
+			return s.renderHub(ctx, pr, hubSpec{Hub: hub}, hubCtx{})
+		},
 		Identity:    func(row model.Hub) string { return row.HubIdentifier },
 		Report:      homeLayoutFacts,
-		InLibraries: func(hub core.Hub) bool { return s.hubInSections(hub, sections) },
+		InLibraries: func(hub core.Hub) bool { return perDirectory || s.hubInSections(hub, sections) },
 		Continue: func() (core.Hub, model.Hub) {
 			spec := s.continueHub(ctx, pr, cwHome, Section{}, count)
 			return spec.Hub, s.renderHub(ctx, pr, spec, hubCtx{})
 		},
 		Playlists: func() (model.Hub, bool) { hub, _, ok := s.playlistsHubProjection(ctx, pr, count); return hub, ok },
 		Discovery: func() []core.Hub {
-			var hubs []core.Hub
-			for _, spec := range s.discoveryHubs(ctx, pr, count) {
-				hubs = append(hubs, spec.Hub)
+			hubs := append([]core.Hub(nil), sharedDiscovery...)
+			if !perDirectory {
+				for _, spec := range s.discoveryHubs(ctx, pr, count) {
+					hubs = append(hubs, spec.Hub)
+				}
+			}
+			if perDirectory && directorySection.ID != 0 {
+				if spec, err := s.recentlyAddedHubPage(ctx, pr, directorySection, count, true); err == nil {
+					hubs = append(hubs, spec.Hub)
+				}
+				if s.d.Recommender != nil {
+					sectionHubs, err := s.recommendSection(ctx, pr, directorySection.Type, s.hubContext(pr, directorySection.ID), s.saferFetchCount(pr.User, count))
+					if err == nil {
+						for _, hub := range sectionHubs {
+							if s.homeDirectoryForHub(hub.ID) == directory {
+								hubs = append(hubs, hub)
+							}
+						}
+					}
+				}
 			}
 			return hubs
 		},
@@ -274,12 +353,49 @@ func (s *Server) homeHubs(w http.ResponseWriter, r *http.Request, promotedOnly b
 			return s.arrangeHomeRows(ctx, pr, hc, "home", rows, hubs, neutral)
 		},
 	}
-	rows, served := assembly.Rows(hubs, q.Get("excludeContinueWatching") != "1", promotedOnly, len(sections) == 0, experience.HomePurpose)
-	mc.Hub = heroReadyHomeHubs(stableHomeHubs(rows))
+	rows, served := assembly.Rows(hubs, q.Get("excludeContinueWatching") != "1", promotedOnly, len(sections) == 0 || perDirectory, experience.HomePurpose)
+	if perDirectory {
+		var filtered []model.Hub
+		for _, row := range rows {
+			owner := first
+			if row.HubIdentifier == "home.playlists" {
+				owner = "playlists"
+			} else if section := s.homeDirectoryForHub(row.HubIdentifier); section != "" {
+				owner = section
+			}
+			if owner == directory {
+				if row.HubIdentifier != "home.continue" && strings.EqualFold(row.Style, "hero") {
+					row.Style = "shelf"
+				}
+				filtered = append(filtered, row)
+			}
+		}
+		mc.Hub = stableHomeHubs(filtered)
+	} else {
+		mc.Hub = heroReadyHomeHubs(stableHomeHubs(rows))
+	}
 	mc.Size = len(mc.Hub)
 	s.write(w, r, mc)
 	s.recordImpressions(pr, hc, mc.Hub, served)
 	s.warmBrowseLink(ctx, pr, mc.Hub)
+}
+
+// Library hub namespaces identify their source independently of the request.
+// Everything else belongs to the first pinned directory.
+func (s *Server) homeDirectoryForHub(id string) string {
+	var typ core.MediaType
+	switch {
+	case strings.HasPrefix(id, "movie."):
+		typ = core.TypeMovie
+	case strings.HasPrefix(id, "tv."):
+		typ = core.TypeShow
+	default:
+		return ""
+	}
+	if sec, ok := s.sectionFor(typ); ok {
+		return strconv.Itoa(sec.ID)
+	}
+	return ""
 }
 
 // hubContext is the personalization context of a hubs request: the
@@ -421,7 +537,62 @@ func (s *Server) handleContinueWatching(w http.ResponseWriter, r *http.Request) 
 	ctx := withStoredPolicy(r.Context())
 	pr := FromContext(ctx)
 	mc := hubContainer()
-	mc.Hub = []model.Hub{s.renderHub(ctx, pr, s.continueHub(ctx, pr, cwGlobal, Section{}, countParam(r, 20)), hubCtx{})}
+	sec := Section{}
+	if raw := r.URL.Query().Get("contentDirectoryID"); raw != "" {
+		var allowed []Section
+		seen := map[int]bool{}
+		for _, id := range parseSectionList(raw) {
+			if candidate, ok := s.sectionByID(id); ok && !seen[id] && s.canSeeSection(pr.User, id) {
+				allowed = append(allowed, candidate)
+				seen[id] = true
+			}
+		}
+		if len(allowed) == 0 {
+			writeHTTPError(w, http.StatusNotFound)
+			return
+		}
+		if len(allowed) == 1 {
+			sec = allowed[0]
+		}
+	}
+	count := countParam(r, 20)
+	var spec hubSpec
+	if r.URL.Query().Get("contentDirectoryID") != "" {
+		// Select a common bounded candidate window before narrowing it to a
+		// library. Applying the preference filter to a window already narrowed
+		// to count could otherwise leave the combined shelf shorter than a
+		// single-library shelf.
+		fetch := min(200, count*2+24)
+		spec = s.continueHub(ctx, pr, cwGlobal, Section{}, fetch)
+		// renderHub also applies availability. Do it before the per-library
+		// page limit so unavailable entries cannot displace visible items.
+		spec.Items = s.availableForViewer(ctx, pr.User, spec.Items)
+		if sec.ID != 0 {
+			items := make([]core.Title, 0, len(spec.Items))
+			for _, title := range spec.Items {
+				if section, ok := s.untitledSectionFor(title.Type); ok && section.ID == sec.ID {
+					items = append(items, title)
+				}
+			}
+			spec.Items = items
+		}
+		spec.More = len(spec.Items) > count || (sec.ID == 0 && spec.More)
+		if len(spec.Items) > count {
+			spec.Items = spec.Items[:count]
+		}
+	} else {
+		spec = s.continueHub(ctx, pr, cwGlobal, sec, count)
+	}
+	hub := s.renderHub(ctx, pr, spec, hubCtx{})
+	if r.URL.Query().Get("contentDirectoryID") != "" {
+		if layout, ok := s.d.Recommender.(interface {
+			HomeRowEnabled(context.Context, *core.User, core.HubContext, string) bool
+		}); ok && !layout.HomeRowEnabled(ctx, pr.User, s.hubContext(pr, 0), "home.continue") {
+			writeHTTPError(w, http.StatusNotFound)
+			return
+		}
+	}
+	mc.Hub = []model.Hub{hub}
 	mc.Size = 1
 	s.write(w, r, mc)
 }

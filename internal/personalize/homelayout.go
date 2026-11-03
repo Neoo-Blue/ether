@@ -579,6 +579,29 @@ func (e *Engine) finalizeHomeRows(ctx context.Context, user *core.User, hc core.
 	return out
 }
 
+// HomeRowEnabled checks the owner's inclusion policy without applying slot or
+// page-size constraints to a separately fetched Plex Continue Watching row.
+func (e *Engine) HomeRowEnabled(ctx context.Context, user *core.User, hc core.HubContext, id string) bool {
+	if user == nil {
+		user = &core.User{}
+	}
+	if hc.Now.IsZero() {
+		hc.Now = e.now()
+	}
+	hc.Now = hc.Now.In(e.loc)
+	layout := e.layoutForContext(ctx)
+	row := core.HomeRow{HubID: id, Kind: hubKind(id)}
+	policy := matchingPolicy(pageFor(layout.Global, "home"), row)
+	for _, viewer := range layout.Viewers {
+		if viewer.UserID == user.ID {
+			if override := matchingPolicy(pageFor(viewer.Pages, "home"), row); override != nil {
+				policy = override
+			}
+		}
+	}
+	return policy == nil || (policy.Status != "off" && whenMatches(policy.When, hc) && weekEligible(user.ID, policy.Row, hc, policy.MaxDaysPerWeek))
+}
+
 func (e *Engine) FinalizeNeutralHome(ctx context.Context, user *core.User, situation core.HomeSituation, section string, candidates []core.NeutralHomeRow) ([]core.NeutralHomeRow, error) {
 	hc := core.HubContext{Device: situation.Device, Daypart: situation.Daypart, Weekend: situation.Weekend, Now: situation.Now, SectionID: situation.LibraryID, Product: situation.Product, Platform: situation.Platform, SessionID: situation.SessionID, ClientID: situation.ClientID}
 	rows := make([]core.HomeRow, 0, len(candidates))

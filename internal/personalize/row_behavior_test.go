@@ -140,3 +140,19 @@ func TestNeutralPrecomposedHomeMatchesLegacyConfiguredLayout(t *testing.T) {
 		t.Fatalf("legacy=%v neutral=%v", oldIDs, newIDs)
 	}
 }
+
+func TestHomeRowEnabledHonorsViewerOverrideWithoutRequiringSlot(t *testing.T) {
+	h := newHarness(t, nil)
+	ctx := context.Background()
+	doc := core.HomeLayout{Global: []core.LayoutPage{{Section: "home", Rows: []core.RowPolicy{{Row: KindContinue, Status: "off"}}}}, Viewers: []core.ViewerLayout{{UserID: 2, Pages: []core.LayoutPage{{Section: "home", Rows: []core.RowPolicy{{Row: "home.continue", Status: "always", Slot: 3}}}}}}}
+	if _, err := h.e.SetHomeLayout(ctx, doc); err != nil {
+		t.Fatal(err)
+	}
+	hc := hubContext(testNow, core.DeviceTV)
+	if h.e.HomeRowEnabled(ctx, &core.User{ID: 1}, hc, "home.continue") {
+		t.Fatal("global disabled row enabled")
+	}
+	if !h.e.HomeRowEnabled(ctx, &core.User{ID: 2}, hc, "home.continue") {
+		t.Fatal("viewer override or later slot disabled row")
+	}
+}
