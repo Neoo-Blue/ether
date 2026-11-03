@@ -6,7 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"github.com/braedonsaunders/ether/internal/mediasafety"
+	"github.com/braedonsaunders/ether/internal/frontend/kit/mediasafety"
 	"net/http"
 	"strconv"
 	"strings"

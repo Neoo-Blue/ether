@@ -3,7 +3,7 @@ package livetv
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/braedonsaunders/ether/internal/mediasafety"
+	"github.com/braedonsaunders/ether/internal/frontend/kit/mediasafety"
 	"net/http"
 	"net/url"
 	"strconv"

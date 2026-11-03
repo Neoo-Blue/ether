@@ -2,7 +2,7 @@ package stremio
 
 import (
 	"context"
-	"github.com/braedonsaunders/ether/internal/mediasafety"
+	"github.com/braedonsaunders/ether/internal/frontend/kit/mediasafety"
 	"net/http"
 	"strings"
 	"time"

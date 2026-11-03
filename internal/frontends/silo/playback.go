@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/braedonsaunders/ether/internal/mediasafety"
+	"github.com/braedonsaunders/ether/internal/frontend/kit/mediasafety"
 	"math"
 	"net/http"
 	"strconv"

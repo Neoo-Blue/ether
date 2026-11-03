@@ -3,7 +3,7 @@ package mediabrowser
 import (
 	"encoding/json"
 	"errors"
-	"github.com/braedonsaunders/ether/internal/mediasafety"
+	"github.com/braedonsaunders/ether/internal/frontend/kit/mediasafety"
 	"io"
 	"net/http"
 	"strconv"

@@ -3,7 +3,7 @@ package sessions
 import (
 	"context"
 	"fmt"
-	"github.com/braedonsaunders/ether/internal/mediasafety"
+	"github.com/braedonsaunders/ether/internal/frontend/kit/mediasafety"
 	"io"
 	"net/http"
 	"strconv"
