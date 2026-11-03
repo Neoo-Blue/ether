@@ -284,3 +284,33 @@ func TestProbeProcessesEveryInWindowTitle(t *testing.T) {
 		t.Fatalf("first probe %v, want highest priority", searched[0])
 	}
 }
+
+func TestDigitalModeRequiresHomeDateEvenForOlderMovies(t *testing.T) {
+	x := setup(t)
+	title := x.cat.titles[core.MovieKey(1)]
+	title.Released = x.now.AddDate(-2, 0, 0)
+	cat := probeCatalog{fakeCatalog: x.cat, homes: map[core.RatingKey]time.Time{}}
+	x.s.d.Catalog = cat
+	x.c.Availability.Mode = config.ModeDigital
+	x.c.Availability.ApplyMode()
+	if got := x.s.FilterDiscovery(t.Context(), []core.Title{title}); len(got) != 0 {
+		t.Fatal("unknown home date admitted")
+	}
+	cat.homes[title.Key] = x.now.Add(time.Hour)
+	x.s.clearVisibility()
+	if got := x.s.FilterDiscovery(t.Context(), []core.Title{title}); len(got) != 0 {
+		t.Fatal("future home date admitted")
+	}
+	cat.homes[title.Key] = x.now
+	x.s.clearVisibility()
+	if got := x.s.FilterDiscovery(t.Context(), []core.Title{title}); len(got) != 1 {
+		t.Fatal("passed home date hidden")
+	}
+	x.c.Availability.Mode = config.ModeImmediate
+	x.c.Availability.ApplyMode()
+	cat.homes[title.Key] = time.Time{}
+	x.s.clearVisibility()
+	if got := x.s.FilterDiscovery(t.Context(), []core.Title{title}); len(got) != 1 {
+		t.Fatal("immediate mode gated")
+	}
+}

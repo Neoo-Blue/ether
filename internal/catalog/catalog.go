@@ -220,14 +220,11 @@ type Catalog struct {
 	db             *sql.DB
 	remote         atomic.Pointer[tmdbRef]
 	configUpdateMu sync.Mutex // serializes transitions without blocking config readers
-	// Retry a failed preservation on the next config transition. The saved
-	// settings still take effect immediately, even when the database fails.
-	admissionsPending bool
-	cfgMu             sync.RWMutex
-	cfg               config.Catalog
-	cfgVersion        *configVersion
-	log               *slog.Logger
-	clock             atomic.Value // func() time.Time
+	cfgMu          sync.RWMutex
+	cfg            config.Catalog
+	cfgVersion     *configVersion
+	log            *slog.Logger
+	clock          atomic.Value // func() time.Time
 
 	staleAfter time.Duration
 	listTTL    time.Duration
@@ -278,11 +275,6 @@ type Catalog struct {
 	grandCache  map[core.RatingKey]cachedBrowse
 	facetCache  map[string]cachedFacet
 	statsCache  cachedStats
-
-	admitMu     sync.Mutex
-	admitGen    uint64
-	admitMinute int64
-	admitReady  bool
 
 	personMu       sync.Mutex
 	personHydrated map[int64]time.Time
@@ -432,15 +424,6 @@ func (c *Catalog) UpdateConfig(cfg config.Catalog) {
 	search := f.ForSearch()
 	c.configUpdateMu.Lock()
 	defer c.configUpdateMu.Unlock()
-	previous := c.config()
-	if c.admissionsPending || (previous.GateMoviesByHomeRelease && !cfg.GateMoviesByHomeRelease) {
-		if _, err := c.db.Exec(`UPDATE catalog_home_release SET fallback_admitted=1 WHERE checked=1 AND earliest_ts=0 AND EXISTS (SELECT 1 FROM catalog_titles t WHERE t.key=catalog_home_release.key AND t.release_known=1 AND t.released_ts<=?)`, c.now().Unix()-int64(homeReleaseGrace.Seconds())); err != nil {
-			c.log.Error("catalog: preserve fallback admissions", "err", err)
-			c.admissionsPending = true
-		} else {
-			c.admissionsPending = false
-		}
-	}
 	c.cfgMu.Lock()
 	c.cfg = cfg
 	c.visibility = f
@@ -465,7 +448,7 @@ func MeetsThreshold(cfg config.Catalog, t core.Title, now time.Time) bool {
 	if t.Type != core.TypeMovie && t.Type != core.TypeShow {
 		return false
 	}
-	if !t.IsReleased(now) {
+	if !t.IsReleased(now) && !(cfg.ShowUpcomingMovies && t.Type == core.TypeMovie && !t.Released.IsZero()) {
 		// A title with no date is treated as unreleased.
 		return false
 	}

@@ -1,21 +1,22 @@
 import { SubtabNav } from "../../components/layout";
+import { CheckCircle2, AlertTriangle } from "lucide-react";
 import { SettingsSection, Spinner, toast } from "@braedonsaunders/appkit-ui";
 import { Segmented } from "../../components/fields";
 import { MoreOptions } from "../../components/ConfigSection";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { useCallback, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { useCallback, useMemo, useState } from "react";
 import { useApp } from "../../app-context";
 import { SaveBar, useDraft } from "../../components/SaveBar";
 import { ErrorPanel } from "../../components/feedback";
-import { secretConfigured } from "../../components/IntegrationAccount";
-import { t, tx } from "../../i18n";
-import { api, ApiError, errorMessage } from "../../lib/api";
-import { useAsync } from "../../lib/hooks";
+import { t, tn } from "../../i18n";
+import { relativeTime } from "../../lib/format";
+import { api, apiFetch, ApiError, errorMessage } from "../../lib/api";
+import { useAsync, useDebouncedValue } from "../../lib/hooks";
 import { isRuleComplete } from "../../lib/rules";
 import { asObj, SchemaField, type FieldGroup } from "../settings/SchemaForm";
 import { CatalogPickers, isCatalogPicker } from "./CatalogPickers";
 import { CATALOG } from "../settings/schema";
-import { HomeReleaseStatus, UpcomingEpisodeSettings } from "./HomeReleaseSettings";
+import { CatalogActivity, UpcomingEpisodeSettings } from "./HomeReleaseSettings";
 import { WatchlistAlerts } from "../viewers/sections/WatchlistDefaults";
 import { NewReleasesSettings, useAvailabilityDraft } from "./NewReleasesSettings";
 import { RulesPanel, type VisibilityRule } from "./LibraryVisibility";
@@ -25,29 +26,6 @@ import { SettingsRow } from "../../components/SettingsRow";
 import "./catalog.css";
 
 type Obj = Record<string, unknown>;
-
-function TmdbAccount({ apiKey }: { apiKey: unknown }) {
-  if (secretConfigured(apiKey)) {
-    return (
-      <p className="text-sm">
-        <Link to="/services/tmdb" className="text-primary underline">
-          {t("TMDB connected")}
-        </Link>
-      </p>
-    );
-  }
-  return (
-    <p className="text-sm text-fg-muted">
-      {tx("Connect TMDB in {link}.", {
-        link: (
-          <Link to="/services/tmdb" className="text-primary underline">
-            {t("Integrations")}
-          </Link>
-        ),
-      })}
-    </p>
-  );
-}
 
 function briefGroup(g: FieldGroup): FieldGroup {
   return {
@@ -102,8 +80,13 @@ function ObscureTitles({ draft, onChange }: { draft: Obj; onChange: (next: Obj) 
 export function CatalogSettings() {
   const { tab } = useParams();
   const navigate = useNavigate();
-  const section = tab === "visibility" ? "rules" : "library";
-  const { health, refreshDashboard } = useApp();
+  const section = tab === "rules" ? "rules" : "library";
+  const { health, dashboard, refreshDashboard } = useApp();
+  const catalogStatus = asObj(dashboard?.sections.catalog);
+  const titleCount =
+    Number(catalogStatus.browsableMovies ?? catalogStatus.movies ?? 0) +
+    Number(catalogStatus.browsableShows ?? catalogStatus.shows ?? 0);
+  const catalogHealth = health.find((h) => h.id === "catalog");
   const config = useAsync(() => api.getConfig(), []);
   const stored = config.data ? asObj(config.data.catalog) : null;
   const { draft, setDraft, dirty, reset } = useDraft<Obj>(stored);
@@ -112,6 +95,26 @@ export function CatalogSettings() {
   const rules = (Array.isArray(draft?.exclusions) ? draft.exclusions : []) as VisibilityRule[];
   const fallback = draft?.visibilityDefault === "hide" ? "hide" : "show";
   const rulesReady = rules.every((g) => g.rules.length > 0 && g.rules.every(isRuleComplete));
+  const visibilitySpec = useMemo(
+    () => ({ exclusions: rules, visibilityDefault: fallback }),
+    [draft],
+  );
+  const visibilityDraft = useDebouncedValue(visibilitySpec, 400);
+  const visibility = useAsync(
+    async (signal) => {
+      if (section !== "library" || !rulesReady) return null;
+      return apiFetch<{ total: number; visible: number; hidden: number }>(
+        "/catalog/visibility/preview",
+        {
+          method: "POST",
+          body: JSON.stringify(visibilityDraft),
+          signal,
+        },
+      );
+    },
+    [visibilityDraft, section, rulesReady],
+  );
+
   const save = useCallback(async () => {
     if (!draft) return;
     setSaving(true);
@@ -132,18 +135,18 @@ export function CatalogSettings() {
   const groups = [...CATALOG, UpcomingEpisodeSettings].map(briefGroup);
   return (
     <div className="catalog-scroll app-scroll">
-      <div className="space-y-5 p-5 lg:p-7">
-        <SubtabNav
-          ariaLabel={t("Catalog settings")}
-          active={section}
-          onSelect={(key) =>
-            navigate(key === "rules" ? "/catalog/visibility" : "/catalog/settings")
-          }
-          tabs={[
-            { key: "library", label: t("General") },
-            { key: "rules", label: t("Visibility") },
-          ]}
-        />
+      <div className="space-y-4 px-5 pb-5 pt-3 lg:px-7">
+        <div className="pb-1">
+          <SubtabNav
+            ariaLabel={t("Catalog settings")}
+            active={section}
+            onSelect={(key) => navigate(key === "rules" ? "/catalog/rules" : "/catalog/settings")}
+            tabs={[
+              { key: "library", label: t("General") },
+              { key: "rules", label: t("Rules") },
+            ]}
+          />
+        </div>
         {config.error ? (
           <ErrorPanel error={config.error} onRetry={() => void config.reload()} />
         ) : null}
@@ -162,13 +165,10 @@ export function CatalogSettings() {
         ) : (
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
             <div className="space-y-5">
-              <TmdbAccount apiKey={draft.tmdbKey} />
               {availability.draft ? (
                 <NewReleasesSettings
                   availability={availability.draft}
                   onAvailability={availability.setDraft}
-                  gate={Boolean(draft.gateMoviesByHomeRelease)}
-                  onGate={(v) => setDraft({ ...draft, gateMoviesByHomeRelease: v })}
                 />
               ) : null}
               {groups.map((g, i) => (
@@ -215,21 +215,44 @@ export function CatalogSettings() {
               <WatchlistAlerts />
             </div>
             <aside className="space-y-5">
-              <HomeReleaseStatus />
-              <TrendingStatus />
-              {health.find((h) => h.id === "catalog") ? (
-                <SettingsSection title={t("Catalog health")}>
-                  <SettingsRow
-                    title={t("TMDB catalog")}
-                    control={
-                      <LevelBadge
-                        level={health.find((h) => h.id === "catalog")!.level}
-                        label={health.find((h) => h.id === "catalog")!.summary}
-                      />
-                    }
-                  />
-                </SettingsSection>
+              {catalogHealth ? (
+                <section
+                  className="rounded-xl border border-border bg-surface p-5"
+                  aria-label={t("Your catalog")}
+                >
+                  <div className="mb-4 flex items-center gap-3">
+                    {catalogHealth.level === "ok" ? (
+                      <CheckCircle2 size={36} className="text-success" />
+                    ) : (
+                      <AlertTriangle size={36} className="text-warning" />
+                    )}
+                    <h3 className="text-lg font-semibold">{t("Your catalog")}</h3>
+                  </div>
+                  <p className="text-xs text-fg-muted">{t("Catalog size before rules")}</p>
+                  <p className="mt-1 text-3xl font-semibold tabular-nums">
+                    {tn(visibility.data?.total ?? titleCount, "{count} title", "{count} titles")}
+                  </p>
+                  <p className="mt-2 text-sm">
+                    {visibility.data
+                      ? tn(
+                          visibility.data.visible ?? visibility.data.total - visibility.data.hidden,
+                          "{count} shown after your rules",
+                          "{count} shown after your rules",
+                        )
+                      : t("Checking your rules…")}
+                  </p>
+                  <p className="mt-2 text-sm text-fg-muted">
+                    {catalogStatus.lastSync
+                      ? t("Synced {when}", { when: relativeTime(String(catalogStatus.lastSync)) })
+                      : t("Not synced yet")}
+                  </p>
+                  <div className="mt-4">
+                    <LevelBadge level={catalogHealth.level} />
+                  </div>
+                </section>
               ) : null}
+              <CatalogActivity />
+              <TrendingStatus />
             </aside>
           </div>
         )}

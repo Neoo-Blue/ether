@@ -309,6 +309,7 @@ func fromDoc(doc map[string]any) (Config, error) {
 	}
 	var c Config
 	err = json.Unmarshal(b, &c)
+	c.Catalog.ReleaseMode = c.Availability.EffectiveMode()
 	return c, err
 }
 

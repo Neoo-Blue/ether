@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/braedonsaunders/ether/internal/config"
 	"math"
 	"sort"
 	"strconv"
@@ -570,7 +571,6 @@ type upsertOpts struct {
 	// earlier detail upsert marked (which otherwise keep their date).
 	airDates     bool
 	releaseDates *tmdb.ReleaseDates
-	gateEnabled  bool
 	// region is the owner's catalogue region; upsertMany sets it. A TMDB
 	// rating from the region or the US outranks a provider rating.
 	region string
@@ -699,11 +699,7 @@ func upsertOne(ctx context.Context, tx *sql.Tx, t core.Title, o upsertOpts, now 
 	if o.detail {
 		detailInt = 1
 	}
-	if o.releaseDates != nil && o.gateEnabled && t.Type == core.TypeMovie {
-		if _, err := tx.ExecContext(ctx, `UPDATE catalog_home_release SET fallback_admitted=1 WHERE key=? AND checked=1 AND earliest_ts=0 AND EXISTS (SELECT 1 FROM catalog_titles t WHERE t.key=catalog_home_release.key AND t.release_known=1 AND t.released_ts<=?)`, int64(t.Key), now-int64(homeReleaseGrace.Seconds())); err != nil {
-			return err
-		}
-	}
+
 	homeInt := 0
 	if homeRating(t.ContentRating, t.ContentRatingSource, o.region) {
 		homeInt = 1
@@ -976,9 +972,6 @@ func pairsEqual(ctx context.Context, tx *sql.Tx, table, col string, key int64, w
 }
 
 func (c *Catalog) queryTitles(ctx context.Context, q string, args ...any) ([]core.Title, error) {
-	if err := c.admitFallbacks(ctx); err != nil {
-		return nil, err
-	}
 	gen := c.writeGen.Load()
 	minute := c.minuteBucket()
 	rows, err := c.db.QueryContext(ctx, q, args...)
@@ -995,7 +988,7 @@ func (c *Catalog) queryTitles(ctx context.Context, q string, args ...any) ([]cor
 		// Let hydration establish an undated Specials container's premiere
 		// from its aired children; all other unknown dates remain excluded.
 		undatedSpecials := st.t.Type == core.TypeSeason && st.t.Key.Season() == 0 && st.t.Released.IsZero()
-		if !st.t.Adult && (st.t.IsReleased(c.now()) || undatedSpecials) {
+		if !st.t.Adult && (st.t.IsReleased(c.now()) || c.upcomingMovie(&st.t) || undatedSpecials) {
 			out = append(out, st.t)
 		}
 	}
@@ -1024,7 +1017,7 @@ func (c *Catalog) queryTitles(ctx context.Context, q string, args ...any) ([]cor
 	}
 	visible := out[:0]
 	for _, t := range out {
-		if t.IsReleased(c.now()) && (!c.config().GateMoviesByHomeRelease || homeReleaseVisible(&t, c.now())) {
+		if c.upcomingMovie(&t) || (t.IsReleased(c.now()) && (!(c.config().ReleaseMode == config.ModeDigital) || homeReleaseVisible(&t, c.now()))) {
 			visible = append(visible, t)
 		}
 	}

@@ -405,7 +405,7 @@ func TestRowViewHydrateEntriesMatchesIndependentLegacy(t *testing.T) {
 						t.Fatal(e)
 					}
 				}
-				c, e := catalog.New(db, nil, config.Catalog{GateMoviesByHomeRelease: true}, nil, catalog.WithNow(func() time.Time { return now }))
+				c, e := catalog.New(db, nil, config.Catalog{ReleaseMode: config.ModeDigital}, nil, catalog.WithNow(func() time.Time { return now }))
 				if e != nil {
 					t.Fatal(e)
 				}
@@ -486,7 +486,7 @@ func TestRowViewHydrateEntriesAdmissionDatabaseFaultEquivalence(t *testing.T) {
 				}
 				db.SetMaxOpenConns(1)
 				t.Cleanup(func() { db.Close() })
-				c, e := catalog.New(db, nil, config.Catalog{GateMoviesByHomeRelease: true}, nil, catalog.WithNow(func() time.Time { return now }))
+				c, e := catalog.New(db, nil, config.Catalog{ReleaseMode: config.ModeDigital}, nil, catalog.WithNow(func() time.Time { return now }))
 				if e != nil {
 					t.Fatal(e)
 				}

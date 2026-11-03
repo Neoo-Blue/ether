@@ -11,8 +11,57 @@ beforeEach(() => {
 });
 
 describe("Library visibility", () => {
+  it.each(["hidden", "shown"])(
+    "browses %s rules with the shared catalog search",
+    async (visibility) => {
+      const { fake } = renderAppWith("/catalog/rules", (_method, path) => {
+        if (path === "/catalog/visibility/preview")
+          return {
+            total: 1000,
+            hidden: 400,
+            visible: 600,
+            movies: 200,
+            shows: 200,
+            items: Array.from({ length: 24 }, (_, i) => ({
+              key: `hidden-${i}`,
+              title: `Hidden ${i}`,
+            })),
+            shown: Array.from({ length: 24 }, (_, i) => ({
+              key: `shown-${i}`,
+              title: `Shown ${i}`,
+            })),
+          };
+      });
+      await settleUi(() =>
+        expect(screen.getAllByRole("button", { name: "Browse" })).toHaveLength(2),
+      );
+      fireEvent.click(
+        screen.getAllByRole("button", { name: "Browse" })[visibility === "hidden" ? 0 : 1]!,
+      );
+      await settleUi(() =>
+        expect(screen.getByPlaceholderText("Search catalog…")).toBeInTheDocument(),
+      );
+      fireEvent.change(screen.getByPlaceholderText("Search catalog…"), {
+        target: { value: "Dune" },
+      });
+      await settleUi(() => {
+        const requests = fake.state.calls.filter((call) => call.path.startsWith("/catalog/browse"));
+        expect(
+          requests.some((call) => {
+            const params = new URL(call.path, "http://localhost").searchParams;
+            return (
+              params.get("ruleVisibility") === visibility &&
+              params.get("q") === "Dune" &&
+              params.has("rules")
+            );
+          }),
+        ).toBe(true);
+      });
+    },
+  );
+
   it.each([null, undefined])("keeps empty previews usable when items is %s", async (items) => {
-    const { fake } = renderAppWith("/catalog/visibility", (_method, path) => {
+    const { fake } = renderAppWith("/catalog/rules", (_method, path) => {
       if (path === "/catalog/visibility/preview")
         return { total: 63996, hidden: 0, movies: 0, shows: 0, unknownCountry: 16721, items };
     });
@@ -20,7 +69,10 @@ describe("Library visibility", () => {
       expect(screen.getByText("63,996")).toBeInTheDocument();
       expect(screen.getByText("No rules yet. Everything is shown.")).toBeInTheDocument();
     });
-    expect(screen.queryByText("Hidden")).not.toBeInTheDocument();
+    expect(screen.getByText("Hidden · 0")).toBeInTheDocument();
+    expect(screen.getByText("titles visible")).toBeInTheDocument();
+    expect(screen.getByText("Nothing hidden")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Browse" })[0]).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Add rule" }));
     expect(screen.getByLabelText("Rule name")).toHaveValue("");
     expect(calls(fake, "PUT", "/config/catalog")).toHaveLength(0);
@@ -65,7 +117,7 @@ describe("Library visibility", () => {
       }),
     );
     render(
-      <MemoryRouter initialEntries={["/catalog/visibility"]}>
+      <MemoryRouter initialEntries={["/catalog/rules"]}>
         <App />
       </MemoryRouter>,
     );
@@ -73,6 +125,7 @@ describe("Library visibility", () => {
       expect(screen.getByText(/Hide · Country is IN/)).toBeInTheDocument();
       expect(fake.state.calls.filter((c) => c.path.includes("preview")).length).toBeGreaterThan(0);
       expect(screen.getByText("Hidden: 800 movies · 400 shows")).toBeInTheDocument();
+      expect(screen.getByText(/^visible of /)).toBeInTheDocument();
       expect(screen.getByText("800 movies · 400 shows")).toBeInTheDocument();
     });
     fireEvent.click(screen.getByRole("button", { name: "Delete rule 1" }));
@@ -96,7 +149,7 @@ describe("Library visibility", () => {
         document.body.textContent?.includes("No rules yet. Everything is shown.") ?? false;
     });
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-    renderApp("/catalog/visibility", {}, (server) => {
+    renderApp("/catalog/rules", {}, (server) => {
       (server.state.config.catalog as { exclusions?: unknown }).exclusions = [
         {
           name: "Stored group",
@@ -145,7 +198,7 @@ describe("Library visibility", () => {
       }),
     );
     render(
-      <MemoryRouter initialEntries={["/catalog/visibility"]}>
+      <MemoryRouter initialEntries={["/catalog/rules"]}>
         <App />
       </MemoryRouter>,
     );
@@ -159,7 +212,7 @@ describe("Library visibility", () => {
   });
 
   it("does not save an unfinished rule", async () => {
-    const { fake } = renderApp("/catalog/visibility");
+    const { fake } = renderApp("/catalog/rules");
     await settleUi(() => {
       expect(screen.getByText("No rules yet. Everything is shown.")).toBeInTheDocument();
     });
@@ -169,7 +222,7 @@ describe("Library visibility", () => {
     expect(calls(fake, "PUT", "/config/catalog")).toHaveLength(0);
   });
   it("shows a stored film-and-TV allowlist as rating levels", async () => {
-    renderApp("/catalog/visibility", {}, (server) => {
+    renderApp("/catalog/rules", {}, (server) => {
       (server.state.config.catalog as { exclusions?: unknown }).exclusions = [
         {
           name: "Family",
@@ -190,7 +243,7 @@ describe("Library visibility", () => {
   });
 
   it("limits a hide rule to browsing and saves its scope", async () => {
-    const { fake } = renderApp("/catalog/visibility", {}, (server) => {
+    const { fake } = renderApp("/catalog/rules", {}, (server) => {
       (server.state.config.catalog as { exclusions?: unknown }).exclusions = [
         {
           name: "",
@@ -230,7 +283,7 @@ describe("Library visibility", () => {
   });
 
   it("offers the browsing-only choice for hide rules alone", async () => {
-    renderApp("/catalog/visibility", {}, (server) => {
+    renderApp("/catalog/rules", {}, (server) => {
       (server.state.config.catalog as { exclusions?: unknown }).exclusions = [
         {
           name: "",

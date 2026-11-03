@@ -117,8 +117,8 @@ export const PAGES = localized<PageDef[]>(() => [
     title: t("Catalog"),
     sections: [
       {
-        key: "visibility",
-        title: t("Visibility"),
+        key: "rules",
+        title: t("Rules"),
         keywords: searchTerms(msg("hide show rules library exclusions")),
       },
       {

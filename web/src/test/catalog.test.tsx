@@ -13,6 +13,18 @@ const title = {
 };
 
 describe("Catalog workspace", () => {
+  it("distinguishes catalog size from the rules result", async () => {
+    const { fake } = renderAppWith("/catalog/settings", (_method, path) => {
+      if (path === "/catalog/visibility/preview") return { total: 1000, visible: 700, hidden: 300 };
+    });
+    expect(await screen.findByText("700 shown after your rules")).toBeInTheDocument();
+    expect(screen.getByText("Catalog size before rules")).toBeInTheDocument();
+    expect(screen.getByText("1,000 titles")).toBeInTheDocument();
+    expect(calls(fake, "POST", "/catalog/visibility/preview").at(-1)?.body).toMatchObject({
+      visibilityDefault: "show",
+    });
+  });
+
   it("browses pages, filters, views and title details", async () => {
     const { fake } = renderAppWith("/catalog", (_method, path, _body, query) => {
       if (path === "/catalog/browse") return { items: [title], total: query.get("q") ? 1 : 107 };
@@ -58,33 +70,33 @@ describe("Catalog workspace", () => {
   it("keeps all catalog settings and saves changes from the new page", async () => {
     const { fake } = renderAppWith("/catalog/settings", () => undefined);
     const language = await screen.findByLabelText("Language");
+    expect(screen.queryByText("Catalog healthy")).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Your catalog" })).toBeInTheDocument();
+    expect(screen.queryByText(/Your saved release-date requirement/)).not.toBeInTheDocument();
     expect(screen.getByLabelText("Region")).toBeInTheDocument();
     expect(screen.queryByLabelText("Minimum popularity")).not.toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Some" })).toBeChecked();
     fireEvent.click(screen.getByRole("button", { name: "More options: What's browsable" }));
     expect(screen.getByLabelText("Minimum popularity")).toBeInTheDocument();
-    expect(
-      screen
-        .getAllByRole("link", { name: "Integrations" })
-        .map((link) => link.getAttribute("href")),
-    ).toContain("/services/tmdb");
+    expect(screen.queryByText("TMDB connected")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Your TMDB API key")).not.toBeInTheDocument();
-    const gate = screen.getByLabelText("Wait for digital or physical release");
-    expect(gate).not.toBeChecked();
-    fireEvent.click(gate);
-    const upcoming = screen.getByLabelText("Show scheduled episodes");
+    fireEvent.click(screen.getByRole("radio", { name: /On digital release/ }));
+    const upcoming = screen.getByLabelText("Show upcoming episodes");
     expect(upcoming).not.toBeChecked();
     fireEvent.click(upcoming);
+    const movies = screen.getByLabelText("Show upcoming movies");
+    expect(movies).not.toBeChecked();
+    fireEvent.click(movies);
     fireEvent.click(language);
     fireEvent.click(await screen.findByRole("option", { name: "French (France)" }));
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(calls(fake, "PUT", "/config/catalog").length).toBe(1));
     expect(calls(fake, "PUT", "/config/catalog")[0]?.body).toMatchObject({
       language: "fr-FR",
-      gateMoviesByHomeRelease: true,
       showUpcomingEpisodes: true,
+      showUpcomingMovies: true,
     });
-    expect(screen.getByRole("radio", { name: /When they can play/ })).toBeVisible();
+    expect(screen.getByRole("radio", { name: /On digital release/ })).toBeVisible();
   });
 
   it("filters the catalog to titles waiting for a release", async () => {

@@ -110,7 +110,6 @@ export function settingsIndex(): SettingHit[] {
     ...groupHits([UpcomingEpisodeSettings], "/catalog/settings", catalog),
     ...rows("/catalog/settings", catalog, [
       t("Hide obscure titles"),
-      t("Wait for digital or physical release"),
       t("Watchlist monitoring"),
       t("Plex watchlists"),
       t("Trakt watchlists"),
@@ -122,6 +121,7 @@ export function settingsIndex(): SettingHit[] {
       t("On digital release"),
       t("Right away"),
     ]),
+    ...rows("/catalog/rules", catalog, [t("Rules"), t("Hide"), t("Show")]),
     // Sources
     ...groupHits(S.DEBRID, "/sources/debrid", t("Debrid"), () => t("More options")),
     ...rows(

@@ -73,7 +73,7 @@ func TestHomeReleaseGateBackfillAndCorrections(t *testing.T) {
 	if err != nil || page.Total != 4 {
 		t.Fatalf("default off: %+v %v", page, err)
 	}
-	c.UpdateConfig(config.Catalog{GateMoviesByHomeRelease: true})
+	c.UpdateConfig(config.Catalog{ReleaseMode: config.ModeDigital})
 	page, err = c.Browse(ctx, core.BrowseQuery{})
 	if err != nil || page.Total != 0 {
 		t.Fatalf("unknown: %+v %v", page, err)
@@ -88,16 +88,16 @@ func TestHomeReleaseGateBackfillAndCorrections(t *testing.T) {
 		t.Fatalf("remaining: %d %v", n, err)
 	}
 	page, err = c.Browse(ctx, core.BrowseQuery{Limit: 1})
-	if err != nil || page.Total != 2 || len(page.Items) != 1 {
+	if err != nil || page.Total != 1 || len(page.Items) != 1 {
 		t.Fatalf("page: %+v %v", page, err)
 	}
 	page2, err := c.Browse(ctx, core.BrowseQuery{Limit: 1, Offset: 1})
-	if err != nil || page2.Total != 2 || len(page2.Items) != 1 || page.Items[0].Key == page2.Items[0].Key {
+	if err != nil || page2.Total != 1 || len(page2.Items) != 0 {
 		t.Fatalf("page2: %+v %v", page2, err)
 	}
 	for id := int64(1); id <= 4; id++ {
 		got, err := c.Get(ctx, core.MovieKey(id))
-		if id <= 2 {
+		if id == 1 {
 			if err != nil || got.Year != 2025 {
 				t.Fatalf("visible %d: %+v %v", id, got, err)
 			}
@@ -157,14 +157,14 @@ func TestHomeReleaseGateBackfillAndCorrections(t *testing.T) {
 	if client.calls != beforeCalls {
 		t.Fatal("browse paths fetched per-title details")
 	}
-	// Admission is durable even if the wall clock moves back before the grace boundary.
-	now = now.Add(-24 * time.Hour)
-	rollback, err := c.Get(ctx, core.MovieKey(2))
-	if err != nil || !rollback.HomeReleaseFallbackAdmitted {
-		t.Fatalf("clock rollback lost admission: %+v %v", rollback, err)
+	// Age and historical fallback admission never replace a known home date.
+	if _, err := db.ExecContext(ctx, `UPDATE catalog_home_release SET fallback_admitted=1 WHERE key=?`, int64(core.MovieKey(2))); err != nil {
+		t.Fatal(err)
 	}
-	now = now.Add(24 * time.Hour)
-	// A correction after fallback admission cannot hide B, even across restart.
+	if _, err := c.Get(ctx, core.MovieKey(2)); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("unknown date admitted: %v", err)
+	}
+	// Corrected physical dates can admit a title, but future dates cannot.
 	client.details[2] = releaseDetail(t, `{"id":2,"title":"B","release_date":"2025-01-01","release_dates":{"results":[{"iso_3166_1":"GB","release_dates":[{"type":4,"release_date":"2025-08-01T00:00:00Z"}]}]}}`)
 	client.details[3] = releaseDetail(t, `{"id":3,"title":"C","release_date":"2025-01-01","release_dates":{"results":[{"iso_3166_1":"JP","release_dates":[{"type":5,"release_date":"2025-04-01T00:00:00Z"}]}]}}`)
 	now = now.Add(25 * time.Hour)
@@ -174,12 +174,12 @@ func TestHomeReleaseGateBackfillAndCorrections(t *testing.T) {
 	if _, err = c.Get(ctx, core.MovieKey(3)); err != nil {
 		t.Fatalf("corrected future date: %v", err)
 	}
-	c, err = New(db, client, config.Catalog{GateMoviesByHomeRelease: true}, nil, WithNow(func() time.Time { return now }))
+	c, err = New(db, client, config.Catalog{ReleaseMode: config.ModeDigital}, nil, WithNow(func() time.Time { return now }))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, err := c.Get(ctx, core.MovieKey(2)); err != nil || !got.HomeReleaseFallbackAdmitted {
-		t.Fatalf("fallback lost: %+v %v", got, err)
+	if got, err := c.Get(ctx, core.MovieKey(2)); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("future date admitted after restart: %+v %v", got, err)
 	}
 	c.UpdateConfig(config.Catalog{})
 	page, err = c.Browse(ctx, core.BrowseQuery{})
@@ -191,11 +191,11 @@ func TestHomeReleaseGateBackfillAndCorrections(t *testing.T) {
 func TestHomeReleaseBoundary(t *testing.T) {
 	start := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	t1 := core.Title{Type: core.TypeMovie, Released: start, HomeReleaseChecked: true}
-	if homeReleaseVisible(&t1, start.Add(homeReleaseGrace-time.Second)) || !homeReleaseVisible(&t1, start.Add(homeReleaseGrace)) {
-		t.Fatal("grace boundary")
+	if homeReleaseVisible(&t1, start.Add(10*365*24*time.Hour)) {
+		t.Fatal("age alone admitted an unknown home date")
 	}
 	t1.HomeReleased = start.Add(100 * 24 * time.Hour)
-	if homeReleaseVisible(&t1, start.Add(homeReleaseGrace)) || !homeReleaseVisible(&t1, t1.HomeReleased) {
+	if homeReleaseVisible(&t1, start.Add(90*24*time.Hour)) || !homeReleaseVisible(&t1, t1.HomeReleased) {
 		t.Fatal("dated boundary")
 	}
 }
@@ -209,7 +209,7 @@ func TestCachedGetManyDoesNotFetchOrAdmitFallback(t *testing.T) {
 	defer db.Close()
 	now := time.Date(2025, 4, 1, 12, 0, 0, 0, time.UTC)
 	client := &releaseClient{details: map[int64]*tmdb.MovieDetails{}}
-	c, err := New(db, client, config.Catalog{GateMoviesByHomeRelease: true}, nil, WithNow(func() time.Time { return now }))
+	c, err := New(db, client, config.Catalog{ReleaseMode: config.ModeDigital}, nil, WithNow(func() time.Time { return now }))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,7 +235,7 @@ func TestCachedGetManyDoesNotFetchOrAdmitFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := c.CachedGetMany(ctx, []core.RatingKey{movie.Key, before.Key, known.Key, unknown.Key, core.MovieKey(999)})
-	if err != nil || len(got) != 2 || got[movie.Key].Key != movie.Key || got[known.Key].Key != known.Key {
+	if err != nil || len(got) != 1 || got[known.Key].Key != known.Key {
 		t.Fatalf("eligibility: %v %v", got, err)
 	}
 	var admitted int

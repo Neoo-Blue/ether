@@ -10,44 +10,19 @@ import (
 	"github.com/braedonsaunders/ether/internal/tmdb"
 )
 
-const homeReleaseGrace = 90 * 24 * time.Hour
-
-// homeReleaseVisible requires a completed release-date response. Missing dates
-// fall back 90 days after the original release; a persisted admission survives
-// subsequent corrections. Release dates are calendar dates in UTC.
+// homeReleaseVisible requires a known digital or physical release date that has passed.
+// Old fallback admissions do not bypass the selected digital release mode.
 func homeReleaseVisible(t *core.Title, now time.Time) bool {
 	if t.Type != core.TypeMovie {
 		return true
 	}
-	if t.HomeReleaseFallbackAdmitted {
-		return true
-	}
-	if !t.HomeReleaseChecked {
-		return false
-	}
-	if !t.HomeReleased.IsZero() {
-		return !t.HomeReleased.After(now)
-	}
-	return !t.Released.IsZero() && !t.Released.Add(homeReleaseGrace).After(now)
+	return t.HomeReleaseChecked && !t.HomeReleased.IsZero() && !t.HomeReleased.After(now)
 }
 
-// homeVisible handles a title loaded just before its first fallback admission.
-func (c *Catalog) homeVisible(t *core.Title) bool {
-	if t.Type != core.TypeMovie || t.HomeReleaseFallbackAdmitted || !t.HomeReleaseChecked || !t.HomeReleased.IsZero() {
-		return homeReleaseVisible(t, c.now())
-	}
-	if err := c.admitFallbacks(context.Background()); err != nil {
-		return false
-	}
-	var admitted int
-	if err := c.db.QueryRow(`SELECT fallback_admitted FROM catalog_home_release WHERE key=?`, int64(t.Key)).Scan(&admitted); err != nil {
-		return false
-	}
-	return admitted != 0
-}
+func (c *Catalog) homeVisible(t *core.Title) bool { return homeReleaseVisible(t, c.now()) }
 
 func homeReleaseSQL(alias string) string {
-	return "(" + alias + ".type<>'movie' OR EXISTS (SELECT 1 FROM catalog_home_release hr WHERE hr.key=" + alias + ".key AND (hr.fallback_admitted=1 OR (hr.checked=1 AND ((hr.earliest_ts<>0 AND hr.earliest_ts<=?) OR (hr.earliest_ts=0 AND " + alias + ".release_known=1 AND " + alias + ".released_ts<=?))))))"
+	return "(" + alias + ".type<>'movie' OR EXISTS (SELECT 1 FROM catalog_home_release hr WHERE hr.key=" + alias + ".key AND hr.checked=1 AND hr.earliest_ts<>0 AND hr.earliest_ts<=?))"
 }
 
 func (c *Catalog) hydrateHomeRelease(ctx context.Context, items []core.Title) error {
@@ -163,38 +138,6 @@ func saveHomeReleases(ctx context.Context, tx *sql.Tx, t core.Title, dates *tmdb
 	return err
 }
 
-// admitFallbacks records every currently eligible fallback before it can be
-// exposed. The minute/generation cache avoids a write on every browse while
-// still revisiting admissions after metadata updates and clock changes.
-func (c *Catalog) admitFallbacks(ctx context.Context) error {
-	if !c.config().GateMoviesByHomeRelease {
-		return nil
-	}
-	c.admitMu.Lock()
-	defer c.admitMu.Unlock()
-	gen, minute := c.writeGen.Load(), c.minuteBucket()
-	if c.admitReady && c.admitGen == gen && c.admitMinute == minute {
-		return nil
-	}
-	result, err := c.db.ExecContext(ctx, `UPDATE catalog_home_release SET fallback_admitted=1 WHERE checked=1 AND earliest_ts=0 AND fallback_admitted=0 AND EXISTS (SELECT 1 FROM catalog_titles t WHERE t.key=catalog_home_release.key AND t.release_known=1 AND t.released_ts<=?)`, c.now().Unix()-int64(homeReleaseGrace.Seconds()))
-	if err != nil {
-		return err
-	}
-	if n, err := result.RowsAffected(); err != nil {
-		return err
-	} else if n > 0 {
-		c.writeGen.Add(1)
-		gen++
-	}
-	c.admitGen = gen
-	c.admitMinute = minute
-	c.admitReady = true
-	return nil
-}
-
-// HomeReleases returns digital or physical dates that have been recorded.
-// A missing key has not been checked. A zero time means the movie was
-// checked and has no digital or physical date (theatrical only).
 func (c *Catalog) HomeReleases(ctx context.Context, keys []core.RatingKey) (map[core.RatingKey]time.Time, error) {
 	out := map[core.RatingKey]time.Time{}
 	for start := 0; start < len(keys); start += 500 {
@@ -270,7 +213,7 @@ func (c *Catalog) BackfillHomeReleases(ctx context.Context, limit int) (int, err
 			continue
 		}
 		t := c.movieDetailsToTitle(ctx, d)
-		if err = c.upsert(ctx, t, upsertOpts{browsable: c.meetsThreshold(t), detail: true, releaseDates: d.ReleaseDates, gateEnabled: c.config().GateMoviesByHomeRelease}); err != nil {
+		if err = c.upsert(ctx, t, upsertOpts{browsable: c.meetsThreshold(t), detail: true, releaseDates: d.ReleaseDates}); err != nil {
 			return count, err
 		}
 		count++
