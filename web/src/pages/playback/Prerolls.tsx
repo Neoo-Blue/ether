@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { PrerollSimulation } from "./PrerollSimulation";
 import { t, tx } from "../../i18n";
 import { prerollsApi, type Preroll, type Selection } from "./prerolls-api";
 
@@ -39,6 +40,7 @@ export function Prerolls() {
         </div>
         <button className="rounded bg-primary px-4 py-2 text-white">{t("Add pre-roll")}</button>
       </div>
+      <PrerollSimulation />
       {error && (
         <p role="alert" className="text-danger">
           {error}
