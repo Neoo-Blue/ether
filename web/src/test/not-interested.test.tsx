@@ -12,7 +12,7 @@ it("restores a visible entry only after the server confirms it", async () => {
   expect(screen.getByText("A Film (2020)")).toBeInTheDocument();
   fireEvent.click(button);
   await waitFor(() => expect(restore).toHaveBeenCalledWith("opaque-a"));
-  expect(await screen.findByText("No hidden recommendations.")).toBeInTheDocument();
+  expect(await screen.findByText("Nothing hidden from recommendations")).toBeInTheDocument();
 });
 
 it("never displays metadata supplied for an unavailable entry and keeps it when restore fails", async () => {

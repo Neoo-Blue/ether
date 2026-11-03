@@ -68,8 +68,9 @@ export function PlexWatchSync({ viewerId, plexId }: { viewerId: number; plexId: 
 
   const st = status.data;
   return (
-    <SettingsSection title={t("Plex account watch state")}>
-      <div className="flex justify-end px-5 pt-3">
+    <SettingsSection>
+      <h2 className="flex items-center gap-2 px-5 py-4 text-sm font-semibold">
+        {t("Plex account watch state")}
         <Tooltip
           content={t(
             "Connect this viewer's Plex account to import watched marks and ratings or export current state. Send future changes enables exports and ongoing updates; it does not upload existing history. Playback progress stays here.",
@@ -79,7 +80,7 @@ export function PlexWatchSync({ viewerId, plexId }: { viewerId: number; plexId: 
             ?
           </button>
         </Tooltip>
-      </div>
+      </h2>
       <SettingsRow
         title={t("Connection")}
         control={
@@ -129,15 +130,39 @@ export function PlexWatchSync({ viewerId, plexId }: { viewerId: number; plexId: 
         }
       />
       <div className="flex flex-wrap gap-2 px-5 py-4">
-        <Button disabled={busy || !st.connected} onClick={() => void run("/import", "POST")}>
-          {t("Import from Plex")}
-        </Button>
-        <Button
-          disabled={busy || !st.connected || !st.enabled}
-          onClick={() => void run("/export", "POST")}
-        >
-          {t("Export current state")}
-        </Button>
+        {(
+          [
+            ["/import", t("Import from Plex")],
+            ["/export", t("Export current state")],
+          ] as const
+        ).map(([path, label]) => {
+          const disabled = busy || !st.connected || (path === "/export" && !st.enabled);
+          const button = (
+            <Button
+              variant={disabled ? "outline" : "default"}
+              disabled={disabled}
+              onClick={() => void run(path, "POST")}
+            >
+              {label}
+            </Button>
+          );
+          return disabled ? (
+            <Tooltip
+              key={path}
+              content={
+                !st.connected
+                  ? t("Connect the Plex account first")
+                  : !st.enabled && path === "/export"
+                    ? t("Turn on Send future changes first")
+                    : t("Please wait")
+              }
+            >
+              <span tabIndex={0}>{button}</span>
+            </Tooltip>
+          ) : (
+            <span key={path}>{button}</span>
+          );
+        })}
       </div>
     </SettingsSection>
   );

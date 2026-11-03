@@ -120,7 +120,7 @@ export function ViewerAccess({ viewer }: { viewer: Viewer }) {
   const noUser = users.data && (!user || !l);
   const simkl = config.data?.simkl;
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="space-y-6">
       {users.error ? (
         <ErrorPanel error={users.error} onRetry={() => void users.reload()} />
       ) : policy.error ? (

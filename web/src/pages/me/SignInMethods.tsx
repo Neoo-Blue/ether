@@ -353,13 +353,10 @@ export default function SignInMethods({
             );
           })
         ) : (
-          <div className="px-5 py-6">
-            <EmptyState
-              icon={<MonitorSmartphone />}
-              title={t("No devices.")}
-              description={t("Nothing is signed in with this account yet.")}
-            />
-          </div>
+          <p className="flex items-center gap-2 px-5 py-4 text-sm text-fg-muted">
+            <MonitorSmartphone size={16} />
+            {t("No devices.")}
+          </p>
         )}
       </SettingsSection>
     </div>

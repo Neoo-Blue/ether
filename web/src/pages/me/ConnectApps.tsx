@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button } from "@braedonsaunders/appkit-ui";
+import { Button, buttonVariants } from "@braedonsaunders/appkit-ui";
 import {
   PlexMark,
   JellyfinMark,
@@ -102,13 +102,13 @@ function ConnectAppsSession({ base, token }: { base: string; token: string }) {
       <div className="space-y-1">
         <h2 className="text-lg font-semibold">{t("Connect apps")}</h2>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="flex flex-wrap gap-3 md:flex-nowrap">
         {apps
           .filter((id) => names[id])
           .map((id) => (
             <div
               key={id}
-              className="rounded-xl border border-border bg-surface p-5 space-y-4 min-w-0"
+              className="flex-1 min-w-40 rounded-xl border border-border bg-surface p-4 space-y-3"
             >
               <div className="flex items-center gap-3 font-semibold">
                 {id === "plex" ? (
@@ -128,7 +128,7 @@ function ConnectAppsSession({ base, token }: { base: string; token: string }) {
               </div>
               {id === "plex" ? (
                 <a
-                  className="text-sm font-medium text-primary hover:underline"
+                  className={buttonVariants({ variant: "default", size: "sm" })}
                   href="https://app.plex.tv"
                   target="_blank"
                   rel="noreferrer"
@@ -136,7 +136,7 @@ function ConnectAppsSession({ base, token }: { base: string; token: string }) {
                   {t("Open Plex")}
                 </a>
               ) : (
-                <Button disabled={busy} onClick={() => void create(id)}>
+                <Button size="sm" disabled={busy} onClick={() => void create(id)}>
                   {t("Create connection")}
                 </Button>
               )}

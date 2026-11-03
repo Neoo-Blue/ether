@@ -104,7 +104,7 @@ export function ViewerPlayback({ viewer }: { viewer: Viewer }) {
   };
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface px-5 py-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">

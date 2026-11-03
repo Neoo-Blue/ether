@@ -11,7 +11,6 @@ import type { TasteProfile, ViewerDetail } from "../../lib/contract";
 import { formatNumber, formatPercent } from "../../lib/format";
 import { useAsync } from "../../lib/hooks";
 import { extractTopPicks } from "./TasteView";
-import { ViewerStatus } from "./ViewerStatus";
 
 export function ViewerDashboard({
   viewer,
@@ -64,16 +63,20 @@ export function ViewerDashboard({
         {[
           [t("Plays in 30 days"), formatNumber(viewer.plays30d)],
           [t("Hours in 30 days"), formatNumber(viewer.hoursWatched30d, 1)],
+          [
+            t("Recent plays finished"),
+            viewer.recent?.length
+              ? formatPercent(
+                  viewer.recent.filter((play) => play.completed).length / viewer.recent.length,
+                )
+              : "—",
+          ],
         ].map(([label, value]) => (
           <div key={label} className="rounded-xl border border-border bg-surface p-4">
             <p className="text-xs text-fg-muted">{label}</p>
             <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
           </div>
         ))}
-        <div className="rounded-xl border border-border bg-surface p-4">
-          <p className="mb-2 text-xs text-fg-muted">{t("Access")}</p>
-          <ViewerStatus viewer={viewer} />
-        </div>
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 md:grid-cols-2">
         <DashboardPanel

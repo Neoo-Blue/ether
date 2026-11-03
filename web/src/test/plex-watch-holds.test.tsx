@@ -45,6 +45,8 @@ describe("Plex watch state actions", () => {
     render(<PlexWatchSync viewerId={7} plexId={77} />);
     expect(await screen.findByRole("button", { name: "Import from Plex" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Export current state" })).toBeDisabled();
+    await userEvent.hover(screen.getByRole("button", { name: "Import from Plex" }).parentElement!);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Connect the Plex account first");
     expect(
       screen.getByRole("button", { name: "Connect this viewer's Plex account" }),
     ).toBeEnabled();

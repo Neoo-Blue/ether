@@ -2036,6 +2036,7 @@ export function createFakeServer(opts: FakeOptions = {}) {
   });
 
   const viewerStreamRules = new Map<string, unknown>();
+  const restoredHidden = new Set<string>();
 
   // ---- Router ------------------------------------------------------------------------
 
@@ -3642,7 +3643,20 @@ export function createFakeServer(opts: FakeOptions = {}) {
       return json({ ok: true });
     const viewerHidden = /^\/viewers\/(\d+)\/not-interested(?:\/restore)?$/.exec(p);
     if (viewerHidden && (method === "GET" || method === "POST")) {
-      if (method === "GET") return json({ items: [] });
+      if (method === "GET")
+        return json({
+          items: catalog
+            .slice(3, 9)
+            .filter((title) => !restoredHidden.has(`${viewerHidden[1]}:${title.key}`))
+            .map((title) => ({
+              handle: String(title.key),
+              title: title.title,
+              year: title.year,
+              posterPath: undefined,
+              poster: title.poster,
+            })),
+        });
+      restoredHidden.add(`${viewerHidden[1]}:${(body as { handle: string }).handle}`);
       return json({ restored: true });
     }
     return err(404, "not_found", "no such API endpoint");

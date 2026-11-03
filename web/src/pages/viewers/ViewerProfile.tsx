@@ -9,7 +9,7 @@ import {
 } from "@braedonsaunders/appkit-ui";
 import { ArrowLeft, CheckCircle2, History } from "lucide-react";
 import { useCallback, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Artwork } from "../../components/Artwork";
 import { Meter } from "../../components/charts";
 import { ErrorPanel, LoadingRows } from "../../components/feedback";
@@ -57,6 +57,10 @@ export default function ViewerProfile() {
   const id = Number(raw);
   const tab: Tab = asTab(routeTab) ?? "overview";
   const navigate = useNavigate();
+  const [search, setSearch] = useSearchParams();
+  const listTab = ["alerts", "hidden"].includes(search.get("list") ?? "")
+    ? search.get("list")!
+    : "watchlist";
 
   const viewer = useAsync<ViewerDetail | null>(() => api.viewer(id), [id]);
   const taste = useAsync(() => api.taste(id), [id]);
@@ -78,12 +82,16 @@ export default function ViewerProfile() {
     [id],
   );
   const loadHidden = useCallback(async (): Promise<NotInterestedEntry[]> => {
-    const result = await apiFetch<{ items: { handle: string; title?: string }[] }>(
-      `/viewers/${id}/not-interested`,
-    );
+    const result = await apiFetch<{
+      items: { handle: string; title?: string; year?: number; posterPath?: string }[];
+    }>(`/viewers/${id}/not-interested`);
     return (result.items ?? []).map((item) => ({
       handle: item.handle,
       title: item.title,
+      year: item.year,
+      poster:
+        item.poster ??
+        (item.posterPath ? `https://image.tmdb.org/t/p/w92${item.posterPath}` : undefined),
       unavailable: !item.title,
     }));
   }, [id]);
@@ -210,14 +218,28 @@ export default function ViewerProfile() {
         <div className="space-y-6">
           {serverAccess ? (
             <>
-              <div className="space-y-6">
-                <FavoritesMirror load={loadFavorites} save={saveFavorites} />
-                <ViewerWatchlist viewerId={id} />
+              <div className="pb-4">
+                <SubtabNav
+                  ariaLabel={t("Lists and alerts sections")}
+                  active={listTab}
+                  onSelect={(next) => setSearch({ list: next })}
+                  tabs={[
+                    { key: "watchlist", label: t("Watchlist") },
+                    { key: "alerts", label: t("Alerts") },
+                    { key: "hidden", label: t("Not interested") },
+                  ]}
+                />
               </div>
-              <div className="space-y-6">
+              {listTab === "watchlist" ? (
+                <>
+                  <ViewerWatchlist viewerId={id} />
+                  <FavoritesMirror load={loadFavorites} save={saveFavorites} />
+                </>
+              ) : listTab === "alerts" ? (
                 <FavoriteEpisodeAlerts load={loadAlerts} />
+              ) : (
                 <NotInterested load={loadHidden} restore={restoreHidden} />
-              </div>
+              )}
             </>
           ) : null}
         </div>

@@ -459,3 +459,28 @@ it("shows a bounded dashboard and ordered viewer sections", async () => {
   fireEvent.click(within(tabs).getByRole("tab", { name: "Recent activity" }));
   expect(await screen.findByRole("table")).toBeInTheDocument();
 });
+
+it("deep-links to list sub-tabs and restores hidden recommendations", async () => {
+  const { fake } = renderApp("/viewers/4/lists?list=hidden");
+  const tabs = await screen.findByRole("tablist", { name: "Lists and alerts sections" }, WAIT);
+  expect(within(tabs).getByRole("tab", { name: "Not interested" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  const restore = await screen.findAllByRole(
+    "button",
+    { name: /Show .* in recommendations/ },
+    WAIT,
+  );
+  fireEvent.click(restore[0]!);
+  await waitFor(() =>
+    expect(calls(fake, "POST", "/viewers/4/not-interested/restore")).toHaveLength(1),
+  );
+  fireEvent.click(within(tabs).getByRole("tab", { name: "Alerts" }));
+  expect(await screen.findByText("New episodes from favourite shows")).toBeInTheDocument();
+  expect(screen.queryByRole("switch")).toBeNull();
+  fireEvent.click(within(tabs).getByRole("tab", { name: "Watchlist" }));
+  expect(
+    await screen.findByRole("switch", { name: "Show my favourites as a playlist in Plex." }),
+  ).toBeInTheDocument();
+});
