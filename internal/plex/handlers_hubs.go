@@ -705,7 +705,9 @@ func (s *Server) handleHubItems(w http.ResponseWriter, r *http.Request) {
 	}
 	count := countParam(r, 50)
 	if pr.HasPage && pr.Size > 0 {
-		count = min(max(50, min(pr.Start, 200)+min(pr.Size, 200)), 200)
+		// Assembly assigns candidates across rows based on the requested count.
+		// Every page must therefore use the same bounded assembly window.
+		count = 200
 	}
 	mc := hubContainer()
 	sections := parseSectionList(q.Get("contentDirectoryID"))
