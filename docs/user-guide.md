@@ -345,6 +345,21 @@ changing a Home row does not delete a library or remove a title from the
 catalogue. Plex's own Watchlist and other Plex-provided navigation remain
 client features.
 
+In **Library › Catalog**, use **Add to Watchlist** on a title card or in its
+details drawer. The watchlist viewer picker starts with your owner profile;
+select up to ten household viewers to update them together. A card shows the
+number of selected watchlists containing the title. When only some contain it,
+the add action adds it for all selected viewers; when all contain it, the
+remove action removes it for all. These titles use Ether's watchlist monitoring,
+including the Watchlist and Now available rows and availability alerts when
+those features are enabled in Catalog settings.
+
+Ether also sends the change to an enabled, linked Trakt account. If that write
+fails, the console reports it and the change remains in Ether; update Trakt
+separately. Plex watchlist changes stay in Ether: Ether does not write to
+plex.tv, and a subsequent Plex watchlist sync can restore an item removed in
+Ether. Remove it in Plex as well if you do not want it restored.
+
 ## Organise your Home
 
 Movies, TV and Home put populated **Continue Watching** first, followed by

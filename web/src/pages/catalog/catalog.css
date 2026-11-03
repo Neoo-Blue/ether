@@ -188,6 +188,57 @@
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   gap: 26px 18px;
 }
+.catalog-watchlist-card {
+  min-width: 0;
+}
+.catalog-watchlist-card > .catalog-poster {
+  width: 100%;
+}
+.catalog-watchlist-card > .catalog-watchlist-action {
+  margin-top: 6px;
+  max-width: 100%;
+}
+.catalog-watchlist-row {
+  display: flex;
+  align-items: center;
+  background: var(--color-surface);
+}
+.catalog-watchlist-row > .catalog-list-item {
+  flex: 1;
+  min-width: 0;
+}
+.catalog-watchlist-row > .catalog-watchlist-action {
+  margin: 0 12px;
+}
+.catalog-watchlist-picker {
+  position: relative;
+  font-size: 12px;
+}
+.catalog-watchlist-picker summary {
+  cursor: pointer;
+  padding: 8px;
+}
+.catalog-watchlist-menu {
+  position: absolute;
+  z-index: 20;
+  right: 0;
+  width: 260px;
+  max-height: 300px;
+  overflow: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 12px;
+  box-shadow: 0 8px 20px #0004;
+}
+.catalog-watchlist-menu label {
+  display: block;
+  padding: 4px;
+}
+.catalog-watchlist-menu p {
+  margin-top: 8px;
+  color: var(--color-fg-muted);
+}
 .catalog-poster {
   position: relative;
   text-align: left;
@@ -1276,4 +1327,12 @@ button.catalog-next:hover {
   .catalog-next-count {
     display: none;
   }
+}
+
+.catalog-watchlist-action {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 11px;
 }

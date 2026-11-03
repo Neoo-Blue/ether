@@ -1,6 +1,6 @@
 import { PanelSlots, PluginActionMenu } from "../../viewspec/slots/Slots";
 import { Badge, Spinner, SubtabNav } from "@braedonsaunders/appkit-ui";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowUpRight, Film, Star } from "lucide-react";
 import { Artwork } from "../../components/Artwork";
@@ -39,10 +39,12 @@ export function TitleInspector({
   titleKey,
   onClose,
   initialTab = "overview",
+  watchlistAction,
 }: {
   titleKey: string;
   onClose: () => void;
   initialTab?: InspectorTab;
+  watchlistAction?: ReactNode;
 }) {
   const state = useAsync(() => api.title(titleKey), [titleKey]);
   const title = state.data;
@@ -106,6 +108,7 @@ export function TitleInspector({
         ) : undefined
       }
     >
+      {watchlistAction ? <div className="px-5 pt-4">{watchlistAction}</div> : null}
       {state.error ? (
         <ErrorPanel className="m-5" error={state.error} onRetry={() => void state.reload()} />
       ) : !title ? (

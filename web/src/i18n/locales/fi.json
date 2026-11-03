@@ -6511,5 +6511,12 @@
   "m_1ffb9d60560b3f": "Klusterista",
   "m_1ffceea1081742": "dvd absoluuttinen esitys järjestys",
   "m_1ffe73d99814f5": "Hub-tunnukset, lajit tai glob-mallit",
-  "m_1ffeee0f0cedfc": "Tietokannan URL-osoitteen ohitus (valinnainen)"
+  "m_1ffeee0f0cedfc": "Tietokannan URL-osoitteen ohitus (valinnainen)",
+  "m_07020c1dead5c0": "Joitakin katselulistoja ei voitu päivittää. Yritä uudelleen.",
+  "m_075101ab9abaeb": "Katselulistan käyttäjät",
+  "m_0a6245265a6bcc": "Muutos tehtiin Etherissä, mutta Traktia ei voitu päivittää. Päivitä Trakt erikseen.",
+  "m_0a848c1a79c063": "Poista katselulistalta",
+  "m_10972ef4040b5a": "Katselulistan tilaa ei voitu ladata.",
+  "m_1212f660fb5847": "Plex-katselulistan muutokset jäävät Etheriin. Plex-synkronointi voi palauttaa poistetut nimikkeet.",
+  "m_14b0f89ac9fde3": "Lisää katselulistalle"
 }

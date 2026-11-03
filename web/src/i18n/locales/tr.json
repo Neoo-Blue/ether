@@ -6511,5 +6511,12 @@
   "m_1ffb9d60560b3f": "Bir kümeden",
   "m_1ffceea1081742": "dvd mutlak yayın sıralama",
   "m_1ffe73d99814f5": "Hub kimlikleri, türleri veya glob desenleri",
-  "m_1ffeee0f0cedfc": "Veritabanı URL'si geçersiz kılma (isteğe bağlı)"
+  "m_1ffeee0f0cedfc": "Veritabanı URL'si geçersiz kılma (isteğe bağlı)",
+  "m_07020c1dead5c0": "Bazı izleme listeleri güncellenemedi. Tekrar deneyin.",
+  "m_075101ab9abaeb": "İzleme listesi izleyicileri",
+  "m_0a6245265a6bcc": "Ether’da değiştirildi ancak Trakt güncellenemedi. Trakt’ı ayrıca güncelleyin.",
+  "m_0a848c1a79c063": "İzleme listesinden çıkar",
+  "m_10972ef4040b5a": "İzleme listesi durumu yüklenemedi.",
+  "m_1212f660fb5847": "Plex izleme listesi değişiklikleri Ether’da kalır. Plex eşitlemesi kaldırılan içerikleri geri getirebilir.",
+  "m_14b0f89ac9fde3": "İzleme listesine ekle"
 }

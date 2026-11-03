@@ -6511,5 +6511,12 @@
   "m_1ffb9d60560b3f": "Från ett kluster",
   "m_1ffceea1081742": "dvd absolut sänd ordning",
   "m_1ffe73d99814f5": "Hub-ID:n, typer eller globmönster",
-  "m_1ffeee0f0cedfc": "Åsidosätt databas-URL (valfritt)"
+  "m_1ffeee0f0cedfc": "Åsidosätt databas-URL (valfritt)",
+  "m_07020c1dead5c0": "Vissa bevakningslistor kunde inte uppdateras. Försök igen.",
+  "m_075101ab9abaeb": "Bevakningslistans tittare",
+  "m_0a6245265a6bcc": "Ändrat i Ether, men Trakt kunde inte uppdateras. Uppdatera Trakt separat.",
+  "m_0a848c1a79c063": "Ta bort från bevakningslistan",
+  "m_10972ef4040b5a": "Bevakningslistans status kunde inte hämtas.",
+  "m_1212f660fb5847": "Ändringar i Plex bevakningslista stannar i Ether. Plex-synkronisering kan återställa borttagna titlar.",
+  "m_14b0f89ac9fde3": "Lägg till i bevakningslistan"
 }

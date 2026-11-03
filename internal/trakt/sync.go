@@ -132,6 +132,51 @@ func (c *Client) AddHistory(ctx context.Context, userID int64, key core.RatingKe
 	return c.sync(ctx, userID, "/sync/history", key, map[string]any{"watched_at": watchedAt.UTC().Format(time.RFC3339)})
 }
 
+// SetWatchlist pushes a catalogue movie or show to a linked Trakt account.
+// A disconnected account is intentionally local-only.
+func (c *Client) SetWatchlist(ctx context.Context, userID int64, title core.Title, add bool) (bool, error) {
+	if !c.Connected(ctx, userID) {
+		return false, nil
+	}
+	var group string
+	switch title.Type {
+	case core.TypeMovie:
+		group = "movies"
+	case core.TypeShow:
+		group = "shows"
+	default:
+		return true, fmt.Errorf("trakt watchlist: unsupported title type")
+	}
+	ids := title.IDs
+	if ids.TMDB == 0 {
+		ids.TMDB = title.Key.TMDB()
+	}
+	path := "/sync/watchlist"
+	if !add {
+		path += "/remove"
+	}
+	status, body, err := c.authed(ctx, userID, http.MethodPost, path, map[string]any{group: []any{map[string]any{"title": title.Title, "year": title.Year, "ids": idsOf(ids)}}})
+	if err != nil {
+		return true, err
+	}
+	if status != http.StatusOK && status != http.StatusCreated {
+		return true, fmt.Errorf("trakt watchlist: HTTP %d", status)
+	}
+	var result struct {
+		NotFound map[string][]json.RawMessage `json:"not_found"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return true, fmt.Errorf("trakt watchlist: invalid response")
+	}
+	for _, entries := range result.NotFound {
+		if len(entries) > 0 {
+			return true, fmt.Errorf("trakt watchlist: title not found")
+		}
+	}
+	c.invalidateUser(userID)
+	return true, nil
+}
+
 // RemoveHistory removes a title from the user's Trakt history.
 func (c *Client) RemoveHistory(ctx context.Context, userID int64, key core.RatingKey) error {
 	return c.sync(ctx, userID, "/sync/history/remove", key, nil)

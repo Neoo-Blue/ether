@@ -6842,5 +6842,12 @@
   "m_1ffb9d60560b3f": "Z klastra",
   "m_1ffceea1081742": "dvd absolute aired ordering kolejność emisji bezwzględna",
   "m_1ffe73d99814f5": "Identyfikatory hubów, rodzaje lub wzorce glob",
-  "m_1ffeee0f0cedfc": "Nadpisanie adresu URL bazy danych (opcjonalnie)"
+  "m_1ffeee0f0cedfc": "Nadpisanie adresu URL bazy danych (opcjonalnie)",
+  "m_07020c1dead5c0": "Nie udało się zaktualizować niektórych list. Spróbuj ponownie.",
+  "m_075101ab9abaeb": "Widzowie listy",
+  "m_0a6245265a6bcc": "Zmieniono w Etherze, ale nie udało się zaktualizować Trakta. Zaktualizuj Trakt osobno.",
+  "m_0a848c1a79c063": "Usuń z listy",
+  "m_10972ef4040b5a": "Nie udało się załadować stanu listy.",
+  "m_1212f660fb5847": "Zmiany listy Plex pozostają w Etherze. Synchronizacja Plex może przywrócić usunięte tytuły.",
+  "m_14b0f89ac9fde3": "Dodaj do listy"
 }

@@ -6511,5 +6511,12 @@
   "m_1ffb9d60560b3f": "Fra en cluster",
   "m_1ffceea1081742": "dvd absolut sendt rækkefølge",
   "m_1ffe73d99814f5": "Hub-id’er, typer eller globs",
-  "m_1ffeee0f0cedfc": "Tilsidesæt database-URL (valgfrit)"
+  "m_1ffeee0f0cedfc": "Tilsidesæt database-URL (valgfrit)",
+  "m_07020c1dead5c0": "Nogle huskelister kunne ikke opdateres. Prøv igen.",
+  "m_075101ab9abaeb": "Huskelistens seere",
+  "m_0a6245265a6bcc": "Ændret i Ether, men Trakt kunne ikke opdateres. Opdater Trakt separat.",
+  "m_0a848c1a79c063": "Fjern fra huskeliste",
+  "m_10972ef4040b5a": "Huskelistens status kunne ikke indlæses.",
+  "m_1212f660fb5847": "Ændringer til Plex-huskelisten bliver i Ether. Plex-synkronisering kan gendanne fjernede titler.",
+  "m_14b0f89ac9fde3": "Føj til huskeliste"
 }

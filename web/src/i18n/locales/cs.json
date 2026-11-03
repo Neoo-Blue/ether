@@ -6842,5 +6842,12 @@
   "m_1ffb9d60560b3f": "Z clusteru",
   "m_1ffceea1081742": "dvd absolutní odvysílané řazení pořadí",
   "m_1ffe73d99814f5": "ID hubů, druhy nebo vzory glob",
-  "m_1ffeee0f0cedfc": "Přepsání URL databáze (volitelné)"
+  "m_1ffeee0f0cedfc": "Přepsání URL databáze (volitelné)",
+  "m_07020c1dead5c0": "Některé seznamy se nepodařilo aktualizovat. Zkuste to znovu.",
+  "m_075101ab9abaeb": "Diváci seznamu",
+  "m_0a6245265a6bcc": "Změněno v Etheru, ale Trakt se nepodařilo aktualizovat. Aktualizujte Trakt zvlášť.",
+  "m_0a848c1a79c063": "Odebrat ze seznamu",
+  "m_10972ef4040b5a": "Stav seznamu se nepodařilo načíst.",
+  "m_1212f660fb5847": "Změny seznamu Plex zůstávají v Etheru. Synchronizace Plex může obnovit odebrané tituly.",
+  "m_14b0f89ac9fde3": "Přidat do seznamu"
 }

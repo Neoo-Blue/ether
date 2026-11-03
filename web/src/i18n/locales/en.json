@@ -6529,5 +6529,12 @@
   "m_1ffb9d60560b3f": "From a cluster",
   "m_1ffceea1081742": "dvd absolute aired ordering",
   "m_1ffe73d99814f5": "Hub ids, kinds or globs",
-  "m_1ffeee0f0cedfc": "Database URL override (optional)"
+  "m_1ffeee0f0cedfc": "Database URL override (optional)",
+  "m_07020c1dead5c0": "Some watchlists could not be updated. Try again.",
+  "m_075101ab9abaeb": "Watchlist viewers",
+  "m_0a6245265a6bcc": "Changed in Ether, but Trakt could not be updated. Update Trakt separately.",
+  "m_0a848c1a79c063": "Remove from Watchlist",
+  "m_10972ef4040b5a": "Watchlist status could not be loaded.",
+  "m_1212f660fb5847": "Plex watchlist changes stay in Ether. Plex sync may restore removed titles.",
+  "m_14b0f89ac9fde3": "Add to Watchlist"
 }

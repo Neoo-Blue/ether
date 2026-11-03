@@ -6675,5 +6675,12 @@
   "m_1ffb9d60560b3f": "De un clúster",
   "m_1ffceea1081742": "dvd absoluto emisión ordenación",
   "m_1ffe73d99814f5": "ID de hub, tipos o patrones glob",
-  "m_1ffeee0f0cedfc": "URL de base de datos alternativa (opcional)"
+  "m_1ffeee0f0cedfc": "URL de base de datos alternativa (opcional)",
+  "m_07020c1dead5c0": "No se pudieron actualizar algunas listas. Inténtalo de nuevo.",
+  "m_075101ab9abaeb": "Usuarios de la lista",
+  "m_0a6245265a6bcc": "Cambio guardado en Ether, pero no en Trakt. Actualiza Trakt por separado.",
+  "m_0a848c1a79c063": "Quitar de la lista",
+  "m_10972ef4040b5a": "No se pudo cargar el estado de la lista.",
+  "m_1212f660fb5847": "Los cambios de la lista de Plex permanecen en Ether. La sincronización de Plex puede restaurar títulos eliminados.",
+  "m_14b0f89ac9fde3": "Añadir a la lista"
 }

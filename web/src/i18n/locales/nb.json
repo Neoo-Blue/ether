@@ -6511,5 +6511,12 @@
   "m_1ffb9d60560b3f": "Fra en klynge",
   "m_1ffceea1081742": "dvd absolutt sendt rekkefølge",
   "m_1ffe73d99814f5": "Hub-ID-er, typer eller glob-mønstre",
-  "m_1ffeee0f0cedfc": "Overstyring av database-URL (valgfritt)"
+  "m_1ffeee0f0cedfc": "Overstyring av database-URL (valgfritt)",
+  "m_07020c1dead5c0": "Noen ønskelister kunne ikke oppdateres. Prøv igjen.",
+  "m_075101ab9abaeb": "Ønskelistens seere",
+  "m_0a6245265a6bcc": "Endret i Ether, men Trakt kunne ikke oppdateres. Oppdater Trakt separat.",
+  "m_0a848c1a79c063": "Fjern fra ønskelisten",
+  "m_10972ef4040b5a": "Kunne ikke laste ønskelistens status.",
+  "m_1212f660fb5847": "Endringer i Plex-ønskelisten blir i Ether. Plex-synkronisering kan gjenopprette fjernede titler.",
+  "m_14b0f89ac9fde3": "Legg til i ønskelisten"
 }

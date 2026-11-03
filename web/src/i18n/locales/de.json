@@ -6511,5 +6511,12 @@
   "m_1ffb9d60560b3f": "Aus einem Cluster",
   "m_1ffceea1081742": "dvd absolut ausgestrahlt Reihenfolge",
   "m_1ffe73d99814f5": "Hub-IDs, Arten oder Globs",
-  "m_1ffeee0f0cedfc": "Datenbank-URL überschreiben (optional)"
+  "m_1ffeee0f0cedfc": "Datenbank-URL überschreiben (optional)",
+  "m_07020c1dead5c0": "Einige Merklisten konnten nicht aktualisiert werden. Erneut versuchen.",
+  "m_075101ab9abaeb": "Merklisten-Profile",
+  "m_0a6245265a6bcc": "In Ether geändert, aber Trakt konnte nicht aktualisiert werden. Trakt separat aktualisieren.",
+  "m_0a848c1a79c063": "Von der Merkliste entfernen",
+  "m_10972ef4040b5a": "Der Merklistenstatus konnte nicht geladen werden.",
+  "m_1212f660fb5847": "Änderungen an der Plex-Merkliste bleiben in Ether. Die Plex-Synchronisierung kann entfernte Titel wiederherstellen.",
+  "m_14b0f89ac9fde3": "Zur Merkliste hinzufügen"
 }

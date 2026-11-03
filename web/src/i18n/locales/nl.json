@@ -6511,5 +6511,12 @@
   "m_1ffb9d60560b3f": "Uit een cluster",
   "m_1ffceea1081742": "dvd absoluut uitgezonden volgorde",
   "m_1ffe73d99814f5": "Hub-ID's, soorten of globs",
-  "m_1ffeee0f0cedfc": "Database-URL overschrijven (optioneel)"
+  "m_1ffeee0f0cedfc": "Database-URL overschrijven (optioneel)",
+  "m_07020c1dead5c0": "Sommige kijklijsten konden niet worden bijgewerkt. Probeer opnieuw.",
+  "m_075101ab9abaeb": "Kijklijstprofielen",
+  "m_0a6245265a6bcc": "Gewijzigd in Ether, maar Trakt kon niet worden bijgewerkt. Werk Trakt apart bij.",
+  "m_0a848c1a79c063": "Van kijklijst verwijderen",
+  "m_10972ef4040b5a": "De kijklijststatus kon niet worden geladen.",
+  "m_1212f660fb5847": "Wijzigingen aan de Plex-kijklijst blijven in Ether. Plex-synchronisatie kan verwijderde titels herstellen.",
+  "m_14b0f89ac9fde3": "Aan kijklijst toevoegen"
 }
