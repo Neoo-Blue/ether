@@ -1,4 +1,5 @@
 import { routeApiImagesThroughFetch } from "../lib/api";
+import { createPrerollsMock } from "./prerolls";
 import { createFakeServer } from "./server";
 
 /** Route same-origin /ether/api requests to the in-browser fake (mock mode only). */
@@ -66,12 +67,18 @@ export function installMockBackend(): void {
     fake.state.config.posters = undefined;
     fake.state.config.trakt.enabled = false;
   }
+  const prerolls = createPrerollsMock(params.has("prerolls"));
   const real = window.fetch.bind(window);
   window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(
       input instanceof Request ? input.url : String(input),
       window.location.origin,
     );
+    if (
+      url.origin === window.location.origin &&
+      url.pathname.startsWith("/ether/api/admin/prerolls")
+    )
+      return prerolls(url, init);
     if (url.origin === window.location.origin && url.pathname.startsWith("/ether/api/"))
       return fake.fetch(url.toString(), init);
     return real(input, init);
