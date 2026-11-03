@@ -46,7 +46,7 @@ describe("registry navigation", () => {
     ]);
     expect(groups[2]!.items.map((i) => i.href)).toEqual([
       "/sources",
-      "/releases",
+      "/quality",
       "/cache",
       "/playback",
     ]);

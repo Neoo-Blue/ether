@@ -48,7 +48,7 @@ describe("console descriptors", () => {
   });
 
   it("keeps agent suggestions per route and out of plain actions", () => {
-    const onReleases = agentSuggestionsFor(commands, "/releases/profiles");
+    const onReleases = agentSuggestionsFor(commands, "/quality/profiles");
     expect(onReleases.map((c) => c.id)).toContain("ask.releases.why-pick");
     expect(agentSuggestionsFor(commands, "/livetv").map((c) => c.id)).toContain(
       "ask.livetv.failing",

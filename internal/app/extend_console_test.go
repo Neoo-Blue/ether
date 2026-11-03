@@ -25,7 +25,7 @@ func TestConsoleDescriptorsRegister(t *testing.T) {
 		{"catalog", "library", "/catalog"}, {"collections", "library", "/collections"},
 		{"home", "library", "/home"}, {"livetv", "library", "/livetv"},
 		{"calendar", "library", "/calendar"}, {"metadata", "library", "/metadata"},
-		{"sources", "streaming", "/sources"}, {"releases", "streaming", "/releases"},
+		{"sources", "streaming", "/sources"}, {"releases", "streaming", "/quality"},
 		{"cache", "streaming", "/cache"}, {"playback", "streaming", "/playback"},
 		{"general", "server", "/server"}, {"apps", "server", "/apps"},
 		{"integrations", "server", "/services"}, {"plugins", "server", "/plugins"},

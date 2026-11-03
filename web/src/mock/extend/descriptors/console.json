@@ -124,8 +124,8 @@
       "keywords": {},
       "agentSuggestion": true,
       "routePatterns": [
-        "/releases",
-        "/releases/*"
+        "/quality",
+        "/quality/*"
       ]
     }
   },
@@ -675,14 +675,14 @@
     "id": "releases",
     "owner": "builtin",
     "label": {
-      "source": "Releases"
+      "source": "Quality"
     },
     "hint": {},
     "icon": "ListFilter",
     "group": "streaming",
     "order": 20,
     "meta": {
-      "route": "/releases",
+      "route": "/quality",
       "page": "releases"
     }
   },
@@ -1429,14 +1429,14 @@
     "id": "releases",
     "owner": "builtin",
     "label": {
-      "source": "Releases"
+      "source": "Quality"
     },
     "hint": {},
     "icon": "ListFilter",
     "group": "streaming",
     "order": 20,
     "meta": {
-      "route": "/releases",
+      "route": "/quality",
       "navGroup": "streaming",
       "inNav": true,
       "keywords": {},
