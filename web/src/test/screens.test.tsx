@@ -153,7 +153,7 @@ describe("Updates settings", () => {
     );
     expect(screen.getByLabelText("Maintenance window ends")).toHaveValue("06:00");
     expect(screen.getByLabelText("Update feed")).toHaveValue("");
-    expect(screen.getByLabelText("Wait for playback to finish")).toHaveValue("");
+    expect(screen.getByLabelText("Wait for playback to finish")).toHaveValue(null); // an empty duration amount
   });
 });
 

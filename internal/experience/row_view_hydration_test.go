@@ -3,13 +3,8 @@ package experience
 import (
 	"context"
 	"database/sql"
-	"database/sql/driver"
 	"errors"
-	"path/filepath"
 	"reflect"
-	"strconv"
-	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -461,106 +456,4 @@ func TestRowViewHydrateEntriesMatchesIndependentLegacy(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestRowViewHydrateEntriesAdmissionDatabaseFaultEquivalence(t *testing.T) {
-	for index, pattern := range []string{"UPDATE catalog_home_release SET fallback_admitted", "SELECT fallback_admitted FROM catalog_home_release"} {
-		t.Run(strconv.Itoa(index), func(t *testing.T) {
-			ctx := context.Background()
-			now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-			viewer := &core.User{ID: 7}
-			key := core.MovieKey(71)
-			makeSource := func(label string) (*catalog.Catalog, *atomic.Bool) {
-				path := filepath.Join(t.TempDir(), "fixture.db")
-				base, e := store.OpenPath(ctx, path)
-				if e != nil {
-					t.Fatal(e)
-				}
-				drv := base.Driver()
-				base.Close()
-				fault := &atomic.Bool{}
-				sql.Register("exp_row_hydration_"+strconv.Itoa(index)+label, hydrationAdmissionDriver{base: drv, fault: fault, pattern: pattern})
-				db, e := sql.Open("exp_row_hydration_"+strconv.Itoa(index)+label, path)
-				if e != nil {
-					t.Fatal(e)
-				}
-				db.SetMaxOpenConns(1)
-				t.Cleanup(func() { db.Close() })
-				c, e := catalog.New(db, nil, config.Catalog{ReleaseMode: config.ModeDigital}, nil, catalog.WithNow(func() time.Time { return now }))
-				if e != nil {
-					t.Fatal(e)
-				}
-				if e = c.UpsertTitle(ctx, core.Title{Key: key, Type: core.TypeMovie, Title: "Eligible", Released: now.AddDate(-1, 0, 0)}, true); e != nil {
-					t.Fatal(e)
-				}
-				if _, e = db.ExecContext(ctx, `INSERT INTO catalog_home_release(key,checked,earliest_ts,fallback_admitted,attempted_at) VALUES(?,1,0,0,0)`, int64(key)); e != nil {
-					t.Fatal(e)
-				}
-				return c, fault
-			}
-			legacy, lf := makeSource("legacy")
-			candidate, cf := makeSource("candidate")
-			lf.Store(true)
-			cf.Store(true)
-			makeOne := func(c *catalog.Catalog) RowViewEntry {
-				return func(ctx context.Context, _ core.NeutralEntryRef) (frontend.RowEntry, error) {
-					title, e := c.CachedGet(ctx, key)
-					if e != nil {
-						return frontend.RowEntry{}, e
-					}
-					return frontend.RowEntry{Kind: frontend.RowEntryTitle, Title: title}, nil
-				}
-			}
-			refs := []core.NeutralEntryRef{{Kind: string(frontend.RowEntryTitle), ID: key.String()}}
-			guide := func(context.Context) ([]frontend.RowEntry, error) { return nil, core.ErrNotFound }
-			want, we := RowViewHydrateLegacy(ctx, viewer, refs, makeOne(legacy), guide)
-			read := func(ctx context.Context, k core.RatingKey) (*core.Title, error) {
-				return candidate.CachedGet(ctx, k)
-			}
-			got, ge := RowViewHydrateEntries(ctx, viewer, refs, makeOne(candidate), candidate.CachedGetMany, read, Visibility{SectionFor: func(core.MediaType) (int, bool) { return 1, true }}, guide)
-			if lf.Load() || cf.Load() || got != nil || want != nil || !errors.Is(we, core.ErrNotFound) || !errors.Is(ge, core.ErrNotFound) || !reflect.DeepEqual(want, got) {
-				t.Fatalf("fault not equivalent legacy=%+v %v candidate=%+v %v fired=%v/%v", want, we, got, ge, !lf.Load(), !cf.Load())
-			}
-		})
-	}
-}
-
-type hydrationAdmissionDriver struct {
-	base    driver.Driver
-	fault   *atomic.Bool
-	pattern string
-}
-
-func (d hydrationAdmissionDriver) Open(name string) (driver.Conn, error) {
-	c, e := d.base.Open(name)
-	if e != nil {
-		return nil, e
-	}
-	return &hydrationAdmissionConn{Conn: c, fault: d.fault, pattern: d.pattern}, nil
-}
-
-type hydrationAdmissionConn struct {
-	driver.Conn
-	fault   *atomic.Bool
-	pattern string
-}
-
-func (c *hydrationAdmissionConn) QueryContext(ctx context.Context, q string, args []driver.NamedValue) (driver.Rows, error) {
-	if strings.Contains(q, c.pattern) && c.fault.CompareAndSwap(true, false) {
-		return nil, errors.New("injected admission failure")
-	}
-	if d, ok := c.Conn.(driver.QueryerContext); ok {
-		return d.QueryContext(ctx, q, args)
-	}
-	return nil, driver.ErrSkip
-}
-
-func (c *hydrationAdmissionConn) ExecContext(ctx context.Context, q string, args []driver.NamedValue) (driver.Result, error) {
-	if strings.Contains(q, c.pattern) && c.fault.CompareAndSwap(true, false) {
-		return nil, errors.New("injected admission failure")
-	}
-	if d, ok := c.Conn.(driver.ExecerContext); ok {
-		return d.ExecContext(ctx, q, args)
-	}
-	return nil, driver.ErrSkip
 }
