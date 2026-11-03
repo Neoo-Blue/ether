@@ -37,7 +37,7 @@ func (a *App) buildExtensibility(ctx context.Context, cfg config.Config) error {
 	if a.pluginsRT, err = a.buildPlugins(ctx, cfg); err != nil {
 		return fmt.Errorf("plugins: %w", err)
 	}
-	if err := studio.RegisterTools(a.extendRT.tools, studio.ToolDeps{Registry: a.extendRT.registry, TextResolver: a.pluginTextResolver(), Manager: a.pluginsRT.mgr}); err != nil {
+	if err := studio.RegisterTools(a.extendRT.tools, studio.ToolDeps{Studio: a.pluginsRT.studio, Registry: a.extendRT.registry, TextResolver: a.pluginTextResolver(), Manager: a.pluginsRT.mgr}); err != nil {
 		return fmt.Errorf("Studio tools: %w", err)
 	}
 	if a.agentRT, err = a.buildAgent(ctx, cfg); err != nil {

@@ -17,6 +17,7 @@ import (
 
 // ToolDeps holds dependencies for the Studio and extensibility agent and MCP tools.
 type ToolDeps struct {
+	Studio       *Studio
 	Registry     *extend.Registry
 	TextResolver extend.TextResolver
 	Manager      *plugins.Manager
@@ -29,7 +30,7 @@ func RegisterTools(cat *tools.Catalogue, deps ToolDeps) error {
 	if cat == nil {
 		return fmt.Errorf("studio: tool catalogue is required")
 	}
-	return cat.Register(Tools(deps)...)
+	return cat.Register(append(Tools(deps), ProjectTools(deps.Studio)...)...)
 }
 
 // Tools returns the 8 Studio and extensibility tools (WS11h):

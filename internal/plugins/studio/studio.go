@@ -309,11 +309,21 @@ func (s *Studio) SaveFiles(
 	shadow *bool,
 	settings map[string]any,
 ) (*Project, CompileResult, error) {
+	return s.saveFiles(ctx, id, files, shadow, settings, "")
+}
+func (s *Studio) saveFilesVersion(ctx context.Context, id string, files map[string]string, version string) (*Project, CompileResult, error) {
+	return s.saveFiles(ctx, id, files, nil, nil, version)
+}
+func (s *Studio) saveFiles(ctx context.Context, id string, files map[string]string, shadow *bool, settings map[string]any, version string) (*Project, CompileResult, error) {
 	s.mu.Lock()
 	p, ok := s.lookupLocked(id)
 	if !ok {
 		s.mu.Unlock()
 		return nil, CompileResult{}, ErrProjectNotFound
+	}
+	if version != "" && p.UpdatedAt.Format(time.RFC3339Nano) != version {
+		s.mu.Unlock()
+		return nil, CompileResult{}, fmt.Errorf("draft changed; read it again before saving")
 	}
 	p = cloneProject(p)
 	merged := make(map[string]string, len(p.Files)+len(files))
