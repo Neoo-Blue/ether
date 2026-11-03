@@ -258,8 +258,13 @@ export const PAGES = localized<PageDef[]>(() => [
         key: "extras",
         title: t("Extras"),
         keywords: searchTerms(
-          msg("trailers cinema yt-dlp intro credits skip chapters up next post-play"),
+          msg("intro credits skip chapters up next post-play"),
         ),
+      },
+      {
+        key: "prerolls",
+        title: t("Pre-rolls"),
+        keywords: searchTerms(msg("pre-roll preroll intro video before feature trailers cinema yt-dlp")),
       },
       {
         key: "subtitles",

@@ -1,6 +1,7 @@
 import * as S from "../settings/schema";
 import { Link } from "react-router-dom";
 import { ConfigSection } from "../../components/ConfigSection";
+import { SectionHeading } from "../../components/feedback";
 import { DomainPage, useRouteTab } from "../../components/layout";
 import { localized, t, tx } from "../../i18n";
 import { DeviceCapabilities } from "./Devices";
@@ -59,6 +60,14 @@ export default function Playback() {
         label={t("Streams & transcoding")}
       />
       {tab === "devices" ? <DeviceCapabilities /> : null}
+      {tab === "prerolls" ? (
+        <SectionHeading
+          title={t("Before the feature")}
+          description={t(
+            "What plays before a movie or episode starts: your pre-rolls and cinema trailers.",
+          )}
+        />
+      ) : null}
       <ConfigSection
         hidden={tab !== "prerolls"}
         configKey="extras"

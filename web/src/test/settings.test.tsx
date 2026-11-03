@@ -534,14 +534,15 @@ describe("Settings", () => {
     expect(whole.plex.remoteAccess).toBe(!before);
   });
 
-  it("saves trailers and up-next picks together on Playback › Extras", async () => {
-    const { fake } = renderApp("/playback/extras");
+  it("saves trailers on Pre-rolls and up-next picks on Extras together", async () => {
+    const { fake } = renderApp("/playback/prerolls");
     type Saved = { extras: { enabled: boolean }; personalize: { postPlay: boolean } };
     const live = () => fake.state.config as unknown as Saved;
     const trailers = Boolean(live().extras?.enabled);
     const upNext = Boolean(live().personalize?.postPlay);
     fireEvent.click(await screen.findByLabelText("Trailers and Cinema Trailers", {}, WAIT));
-    fireEvent.click(screen.getByLabelText("Personal “up next” picks"));
+    fireEvent.click(screen.getByRole("tab", { name: "Extras" }));
+    fireEvent.click(await screen.findByLabelText("Personal “up next” picks", {}, WAIT));
     expect(screen.getByRole("switch", { name: "Skip intro" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Save changes/ }));
     const wholeSaves = () => calls(fake, "PUT", "/config").filter((c) => c.path === "/config");

@@ -145,7 +145,8 @@ export function SchedulePanel({
   );
 }
 
-function ToggleRow({
+/** A labelled switch on its own card row. */
+export function ToggleRow({
   title,
   description,
   checked,
