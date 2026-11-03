@@ -186,6 +186,7 @@ func releasesFailed(n int, lastErr error, allUncached bool) error {
 // nextResolution returns the next release to try: an untried alternate when
 // NZBs can be fetched directly, else a fresh Resolve excluding tried ones.
 func (m *Manager) nextResolution(ctx context.Context, s *session, tried []string, alternates []core.Release) (*core.Resolution, error) {
+	ctx = core.WithIndexerPurpose(ctx, core.IndexerPurposePlayback)
 	if m.deps.FetchNZB != nil {
 		for i, alt := range alternates {
 			if alt.ID == "" || slices.Contains(tried, alt.ID) || !releaseMatchesTitle(alt, s.title) {

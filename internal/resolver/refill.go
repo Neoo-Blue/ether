@@ -42,7 +42,7 @@ func (s *Service) RefillSearchCache(title *core.Title) <-chan struct{} {
 	done := make(chan struct{})
 	s.refills[key] = done
 	// Use the service lifetime, not the metadata request or source warm-up.
-	ctx, cancel := context.WithTimeout(s.bgCtx, searchRefillBudget)
+	ctx, cancel := context.WithTimeout(core.WithIndexerPurpose(s.bgCtx, core.IndexerPurposeWarmup), searchRefillBudget)
 	s.bgWG.Add(1)
 	go func() {
 		defer s.bgWG.Done()

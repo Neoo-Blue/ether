@@ -279,7 +279,7 @@ func (m *Manager) Prewarm(_ context.Context, user *core.User, key core.RatingKey
 			m.mu.Unlock()
 			e.ready.Do(func() { close(e.done) })
 		}()
-		ctx, cancel := warmPreparationContext(m.ctx, timeout, e.foreground)
+		ctx, cancel := warmPreparationContext(core.WithIndexerPurpose(m.ctx, core.IndexerPurposeWarmup), timeout, e.foreground)
 		e.setCancel(cancel)
 		defer cancel()
 		title, err := m.deps.Catalog.Get(ctx, key)

@@ -472,7 +472,7 @@ func (m *Manager) fill(ctx context.Context, owner *core.User, title *core.Title,
 	m.status.Size = 0
 	m.mu.Unlock()
 	m.state("resolving", "Selecting a release using the owner's quality rules")
-	resolveCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	resolveCtx, cancel := context.WithTimeout(core.WithIndexerPurpose(ctx, core.IndexerPurposeWarmup), 90*time.Second)
 	caps := core.ClientCaps{ClientID: "ether-managed-cache", Product: "Ether Managed Cache"}
 	res, err := m.deps.Resolver.Resolve(resolveCtx, core.ResolveRequest{Title: title, User: owner, Client: caps, Prefer: previous.ReleaseID})
 	cancel()

@@ -70,6 +70,9 @@ type Options struct {
 	// Backend builds the search backend for an indexer whose Kind is not
 	// Newznab (built-in sites, internal/cardigann). Nil disables them.
 	Backend func(config.Indexer) (Backend, error)
+	// usageDB records a one-off client's requests in the usage breakdown
+	// without spending budgets (Manager.TestIndexer).
+	usageDB *sql.DB
 }
 
 // Backend searches a site that is not a Newznab API, such as a built-in
@@ -102,6 +105,7 @@ type Client struct {
 	feedMode recentFeedMode
 	budgetMu sync.Mutex
 	mem      memBudget
+	usageDB  *sql.DB // see Options.usageDB
 	rate     rateLimitState
 
 	cacheMu  sync.RWMutex
@@ -185,7 +189,7 @@ var _ core.Indexer = (*Client)(nil)
 // New builds a Client for one indexer. db may be nil (budgets and cache
 // then live in memory).
 func New(cfg config.Indexer, db *sql.DB, opts Options) *Client {
-	c := &Client{cfg: cfg, db: db, nzbDir: opts.NZBDir, backends: opts.Backend}
+	c := &Client{cfg: cfg, db: db, usageDB: opts.usageDB, nzbDir: opts.NZBDir, backends: opts.Backend}
 	c.http = opts.HTTPClient
 	if c.http == nil {
 		c.http = egress.Client(egress.CapIndexers, defaultHTTPTimeout)
@@ -556,7 +560,7 @@ func (c *Client) Caps(ctx context.Context) (*Caps, error) {
 		c.capsMu.Unlock()
 		return caps, nil
 	}
-	if err := c.reserve(ctx, "hit"); err != nil {
+	if err := c.reserve(capsPurpose(ctx), "hit"); err != nil {
 		return nil, err
 	}
 	caps, err := c.fetchCaps(ctx)

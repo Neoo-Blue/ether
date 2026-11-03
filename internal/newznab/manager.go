@@ -171,6 +171,7 @@ func (m *Manager) SearchRescue(ctx context.Context, req core.SearchRequest) ([]c
 
 // SearchRescueWith is SearchRescue with per-indexer early arrival callbacks.
 func (m *Manager) SearchRescueWith(ctx context.Context, req core.SearchRequest, arrived func([]core.Release)) ([]core.Release, error) {
+	ctx = core.WithIndexerPurpose(ctx, core.IndexerPurposeRescue)
 	clients := m.Clients()
 	type slot struct {
 		results []core.Release

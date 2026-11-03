@@ -270,7 +270,7 @@ func (p *Prefetcher) firePostPlay(ctx context.Context, user *core.User, key core
 			return p.deps.Engine.Prefetch(ctx, rp.ReleaseID(), rp.NZB, 0, clampLen(0, length, rp.Size))
 		}
 	}
-	res, err := p.deps.Resolver.Resolve(ctx, core.ResolveRequest{Title: playable, Client: caps, User: user})
+	res, err := p.deps.Resolver.Resolve(core.WithIndexerPurpose(ctx, core.IndexerPurposeWarmup), core.ResolveRequest{Title: playable, Client: caps, User: user})
 	if errors.Is(err, core.ErrNotAvailable) {
 		log.Debug("post-play pick not available")
 		return nil

@@ -247,7 +247,7 @@ func (p *searchPreparation) searchLive(ctx context.Context, indexer core.Streami
 	// Detach from Play cancel so a first healthy hit can start while the
 	// remaining indexers finish into the search cache (better versions and
 	// failover). Close still cancels and joins via bgCtx/bgWG.
-	searchCtx, cancel := context.WithCancel(p.svc.bgCtx)
+	searchCtx, cancel := context.WithCancel(core.InheritIndexerPurpose(p.svc.bgCtx, ctx))
 	type answer struct {
 		releases []core.Release
 		err      error
