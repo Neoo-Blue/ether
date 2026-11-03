@@ -778,7 +778,7 @@ func (s *Server) prewarmSidecarSubtitle(u *core.User, ps *core.PlaySession, m mo
 		if st.StreamType != 3 || st.Location != "sidecar" || st.Selected == nil || !*st.Selected || !embeddedTextSubtitle(st) {
 			continue
 		}
-		binding, err := s.resolveStream(context.Background(), u, st.ID)
+		binding, err := s.resolveIssuedStream(context.Background(), u, ps.ClientID, st.ID)
 		if err != nil || binding.Info.Type != "subtitle" || binding.Info.External {
 			continue
 		}

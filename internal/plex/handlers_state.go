@@ -318,7 +318,7 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		viewer := &Request{User: &e.user, ClientID: e.client.ClientID, Product: e.client.Product, Platform: e.client.Platform}
-		md := s.metadata(ctx, viewer, t, renderOpts{media: true})
+		md := s.metadata(ctx, viewer, t, renderOpts{media: true, session: true})
 		md.SessionKey = strconv.Itoa(e.sessionKey)
 		md.ViewOffset = ms(e.offset)
 		md.User = &model.SessionUser{ID: strconv.FormatInt(e.user.PlexID, 10), Thumb: e.user.Thumb, Title: e.user.Title}

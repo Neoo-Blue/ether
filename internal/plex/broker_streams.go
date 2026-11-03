@@ -41,6 +41,21 @@ func (s *Server) resolveStream(ctx context.Context, u *core.User, id int64) (ses
 	return s.boundStreams.ResolvePlexStream(ctx, s.plexStreamAccess(u), id)
 }
 
+// resolveIssuedStream resolves a stream id a client sent back. The broker
+// authorizes it and names the title; when a probe or failover moved that
+// id onto another track for this client, the track it names now is
+// returned instead of the title-wide binding.
+func (s *Server) resolveIssuedStream(ctx context.Context, u *core.User, clientID string, id int64) (sessions.PlexStreamBinding, error) {
+	binding, err := s.resolveStream(ctx, u, id)
+	if err != nil || u == nil || s.playIDs == nil {
+		return binding, err
+	}
+	if t, ok := s.playIDs.resolve(playIdentityKey{userID: u.ID, clientID: clientID, key: binding.Key}, id); ok {
+		binding.Index, binding.Info = t.index, t.info
+	}
+	return binding, nil
+}
+
 func streamMiss(err error) bool {
 	return err == nil || errors.Is(err, core.ErrNotFound)
 }

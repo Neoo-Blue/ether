@@ -255,7 +255,7 @@ func TestResumedDetailColdRestartRefill(t *testing.T) {
 	if x.idx.searches.Load() != 1 || x.idx.fetches.Load() != 0 {
 		t.Fatal("refill must search only once")
 	}
-	ids, ok := x.f.srv.renderedVariants.get(renderedVariantKey{ownerUser.ID, "client-1", x.title.Key}, fixedNow)
+	ids, ok := x.f.srv.playIDs.releases(playIdentityKey{ownerUser.ID, "client-1", x.title.Key}, fixedNow)
 	if !ok {
 		t.Fatal("render order missing")
 	}

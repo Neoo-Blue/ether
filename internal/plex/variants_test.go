@@ -255,7 +255,7 @@ func TestDetailRendersPlayVersionMedia(t *testing.T) {
 		t.Errorf("json variant label missing: %d %s", rec.Code, rec.Body.String())
 	}
 	// The rendered order is remembered for mediaIndex.
-	ids, ok := f.srv.renderedVariants.get(renderedVariantKey{userID: ownerUser.ID, clientID: "client-1", key: fightClub.Key}, fixedNow)
+	ids, ok := f.srv.playIDs.releases(playIdentityKey{userID: ownerUser.ID, clientID: "client-1", key: fightClub.Key}, fixedNow)
 	if !ok || len(ids) != 3 || ids[0] != "rel-auto" || ids[1] != "rel-4k" || ids[2] != "rel-compat" {
 		t.Errorf("rendered set %v ok=%v", ids, ok)
 	}
@@ -901,8 +901,7 @@ func TestPlexWebVersionKeepsTracksAndIndexDuringPlayback(t *testing.T) {
 	}
 }
 
-// Only Plex Web keeps the full version list during a session (#267). The
-// other apps keep seeing the playing version alone, as before.
+// Native clients also keep their chosen version index during playback.
 func TestNonWebClientsSeeThePlayingVersionDuringPlayback(t *testing.T) {
 	f, pb := newVariantPlaybackFixture(t)
 	path := "/library/metadata/" + fightClub.Key.String()
@@ -929,7 +928,7 @@ func TestNonWebClientsSeeThePlayingVersionDuringPlayback(t *testing.T) {
 	if rec.Code != http.StatusOK || len(pb.variantCalls) != 1 {
 		t.Fatalf("decision: %d %v", rec.Code, pb.variantCalls)
 	}
-	if n := count(); n != 1 {
-		t.Fatalf("during playback: %d media, want the playing version alone", n)
+	if n := count(); n != 3 {
+		t.Fatalf("during playback: %d media, want the full version list", n)
 	}
 }
