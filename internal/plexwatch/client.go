@@ -187,12 +187,23 @@ func (c *Client) account(ctx context.Context, token string) (remoteAccount, erro
 	return remoteAccount{ID: out.ID, Username: name, Restricted: out.Restricted}, nil
 }
 
-// eligibility is the read-only view_state_sync check. allowed is true only
-// for HTTP 200. HTTP 403 is ErrNotEligible. Other statuses are returned.
+// eligibility is the read-only view_state_sync check: the account's own
+// "Sync my watch state and ratings" consent, read with the viewer's account
+// token. (server/users/{id}/view_state_sync needs a Plex server token and
+// refuses every account token with 403 code 1080, #288.) Consent false or
+// HTTP 403 is ErrNotEligible; other statuses are returned.
 func (c *Client) eligibility(ctx context.Context, token string, plexID int64) error {
-	path := "/api/v2/server/users/" + strconv.FormatInt(plexID, 10) + "/view_state_sync"
-	_, err := c.call(ctx, http.MethodGet, c.plex, path, token, nil, nil, http.StatusOK)
-	return err
+	_ = plexID // the account endpoint is scoped by the token itself
+	var out struct {
+		Consent bool `json:"consent"`
+	}
+	if _, err := c.call(ctx, http.MethodGet, c.plex, "/api/v2/user/view_state_sync", token, nil, &out, http.StatusOK); err != nil {
+		return err
+	}
+	if !out.Consent {
+		return ErrNotEligible
+	}
+	return nil
 }
 
 type postItem struct {

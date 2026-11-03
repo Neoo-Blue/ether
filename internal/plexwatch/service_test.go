@@ -157,6 +157,9 @@ func (f *fakeUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			code = http.StatusOK
 		}
 		w.WriteHeader(code)
+		if code == http.StatusOK {
+			_, _ = w.Write([]byte(`{"consent":true}`))
+		}
 	case r.Method == http.MethodPost && r.URL.Path == "/state":
 		if f.entered != nil {
 			select {
