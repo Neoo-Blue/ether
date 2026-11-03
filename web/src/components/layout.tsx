@@ -1,5 +1,10 @@
-import { PageContainer, PageHeader, SubtabNav, cn } from "@braedonsaunders/appkit-ui";
-import type { ReactNode } from "react";
+import {
+  PageContainer,
+  PageHeader,
+  SubtabNav as AppKitSubtabNav,
+  cn,
+} from "@braedonsaunders/appkit-ui";
+import { useRef, type ReactNode, type ComponentProps } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { t } from "../i18n";
 
@@ -52,7 +57,7 @@ export function DomainPage({
       <PageHeader title={title} description={description} actions={actions} />
       {status}
       {tabs && tabs.length > 1 ? (
-        <div className="border-b border-border">
+        <div>
           <SubtabNav
             ariaLabel={t("{page} sections", { page: title })}
             active={active ?? tabs[0]!.key}
@@ -116,5 +121,32 @@ export function Section({
         </div>
       ) : null}
     </section>
+  );
+}
+
+// All page tabs share spacing and retain their scroll container during selection.
+export function SubtabNav(props: ComponentProps<typeof AppKitSubtabNav>) {
+  const root = useRef<HTMLDivElement>(null);
+  return (
+    <div ref={root} className="mb-6">
+      <AppKitSubtabNav
+        {...props}
+        onSelect={(key) => {
+          const positions: [HTMLElement, number][] = [];
+          let node: HTMLElement | null = root.current;
+          while (node) {
+            // Keep Chrome from moving the viewport to a different anchor when
+            // the selected panel becomes shorter.
+            if (node.classList.contains("app-scroll")) node.style.overflowAnchor = "none";
+            positions.push([node, node.scrollTop]);
+            node = node.parentElement;
+          }
+          props.onSelect?.(key);
+          requestAnimationFrame(() => {
+            for (const [element, top] of positions) element.scrollTop = top;
+          });
+        }}
+      />
+    </div>
   );
 }

@@ -1,3 +1,4 @@
+import { SubtabNav } from "../../components/layout";
 import {
   Badge,
   Button,
@@ -8,7 +9,6 @@ import {
   PagedTable,
   SearchSelect,
   Select,
-  SubtabNav,
   type ListSearchParams,
 } from "@braedonsaunders/appkit-ui";
 import { Plus } from "lucide-react";

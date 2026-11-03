@@ -1,4 +1,5 @@
-import { SettingsSection, Spinner, SubtabNav, toast } from "@braedonsaunders/appkit-ui";
+import { SubtabNav } from "../../components/layout";
+import { SettingsSection, Spinner, toast } from "@braedonsaunders/appkit-ui";
 import { Segmented } from "../../components/fields";
 import { MoreOptions } from "../../components/ConfigSection";
 import { Link, useNavigate, useParams } from "react-router-dom";

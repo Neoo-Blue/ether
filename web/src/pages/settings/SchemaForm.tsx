@@ -1,12 +1,6 @@
+import { SubtabNav } from "../../components/layout";
 import { SettingsRow } from "../../components/SettingsRow";
-import {
-  Input,
-  SearchSelect,
-  SettingsSection,
-  SubtabNav,
-  Switch,
-  Textarea,
-} from "@braedonsaunders/appkit-ui";
+import { Input, SearchSelect, SettingsSection, Switch, Textarea } from "@braedonsaunders/appkit-ui";
 import { useEffect, useState, type ReactNode } from "react";
 import { ListInput, MapInput, NumberInput, SecretInput } from "../../components/fields";
 import { t } from "../../i18n";

@@ -12,7 +12,7 @@ describe("Apps Plex placement", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/192\.168\.1\.20:32400/)).toBeInTheDocument();
     expect(screen.queryByText(/127\.0\.0\.1/)).not.toBeInTheDocument();
-    expect(screen.getAllByText("Claimed by the Plex account owner.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Claimed by Plex account Braedon").length).toBeGreaterThan(0);
     expect(screen.queryByLabelText("Owner token")).not.toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: "Claimed" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Remote access" }));
