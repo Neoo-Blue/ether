@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -12,6 +13,10 @@ import (
 
 	"github.com/braedonsaunders/ether/internal/logredact"
 )
+
+var supportNetworkText = regexp.MustCompile(`(?i)https?://[^\s]+|\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b|\b(?:[a-z0-9-]+\.)+(?:com|net|org|local|internal|lan|io)\b|\[[0-9a-f:]+\]`)
+
+func redactNetworkText(s string) string { return supportNetworkText.ReplaceAllString(s, redactMask) }
 
 // secretForms lists literal encodings of a nonempty secret. Percent-encoded
 // forms are not enumerated: redactPercentEncoded decodes bounded runs, so

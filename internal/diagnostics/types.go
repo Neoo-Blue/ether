@@ -56,6 +56,7 @@ const (
 	KindPoll              Kind = "client.poll"
 	KindTranscodeDecision Kind = "transcode.decision"
 	KindPlaybackDecision  Kind = "playback.decision"
+	KindRequest           Kind = "request"
 )
 
 // Event is one neutral observation. String fields are clipped before the
@@ -74,6 +75,10 @@ type Event struct {
 	Route            string
 	Status           int
 	Duration         time.Duration
+	Query            string
+	DBQueries        int64
+	DBTime           time.Duration
+	Response         *ResponseSummary
 	Bytes            int64
 	Range            string
 	Repeat           int
@@ -81,6 +86,7 @@ type Event struct {
 	Platform         string
 	Model            string
 	DeviceName       string
+	Device           string
 	AppVersion       string
 	QualityRequested string
 	QualitySelected  string
@@ -103,6 +109,25 @@ type Event struct {
 	// Release names stay only when the titles flag is on. It must not carry
 	// a username or address.
 	Playback *PlaybackDecision
+}
+
+type ResponseSummary struct {
+	Size      int          `json:"size"`
+	TotalSize *int         `json:"totalSize,omitempty"`
+	Items     []string     `json:"items,omitempty"`
+	Hubs      []HubSummary `json:"hubs,omitempty"`
+	Truncated bool         `json:"truncated,omitempty"`
+}
+
+type HubSummary struct {
+	Identifier string   `json:"identifier"`
+	Title      string   `json:"title,omitempty"`
+	Style      string   `json:"style,omitempty"`
+	Type       string   `json:"type,omitempty"`
+	Size       int      `json:"size"`
+	More       bool     `json:"more"`
+	ItemCount  int      `json:"itemCount"`
+	Items      []string `json:"items,omitempty"`
 }
 
 // Candidate is a bounded, URL-free source fact.

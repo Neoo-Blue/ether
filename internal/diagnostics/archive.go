@@ -300,10 +300,11 @@ func collectJSONLIdentity(b []byte, flags [3]bool, p *IdentityPreview) {
 			continue
 		}
 		var row struct {
-			Username   string `json:"username"`
-			Peer       string `json:"peer"`
-			Title      string `json:"title"`
-			SourceName string `json:"sourceName"`
+			Username   string           `json:"username"`
+			Peer       string           `json:"peer"`
+			Title      string           `json:"title"`
+			SourceName string           `json:"sourceName"`
+			Response   *ResponseSummary `json:"response"`
 		}
 		if json.Unmarshal(line, &row) != nil {
 			continue
@@ -316,6 +317,12 @@ func collectJSONLIdentity(b []byte, flags [3]bool, p *IdentityPreview) {
 		}
 		if flags[0] {
 			p.Titles = mergeStrings(p.Titles, []string{row.Title, row.SourceName})
+			if row.Response != nil {
+				p.Titles = mergeStrings(p.Titles, row.Response.Items)
+				for _, h := range row.Response.Hubs {
+					p.Titles = mergeStrings(p.Titles, append([]string{h.Title}, h.Items...))
+				}
+			}
 		}
 	}
 }
@@ -502,6 +509,16 @@ type exportEvent struct {
 	Protocol      string            `json:"protocol,omitempty"`
 	Method        string            `json:"method,omitempty"`
 	Route         string            `json:"route,omitempty"`
+	Query         string            `json:"query,omitempty"`
+	DurationMS    int64             `json:"durationMs,omitempty"`
+	DBQueries     int64             `json:"dbQueries"`
+	DBTimeMS      int64             `json:"dbTimeMs"`
+	Product       string            `json:"product,omitempty"`
+	Platform      string            `json:"platform,omitempty"`
+	Model         string            `json:"model,omitempty"`
+	DeviceType    string            `json:"clientDevice,omitempty"`
+	AppVersion    string            `json:"appVersion,omitempty"`
+	Response      *ResponseSummary  `json:"response,omitempty"`
 	Status        int               `json:"status,omitempty"`
 	Bytes         int64             `json:"bytes,omitempty"`
 	Repeat        int               `json:"repeat,omitempty"`
@@ -526,18 +543,33 @@ func eventsJSONL(events []Event, flags [3]bool, captureID string, uses []secretU
 	for _, e := range events {
 		row := exportEvent{
 			At: e.Time, Until: e.Until, Kind: e.Kind, Status: e.Status, Bytes: e.Bytes, Repeat: e.Repeat,
-			Uncorrelated:  e.Uncorrelated,
-			Device:        Alias("device", e.DeviceKey),
-			Session:       Alias("session", e.SessionKey),
-			Attempt:       Alias("attempt", e.AttemptKey),
-			Protocol:      redactString(e.Protocol, uses),
-			Method:        redactString(e.Method, uses),
-			Route:         redactString(e.Route, uses),
+			Uncorrelated: e.Uncorrelated,
+			Device:       Alias("device", e.DeviceKey),
+			Session:      Alias("session", e.SessionKey),
+			Attempt:      Alias("attempt", e.AttemptKey),
+			Protocol:     redactString(e.Protocol, uses),
+			Method:       redactString(e.Method, uses),
+			Route:        redactString(e.Route, uses),
+			Query:        redactString(e.Query, uses),
+			DurationMS:   e.Duration.Milliseconds(), DBQueries: e.DBQueries, DBTimeMS: e.DBTime.Milliseconds(),
+			Product: redactString(e.Product, uses), Platform: redactString(e.Platform, uses), Model: redactString(e.Model, uses), DeviceType: redactString(e.Device, uses), AppVersion: redactString(e.AppVersion, uses),
 			Decision:      redactString(e.Decision, uses),
 			Reason:        redactString(e.Reason, uses),
 			Rejection:     redactString(e.Rejection, uses),
 			ErrorExcerpt:  redactString(e.ErrorExcerpt, uses),
 			FFmpegExcerpt: redactString(e.FFmpegExcerpt, uses),
+		}
+		if e.Response != nil {
+			v := *e.Response
+			v.Hubs = append([]HubSummary(nil), v.Hubs...)
+			if !flags[0] {
+				v.Items = nil
+				for i := range v.Hubs {
+					v.Hubs[i].Title = ""
+					v.Hubs[i].Items = nil
+				}
+			}
+			row.Response = &v
 		}
 		if e.Media != nil {
 			m := *e.Media

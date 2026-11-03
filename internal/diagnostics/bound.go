@@ -42,6 +42,29 @@ func boundEvent(e Event, uses []secretUse) Event {
 		e.Uncorrelated = true
 	}
 	e.Route = clipFree(stripQuery(e.Route), maxString, uses)
+	if e.Kind == KindRequest {
+		e.Route = requestRoute(e.Route)
+	}
+	e.Query = clipFree(e.Query, 4096, uses)
+	if e.Response != nil {
+		v := *e.Response
+		remaining := 64
+		v.Items = boundTitles(v.Items, uses, &remaining, &v.Truncated)
+		if len(v.Hubs) > 64 {
+			v.Hubs = v.Hubs[:64]
+			v.Truncated = true
+		}
+		v.Hubs = append([]HubSummary(nil), v.Hubs...)
+		for i := range v.Hubs {
+			h := &v.Hubs[i]
+			h.Identifier = clipFree(redactNetworkText(h.Identifier), maxString, uses)
+			h.Title = clipFree(redactNetworkText(h.Title), maxString, uses)
+			h.Style = clipFree(redactNetworkText(h.Style), 80, uses)
+			h.Type = clipFree(redactNetworkText(h.Type), 80, uses)
+			h.Items = boundTitles(h.Items, uses, &remaining, &v.Truncated)
+		}
+		e.Response = &v
+	}
 	e.Protocol = clipFree(e.Protocol, 32, uses)
 	e.Method = clipFree(e.Method, 16, uses)
 	e.Range = clipFree(e.Range, 64, uses)
@@ -49,7 +72,15 @@ func boundEvent(e Event, uses []secretUse) Event {
 	e.Platform = clipFree(e.Platform, 80, uses)
 	e.Model = clipFree(e.Model, 80, uses)
 	e.DeviceName = clipFree(e.DeviceName, 80, uses)
+	e.Device = clipFree(e.Device, 80, uses)
 	e.AppVersion = clipFree(e.AppVersion, 40, uses)
+	if e.Kind == KindRequest {
+		e.Product = redactNetworkText(e.Product)
+		e.Platform = redactNetworkText(e.Platform)
+		e.Model = redactNetworkText(e.Model)
+		e.Device = redactNetworkText(e.Device)
+		e.AppVersion = redactNetworkText(e.AppVersion)
+	}
 	e.QualityRequested = clipFree(e.QualityRequested, 40, uses)
 	e.QualitySelected = clipFree(e.QualitySelected, 40, uses)
 	e.Profile = clipFree(e.Profile, 80, uses)
@@ -91,6 +122,19 @@ func boundEvent(e Event, uses []secretUse) Event {
 		e.Repeat = 0
 	}
 	return e
+}
+
+func boundTitles(in []string, uses []secretUse, remaining *int, truncated *bool) []string {
+	if len(in) > *remaining {
+		in = in[:*remaining]
+		*truncated = true
+	}
+	*remaining -= len(in)
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		out = append(out, clipFree(redactNetworkText(s), maxString, uses))
+	}
+	return out
 }
 
 func coarseRoute(route string) string {
