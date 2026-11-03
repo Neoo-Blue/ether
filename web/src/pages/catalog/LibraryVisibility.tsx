@@ -336,7 +336,9 @@ export function RulesPanel({
                 {preview.loading ? "…" : formatNumber(visible)}
               </p>
               <p className="text-sm text-fg-muted">
-                {tn(visible, "{count} title visible", "{count} titles visible")}
+                {(preview.data?.hidden ?? 0) > 0
+                  ? t("visible of {total}", { total: formatNumber(preview.data?.total ?? 0) })
+                  : t("titles visible")}
               </p>
               {(preview.data?.hidden ?? 0) > 0 ? (
                 <p className="mt-2 text-xs text-fg-muted">

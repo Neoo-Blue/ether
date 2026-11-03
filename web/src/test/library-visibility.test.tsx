@@ -56,6 +56,7 @@ describe("Library visibility", () => {
       expect(screen.getByText("No rules yet. Everything is shown.")).toBeInTheDocument();
     });
     expect(screen.getByText("Hidden · 0")).toBeInTheDocument();
+    expect(screen.getByText("titles visible")).toBeInTheDocument();
     expect(screen.getByText("Nothing hidden")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Browse" })[0]).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Add rule" }));
@@ -110,6 +111,7 @@ describe("Library visibility", () => {
       expect(screen.getByText(/Hide · Country is IN/)).toBeInTheDocument();
       expect(fake.state.calls.filter((c) => c.path.includes("preview")).length).toBeGreaterThan(0);
       expect(screen.getByText("Hidden: 800 movies · 400 shows")).toBeInTheDocument();
+      expect(screen.getByText(/^visible of /)).toBeInTheDocument();
       expect(screen.getByText("800 movies · 400 shows")).toBeInTheDocument();
     });
     fireEvent.click(screen.getByRole("button", { name: "Delete rule 1" }));
