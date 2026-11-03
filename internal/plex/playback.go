@@ -43,6 +43,7 @@ const (
 	msgNotAvailable = "Not available yet: no playable release of this title was found. Try again later."
 	msgStreamLimit  = "Stream limit reached: stop another stream on this server and try again."
 	msgPlayFailed   = "This title could not be played right now. Try again in a moment."
+	msgPrepareSlow  = "Ether is still finding a source for this title. Try again in a moment."
 	// Setup problems: the owner can fix these, and "not available" would
 	// send them looking for a missing release instead.
 	msgNoSources        = "Ether has no sources to search: add a Stremio addon or Torznab indexer under Sources › Indexers."
@@ -70,6 +71,8 @@ func playbackMessage(err error) string {
 		return msgNotAvailable
 	case errors.Is(err, core.ErrStreamLimit):
 		return msgStreamLimit
+	case errors.Is(err, core.ErrPrepareSlow):
+		return msgPrepareSlow
 	case errors.Is(err, core.ErrBudgetExhausted):
 		return "Indexers are temporarily at their limit. Ether will retry automatically; previously cached releases may still play."
 	}
@@ -465,6 +468,17 @@ func (s *Server) handleDecision(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	pr := FromContext(ctx)
+	// A slow source search must not hold the owner gates (timeline and stop
+	// share them) or outlast the client's request timeout.
+	if t, err := s.awaitSource(ctx, r, pr); err != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		s.log.Info("playback decision deferred", "user", pr.User.Username, "reason", playbackMessage(err), "err", err)
+		p, _ := s.parsePlayRequest(r)
+		s.write(w, r, s.decisionError(ctx, pr, t, err, p))
+		return
+	}
 	unlockOwner, locked := s.lockPlaybackRequest(w, r)
 	if !locked {
 		return
@@ -504,6 +518,50 @@ func (s *Server) handleDecision(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.write(w, r, s.decisionContainer(ctx, pr, t, ps, dec, p))
+}
+
+// decisionSourceWait bounds how long a decision waits for a source search
+// before answering; Plex apps give up on a decision after about 30 s.
+const decisionSourceWait = 12 * time.Second
+
+// awaitSource waits, outside the owner gates, for the source an automatic
+// decision will use. The search is the playback manager's shared flight:
+// the gated admission that follows finds the prepared session at once.
+// When the search outlasts decisionSourceWait it keeps running for the
+// client's retry and the decision answers core.ErrPrepareSlow. Explicit
+// version picks and requests this cannot pre-check go straight on.
+func (s *Server) awaitSource(ctx context.Context, r *http.Request, pr *Request) (*core.Title, error) {
+	pw, ok := s.d.Playback.(core.PlaybackPrepareWithin)
+	if !ok || pr == nil || pr.User == nil || s.d.Catalog == nil {
+		return nil, nil
+	}
+	if tt := chi.URLParam(r, "ttype"); tt != "" && tt != "video" {
+		return nil, nil
+	}
+	p, err := s.parsePlayRequest(r)
+	if err != nil || p.key == 0 || p.partReleaseID != "" || p.mediaIndex > 0 || !isPlayableKey(p.key) {
+		return nil, nil
+	}
+	t, err := s.d.Catalog.Get(ctx, p.key)
+	if err != nil || t == nil || !s.playableTitle(ctx, pr.User, t) {
+		return nil, nil
+	}
+	if policy, ok := s.d.AccessPolicy.(core.PlaybackAccessPolicy); ok && !policy.CanPlay(pr.User, p.caps.Remote, s.now()) {
+		return nil, nil
+	}
+	if policy, ok := s.d.AccessPolicy.(core.BitrateAccessPolicy); ok {
+		if limit := policy.BitrateLimit(pr.User); limit > 0 && (p.caps.MaxBitrateKbps == 0 || limit < p.caps.MaxBitrateKbps) {
+			p.caps.MaxBitrateKbps = limit
+		}
+	}
+	if p.caps.ClientID == "" {
+		p.caps.ClientID = pr.ClientID
+	}
+	if _, err := pw.PrepareWithin(ctx, decisionSourceWait, pr.User, p.key, p.caps, "", false); errors.Is(err, core.ErrPrepareSlow) {
+		return t, err
+	}
+	// Any other outcome is the gated path's to report as it does today.
+	return nil, nil
 }
 
 // decisionError is the decision response for a failed resolve: no Media,
