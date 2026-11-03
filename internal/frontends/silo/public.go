@@ -74,7 +74,7 @@ func (i *instance) account(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unauthorized", 401)
 		return
 	}
-	reply(w, 200, user(v))
+	reply(w, 200, i.user(r, v))
 }
 func (i *instance) requestStatus(w http.ResponseWriter, r *http.Request) {
 	v, _, err := i.viewer(r)

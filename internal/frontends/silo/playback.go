@@ -70,7 +70,7 @@ func (i *instance) playbackStart(w http.ResponseWriter, r *http.Request) {
 		installationChanged(w)
 		return
 	}
-	if b.ProfileID != "" && b.ProfileID != strconv.FormatInt(v.ID, 10) {
+	if b.ProfileID != "" && b.ProfileID != i.viewerWireID(r.Context(), v.ID) {
 		http.Error(w, "Forbidden", 403)
 		return
 	}
@@ -476,32 +476,19 @@ func (i *instance) resolveLiveFile(r *http.Request, v *frontend.Viewer, fileID s
 	return ch.ID, true, nil
 }
 
-func (i *instance) resolveLiveChannelFileID(ctx context.Context, v *frontend.Viewer, fileID string) (string, string) {
-	if guid := i.rememberedLiveChannel(fileID); guid != "" {
-		return "", guid
-	}
-	if i.host.LiveTV == nil {
+func (i *instance) resolveLiveChannelFileID(ctx context.Context, _ *frontend.Viewer, fileID string) (string, string) {
+	n, err := ids.ParseDecimal(fileID)
+	if err != nil || !isLiveChannelFileID(fileID) {
 		return "", ""
 	}
-	channels, err := i.host.LiveTV.Channels(ctx, v)
+	guid, err := i.host.IDs.Resolve(ctx, "silo", "live-channel", int32(n-liveChannelFileBit))
 	if err != nil {
 		return "", ""
 	}
-	for _, ch := range channels {
-		guid, err := ids.StringGUID(ids.Channel, ch.ID)
-		if err != nil {
-			continue
-		}
-		candidate, err := liveChannelFileID(guid)
-		if err != nil {
-			continue
-		}
-		if candidate == fileID {
-			_, _ = i.rememberLiveChannel(guid, liveChannelCardMeta{})
-			return ch.ID, guid
-		}
+	if _, err = ids.ParseGUID(ids.Channel, guid); err != nil {
+		return "", ""
 	}
-	return "", ""
+	return "", guid
 }
 
 func siloMediaURL(sessionID string, format frontend.StreamFormat) string {

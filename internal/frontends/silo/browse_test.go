@@ -583,10 +583,10 @@ func TestDiscoverAndNowAvailableUseExperienceRows(t *testing.T) {
 		t.Fatal("discover did not read Experience rows")
 	}
 	libs := call("/api/v2/user/libraries")
-	if libs.Code != 200 || !strings.Contains(libs.Body.String(), `"id":"now-available"`) || !strings.Contains(libs.Body.String(), `"name":"Movies"`) {
+	if libs.Code != 200 || !strings.Contains(libs.Body.String(), `"id":"`+nowAvailableLibraryID+`"`) || !strings.Contains(libs.Body.String(), `"name":"Movies"`) {
 		t.Fatalf("libraries %d %s", libs.Code, libs.Body.String())
 	}
-	catalog := call("/api/v2/catalog?library_id=now-available")
+	catalog := call("/api/v2/catalog?library_id=" + nowAvailableLibraryID)
 	if catalog.Code != 200 || !strings.Contains(catalog.Body.String(), `"title":"Ready"`) || strings.Contains(catalog.Body.String(), "Similar") {
 		t.Fatalf("catalog %d %s", catalog.Code, catalog.Body.String())
 	}

@@ -57,11 +57,7 @@ func titleDTO(t frontend.Title, state frontend.WatchStatus) map[string]any {
 	return out
 }
 
-const (
-	maxSourceOfferFileID int64 = 1<<53 - 1
-	liveChannelFileBit   int64 = 1 << 54
-	liveChannelFileMask  int64 = 1<<53 - 1
-)
+const liveChannelFileBit int64 = 1 << 30
 
 type liveChannelCardMeta struct {
 	title    string
@@ -69,61 +65,35 @@ type liveChannelCardMeta struct {
 	runtime  int
 }
 
-func liveChannelFileID(channelGUID string) (string, error) {
-	raw, err := ids.ParseGUID(ids.Channel, channelGUID)
-	if err != nil {
-		return "", err
-	}
-	n := liveChannelFileBit | (raw & liveChannelFileMask)
-	return strconv.FormatInt(n, 10), nil
-}
-
 func isLiveChannelFileID(fileID string) bool {
 	n, err := ids.ParseDecimal(fileID)
-	if err != nil || n <= maxSourceOfferFileID {
-		return false
-	}
-	return n&liveChannelFileBit != 0 && n&^(liveChannelFileBit|liveChannelFileMask) == 0
+	return err == nil && n > liveChannelFileBit && n <= 1<<31-1
 }
 
-func (i *instance) rememberLiveChannel(channelGUID string, meta liveChannelCardMeta) (string, error) {
-	raw, err := ids.ParseGUID(ids.Channel, channelGUID)
+func (i *instance) liveChannelFileID(ctx context.Context, channelGUID string) (string, error) {
+	if _, err := ids.ParseGUID(ids.Channel, channelGUID); err != nil {
+		return "", err
+	}
+	n, err := i.host.IDs.Compact(ctx, "silo", "live-channel", channelGUID)
 	if err != nil {
 		return "", err
 	}
-	canonical, err := ids.GUID(ids.Channel, raw)
-	if err != nil {
-		return "", err
+	if n <= 0 || int64(n) >= liveChannelFileBit {
+		return "", errors.New("silo: live channel ID capacity exhausted")
 	}
-	fileID, err := liveChannelFileID(canonical)
-	if err != nil {
-		return "", err
-	}
+	return strconv.FormatInt(liveChannelFileBit+int64(n), 10), nil
+}
+
+func (i *instance) rememberLiveCard(channelGUID string, meta liveChannelCardMeta) {
 	if i == nil {
-		return fileID, nil
+		return
 	}
 	i.liveMu.Lock()
 	defer i.liveMu.Unlock()
-	if i.liveChannels == nil || len(i.liveChannels) > 4096 {
-		i.liveChannels = map[string]string{}
+	if i.liveCards == nil || len(i.liveCards) > 4096 {
+		i.liveCards = map[string]liveChannelCardMeta{}
 	}
-	i.liveChannels[fileID] = canonical
-	if meta.title != "" || meta.overview != "" || meta.runtime > 0 {
-		if i.liveCards == nil || len(i.liveCards) > 4096 {
-			i.liveCards = map[string]liveChannelCardMeta{}
-		}
-		i.liveCards[canonical] = meta
-	}
-	return fileID, nil
-}
-
-func (i *instance) rememberedLiveChannel(fileID string) string {
-	if i == nil {
-		return ""
-	}
-	i.liveMu.Lock()
-	defer i.liveMu.Unlock()
-	return i.liveChannels[fileID]
+	i.liveCards[channelGUID] = meta
 }
 
 func (i *instance) rememberedLiveCard(channelGUID string) (liveChannelCardMeta, bool) {
@@ -169,7 +139,7 @@ func (i *instance) buildLiveChannelCards(row frontend.Row) []any {
 				runtime = int(ch.Current.End.Sub(ch.Current.Start).Minutes())
 			}
 		}
-		_, _ = i.rememberLiveChannel(id, liveChannelCardMeta{title: title, overview: channel, runtime: runtime})
+		i.rememberLiveCard(id, liveChannelCardMeta{title: title, overview: channel, runtime: runtime})
 		items = append(items, map[string]any{
 			"content_id": id, "play_content_id": id, "title": title, "type": "episode",
 			"overview": channel, "year": 0, "runtime": runtime,
@@ -258,7 +228,12 @@ func (i *instance) views(w http.ResponseWriter, r *http.Request) {
 		if view.Type == "show" {
 			kind = "series"
 		}
-		items = append(items, map[string]any{"id": view.ID, "name": view.Name, "type": kind, "sort_order": n + 1})
+		wire, err := i.wireID(r.Context(), "library", view.ID)
+		if err != nil {
+			http.Error(w, "Unavailable", 503)
+			return
+		}
+		items = append(items, map[string]any{"id": wire, "name": view.Name, "type": kind, "sort_order": n + 1})
 	}
 	if !published {
 		if _, ok := i.nowAvailableTitles(r, v); ok {
@@ -291,6 +266,13 @@ func (i *instance) sections(w http.ResponseWriter, r *http.Request) {
 	}
 	placement := frontend.PlacementHome
 	view := r.PathValue("library")
+	if view != "" && view != nowAvailableLibraryID {
+		view, err = i.nativeID(r.Context(), "library", view)
+		if err != nil {
+			notFound(w)
+			return
+		}
+	}
 	if view != "" && view != nowAvailableLibraryID {
 		placement = frontend.PlacementLibrary
 	}
@@ -441,7 +423,7 @@ func (i *instance) liveChannelDetail(w http.ResponseWriter, r *http.Request, v *
 		http.Error(w, "Unavailable", 503)
 		return
 	}
-	fileID, err := i.rememberLiveChannel(channelGUID, liveChannelCardMeta{})
+	fileID, err := i.liveChannelFileID(r.Context(), channelGUID)
 	if err != nil {
 		notFound(w)
 		return
@@ -987,7 +969,7 @@ func (i *instance) detail(w http.ResponseWriter, r *http.Request) {
 
 func (i *instance) finishDetailResponse(w http.ResponseWriter, r *http.Request, v *frontend.Viewer, d frontend.ItemDetail, fileMarkers map[string][]frontend.Marker, out map[string]any) {
 	if strings.HasPrefix(r.URL.Path, "/api/v2/watch/") {
-		watch := map[string]any{"content_id": out["content_id"], "type": out["type"], "title": out["title"], "versions": []any{}, "subtitles": []any{}}
+		watch := map[string]any{"content_id": r.PathValue("id"), "type": out["type"], "title": out["title"], "versions": []any{}, "subtitles": []any{}}
 		for _, name := range []string{"overview", "year", "poster_url", "backdrop_url", "series_id", "series_title", "season_number", "episode_number"} {
 			if value, ok := out[name]; ok {
 				watch[name] = value

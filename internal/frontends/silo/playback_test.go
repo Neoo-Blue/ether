@@ -21,6 +21,21 @@ import (
 
 type fileIDs struct{}
 
+type liveTestIDs struct{ guid string }
+
+func (a liveTestIDs) Compact(_ context.Context, surface, kind, ref string) (int32, error) {
+	if surface != "silo" || kind != "live-channel" || ref != a.guid {
+		return 0, errors.New("unexpected compact ID")
+	}
+	return 1, nil
+}
+func (a liveTestIDs) Resolve(_ context.Context, surface, kind string, n int32) (string, error) {
+	if surface != "silo" || kind != "live-channel" || n != 1 {
+		return "", errors.New("unknown compact ID")
+	}
+	return a.guid, nil
+}
+
 type testVersionHandles struct {
 	issue func(frontend.VersionScope, frontend.RatingKey, string) (string, error)
 }
@@ -33,7 +48,7 @@ func TestExactSourceOfferFailure(t *testing.T) {
 		return frontend.PlayPlan{}, nil
 	}}
 	for _, offers := range []frontend.SourceOffers{nil, testSourceOffers{resolve: func(scope frontend.VersionScope, id string) (frontend.SourceOffer, error) {
-		if scope.Viewer != viewer || scope.Device.ID != "tv" || scope.Protocol != "silo" || len(scope.Caps.VideoCodecs) != 1 || id != "2147483648" {
+		if scope.Viewer != viewer || scope.Device.ID != "tv" || scope.Protocol != "silo" || len(scope.Caps.VideoCodecs) != 1 || id != "101" {
 			t.Fatal("wrong offer scope")
 		}
 		return frontend.SourceOffer{}, frontend.ErrSourceGone
@@ -44,7 +59,7 @@ func TestExactSourceOfferFailure(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		body := `{"protocol_version":3,"file_id":"2147483648","profile_id":"7","installation_id":"` + inst.(*instance).installationID() + `","playback_attempt_id":"attempt","client_capabilities":{"codecs_video":["h264"]}}`
+		body := `{"protocol_version":3,"file_id":"101","profile_id":"7","installation_id":"` + inst.(*instance).installationID() + `","playback_attempt_id":"attempt","client_capabilities":{"codecs_video":["h264"]}}`
 		r := httptest.NewRequest("POST", "/api/v2/playback/start", strings.NewReader(body))
 		r.Header.Set("Authorization", "Bearer grant")
 		r.Header.Set("X-Silo-Device-Id", "tv")
@@ -283,11 +298,11 @@ func TestPlaybackUsesScopedBroker(t *testing.T) {
 		inst.Handler().ServeHTTP(w, req)
 		return w
 	}
-	bad := call("POST", "/api/v2/playback/start", `{"protocol_version":3,"file_id":"2147483648","profile_id":"7","installation_id":"stale","playback_attempt_id":"attempt"}`)
+	bad := call("POST", "/api/v2/playback/start", `{"protocol_version":3,"file_id":"101","profile_id":"7","installation_id":"stale","playback_attempt_id":"attempt"}`)
 	if bad.Code != 409 || !strings.Contains(bad.Body.String(), `"type":"/problems/installation_changed"`) {
 		t.Fatalf("stale installation: %d %s", bad.Code, bad.Body.String())
 	}
-	w := call("POST", "/api/v2/playback/start", `{"protocol_version":3,"file_id":"2147483648","profile_id":"7","installation_id":"install","playback_attempt_id":"attempt","start_position":12}`)
+	w := call("POST", "/api/v2/playback/start", `{"protocol_version":3,"file_id":"101","profile_id":"7","installation_id":"install","playback_attempt_id":"attempt","start_position":12}`)
 	if w.Code != 201 || strings.Contains(w.Body.String(), "account-secret") || planned.Version != "handle" || !planned.Intent.ExactVersion || planned.Item != 1000000000000001 || streamed.Format != frontend.StreamHLS {
 		t.Fatalf("play %d %s %+v %+v", w.Code, w.Body.String(), planned, streamed)
 	}
@@ -326,11 +341,11 @@ func TestPlaybackUsesScopedBroker(t *testing.T) {
 	if !strings.Contains(w.Body.String(), `"X-Silo-Device-Id":"tv"`) {
 		t.Fatal("media request missing device binding", w.Body.String())
 	}
-	w = call("POST", "/api/v2/playback/start", `{"protocol_version":3,"file_id":"2147483648","profile_id":"7","installation_id":"install","playback_attempt_id":"attempt","audio_track_index":0,"subtitle_track_index":5}`)
+	w = call("POST", "/api/v2/playback/start", `{"protocol_version":3,"file_id":"101","profile_id":"7","installation_id":"install","playback_attempt_id":"attempt","audio_track_index":0,"subtitle_track_index":5}`)
 	if w.Code != 201 || planned.Intent.AudioOrdinal == nil || *planned.Intent.AudioOrdinal != 0 || planned.Intent.SubtitleStreamIndex == nil || *planned.Intent.SubtitleStreamIndex != 5 || planned.Intent.AudioSet || planned.Intent.SubtitleSet {
 		t.Fatalf("source-bound track selection: %d %+v", w.Code, planned.Intent)
 	}
-	w = call("POST", "/api/v2/playback/start", `{"protocol_version":3,"file_id":"2147483648","profile_id":"7","installation_id":"install","playback_attempt_id":"attempt","subtitle_track_index":-1}`)
+	w = call("POST", "/api/v2/playback/start", `{"protocol_version":3,"file_id":"101","profile_id":"7","installation_id":"install","playback_attempt_id":"attempt","subtitle_track_index":-1}`)
 	if w.Code != 201 || planned.Intent.AudioOrdinal != nil || planned.Intent.SubtitleStreamIndex == nil || *planned.Intent.SubtitleStreamIndex != -1 {
 		t.Fatalf("subtitle off: %d %+v", w.Code, planned.Intent)
 	}
@@ -339,15 +354,15 @@ func TestPlaybackUsesScopedBroker(t *testing.T) {
 		status int
 	}{{frontend.ErrTrackNotFound, 422}, {frontend.ErrTrackSourceUnavailable, 503}} {
 		planErr = tc.err
-		failed := call("POST", "/api/v2/playback/start", `{"protocol_version":3,"file_id":"2147483648","profile_id":"7","installation_id":"install","playback_attempt_id":"attempt","subtitle_track_index":5}`)
+		failed := call("POST", "/api/v2/playback/start", `{"protocol_version":3,"file_id":"101","profile_id":"7","installation_id":"install","playback_attempt_id":"attempt","subtitle_track_index":5}`)
 		if failed.Code != tc.status {
 			t.Fatalf("track admission error %v: %d %s", tc.err, failed.Code, failed.Body.String())
 		}
 	}
 	planErr = nil
 	for _, body := range []string{
-		`{"protocol_version":3,"file_id":"2147483648","profile_id":"7","installation_id":"install","playback_attempt_id":"attempt","audio_track_index":-1}`,
-		`{"protocol_version":3,"file_id":"2147483648","profile_id":"7","installation_id":"install","playback_attempt_id":"attempt","subtitle_track_index":-2}`,
+		`{"protocol_version":3,"file_id":"101","profile_id":"7","installation_id":"install","playback_attempt_id":"attempt","audio_track_index":-1}`,
+		`{"protocol_version":3,"file_id":"101","profile_id":"7","installation_id":"install","playback_attempt_id":"attempt","subtitle_track_index":-2}`,
 	} {
 		if invalid := call("POST", "/api/v2/playback/start", body); invalid.Code != 400 {
 			t.Fatalf("invalid track: %d %s", invalid.Code, invalid.Body.String())
@@ -420,13 +435,13 @@ func TestPlaybackUsesScopedBroker(t *testing.T) {
 		t.Fatalf("partial final sample: %d %s", w.Code, w.Body.String())
 	}
 	openErr = &frontend.TranscodeCapacityError{RetryAfter: 1500 * time.Millisecond}
-	w = call("POST", "/api/v2/playback/start", `{"protocol_version":3,"file_id":"2147483648","profile_id":"7","installation_id":"install","playback_attempt_id":"another"}`)
+	w = call("POST", "/api/v2/playback/start", `{"protocol_version":3,"file_id":"101","profile_id":"7","installation_id":"install","playback_attempt_id":"another"}`)
 	if w.Code != http.StatusServiceUnavailable || w.Header().Get("Retry-After") != "2" || !strings.Contains(w.Body.String(), "transcode_capacity") {
 		t.Fatalf("open capacity: %d %v %s", w.Code, w.Header(), w.Body.String())
 	}
 	openErr = nil
 	planErr = errors.New("exact release unavailable")
-	w = call("POST", "/api/v2/playback/start", `{"protocol_version":3,"file_id":"2147483648","profile_id":"7","installation_id":"install","playback_attempt_id":"another"}`)
+	w = call("POST", "/api/v2/playback/start", `{"protocol_version":3,"file_id":"101","profile_id":"7","installation_id":"install","playback_attempt_id":"another"}`)
 	if w.Code != http.StatusServiceUnavailable || !strings.Contains(w.Body.String(), "version-unavailable") {
 		t.Fatalf("exact plan failure: %d %s", w.Code, w.Body.String())
 	}
@@ -586,6 +601,7 @@ func TestOnNowLiveCardFullAppleTVSequence(t *testing.T) {
 		},
 	}
 	host := frontend.Host{
+		IDs:          ids.Codecs{Allocator: liveTestIDs{guid: channelID}},
 		Identity:     testDeviceIdentity(frontendtest.Identity{ResolveFunc: func(context.Context, string) (*frontend.Viewer, error) { return viewer, nil }}, viewer),
 		Experience:   exp,
 		LiveTV:       live,

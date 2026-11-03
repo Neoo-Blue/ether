@@ -33,7 +33,7 @@ func (s testSourceOffers) IssueBatch(_ context.Context, scope frontend.VersionSc
 	}
 	out := make([]frontend.SourceOffer, len(targets))
 	for n, target := range targets {
-		out[n] = frontend.SourceOffer{ID: strconv.FormatInt(2147483648+int64(n), 10), Target: target, ExpiresAt: time.Now().Add(time.Minute)}
+		out[n] = frontend.SourceOffer{ID: strconv.FormatInt(101+int64(n), 10), Target: target, ExpiresAt: time.Now().Add(time.Minute)}
 	}
 	return out, nil
 }
@@ -41,7 +41,7 @@ func (s testSourceOffers) Resolve(_ context.Context, scope frontend.VersionScope
 	if s.resolve != nil {
 		return s.resolve(scope, id)
 	}
-	if id != "2147483648" {
+	if id != "101" {
 		return frontend.SourceOffer{}, frontend.ErrSourceGone
 	}
 	return frontend.SourceOffer{ID: id, Target: frontend.SourceOfferTarget{Item: 1000000000000001, VersionHandle: "handle"}}, nil
@@ -124,9 +124,9 @@ func TestDetailSourceOfferFlowsThroughPlaybackAndSessionCheck(t *testing.T) {
 			t.Fatal(targets)
 		}
 		target = targets[0]
-		return []frontend.SourceOffer{{ID: "2147483648", Target: target}}, nil
+		return []frontend.SourceOffer{{ID: "101", Target: target}}, nil
 	}, resolve: func(scope frontend.VersionScope, id string) (frontend.SourceOffer, error) {
-		if revoked || id != "2147483648" {
+		if revoked || id != "101" {
 			return frontend.SourceOffer{}, frontend.ErrSourceGone
 		}
 		return frontend.SourceOffer{ID: id, Target: target}, nil
@@ -156,7 +156,7 @@ func TestDetailSourceOfferFlowsThroughPlaybackAndSessionCheck(t *testing.T) {
 		t.Fatalf("browse planned a source: %s calls=%d", w.Body.String(), detailCalls)
 	}
 	target = frontend.SourceOfferTarget{Item: key, DetailSource: "detail", ETag: "generation"}
-	start := `{"protocol_version":3,"file_id":"2147483648","profile_id":"7","installation_id":"` + inst.(*instance).installationID() + `","playback_attempt_id":"attempt"}`
+	start := `{"protocol_version":3,"file_id":"101","profile_id":"7","installation_id":"` + inst.(*instance).installationID() + `","playback_attempt_id":"attempt"}`
 	w = call("POST", "/api/v2/playback/start", start)
 	if w.Code != 201 || detailCalls != 0 || plans != 1 || streams != 1 || matches != 2 {
 		t.Fatalf("play %d %s counts=%d/%d/%d/%d", w.Code, w.Body.String(), detailCalls, plans, streams, matches)
@@ -197,7 +197,7 @@ func TestEstimatedAlternativeKeepsUnknownFacts(t *testing.T) {
 	if w.Code != 200 || calls != 0 {
 		t.Fatalf("detail resolved outside DetailPlanner: %d %s calls=%d", w.Code, w.Body.String(), calls)
 	}
-	for _, want := range []string{`"file_size":0`, `"duration_seconds":0`, `"bitrate":0`, `"codec_video":""`, `"resolution":""`, `"file_id":"2147483648"`} {
+	for _, want := range []string{`"file_size":0`, `"duration_seconds":0`, `"bitrate":0`, `"codec_video":""`, `"resolution":""`, `"file_id":"101"`} {
 		if !strings.Contains(w.Body.String(), want) {
 			t.Errorf("missing unknown sentinel %s: %s", want, w.Body.String())
 		}

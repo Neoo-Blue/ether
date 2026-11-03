@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	nowAvailableLibraryID = "now-available"
+	nowAvailableLibraryID = "1073741824"
 	nowAvailableRowID     = "watchlist.available"
 	nowAvailableTitle     = "Now available"
 )

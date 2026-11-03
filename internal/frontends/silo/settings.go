@@ -233,7 +233,7 @@ func (i *instance) settingsContract(w http.ResponseWriter, r *http.Request) {
 
 func (i *instance) settingScope(r *http.Request, viewer *frontend.Viewer, scope string) (string, bool) {
 	q := r.URL.Query()
-	if p := q.Get("profile_id"); p != "" && p != strconv.FormatInt(viewer.ID, 10) {
+	if p := q.Get("profile_id"); p != "" && p != i.viewerWireID(r.Context(), viewer.ID) {
 		return "", false
 	}
 	switch scope {
@@ -254,8 +254,8 @@ func (i *instance) settingScope(r *http.Request, viewer *frontend.Viewer, scope 
 		if id == "" {
 			id = q.Get("library_ids")
 		}
-		n, err := strconv.Atoi(id)
-		if err != nil || n <= 0 || i.host.Experience == nil {
+		id, err := i.nativeID(r.Context(), "library", id)
+		if err != nil || i.host.Experience == nil {
 			return "", false
 		}
 		views, err := i.host.Experience.Views(r.Context(), viewer)
@@ -484,7 +484,7 @@ func (i *instance) settingValues(w http.ResponseWriter, r *http.Request) {
 			row["source"] = scope
 			row["scope"] = scope
 			if scope != "account" {
-				row["profile_id"] = strconv.FormatInt(v.ID, 10)
+				row["profile_id"] = i.viewerWireID(r.Context(), v.ID)
 			}
 			switch scope {
 			case "profile_device":
@@ -492,7 +492,7 @@ func (i *instance) settingValues(w http.ResponseWriter, r *http.Request) {
 			case "profile_client":
 				row["client_family"] = id
 			case "profile_library":
-				row["library_id"] = id
+				row["library_id"], _ = i.wireID(r.Context(), "library", id)
 			case "profile_series":
 				row["series_id"] = id
 			}
@@ -520,7 +520,7 @@ func (i *instance) settingValues(w http.ResponseWriter, r *http.Request) {
 						if field == "preferred_metadata_language" && value == "" {
 							value = nil
 						}
-						row["value"], row["source"], row["scope"], row["profile_id"] = value, "profile", "profile", strconv.FormatInt(v.ID, 10)
+						row["value"], row["source"], row["scope"], row["profile_id"] = value, "profile", "profile", i.viewerWireID(r.Context(), v.ID)
 					}
 				}
 				break
@@ -581,14 +581,14 @@ func (i *instance) settingValues(w http.ResponseWriter, r *http.Request) {
 			field := map[string]string{"playback.audio_language": "audio", "playback.subtitle_language": "subtitle", "playback.subtitle_mode": "subtitle_mode", "playback.subtitle_appearance": "appearance", "playback.max_bitrate_kbps": "bitrate", "playback.preferred_quality": "height"}[key]
 			scope := map[string]string{"device": "profile_device", "series": "profile_series", "library": "profile_library", "profile": "profile"}[sources[field]]
 			if scope != "" {
-				row["source"], row["scope"], row["profile_id"] = scope, scope, strconv.FormatInt(v.ID, 10)
+				row["source"], row["scope"], row["profile_id"] = scope, scope, i.viewerWireID(r.Context(), v.ID)
 			}
 			if id, ok := i.settingScope(r, v, scope); ok {
 				switch scope {
 				case "profile_device":
 					row["device_id"] = id
 				case "profile_library":
-					row["library_id"] = id
+					row["library_id"], _ = i.wireID(r.Context(), "library", id)
 				case "profile_series":
 					row["series_id"] = id
 				}
@@ -713,7 +713,7 @@ func (i *instance) settingWrite(w http.ResponseWriter, r *http.Request) {
 	stored.Revision, stored.UpdatedAt = revision, updated.Format(time.RFC3339Nano)
 	row := map[string]any{"key": key, "scope": scope, "value": stored.Value, "revision": stored.Revision, "updated_at": stored.UpdatedAt}
 	if scope != "account" {
-		row["profile_id"] = strconv.FormatInt(v.ID, 10)
+		row["profile_id"] = i.viewerWireID(r.Context(), v.ID)
 	}
 	switch scope {
 	case "profile_device":
@@ -721,7 +721,7 @@ func (i *instance) settingWrite(w http.ResponseWriter, r *http.Request) {
 	case "profile_client":
 		row["client_family"] = id
 	case "profile_library":
-		row["library_id"] = id
+		row["library_id"], _ = i.wireID(r.Context(), "library", id)
 	case "profile_series":
 		row["series_id"] = id
 	}

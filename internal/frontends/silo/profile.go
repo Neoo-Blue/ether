@@ -94,7 +94,11 @@ func (i *instance) profileData(r *http.Request, v *frontend.Viewer) (map[string]
 		return nil, err
 	}
 	for _, view := range available {
-		views = append(views, view.ID)
+		wire, err := i.wireID(r.Context(), "library", view.ID)
+		if err != nil {
+			return nil, err
+		}
+		views = append(views, wire)
 	}
 	updated := v.UpdatedAt
 	if stamp, ok := p["_updated_at"].(string); ok {
@@ -103,7 +107,7 @@ func (i *instance) profileData(r *http.Request, v *frontend.Viewer) (map[string]
 		}
 	}
 	delete(p, "_updated_at")
-	p["id"] = strconv.FormatInt(v.ID, 10)
+	p["id"] = i.viewerWireID(r.Context(), v.ID)
 	p["name"] = v.Username
 	p["has_pin"] = false
 	p["is_child"] = false
@@ -146,7 +150,7 @@ func (i *instance) patchProfile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unauthorized", 401)
 		return
 	}
-	if r.PathValue("id") != strconv.FormatInt(v.ID, 10) {
+	if r.PathValue("id") != i.viewerWireID(r.Context(), v.ID) {
 		http.NotFound(w, r)
 		return
 	}

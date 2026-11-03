@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -89,7 +88,7 @@ func (i *instance) watchPartyCreate(w http.ResponseWriter, r *http.Request) {
 		i.partyError(w, err)
 		return
 	}
-	i.writeParty(w, http.StatusCreated, view)
+	i.writeParty(r.Context(), w, http.StatusCreated, view)
 }
 
 func (i *instance) watchPartyJoin(w http.ResponseWriter, r *http.Request) {
@@ -111,7 +110,7 @@ func (i *instance) watchPartyJoin(w http.ResponseWriter, r *http.Request) {
 		i.partyError(w, err)
 		return
 	}
-	i.writeParty(w, http.StatusOK, view)
+	i.writeParty(r.Context(), w, http.StatusOK, view)
 }
 
 func (i *instance) watchPartyGet(w http.ResponseWriter, r *http.Request) {
@@ -124,7 +123,7 @@ func (i *instance) watchPartyGet(w http.ResponseWriter, r *http.Request) {
 		i.partyError(w, err)
 		return
 	}
-	i.writeParty(w, http.StatusOK, got)
+	i.writeParty(r.Context(), w, http.StatusOK, got)
 }
 
 func (i *instance) watchPartySelect(w http.ResponseWriter, r *http.Request) {
@@ -170,7 +169,7 @@ func (i *instance) partyPick(w http.ResponseWriter, r *http.Request, staged bool
 		i.partyError(w, err)
 		return
 	}
-	i.writeParty(w, http.StatusOK, view)
+	i.writeParty(r.Context(), w, http.StatusOK, view)
 }
 
 func (i *instance) watchPartyStart(w http.ResponseWriter, r *http.Request) {
@@ -183,7 +182,7 @@ func (i *instance) watchPartyStart(w http.ResponseWriter, r *http.Request) {
 		i.partyError(w, err)
 		return
 	}
-	i.writeParty(w, http.StatusOK, view)
+	i.writeParty(r.Context(), w, http.StatusOK, view)
 }
 
 func (i *instance) watchPartyStop(w http.ResponseWriter, r *http.Request) {
@@ -196,7 +195,7 @@ func (i *instance) watchPartyStop(w http.ResponseWriter, r *http.Request) {
 		i.partyError(w, err)
 		return
 	}
-	i.writeParty(w, http.StatusOK, view)
+	i.writeParty(r.Context(), w, http.StatusOK, view)
 }
 
 func (i *instance) watchPartyPolicy(w http.ResponseWriter, r *http.Request) {
@@ -216,7 +215,7 @@ func (i *instance) watchPartyPolicy(w http.ResponseWriter, r *http.Request) {
 		i.partyError(w, err)
 		return
 	}
-	i.writeParty(w, http.StatusOK, view)
+	i.writeParty(r.Context(), w, http.StatusOK, view)
 }
 
 func (i *instance) watchPartyEnd(w http.ResponseWriter, r *http.Request) {
@@ -306,7 +305,7 @@ func (i *instance) watchPartySocket(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if write(siloEvent(ev)) != nil {
+			if write(i.siloEvent(ctx, ev)) != nil {
 				return
 			}
 			if ev.Type == "closed" || ev.Type == "replaced" {
@@ -405,19 +404,23 @@ func (i *instance) partyError(w http.ResponseWriter, err error) {
 	}
 }
 
-func (i *instance) writeParty(w http.ResponseWriter, status int, view frontend.PartyView) {
-	reply(w, status, map[string]any{"room": siloRoom(view), "room_access_token": view.RoomToken})
+func (i *instance) writeParty(ctx context.Context, w http.ResponseWriter, status int, view frontend.PartyView) {
+	reply(w, status, map[string]any{"room": i.siloRoom(ctx, view), "room_access_token": view.RoomToken})
 }
 
-func siloRoom(view frontend.PartyView) map[string]any {
+func (i *instance) siloRoom(ctx context.Context, view frontend.PartyView) map[string]any {
 	anchor := view.AnchorAt
 	if anchor.IsZero() {
 		anchor = time.Unix(0, 0)
 	}
 	members := make([]any, 0, len(view.Members))
 	for _, m := range view.Members {
+		memberID := i.viewerWireID(ctx, m.ViewerID)
+		if memberID == "" {
+			continue
+		}
 		members = append(members, map[string]any{
-			"user_id": strconv.FormatInt(m.ViewerID, 10), "profile_id": strconv.FormatInt(m.ViewerID, 10),
+			"user_id": memberID, "profile_id": memberID,
 			"display_name": m.Name, "is_host": m.Host, "is_self": m.Self, "connected": m.Connected,
 			"is_ready": m.Ready, "is_buffering": m.Buffering, "is_syncing": view.Playback == "waiting" && m.Connected && !m.Ready,
 			"lobby_ready": m.Lobby,
@@ -454,10 +457,10 @@ func partyTime(t time.Time) string {
 	return t.UTC().Format("2006-01-02T15:04:05.000Z07:00")
 }
 
-func siloEvent(ev frontend.PartyEvent) any {
+func (i *instance) siloEvent(ctx context.Context, ev frontend.PartyEvent) any {
 	switch ev.Type {
 	case "snapshot":
-		return map[string]any{"type": "snapshot", "room": siloRoom(ev.View)}
+		return map[string]any{"type": "snapshot", "room": i.siloRoom(ctx, ev.View)}
 	case "transport":
 		return map[string]any{"type": "transport_command", "command": map[string]any{
 			"command_id": ev.Command.ID, "session_id": ev.Command.SessionID,
