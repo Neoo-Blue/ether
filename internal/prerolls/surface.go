@@ -250,3 +250,20 @@ func (s *Service) Simulate(ctx context.Context, in SimulateInput) (Decision, err
 		Viewer: viewer, Device: in.Device, Away: in.Away, Feature: feature, Resume: in.Resume, Client: in.Client, At: at,
 	}, all, s.Selection(ctx), true), nil
 }
+
+// Files returns a pre-roll's converted video and thumbnail paths ("" when
+// absent) for the owner preview.
+func (s *Service) Files(ctx context.Context, id string) (string, string, error) {
+	p, err := s.byID(ctx, id)
+	if err != nil {
+		return "", "", err
+	}
+	video, thumb := s.path(p.seq, ".mp4"), s.path(p.seq, ".jpg")
+	if p.Video.State != StateReady || !fileExists(video) {
+		video = ""
+	}
+	if !fileExists(thumb) {
+		thumb = ""
+	}
+	return video, thumb, nil
+}

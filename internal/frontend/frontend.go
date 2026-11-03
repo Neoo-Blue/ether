@@ -281,6 +281,9 @@ type Host struct {
 	// Cinema lists preroll trailers of other movies. Nil means cinema intros
 	// are not wired; the intros route returns an empty page after authorization.
 	Cinema CinemaIntros
+	// Prerolls lists the owner's pre-roll as an intro. Nil means pre-rolls
+	// are off and intros are unchanged.
+	Prerolls Prerolls
 	// Subtitles searches and downloads a sidecar only after an explicit pick.
 	// Nil or Enabled false tells clients the server will not fetch one.
 	Subtitles SubtitleCatalog

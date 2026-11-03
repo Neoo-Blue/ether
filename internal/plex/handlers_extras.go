@@ -163,6 +163,9 @@ func extraEstimateInfo(e extras.Extra) core.MediaInfo {
 // extraMetadata renders one extra as PMS does: a clip Video with a
 // subtype and numeric extra type, carrying a single Media/Part.
 func (s *Server) extraMetadata(e extras.Extra, parent *core.Title, withMedia bool) model.Metadata {
+	if e.Source == prerollSource {
+		return s.prerollMetadata(e, core.PrerollClip{UpdatedAt: e.PublishedAt}, false)
+	}
 	thumb := thumbURL(parent)
 	if parent.BackdropPath != "" {
 		thumb = artURL(parent) // 16:9 backdrop suits trailer thumbs
@@ -206,6 +209,13 @@ func (s *Server) extraMetadata(e extras.Extra, parent *core.Title, withMedia boo
 // extraMetadataByKey renders a registered extra whose parent the viewer
 // may see.
 func (s *Server) extraMetadataByKey(ctx context.Context, pr *Request, key core.RatingKey) (model.Metadata, bool) {
+	if key.IsPreroll() {
+		e, clip, ok := s.prerollExtra(ctx, key)
+		if !ok {
+			return model.Metadata{}, false
+		}
+		return s.prerollMetadata(e, clip, true), true
+	}
 	if s.d.Extras == nil {
 		return model.Metadata{}, false
 	}
@@ -296,6 +306,10 @@ func (s *Server) handleExtraPlayback(w http.ResponseWriter, r *http.Request) boo
 	if !isExtra {
 		return false
 	}
+	if key.IsPreroll() {
+		s.prerollPlayback(w, r, key)
+		return true
+	}
 	ctx := r.Context()
 	pr := FromContext(ctx)
 	if s.d.Extras == nil || !s.d.Extras.Enabled() || pr.User == nil {
@@ -316,6 +330,13 @@ func (s *Server) handleExtraPlayback(w http.ResponseWriter, r *http.Request) boo
 		writeHTTPError(w, http.StatusForbidden)
 		return true
 	}
+	s.serveExtraPlayback(w, r, pr, key, e, parent)
+	return true
+}
+
+// serveExtraPlayback runs an authorized extra's decision or start request.
+func (s *Server) serveExtraPlayback(w http.ResponseWriter, r *http.Request, pr *Request, key core.RatingKey, e extras.Extra, parent *core.Title) {
+	ctx := r.Context()
 	p := s.parseExtraPlayRequest(r, key)
 	if policy, ok := s.d.AccessPolicy.(core.BitrateAccessPolicy); ok {
 		if limit := policy.BitrateLimit(pr.User); limit > 0 && (p.caps.MaxBitrateKbps == 0 || limit < p.caps.MaxBitrateKbps) {
@@ -338,7 +359,6 @@ func (s *Server) handleExtraPlayback(w http.ResponseWriter, r *http.Request) boo
 	default:
 		s.extraStart(w, r, pr, p, e, parent, false)
 	}
-	return true
 }
 
 // prepareExtra resolves, probes (when possible) and decides an extra,
@@ -347,7 +367,7 @@ func (s *Server) prepareExtra(ctx context.Context, pr *Request, p *playRequest, 
 	if !s.transcodes.claim(p.sessionID, pr.User.ID, pr.ClientID, s.now()) {
 		return nil, core.ErrUnauthorized
 	}
-	resolved, err := s.d.Extras.Resolve(ctx, e)
+	resolved, err := s.resolveExtra(ctx, e)
 	if err != nil {
 		return nil, err
 	}
@@ -387,6 +407,22 @@ func (s *Server) prepareExtra(ctx context.Context, pr *Request, p *playRequest, 
 		caps: p.caps, opts: p.opts, offset: p.offset, updatedAt: s.now(),
 	})
 	return sess, nil
+}
+
+// resolveExtra returns an extra's playable input; a pre-roll is its
+// converted local MP4.
+func (s *Server) resolveExtra(ctx context.Context, e extras.Extra) (extras.Resolved, error) {
+	if e.Source == prerollSource {
+		if s.d.Prerolls == nil {
+			return extras.Resolved{}, core.ErrNotFound
+		}
+		clip, ok := s.d.Prerolls.Clip(ctx, e.Key)
+		if !ok {
+			return extras.Resolved{}, core.ErrNotFound
+		}
+		return extras.Resolved{URL: clip.Path, Container: "mp4"}, nil
+	}
+	return s.d.Extras.Resolve(ctx, e)
 }
 
 func (s *Server) extraSessionFor(ctx context.Context, pr *Request, p *playRequest, e extras.Extra) (*extraSession, error) {
@@ -515,6 +551,7 @@ func (s *Server) extraStart(w http.ResponseWriter, r *http.Request, pr *Request,
 	if s.extraPlay != nil {
 		s.extraPlay.put(sess)
 	}
+	s.prerollStarted(ctx, pr, e)
 	if entry, ok := s.transcodes.get(p.sessionID); ok {
 		s.bindTranscodeStarted(entry, dec, p.offset)
 	}
@@ -549,6 +586,10 @@ func (s *Server) handleExtraPart(w http.ResponseWriter, r *http.Request) bool {
 	key := core.RatingKey(id)
 	if err != nil || key.Kind() != core.KindExtra {
 		return false
+	}
+	if key.IsPreroll() {
+		s.prerollPart(w, r, key)
+		return true
 	}
 	ctx := r.Context()
 	pr := FromContext(ctx)

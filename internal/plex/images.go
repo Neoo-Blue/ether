@@ -86,6 +86,9 @@ func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serveItemImage(w http.ResponseWriter, r *http.Request, key core.RatingKey, element string, width int) {
+	if key.IsPreroll() && s.prerollThumb(w, r, key) {
+		return
+	}
 	if element == "composite" || element == "squareArt" {
 		element = "thumb"
 	}

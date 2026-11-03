@@ -151,6 +151,9 @@ func csrfOK(r *http.Request) bool {
 			if csvUploads[r.URL.Path] && (strings.EqualFold(ct, "text/csv") || strings.EqualFold(ct, "application/octet-stream")) {
 				return true
 			}
+			if prerollVideoUpload(r.URL.Path) && strings.EqualFold(ct, "multipart/form-data") {
+				return true
+			}
 		}
 		return false
 	}
