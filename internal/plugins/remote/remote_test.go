@@ -1417,3 +1417,25 @@ func TestPlainStremioPublicRedirectsAndEncoding(t *testing.T) {
 		t.Fatal("encoded traversal accepted")
 	}
 }
+
+// Ether identifies itself honestly to a third-party add-on and sends it
+// no X-Ether-* header.
+func TestPlainStremioClientSendsHonestUserAgent(t *testing.T) {
+	var ua, ether string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ua, ether = r.UserAgent(), r.Header.Get(HeaderRequestID)
+		_, _ = w.Write([]byte(`{"streams":[]}`))
+	}))
+	defer srv.Close()
+	c, err := NewURLClient(URLOptions{Base: "http://addon.example.test/SECRETKEY123/manifest.json", Guard: publicGuard(t, srv), Plain: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if _, err := c.Call(context.Background(), Request{Path: "/stream/movie/tt1.json", RequestID: "req-1"}); err != nil {
+		t.Fatal(err)
+	}
+	if ua != "Ether (+https://github.com/braedonsaunders/ether)" || ether != "" {
+		t.Fatalf("user agent %q, X-Ether-Request-ID %q", ua, ether)
+	}
+}
