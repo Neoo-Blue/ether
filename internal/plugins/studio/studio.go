@@ -3,6 +3,7 @@ package studio
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,6 +34,9 @@ type Deps struct {
 	Publish func(ctx context.Context, typ string, data any) error
 	Logger  *slog.Logger
 	Now     func() time.Time
+	// Installed runs after Studio or its agent installs a plugin, so the
+	// app can switch on what it adds (a Live TV source for channels).
+	Installed func(ctx context.Context, rec plugins.Record)
 }
 
 // Project is one in-progress plugin project in Studio.
@@ -152,6 +156,7 @@ type Studio struct {
 	publish   func(ctx context.Context, typ string, data any) error
 	log       *slog.Logger
 	now       func() time.Time
+	installed func(ctx context.Context, rec plugins.Record)
 
 	mu       sync.Mutex
 	projects map[string]*Project
@@ -179,6 +184,7 @@ func New(deps Deps) *Studio {
 		eng:       eng,
 		ownEngine: ownEngine,
 		publish:   deps.Publish,
+		installed: deps.Installed,
 		log:       log,
 		now:       now,
 		projects:  map[string]*Project{},
@@ -911,7 +917,18 @@ func (s *Studio) InstallProject(ctx context.Context, id string, opts plugins.Ins
 	if err != nil {
 		return plugins.Record{}, err
 	}
-	return s.mgr.Install(ctx, preview, opts)
+	rec, err := s.mgr.Install(ctx, preview, opts)
+	if err == nil {
+		s.NotifyInstalled(ctx, rec)
+	}
+	return rec, err
+}
+
+// NotifyInstalled tells the app a plugin was installed from Studio.
+func (s *Studio) NotifyInstalled(ctx context.Context, rec plugins.Record) {
+	if s != nil && s.installed != nil {
+		s.installed(ctx, rec)
+	}
 }
 
 // installBundlePath is where an installed Studio plugin's compiled bundle lives.
@@ -1209,12 +1226,61 @@ func (h *devHost) CallHost(ctx context.Context, name string, raw json.RawMessage
 		h.s.mu.Unlock()
 		return json.RawMessage("null"), nil
 
+	case "http.fetch":
+		// Previews use real data: the draft's declared network permissions
+		// gate the same guarded client an installed plugin gets.
+		man, _ := plugins.ParseManifest([]byte(p.Files["manifest.json"]))
+		h.s.mu.Unlock()
+		if h.s.mgr == nil || man.Ether == nil {
+			return json.RawMessage("null"), nil
+		}
+		var req struct {
+			Method     string            `json:"method"`
+			URL        string            `json:"url"`
+			Headers    map[string]string `json:"headers"`
+			Body       string            `json:"body"`
+			BodyBase64 string            `json:"bodyBase64"`
+		}
+		if len(args) > 0 {
+			_ = json.Unmarshal(args[0], &req)
+		}
+		body := []byte(req.Body)
+		if req.BodyBase64 != "" {
+			if b, err := base64.StdEncoding.DecodeString(req.BodyBase64); err == nil {
+				body = b
+			}
+		}
+		resp, err := h.s.mgr.PreviewFetch(ctx, man.Ether.Permissions.Network, plugins.FetchRequest{Method: req.Method, URL: req.URL, Headers: req.Headers, Body: body})
+		if err != nil {
+			return nil, wasm.Forbidden(err.Error())
+		}
+		return json.Marshal(map[string]any{
+			"status": resp.Status, "headers": resp.Headers,
+			"body": string(resp.Body), "bodyBase64": base64.StdEncoding.EncodeToString(resp.Body),
+		})
+
 	case "catalog.search":
 		h.s.mu.Unlock()
+		if h.s.mgr != nil {
+			if out, ok, err := h.s.mgr.PreviewCatalogSearch(ctx, str(0), int(num(1)), int(num(2))); ok {
+				if err != nil {
+					return nil, &wasm.Fault{Code: "unavailable", Message: err.Error()}
+				}
+				return out, nil
+			}
+		}
 		return json.RawMessage(`{"titles":[{"id":1,"title":"The Matrix","type":"movie","year":1999}]}`), nil
 
 	case "catalog.get":
 		h.s.mu.Unlock()
+		if h.s.mgr != nil {
+			if out, ok, err := h.s.mgr.PreviewCatalogGet(ctx, str(0)); ok {
+				if err != nil {
+					return nil, &wasm.Fault{Code: "unavailable", Message: err.Error()}
+				}
+				return out, nil
+			}
+		}
 		return json.RawMessage(`{"id":1,"title":"The Matrix","type":"movie","year":1999}`), nil
 
 	case "folders.list":

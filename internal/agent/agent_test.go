@@ -680,3 +680,20 @@ func TestSecretRequestCannotBeSubmittedTwiceConcurrently(t *testing.T) {
 		t.Fatal("accepted concurrent secret submission")
 	}
 }
+
+// Studio turns see only the tools that build and install drafts.
+func TestStudioRouteNarrowsTools(t *testing.T) {
+	model := &fakeModel{scripts: [][]llm.Event{{{Kind: llm.EventTextDelta, Text: "ok"}}}}
+	fx := newFixture(t, model, Options{})
+	emit, _ := fx.emitCollect()
+	if _, _, err := fx.svc.RunTurn(context.Background(), fx.p, "", "build", TurnContext{Route: "/plugins/studio"}, emit); err != nil {
+		t.Fatal(err)
+	}
+	model.mu.Lock()
+	defer model.mu.Unlock()
+	for _, d := range model.requests[0].Tools {
+		if !routeTools["/plugins/studio"][d.Name] {
+			t.Errorf("tool %s offered in Studio", d.Name)
+		}
+	}
+}

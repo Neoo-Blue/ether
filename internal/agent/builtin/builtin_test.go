@@ -744,3 +744,19 @@ func TestWebFetchRefusesPrivateAddresses(t *testing.T) {
 	}
 	t.Fatal("web_fetch missing")
 }
+
+// External MCP apps have their own web access; the research tools are Ask
+// Ether's only.
+func TestWebToolsHiddenFromMCP(t *testing.T) {
+	_, d := buildDeps()
+	mcp := tools.Principal{IsOwner: true, Surface: "mcp", Scopes: []string{"full"}}
+	console := tools.Principal{IsOwner: true, Surface: "console"}
+	for _, tl := range builtin.All(d) {
+		if tl.Name != "web_search" && tl.Name != "web_fetch" {
+			continue
+		}
+		if tl.Visible == nil || tl.Visible(context.Background(), mcp) || !tl.Visible(context.Background(), console) {
+			t.Errorf("%s visibility wrong", tl.Name)
+		}
+	}
+}

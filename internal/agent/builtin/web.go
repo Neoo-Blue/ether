@@ -34,7 +34,7 @@ const (
 // add-on documentation) instead of inventing placeholders. Results are third
 // party text and are marked open-world.
 func webTools() []tools.Tool {
-	return []tools.Tool{
+	out := []tools.Tool{
 		tool(tools.Tool{
 			Name: "web_search", Title: "Search the web", ReadOnly: true, OpenWorld: true,
 			Description: "Search the public web. Returns titles, links and snippets. Use it to find real, legal data sources and their APIs (free live channel services, film archives, public lists) before building a plugin; follow up with web_fetch to read a result.",
@@ -73,6 +73,11 @@ func webTools() []tools.Tool {
 			},
 		}),
 	}
+	// External MCP apps have their own web access; these stay with Ask Ether.
+	for i := range out {
+		out[i].Visible = func(_ context.Context, p tools.Principal) bool { return p.Surface != "mcp" }
+	}
+	return out
 }
 
 func webGet(ctx context.Context, raw string) (*http.Response, []byte, error) {

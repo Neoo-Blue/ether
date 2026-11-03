@@ -113,8 +113,14 @@ function getJSON(url: string): any {
 function region(req: Request): string {
   return setting(req, "region", "auto");
 }
-function channels(req: Request): PlutoChannel[] {
-  const data = getJSON(API + "/v2/channels.json?marketingRegion=" + encodeURIComponent(region(req)));
+function channels(req: Request, withGuide = false): PlutoChannel[] {
+  // One request returns the lineup and, with a time window, every
+  // channel's upcoming programmes, so the guide fills without a call per channel.
+  const window = withGuide
+    ? "&start=" + encodeURIComponent(new Date().toISOString()) +
+      "&stop=" + encodeURIComponent(new Date(Date.now() + 4 * 3600000).toISOString())
+    : "";
+  const data = getJSON(API + "/v2/channels.json?marketingRegion=" + encodeURIComponent(region(req)) + window);
   if (!Array.isArray(data)) return [];
   const wanted = setting(req, "categories", "")
     .split(",")
@@ -167,13 +173,16 @@ export function handle(req: Request) {
     }
   }
   if (req.path === "/ether/channels.json") {
-    const list = channels(req).map((c) => ({
+    const list = channels(req, true).map((c) => ({
       id: c._id,
       name: c.name,
       number: c.number ? String(c.number) : undefined,
       group: c.category,
       logo: c.colorLogoPNG?.path,
       guideId: c._id,
+      programmes: (c.timelines || [])
+        .filter((t) => t.start && t.stop && t.title)
+        .map((t) => ({ id: t._id, channelId: c._id, title: t.title, start: t.start, stop: t.stop, description: t.episode?.description })),
     }));
     return { status: 200, body: { channels: list } };
   }
@@ -181,10 +190,16 @@ export function handle(req: Request) {
     const id = decodeURIComponent(req.path.slice("/ether/guide/".length, -5));
     const from = q(req, "from") || new Date().toISOString();
     const to = q(req, "to") || new Date(Date.now() + 86400000).toISOString();
-    const ch = getJSON(
-      API + "/v2/channels/" + encodeURIComponent(id) + "?start=" + encodeURIComponent(from) +
-        "&stop=" + encodeURIComponent(to) + "&marketingRegion=" + encodeURIComponent(region(req)),
-    ) as PlutoChannel;
+    let ch: PlutoChannel;
+    try {
+      ch = getJSON(
+        API + "/v2/channels/" + encodeURIComponent(id) + "?start=" + encodeURIComponent(from) +
+          "&stop=" + encodeURIComponent(to) + "&marketingRegion=" + encodeURIComponent(region(req)),
+      ) as PlutoChannel;
+    } catch (e) {
+      // An unknown channel or an unreachable service has no guide yet.
+      return { status: 200, body: { programmes: [] } };
+    }
     const programmes = (ch.timelines || [])
       .filter((t) => t.start && t.stop && t.title)
       .map((t) => ({ id: t._id, channelId: id, title: t.title, start: t.start, stop: t.stop, description: t.episode?.description }));
@@ -192,7 +207,11 @@ export function handle(req: Request) {
   }
   if (req.path.startsWith("/stream/tv/") && req.path.endsWith(".json")) {
     const id = decodeURIComponent(req.path.slice("/stream/tv/".length, -5));
-    return { status: 200, body: { streams: [{ name: "Pluto TV", url: streamURL(id) }] } };
+    try {
+      return { status: 200, body: { streams: [{ name: "Pluto TV", url: streamURL(id) }] } };
+    } catch (e) {
+      return { status: 200, body: { streams: [] } };
+    }
   }
   if (req.path === "/ether/view/lineup") {
     let list: PlutoChannel[] = [];

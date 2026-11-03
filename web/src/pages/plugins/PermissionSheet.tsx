@@ -128,9 +128,12 @@ export function PermissionSheet({
   folders,
   onChangeFolders,
   addedPermissions,
+  ownDraft = false,
 }: {
   permissions: string[];
   verified: boolean;
+  /** The owner's own Studio draft: no third-party trust warning. */
+  ownDraft?: boolean;
   needsViewers?: boolean;
   needsFolders?: boolean;
   viewers: number[];
@@ -146,7 +149,7 @@ export function PermissionSheet({
 
   return (
     <div className="space-y-4" data-testid="permission-sheet">
-      {!verified ? (
+      {!verified && !ownDraft ? (
         <Alert variant="warning">
           <AlertTitle className="flex items-center gap-2">
             <Badge variant="warning">
