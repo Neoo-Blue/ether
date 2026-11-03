@@ -58,6 +58,9 @@ describe("Catalog workspace", () => {
   it("keeps all catalog settings and saves changes from the new page", async () => {
     const { fake } = renderAppWith("/catalog/settings", () => undefined);
     const language = await screen.findByLabelText("Language");
+    expect(screen.queryByText("Catalog healthy")).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Your catalog" })).toBeInTheDocument();
+    expect(screen.queryByText(/Your saved release-date requirement/)).not.toBeInTheDocument();
     expect(screen.getByLabelText("Region")).toBeInTheDocument();
     expect(screen.queryByLabelText("Minimum popularity")).not.toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Some" })).toBeChecked();
@@ -78,7 +81,6 @@ describe("Catalog workspace", () => {
     await waitFor(() => expect(calls(fake, "PUT", "/config/catalog").length).toBe(1));
     expect(calls(fake, "PUT", "/config/catalog")[0]?.body).toMatchObject({
       language: "fr-FR",
-      gateMoviesByHomeRelease: true,
       showUpcomingEpisodes: true,
       showUpcomingMovies: true,
     });

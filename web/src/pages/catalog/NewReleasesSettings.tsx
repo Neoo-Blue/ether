@@ -42,9 +42,7 @@ const MODES: {
     value: "digital",
     title: () => t("On digital release"),
     body: () =>
-      t(
-        "Appears on its streaming or digital release date. No checking, but some may not play yet.",
-      ),
+      t("Appears on its digital or physical release date. No checking, but some may not play yet."),
   },
   {
     value: "immediate",
@@ -53,21 +51,13 @@ const MODES: {
   },
 ];
 
-/**
- * The three new-release modes plus the release-date gate. Edits the
- * `availability` draft and `catalog.gateMoviesByHomeRelease`; the page's
- * save bar saves both.
- */
+/** The three release modes share one availability setting. */
 export function NewReleasesSettings({
   availability,
   onAvailability,
-  gate,
-  onGate,
 }: {
   availability: AvailabilityConfig;
   onAvailability: (next: AvailabilityConfig) => void;
-  gate: boolean;
-  onGate: (next: boolean) => void;
 }) {
   const summary = useAsync((signal) => apiFetch<Summary>("/availability/summary", { signal }), []);
   useInterval(() => void summary.reload(), 30000);
@@ -75,13 +65,6 @@ export function NewReleasesSettings({
 
   return (
     <SettingsSection title={t("New releases")}>
-      {gate && mode === "playable" ? (
-        <p className="text-xs text-fg-muted">
-          {t(
-            "Your saved release-date requirement still applies. Choose a release option to replace it.",
-          )}
-        </p>
-      ) : null}
       <div className="new-release-modes" role="radiogroup" aria-label={t("New releases")}>
         {MODES.map((item) => {
           const selected = mode === item.value;
@@ -96,7 +79,6 @@ export function NewReleasesSettings({
                 className={`new-release-card${selected ? " is-selected" : ""}`}
                 onClick={() => {
                   onAvailability(applyReleaseMode(availability, item.value));
-                  onGate(item.value === "digital");
                 }}
               >
                 <Icon className="new-release-card-icon" aria-hidden="true" />

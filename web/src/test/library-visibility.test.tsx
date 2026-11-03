@@ -14,7 +14,10 @@ describe("Library visibility", () => {
   it.each(["hidden", "shown"])(
     "browses %s rules with the shared catalog search",
     async (visibility) => {
-      const { fake } = renderApp("/catalog/rules");
+      const { fake } = renderAppWith("/catalog/rules", (_method, path) => {
+        if (path === "/catalog/visibility/preview")
+          return { total: 20, hidden: 10, visible: 10, movies: 5, shows: 5, items: [], shown: [] };
+      });
       await settleUi(() =>
         expect(screen.getAllByRole("button", { name: "Browse" })).toHaveLength(2),
       );
@@ -52,7 +55,9 @@ describe("Library visibility", () => {
       expect(screen.getByText("63,996")).toBeInTheDocument();
       expect(screen.getByText("No rules yet. Everything is shown.")).toBeInTheDocument();
     });
-    expect(screen.getByText("Hidden")).toBeInTheDocument();
+    expect(screen.getByText("Hidden · 0")).toBeInTheDocument();
+    expect(screen.getByText("Nothing hidden")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Browse" })[0]).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Add rule" }));
     expect(screen.getByLabelText("Rule name")).toHaveValue("");
     expect(calls(fake, "PUT", "/config/catalog")).toHaveLength(0);

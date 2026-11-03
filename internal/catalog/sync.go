@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/braedonsaunders/ether/internal/config"
 	"math"
 	"strconv"
 	"strings"
@@ -191,7 +192,7 @@ func (c *Catalog) Run(ctx context.Context) {
 	full := schedule.New(c.now(), c.untilDue(ctx))
 	// Preserve the existing resume behavior while the gate is off. If the
 	// owner enables it during the wait, start background backfill promptly.
-	for !c.config().GateMoviesByHomeRelease && full.Remaining(c.now()) > 0 {
+	for !(c.config().ReleaseMode == config.ModeDigital) && full.Remaining(c.now()) > 0 {
 		if !schedule.Wait(ctx, c.now, min(schedule.MaxWait, full.Remaining(c.now()))) {
 			return
 		}
@@ -228,7 +229,7 @@ func (c *Catalog) Run(ctx context.Context) {
 		}
 		if warm.Remaining(c.now()) == 0 {
 			if !c.syncing.Load() {
-				if c.config().GateMoviesByHomeRelease {
+				if c.config().ReleaseMode == config.ModeDigital {
 					_, _ = c.BackfillHomeReleases(ctx, 15)
 					_, _ = c.WarmDetails(ctx, 10)
 				} else {

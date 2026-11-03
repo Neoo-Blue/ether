@@ -2,6 +2,10 @@ import { CatalogBrowser } from "./Catalog";
 import { Button, Input, Select } from "@braedonsaunders/appkit-ui";
 import {
   CheckCircle2,
+  Library,
+  Eye,
+  EyeOff,
+  ArrowDown,
   ChevronDown,
   ChevronUp,
   GripVertical,
@@ -168,7 +172,8 @@ export function RulesPanel({
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
       <div className="space-y-4">
-        <div className="rounded-xl border border-border bg-surface p-5 text-lg font-semibold">
+        <div className="flex items-center gap-3 rounded-xl border border-border bg-surface p-5 text-lg font-semibold">
+          <Library className="shrink-0 text-primary" size={24} aria-hidden />
           {preview.loading
             ? t("Loading titles…")
             : tn(
@@ -177,133 +182,141 @@ export function RulesPanel({
                 "{count} titles in your catalog",
               )}
         </div>
-        <p className="text-sm text-fg-muted">
-          {t("First match wins. Ratings match by age level.")}
-        </p>
-        {rules.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-fg-muted">
-            {fallback === "hide"
-              ? t("No rules yet. Everything is hidden.")
-              : t("No rules yet. Everything is shown.")}
+        <div className="ml-6 border-l-2 border-border pl-5 space-y-4">
+          <ArrowDown className="text-fg-muted" size={20} aria-hidden />
+          <p className="text-sm text-fg-muted">
+            {t("First match wins. Ratings match by age level.")}
           </p>
-        ) : null}
-        <ol className="space-y-2">
-          {rules.map((rule, i) => {
-            const counts = preview.data?.rules?.[i];
-            return (
-              <li
-                key={i}
-                draggable
-                onDragStart={() => setDrag(i)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => {
-                  if (drag == null || drag === i) return;
-                  const next = rules.slice();
-                  const [row] = next.splice(drag, 1);
-                  next.splice(i, 0, row!);
-                  onRules(next);
-                  setDrag(null);
-                }}
-                className="flex items-center gap-2 rounded-lg border border-border bg-surface px-2 py-2"
-              >
-                <button
-                  type="button"
-                  className="cursor-grab px-1 text-fg-muted"
-                  aria-label={t("Drag rule {n}", { n: i + 1 })}
-                >
-                  <GripVertical size={16} />
-                </button>
-                <button
-                  type="button"
-                  className="min-w-0 flex-1 text-left"
-                  onClick={() => setOpen(i)}
-                >
-                  <span className="block truncate text-sm font-medium">{ruleLabel(rule)}</span>
-                </button>
-                {counts ? (
-                  <span className="shrink-0 text-xs text-fg-muted">
-                    {tn(counts.movies, "{count} movie", "{count} movies")}
-                    {" · "}
-                    {tn(counts.shows, "{count} show", "{count} shows")}
-                  </span>
-                ) : null}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={t("Move rule {n} up", { n: i + 1 })}
-                  disabled={i === 0}
-                  onClick={() => move(i, -1)}
-                >
-                  <ChevronUp size={16} />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={t("Move rule {n} down", { n: i + 1 })}
-                  disabled={i === rules.length - 1}
-                  onClick={() => move(i, 1)}
-                >
-                  <ChevronDown size={16} />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={t("Edit rule {n}", { n: i + 1 })}
-                  onClick={() => setOpen(i)}
-                >
-                  <Pencil size={16} />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={t("Delete rule {n}", { n: i + 1 })}
-                  onClick={() => {
-                    onRules(rules.filter((_, n) => n !== i));
-                    setOpen(null);
+          {rules.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-fg-muted">
+              {fallback === "hide"
+                ? t("No rules yet. Everything is hidden.")
+                : t("No rules yet. Everything is shown.")}
+            </p>
+          ) : null}
+          <ol className="space-y-2">
+            {rules.map((rule, i) => {
+              const counts = preview.data?.rules?.[i];
+              return (
+                <li
+                  key={i}
+                  draggable
+                  onDragStart={() => setDrag(i)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (drag == null || drag === i) return;
+                    const next = rules.slice();
+                    const [row] = next.splice(drag, 1);
+                    next.splice(i, 0, row!);
+                    onRules(next);
+                    setDrag(null);
                   }}
+                  className="flex items-center gap-2 rounded-lg border border-border bg-surface px-2 py-2"
                 >
-                  <Trash2 size={16} />
-                </Button>
-              </li>
-            );
-          })}
-        </ol>
-        <div className="flex items-center gap-3 rounded-lg border border-border bg-surface-alt px-3 py-2">
-          <span className="flex-1 text-sm font-medium">{t("Everything else")}</span>
-          <Segmented
-            ariaLabel={t("Everything else")}
+                  <button
+                    type="button"
+                    className="cursor-grab px-1 text-fg-muted"
+                    aria-label={t("Drag rule {n}", { n: i + 1 })}
+                  >
+                    <GripVertical size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 text-left"
+                    onClick={() => setOpen(i)}
+                  >
+                    <span className="block truncate text-sm font-medium">{ruleLabel(rule)}</span>
+                  </button>
+                  {counts ? (
+                    <span className="shrink-0 text-xs text-fg-muted">
+                      {tn(counts.movies, "{count} movie", "{count} movies")}
+                      {" · "}
+                      {tn(counts.shows, "{count} show", "{count} shows")}
+                    </span>
+                  ) : null}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={t("Move rule {n} up", { n: i + 1 })}
+                    disabled={i === 0}
+                    onClick={() => move(i, -1)}
+                  >
+                    <ChevronUp size={16} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={t("Move rule {n} down", { n: i + 1 })}
+                    disabled={i === rules.length - 1}
+                    onClick={() => move(i, 1)}
+                  >
+                    <ChevronDown size={16} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={t("Edit rule {n}", { n: i + 1 })}
+                    onClick={() => setOpen(i)}
+                  >
+                    <Pencil size={16} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={t("Delete rule {n}", { n: i + 1 })}
+                    onClick={() => {
+                      onRules(rules.filter((_, n) => n !== i));
+                      setOpen(null);
+                    }}
+                  >
+                    <Trash2 size={16} />
+                  </Button>
+                </li>
+              );
+            })}
+          </ol>
+          <div className="flex items-center gap-3 rounded-lg border border-border bg-surface-alt px-3 py-2">
+            <span className="flex-1 text-sm font-medium">{t("Everything else")}</span>
+            <Segmented
+              ariaLabel={t("Everything else")}
+              size="sm"
+              value={fallback === "hide" ? "hide" : "show"}
+              onChange={onFallback}
+              options={[
+                { value: "show", label: t("Show") },
+                { value: "hide", label: t("Hide") },
+              ]}
+            />
+          </div>
+          <Button
+            variant="outline"
             size="sm"
-            value={fallback === "hide" ? "hide" : "show"}
-            onChange={onFallback}
-            options={[
-              { value: "show", label: t("Show") },
-              { value: "hide", label: t("Hide") },
-            ]}
-          />
+            disabled={rules.length >= 32}
+            onClick={() => {
+              onRules([
+                ...rules,
+                {
+                  name: "",
+                  action: "hide",
+                  mediaType: "mixed",
+                  match: "all",
+                  rules: [blank()],
+                },
+              ]);
+              setFresh(0);
+              setOpen(rules.length);
+            }}
+          >
+            <Plus size={14} />
+            {t("Add rule")}
+          </Button>
+          <ArrowDown className="text-fg-muted" size={20} aria-hidden />
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={rules.length >= 32}
-          onClick={() => {
-            onRules([
-              ...rules,
-              {
-                name: "",
-                action: "hide",
-                mediaType: "mixed",
-                match: "all",
-                rules: [blank()],
-              },
-            ]);
-            setFresh(0);
-            setOpen(rules.length);
-          }}
+        <div
+          className="flex items-center gap-3 rounded-xl border border-border bg-surface p-5 font-semibold"
+          role="status"
         >
-          <Plus size={14} />
-          {t("Add rule")}
-        </Button>
-        <div className="rounded-xl border border-border bg-surface p-5 font-semibold" role="status">
+          <Eye className="shrink-0 text-success" size={24} aria-hidden />
           {t("{shown} shown · {hidden} hidden", {
             shown: formatNumber(visible),
             hidden: formatNumber(preview.data?.hidden ?? 0),
@@ -311,7 +324,7 @@ export function RulesPanel({
         </div>
       </div>
       <aside className="space-y-3 lg:sticky lg:top-0 lg:self-start" aria-label={t("Preview")}>
-        <div className="rounded-xl border border-border bg-surface p-5">
+        <section className="min-h-fit rounded-xl border border-border bg-surface p-5 pb-6">
           <CheckCircle2 className="mb-4 text-success" size={32} aria-hidden />
           {!complete ? (
             <p className="text-sm text-fg-muted">{t("Finish each condition to preview.")}</p>
@@ -335,9 +348,11 @@ export function RulesPanel({
               ) : null}
             </>
           )}
-        </div>
+        </section>
         <PosterRow
           title={t("Hidden")}
+          count={preview.data?.hidden ?? 0}
+          empty={t("Nothing hidden")}
           items={hiddenItems}
           onBrowse={() => {
             setBrowseParams(new URLSearchParams());
@@ -346,6 +361,8 @@ export function RulesPanel({
         />
         <PosterRow
           title={t("Shown")}
+          count={visible}
+          empty={t("Nothing shown")}
           items={shownItems}
           onBrowse={() => {
             setBrowseParams(new URLSearchParams());
@@ -474,17 +491,29 @@ export function RulesPanel({
 }
 
 function PosterRow({
+  count,
+  empty,
   title,
   items,
   onBrowse,
 }: {
   title: string;
+  count: number;
+  empty: string;
   onBrowse: () => void;
   items: { key: string; title: string; poster?: string; posterPath?: string }[];
 }) {
   return (
     <div>
-      <h3 className="mb-2 text-xs font-medium text-fg-muted">{title}</h3>
+      <h3 className="mb-2 text-sm font-medium">
+        {t("{title} · {count}", { title, count: formatNumber(count) })}
+      </h3>
+      {count === 0 ? (
+        <div className="flex items-center gap-2 rounded-lg border border-dashed border-border p-4 text-sm text-fg-muted">
+          <EyeOff size={18} aria-hidden />
+          {empty}
+        </div>
+      ) : null}
       <div className="grid max-h-64 overflow-y-auto grid-cols-4 gap-2">
         {items.slice(0, 24).map((item) => (
           <Artwork
@@ -498,7 +527,7 @@ function PosterRow({
           />
         ))}
       </div>
-      <Button variant="outline" className="mt-3 w-full" onClick={onBrowse}>
+      <Button variant="outline" className="mt-3 w-full" onClick={onBrowse} disabled={count === 0}>
         {t("Browse")}
       </Button>
     </div>

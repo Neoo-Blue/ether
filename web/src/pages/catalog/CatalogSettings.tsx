@@ -7,7 +7,8 @@ import { useCallback, useState } from "react";
 import { useApp } from "../../app-context";
 import { SaveBar, useDraft } from "../../components/SaveBar";
 import { ErrorPanel } from "../../components/feedback";
-import { t } from "../../i18n";
+import { t, tn } from "../../i18n";
+import { relativeTime } from "../../lib/format";
 import { api, ApiError, errorMessage } from "../../lib/api";
 import { useAsync } from "../../lib/hooks";
 import { isRuleComplete } from "../../lib/rules";
@@ -79,7 +80,11 @@ export function CatalogSettings() {
   const { tab } = useParams();
   const navigate = useNavigate();
   const section = tab === "rules" ? "rules" : "library";
-  const { health, refreshDashboard } = useApp();
+  const { health, dashboard, refreshDashboard } = useApp();
+  const catalogStatus = asObj(dashboard?.sections.catalog);
+  const titleCount =
+    Number(catalogStatus.browsableMovies ?? catalogStatus.movies ?? 0) +
+    Number(catalogStatus.browsableShows ?? catalogStatus.shows ?? 0);
   const catalogHealth = health.find((h) => h.id === "catalog");
   const config = useAsync(() => api.getConfig(), []);
   const stored = config.data ? asObj(config.data.catalog) : null;
@@ -109,8 +114,8 @@ export function CatalogSettings() {
   const groups = [...CATALOG, UpcomingEpisodeSettings].map(briefGroup);
   return (
     <div className="catalog-scroll app-scroll">
-      <div className="space-y-5 p-5 lg:p-7">
-        <div className="pb-5">
+      <div className="space-y-4 px-5 pb-5 pt-3 lg:px-7">
+        <div className="pb-1">
           <SubtabNav
             ariaLabel={t("Catalog settings")}
             active={section}
@@ -143,8 +148,6 @@ export function CatalogSettings() {
                 <NewReleasesSettings
                   availability={availability.draft}
                   onAvailability={availability.setDraft}
-                  gate={Boolean(draft.gateMoviesByHomeRelease)}
-                  onGate={(v) => setDraft({ ...draft, gateMoviesByHomeRelease: v })}
                 />
               ) : null}
               {groups.map((g, i) => (
@@ -204,7 +207,14 @@ export function CatalogSettings() {
                     )}
                     <h3 className="text-lg font-semibold">{t("Your catalog")}</h3>
                   </div>
-                  <p className="text-lg font-semibold">{catalogHealth.summary}</p>
+                  <p className="text-3xl font-semibold tabular-nums">
+                    {tn(titleCount, "{count} title", "{count} titles")}
+                  </p>
+                  <p className="mt-2 text-sm text-fg-muted">
+                    {catalogStatus.lastSync
+                      ? t("Synced {when}", { when: relativeTime(String(catalogStatus.lastSync)) })
+                      : t("Not synced yet")}
+                  </p>
                   <div className="mt-4">
                     <LevelBadge level={catalogHealth.level} />
                   </div>

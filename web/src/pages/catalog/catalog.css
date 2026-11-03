@@ -624,7 +624,8 @@
   bottom: -24px;
   width: 120px;
   height: 120px;
-  opacity: 0.06;
+  color: var(--color-primary);
+  opacity: 0.12;
   pointer-events: none;
 }
 @media (max-width: 640px) {

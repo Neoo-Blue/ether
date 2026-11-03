@@ -83,7 +83,7 @@ func TestCachedCreditTitlesUsesOwnedConfigAndTime(t *testing.T) {
 	if err != nil || len(rows) != 0 {
 		t.Fatalf("leased exclusion ignored %+v %v", rows, err)
 	}
-	rows, err = c.CachedCreditTitles(ctx, keys, config.Catalog{GateMoviesByHomeRelease: true}, now)
+	rows, err = c.CachedCreditTitles(ctx, keys, config.Catalog{ReleaseMode: config.ModeDigital}, now)
 	if err != nil || len(rows) != 0 {
 		t.Fatalf("unknown home release exposed %+v %v", rows, err)
 	}

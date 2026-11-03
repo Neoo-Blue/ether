@@ -401,7 +401,7 @@ func (c *Catalog) fetchMovieYear(ctx context.Context, rating core.RatingKey) (bo
 		return false, fmt.Errorf("catalog: movie year refresh %d returned no details", rating.TMDB())
 	}
 	t := c.movieDetailsToTitle(ctx, d)
-	if err := c.upsert(ctx, t, upsertOpts{browsable: c.meetsThreshold(t), detail: true, releaseDates: d.ReleaseDates, gateEnabled: c.config().GateMoviesByHomeRelease}); err != nil {
+	if err := c.upsert(ctx, t, upsertOpts{browsable: c.meetsThreshold(t), detail: true, releaseDates: d.ReleaseDates}); err != nil {
 		return false, err
 	}
 	return true, nil

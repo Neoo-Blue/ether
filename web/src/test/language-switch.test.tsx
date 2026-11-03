@@ -49,7 +49,6 @@ describe("switching language", () => {
     await waitFor(() => expect(calls(fake, "PUT", "/config/catalog").length).toBe(1));
     expect(calls(fake, "PUT", "/config/catalog")[0]?.body).toMatchObject({
       minPopularity: 42,
-      gateMoviesByHomeRelease: true,
     });
   });
 });

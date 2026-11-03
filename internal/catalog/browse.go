@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"github.com/braedonsaunders/ether/internal/config"
 	"slices"
 	"strings"
 	"time"
@@ -17,9 +18,6 @@ import (
 // in-memory count and page caching so repeated library/recommendation reads
 // return without hitting disk.
 func (c *Catalog) Browse(ctx context.Context, q core.BrowseQuery) (core.Page, error) {
-	if err := c.admitFallbacks(ctx); err != nil {
-		return core.Page{}, err
-	}
 	switch q.Filter.Type {
 	case core.TypeEpisode:
 		return c.BrowseStoredEpisodes(ctx, q)
@@ -382,14 +380,14 @@ func (c *Catalog) browseWhere(f core.Filter) (string, []any, error) {
 		conds = append(conds, "NOT ("+q+")")
 		args = append(args, a...)
 	}
-	if c.config().GateMoviesByHomeRelease && f.IncludeKeys == nil && f.RuleVisibility == "" {
+	if (c.config().ReleaseMode == config.ModeDigital) && f.IncludeKeys == nil && f.RuleVisibility == "" {
 		gateSQL := homeReleaseSQL("t")
 		if c.config().ShowUpcomingMovies {
 			gateSQL = "(t.type='movie' AND t.release_known=1 AND t.released_ts>? OR (" + gateSQL + "))"
 			args = append(args, nowTS)
 		}
 		conds = append(conds, gateSQL)
-		args = append(args, nowTS, nowTS-int64(homeReleaseGrace.Seconds()))
+		args = append(args, nowTS)
 	}
 	if f.IncludeKeys != nil {
 		if len(f.IncludeKeys) == 0 {
@@ -781,9 +779,6 @@ func (c *Catalog) Facet(ctx context.Context, t core.MediaType, facet string) ([]
 
 // FacetFilter returns value counts over the browsable set matching f.
 func (c *Catalog) FacetFilter(ctx context.Context, f core.Filter, facet string) ([]core.FacetValue, error) {
-	if err := c.admitFallbacks(ctx); err != nil {
-		return nil, err
-	}
 	if facet == "firstCharacter" {
 		f.FirstCharacter = ""
 	}

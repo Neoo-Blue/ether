@@ -30,7 +30,7 @@ func TestUpcomingMoviesOptIn(t *testing.T) {
 		t.Fatal("future movies enabled by default")
 	}
 	for _, enabled := range []bool{false, true, false} {
-		c.UpdateConfig(config.Catalog{ShowUpcomingMovies: enabled, GateMoviesByHomeRelease: true})
+		c.UpdateConfig(config.Catalog{ShowUpcomingMovies: enabled, ReleaseMode: config.ModeDigital})
 		rows, err := c.Browse(ctx, core.BrowseQuery{Filter: core.Filter{Type: core.TypeMovie}})
 		if err != nil {
 			t.Fatal(err)

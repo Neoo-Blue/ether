@@ -54,7 +54,7 @@ export default function Catalog() {
       title={t("Catalog")}
       actions={
         <>
-          {status ? (
+          {status && !onSettings ? (
             <span className="hidden xl:inline-flex">
               <LevelBadge
                 level={status.level}

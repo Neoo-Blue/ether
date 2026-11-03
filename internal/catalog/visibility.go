@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"context"
+	"github.com/braedonsaunders/ether/internal/config"
 
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/libraryfilter"
@@ -40,7 +41,7 @@ func (c *Catalog) SearchVisible(t *core.Title) bool {
 }
 
 func (c *Catalog) visibleWith(f *libraryfilter.Filter, t *core.Title) bool {
-	return !f.Hidden(t) && (c.upcomingMovie(t) || !c.config().GateMoviesByHomeRelease || c.homeVisible(t))
+	return !f.Hidden(t) && (c.upcomingMovie(t) || !(c.config().ReleaseMode == config.ModeDigital) || c.homeVisible(t))
 }
 
 // FilterVisibility enriches remote summaries with already-known local facets;
@@ -48,11 +49,8 @@ func (c *Catalog) visibleWith(f *libraryfilter.Filter, t *core.Title) bool {
 // An explicit search context (core.WithExplicitSearch) skips rules the owner
 // limited to browsing.
 func (c *Catalog) FilterVisibility(ctx context.Context, ts []core.Title) []core.Title {
-	if err := c.admitFallbacks(ctx); err != nil {
-		return nil
-	}
 	f := c.visibilityFor(ctx)
-	if f.Passive() && !c.config().GateMoviesByHomeRelease {
+	if f.Passive() && !(c.config().ReleaseMode == config.ModeDigital) {
 		return ts
 	}
 	if len(ts) == 0 {
@@ -105,14 +103,14 @@ func (c *Catalog) FilterVisibility(ctx context.Context, ts []core.Title) []core.
 			return nil
 		}
 	}
-	if c.config().GateMoviesByHomeRelease {
+	if c.config().ReleaseMode == config.ModeDigital {
 		if err := c.hydrateHomeRelease(ctx, out); err != nil {
 			return nil
 		}
 	}
 	keep := out[:0]
 	for i := range out {
-		if !f.Hidden(&out[i]) && (c.upcomingMovie(&out[i]) || !c.config().GateMoviesByHomeRelease || homeReleaseVisible(&out[i], c.now())) {
+		if !f.Hidden(&out[i]) && (c.upcomingMovie(&out[i]) || !(c.config().ReleaseMode == config.ModeDigital) || homeReleaseVisible(&out[i], c.now())) {
 			keep = append(keep, out[i])
 		}
 	}
