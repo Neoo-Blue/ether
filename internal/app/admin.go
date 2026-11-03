@@ -184,6 +184,7 @@ func (a *App) buildAdmin() http.Handler {
 		Personalization: a.personalize,
 		Collections:     a.collections,
 		CatalogHelper:   a.collections,
+		TitleSchedules:  a.catalog,
 		WaitingReleaseKeys: func(ctx context.Context) []core.RatingKey {
 			if a.availability == nil {
 				return nil

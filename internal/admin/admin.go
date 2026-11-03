@@ -223,7 +223,10 @@ type Deps struct {
 	// Collections backs /api/collections* (Collection Studio).
 	Collections CollectionStudio
 	// CatalogHelper backs /api/catalog/*.
-	CatalogHelper     CatalogHelper
+	CatalogHelper CatalogHelper
+	// TitleSchedules backs the catalogue drawer's episode and release tabs;
+	// nil disables them.
+	TitleSchedules    TitleSchedules
 	CatalogVisibility func(context.Context, []core.LibraryExclusion, string) (any, error)
 	// WaitingReleaseKeys are in-window movies still hidden from viewers.
 	// Nil leaves the waiting catalog filter empty.

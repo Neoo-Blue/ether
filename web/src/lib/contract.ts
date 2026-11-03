@@ -31,6 +31,19 @@ export interface TitleDetail extends TitleCard {
   directors?: { id: number; name: string; image?: string }[];
   keywords?: { id: number; name: string }[] | string[];
   collection?: { id: number; name: string } | null;
+  tagline?: string;
+  originalTitle?: string;
+  language?: string;
+  /** TMDB status: "Returning Series", "Ended", "Released", "In Production"… */
+  status?: string;
+  studios?: string[];
+  countries?: string[];
+  /** YYYY-MM-DD: first air date or theatrical release. */
+  releaseDate?: string;
+  homeReleaseDate?: string;
+  lastAirDate?: string;
+  seasonCount?: number;
+  episodeCount?: number;
 }
 
 const RULE_FIELDS = [

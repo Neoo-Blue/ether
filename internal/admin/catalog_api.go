@@ -271,6 +271,18 @@ type titleDetail struct {
 		ID   int64  `json:"id"`
 		Name string `json:"name"`
 	} `json:"collection"`
+	// Facts for the drawer's overview; dates are YYYY-MM-DD.
+	Tagline       string   `json:"tagline,omitempty"`
+	OriginalTitle string   `json:"originalTitle,omitempty"`
+	Language      string   `json:"language,omitempty"`
+	Status        string   `json:"status,omitempty"`
+	Studios       []string `json:"studios,omitempty"`
+	Countries     []string `json:"countries,omitempty"`
+	ReleaseDate   string   `json:"releaseDate,omitempty"`
+	HomeRelease   string   `json:"homeReleaseDate,omitempty"`
+	LastAirDate   string   `json:"lastAirDate,omitempty"`
+	Seasons       int      `json:"seasonCount,omitempty"`
+	Episodes      int      `json:"episodeCount,omitempty"`
 }
 
 func people(ps []core.Person, max int) []personCard {
@@ -295,7 +307,13 @@ func (h *Handler) handleCatalogTitle(w http.ResponseWriter, r *http.Request) {
 		h.writeServiceError(w, err)
 		return
 	}
-	d := titleDetail{TMDBID: t.IDs.TMDB, IMDBID: t.IDs.IMDB, TitleCard: CardFor(*t), Cast: people(t.Cast, 20), Directors: people(t.Directors, 5), Keywords: t.Keywords}
+	d := titleDetail{TMDBID: t.IDs.TMDB, IMDBID: t.IDs.IMDB, TitleCard: CardFor(*t), Cast: people(t.Cast, 20), Directors: people(t.Directors, 5), Keywords: t.Keywords,
+		Tagline: t.Tagline, Language: t.Language, Status: t.Status, Studios: t.Studios, Countries: t.Countries,
+		ReleaseDate: airDate(t.Released), HomeRelease: airDate(t.HomeReleased), LastAirDate: airDate(t.LastAirDate),
+		Seasons: t.ChildCount, Episodes: t.LeafCount}
+	if t.OriginalTitle != t.Title {
+		d.OriginalTitle = t.OriginalTitle
+	}
 	if d.Keywords == nil {
 		d.Keywords = []string{}
 	}
