@@ -131,7 +131,14 @@ func (c *Catalog) Browse(ctx context.Context, q core.BrowseQuery) (core.Page, er
 	order := browseOrder(q)
 	orderArgs := []any{}
 	asOf := c.now()
-	computedAdded := q.Sort == core.SortAdded && q.Filter.Type != core.TypeMovie
+	computedAdded := q.Sort == core.SortAdded && q.Filter.Type != core.TypeMovie && q.Filter.Type != core.TypeShow
+	if q.Sort == core.SortAdded && q.Filter.Type == core.TypeShow {
+		dir := "ASC"
+		if q.Desc {
+			dir = "DESC"
+		}
+		order = "t.show_added_ts " + dir + browseSecondaryOrder("t", q.SecondarySorts)
+	}
 	if computedAdded {
 		dir := "ASC"
 		if q.Desc {
@@ -164,26 +171,7 @@ func (c *Catalog) Browse(ctx context.Context, q core.BrowseQuery) (core.Page, er
 		queryArgs = append(append([]any{}, orderArgs...), pageArgs...)
 	}
 	var items []core.Title
-	walked := false
-	if computedAdded && q.Desc && len(q.SecondarySorts) == 0 && q.Filter.Type == core.TypeShow && (q.NoTotal || total >= recentWalkMinTotal) {
-		// Newest-first series by date added, from the aired-episode index.
-		page, ok, err := c.recentShowsPage(ctx, where, args, asOf, offset, limit)
-		if err != nil {
-			return core.Page{}, err
-		}
-		if ok {
-			walked = true
-			keys := make([]core.RatingKey, len(page))
-			for i, a := range page {
-				keys[i] = a.key
-			}
-			if items, err = c.titlesInKeyOrder(ctx, keys); err != nil {
-				return core.Page{}, err
-			}
-		}
-	}
 	switch {
-	case walked:
 	case q.Filter.Type == "" && !q.SortLastViewed && !computedAdded && len(q.SecondarySorts) == 0 && q.Sort != core.SortTitle && offset+limit <= mergedPageMax:
 		// Movies and series together: no index orders both types, so the
 		// sorted query reads every browsable title. Each type's page comes
