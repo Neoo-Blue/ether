@@ -145,6 +145,11 @@ func TestCUDAP010ToneMapContractAndFallback(t *testing.T) {
 	mustNotContain(t, args, "tonemap_cuda=", "scale_cuda=")
 	mustContain(t, args, "-c:v hevc_nvenc", "format=p010le", "zscale=")
 	s.Features.cudaP010ToneMap = true
+	hdr.Video().ColorRange = "pc"
+	s.Info = hdr
+	mustNotContain(t, buildArgs(s), "tonemap_cuda=")
+	hdr.Video().ColorRange = "tv"
+	s.Info = hdr
 	s.Target = &videoContract{codec: "hevc", depth: 10, rng: rangeSDR, width: 3840, height: 1920, pic: picture{sarNum: 1, sarDen: 1, prim: "bt709", matrix: "bt709", full: true}}
 	mustNotContain(t, buildArgs(s), "tonemap_cuda=")
 }

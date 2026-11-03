@@ -707,7 +707,7 @@ func planFilterChain(s runSpec, v *core.StreamInfo, pic picturePlan, accel strin
 	// Software filters only: GPU scalers neither pad nor convert SDR to
 	// HDR, and only the explicitly probed CUDA path can feed a 10-bit
 	// tone-mapped contract. Tone mappers produce limited-range BT.709.
-	p010CUDA := accel == AccelNVENC && s.Features.cudaP010ToneMap && (s.Target == nil || (s.Target.pic.prim == "bt709" && s.Target.pic.matrix == "bt709" && !s.Target.pic.full))
+	p010CUDA := accel == AccelNVENC && s.Features.cudaP010ToneMap && !pictureOf(v).full && (s.Target == nil || (s.Target.pic.prim == "bt709" && s.Target.pic.matrix == "bt709" && !s.Target.pic.full))
 	gpuOff := s.PictureCrop != nil || pic.pad || pic.convert != "" || (pic.tonemap && pic.tenBit && !p010CUDA)
 	gpuInput, gpuFilters, gpuOK := gpuPipeline(s, accel, pic.w, pic.h, pic.tonemap, pic.tenBit, burn)
 	switch {
