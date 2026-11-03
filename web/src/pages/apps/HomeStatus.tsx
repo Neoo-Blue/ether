@@ -20,12 +20,20 @@ export function HomeStatusRow({
   const chosen = chosenAddress(status, address);
   const others = usableAddresses(status).filter((item) => item !== chosen);
   const home = homeSummary(status, chosen);
+  const reason = status?.lanReason === "verified" ? t("Local identity verified")
+    : status?.lanReason === "wrong_identity" ? t("Different server identity")
+    : status?.lanReason === "probe_failed" ? t("Local connection failed")
+    : status?.lanReason ? t("Local check unavailable") : undefined;
+  const checked = status?.lanCheckedAt ? new Date(status.lanCheckedAt) : null;
+  const detail = reason && checked && !Number.isNaN(checked.valueOf())
+    ? t("{reason} · {time}. Checked from this server; other devices may differ.", { reason, time: checked.toLocaleString() })
+    : home.detail;
   return (
     <div>
       <ConnectionStatusRow
         state={status?.lan}
         title={home.title}
-        detail={home.detail}
+        detail={detail}
         address={chosen}
       />
       {others.length > 0 ? (

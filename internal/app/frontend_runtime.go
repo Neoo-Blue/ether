@@ -51,6 +51,8 @@ type frontendRuntime struct {
 	cancel         context.CancelFunc
 	mu             sync.Mutex
 	lifecycleMu    sync.Mutex
+	lan            lanCheck
+	lanChecking    bool
 	discoveryError string
 	runCtx         context.Context
 	mainAddr       net.Addr
@@ -428,9 +430,16 @@ func (r *frontendRuntime) plexStatus(ctx context.Context) frontend.Status {
 	r.mu.Lock()
 	addr := r.mainAddr
 	discoveryError := r.discoveryError
+	lan := r.lan
 	r.mu.Unlock()
 	cfg := r.app.cfg.Get()
 	st := frontend.Status{TargetVersion: plextv.PMSVersion(cfg), LAN: "unknown", WAN: "unknown", Conformance: "unknown", LiveStreamsKnown: true}
+	targets, machine := r.lanInputs()
+	if !lan.checked.IsZero() && lan.fingerprint == lanFingerprint(targets, machine) {
+		st.LAN = lan.state
+		st.LANReason = lan.reason
+		st.LANCheckedAt = lan.checked
+	}
 	if discoveryError != "" {
 		st.Warnings = append(st.Warnings, discoveryError)
 	}
@@ -508,6 +517,7 @@ func (r *frontendRuntime) start(ctx context.Context, addr net.Addr) {
 	}
 	r.runCtx = ctx
 	r.mainAddr = addr
+	r.lan = lanCheck{}
 	r.mu.Unlock()
 	r.control.Reconcile(r.ctx, r.app.cfg.Get())
 	r.mu.Lock()
@@ -541,6 +551,7 @@ func (r *frontendRuntime) stop() {
 	defer r.mu.Unlock()
 	r.runCtx = nil
 	r.mainAddr = nil
+	r.lan = lanCheck{}
 	if r.gdmRunning {
 		r.discovery.Stop()
 		r.discovery = nil
