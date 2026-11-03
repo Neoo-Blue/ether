@@ -79,8 +79,9 @@ func viewOf(s core.CollectionSpec) collectionView {
 		srcs := make([]core.CollectionSource, len(s.Sources))
 		copy(srcs, s.Sources)
 		for i := range srcs {
-			if srcs[i].Kind == "stremioCatalog" && srcs[i].URL != "" {
-				srcs[i].URL = redactStremioURL(srcs[i].URL)
+			// A legacy add-on catalog awaiting migration never shows its link.
+			if srcs[i].URL != "" && strings.HasPrefix(srcs[i].Kind, "stremio") {
+				srcs[i].URL = redact(srcs[i].URL)
 			}
 		}
 		s.Sources = srcs
@@ -99,57 +100,6 @@ func viewOf(s core.CollectionSpec) collectionView {
 	return v
 }
 
-func (h *Handler) unredactCollectionSources(ctx context.Context, id string, spec *core.CollectionSpec) {
-	if h == nil || h.deps.Collections == nil || spec == nil {
-		return
-	}
-	needsLookup := false
-	for _, src := range spec.Sources {
-		if src.Kind == "stremioCatalog" && isRedactedStremioURL(src.URL) {
-			needsLookup = true
-			break
-		}
-	}
-	if !needsLookup {
-		return
-	}
-	if id == "" {
-		id = spec.ID
-	}
-	if strings.TrimSpace(id) == "" {
-		return
-	}
-	existing, err := h.deps.Collections.GetSpec(ctx, id)
-	if err != nil || existing == nil {
-		return
-	}
-	for i := range spec.Sources {
-		src := &spec.Sources[i]
-		if src.Kind != "stremioCatalog" || !isRedactedStremioURL(src.URL) {
-			continue
-		}
-		wantRedacted := strings.TrimSpace(src.URL)
-		matches := map[string]bool{}
-		exact := map[string]bool{}
-		for _, old := range existing.Sources {
-			if old.Kind == "stremioCatalog" && redactStremioURL(old.URL) == wantRedacted {
-				matches[old.URL] = true
-				if old.List == src.List && old.MediaType == src.MediaType {
-					exact[old.URL] = true
-				}
-			}
-		}
-		if len(matches) == 1 {
-			for url := range matches {
-				src.URL = url
-			}
-		} else if len(exact) == 1 {
-			for url := range exact {
-				src.URL = url
-			}
-		}
-	}
-}
 
 // encodableRules drops rules whose stored value is not valid JSON, so one
 // damaged rule cannot fail the whole collection list. Each dropped rule is
@@ -254,7 +204,6 @@ func (h *Handler) handleUpdateCollection(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	id := r.PathValue("id")
-	h.unredactCollectionSources(r.Context(), id, &spec)
 	s, err := h.deps.Collections.UpdateSpec(r.Context(), id, spec)
 	if err != nil {
 		h.writeServiceError(w, err)
@@ -287,7 +236,6 @@ func (h *Handler) handlePreviewCollection(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, "bad_json", err.Error())
 		return
 	}
-	h.unredactCollectionSources(r.Context(), spec.ID, &spec)
 	n, _ := strconv.Atoi(r.URL.Query().Get("n"))
 	if n <= 0 || n > 200 {
 		n = 60

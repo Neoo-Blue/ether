@@ -110,6 +110,10 @@ func (b *Bridge) Sync(_ context.Context, r plugins.Record) {
 			pluginID:   r.ID,
 			pluginName: r.Name,
 			meta:       *c.Channels,
+			mode:       modeNative,
+		}
+		if r.Manifest.IsStremioOnly() {
+			chKind.mode = modeAddon
 		}
 		if b.tv != nil {
 			_ = b.tv.RegisterSourceKind(chKind)
