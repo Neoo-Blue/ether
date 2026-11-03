@@ -6,58 +6,11 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"io"
-	"net/url"
-	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/braedonsaunders/ether/internal/diagnostics"
 )
-
-// Query values whose syntax and meaning are known not to contain credentials.
-// Unknown keys are retained, but their values are masked: clients can send
-// arbitrary credentials in extension parameters.
-var supportQueryValue = regexp.MustCompile(`^[A-Za-z0-9_,-]{0,256}$`)
-var supportDirectoryValue = regexp.MustCompile(`^(?:[0-9]+|playlists)(?:,(?:[0-9]+|playlists))*$`)
-var supportNumericValue = regexp.MustCompile(`^[0-9]{1,10}$`)
-var supportQueryKeys = map[string]bool{
-	"contentdirectoryid": true, "pinnedcontentdirectoryid": true,
-	"excludecontinuewatching": true, "count": true, "excludeelements": true,
-	"excludefields": true, "excludemusic": true, "excludephotos": true,
-	"includerecentchannels": true, "includedetails": true, "includemeta": true,
-	"includeondeck": true, "includecollections": true, "includestations": true,
-	"includeexternalmetadata": true, "includelibraryplaylists": true,
-	"x-plex-container-start": true, "x-plex-container-size": true,
-}
-
-func supportQuery(q url.Values) string {
-	out := url.Values{}
-	for key, values := range q {
-		// Keys are untrusted too; do not reflect arbitrary text into the ZIP.
-		if !supportQueryValue.MatchString(key) || len(key) > 80 {
-			continue
-		}
-		safe := supportQueryKeys[strings.ToLower(key)]
-		if !safe {
-			out.Add("[redacted-key]", "[redacted]")
-			continue
-		}
-		for _, v := range values {
-			name := strings.ToLower(key)
-			valid := supportNumericValue.MatchString(v)
-			if name == "contentdirectoryid" || name == "pinnedcontentdirectoryid" {
-				valid = supportDirectoryValue.MatchString(v)
-			}
-			if name == "excludeelements" || name == "excludefields" {
-				valid = supportQueryValue.MatchString(v)
-			}
-			if !safe || !valid {
-				v = "[redacted]"
-			}
-			out.Add(key, v)
-		}
-	}
-	return out.Encode()
-}
 
 type journalItem struct {
 	Title string `json:"title" xml:"title,attr"`
@@ -75,13 +28,15 @@ type journalHub struct {
 	Tracks     []journalItem `json:"-" xml:"Track"`
 }
 type journalContainer struct {
-	Size      int           `json:"size" xml:"size,attr"`
-	TotalSize *int          `json:"totalSize" xml:"totalSize,attr"`
-	Hubs      []journalHub  `json:"Hub" xml:"Hub"`
-	Metadata  []journalItem `json:"Metadata" xml:"Metadata"`
-	Directory []journalItem `json:"Directory" xml:"Directory"`
-	Videos    []journalItem `json:"-" xml:"Video"`
-	Tracks    []journalItem `json:"-" xml:"Track"`
+	Size                int           `json:"size" xml:"size,attr"`
+	TotalSize           *int          `json:"totalSize" xml:"totalSize,attr"`
+	Hubs                []journalHub  `json:"Hub" xml:"Hub"`
+	Metadata            []journalItem `json:"Metadata" xml:"Metadata"`
+	Directory           []journalItem `json:"Directory" xml:"Directory"`
+	Videos              []journalItem `json:"-" xml:"Video"`
+	Tracks              []journalItem `json:"-" xml:"Track"`
+	GeneralDecisionCode *int          `json:"generalDecisionCode" xml:"generalDecisionCode,attr"`
+	GeneralDecisionText string        `json:"generalDecisionText" xml:"generalDecisionText,attr"`
 }
 type flexibleBool bool
 
@@ -130,6 +85,19 @@ func summarizePlexResponse(raw []byte, truncated bool, encoding string) *diagnos
 	c.Metadata = append(c.Metadata, c.Videos...)
 	c.Metadata = append(c.Metadata, c.Tracks...)
 	out := &diagnostics.ResponseSummary{Size: c.Size, TotalSize: c.TotalSize, Items: journalTitles(c.Metadata, c.Directory)}
+	if c.GeneralDecisionCode != nil {
+		code := *c.GeneralDecisionCode
+		switch {
+		case code >= 2000:
+			out.Decision = "failed"
+			out.ErrorCode = strconv.Itoa(code)
+			out.Error = c.GeneralDecisionText
+		case code == 1000:
+			out.Decision = "direct play permitted"
+		case code == 1001:
+			out.Decision = "conversion permitted"
+		}
+	}
 	for _, h := range c.Hubs {
 		h.Metadata = append(h.Metadata, h.Videos...)
 		h.Metadata = append(h.Metadata, h.Tracks...)

@@ -115,7 +115,12 @@ type Event struct {
 
 type ResponseSummary struct {
 	Size      int          `json:"size"`
+	ItemCount int          `json:"itemCount,omitempty"`
+	Decision  string       `json:"decision,omitempty"`
+	ErrorCode string       `json:"errorCode,omitempty"`
+	Error     string       `json:"error,omitempty"`
 	TotalSize *int         `json:"totalSize,omitempty"`
+	More      *bool        `json:"more,omitempty"`
 	Items     []string     `json:"items,omitempty"`
 	Hubs      []HubSummary `json:"hubs,omitempty"`
 	Truncated bool         `json:"truncated,omitempty"`
@@ -211,20 +216,39 @@ type DeviceInfo struct {
 // Settings is an explicit safe projection. Callers must not put secrets,
 // filesystem paths, or URLs in it.
 type Settings struct {
-	LogLevel              string `json:"logLevel,omitempty"`
-	FriendlyName          string `json:"friendlyName,omitempty"`
-	QualityDefault        string `json:"qualityDefault,omitempty"`
-	QualityRemote         string `json:"qualityRemote,omitempty"`
-	ProfileName           string `json:"profileName,omitempty"`
-	ProfileMaxHeight      int    `json:"profileMaxHeight,omitempty"`
-	ProfileAllowHDR       bool   `json:"profileAllowHdr,omitempty"`
-	HWAccel               string `json:"hwAccel,omitempty"`
-	MaxTranscodes         int    `json:"maxTranscodes,omitempty"`
-	RemoteMaxBitrateKbps  int    `json:"remoteMaxBitrateKbps,omitempty"`
-	SecureConnections     string `json:"secureConnections,omitempty"`
-	RemoteAccess          bool   `json:"remoteAccess,omitempty"`
-	CertificateConfigured bool   `json:"certificateConfigured,omitempty"`
-	CacheBudgetBytes      int64  `json:"cacheBudgetBytes,omitempty"`
+	LogLevel              string            `json:"logLevel,omitempty"`
+	FriendlyName          string            `json:"friendlyName,omitempty"`
+	QualityDefault        string            `json:"qualityDefault,omitempty"`
+	QualityRemote         string            `json:"qualityRemote,omitempty"`
+	ProfileName           string            `json:"profileName,omitempty"`
+	ProfileMaxHeight      int               `json:"profileMaxHeight,omitempty"`
+	ProfileAllowHDR       bool              `json:"profileAllowHdr,omitempty"`
+	HWAccel               string            `json:"hwAccel,omitempty"`
+	MaxTranscodes         int               `json:"maxTranscodes,omitempty"`
+	RemoteMaxBitrateKbps  int               `json:"remoteMaxBitrateKbps,omitempty"`
+	SecureConnections     string            `json:"secureConnections,omitempty"`
+	RemoteAccess          bool              `json:"remoteAccess,omitempty"`
+	CertificateConfigured bool              `json:"certificateConfigured,omitempty"`
+	CacheBudgetBytes      int64             `json:"cacheBudgetBytes,omitempty"`
+	ReleaseMode           string            `json:"releaseMode,omitempty"`
+	ShowUpcomingEpisodes  bool              `json:"showUpcomingEpisodes"`
+	ShowUpcomingMovies    bool              `json:"showUpcomingMovies"`
+	VisibilityDefault     string            `json:"visibilityDefault,omitempty"`
+	CatalogRules          []CatalogRuleFact `json:"catalogRules,omitempty"`
+	CatalogRulesTruncated bool              `json:"catalogRulesTruncated,omitempty"`
+}
+
+type CatalogRuleFact struct {
+	Action     string                 `json:"action"`
+	MediaType  string                 `json:"mediaType"`
+	Match      string                 `json:"match"`
+	Scope      string                 `json:"scope"`
+	Conditions []CatalogConditionFact `json:"conditions"`
+}
+type CatalogConditionFact struct {
+	Field string `json:"field"`
+	Op    string `json:"op"`
+	Value string `json:"value,omitempty"`
 }
 
 // SessionFact is one playback session before projection. DeviceKey selects
@@ -300,15 +324,16 @@ type ViewerFacts struct {
 
 // Deps are the only inputs the archive collectors may use.
 type Deps struct {
-	Now       func() time.Time
-	Version   string
-	Commit    string
-	BuildDate string
-	Platform  string
-	Container string // "yes", "no", or "" when the caller could not tell
-	Uptime    func() time.Duration
-	Secrets   func() []string
-	Settings  func() (Settings, error)
+	Now         func() time.Time
+	Version     string
+	Commit      string
+	BuildDate   string
+	Platform    string
+	Container   string // "yes", "no", or "" when the caller could not tell
+	InstallType string
+	Uptime      func() time.Duration
+	Secrets     func() []string
+	Settings    func() (Settings, error)
 	// Sessions returns facts for deviceKey and a count of sessions that
 	// belonged to someone else and were not copied into the slice.
 	Sessions     func(deviceKey string) (matched []SessionFact, omitted int, err error)

@@ -21,13 +21,15 @@ import (
 
 func (a *App) supportDeps() diagnostics.Deps {
 	started := time.Now()
+	container := containerHint()
 	return diagnostics.Deps{
 		Now:          parityClock(),
 		Version:      a.opts.Version,
 		Commit:       updater.Commit,
 		BuildDate:    updater.Date,
 		Platform:     runtime.GOOS + "/" + runtime.GOARCH,
-		Container:    containerHint(),
+		Container:    container,
+		InstallType:  supportInstallType(container),
 		Uptime:       func() time.Duration { return time.Since(started) },
 		Secrets:      func() []string { return supportSecrets(a.cfg.Get()) },
 		Settings:     func() (diagnostics.Settings, error) { return supportSettings(a.cfg.Get()), nil },
@@ -50,7 +52,7 @@ func supportSecrets(cfg config.Config) []string {
 
 func supportSettings(cfg config.Config) diagnostics.Settings {
 	name, height, hdr := profileFacts(cfg, cfg.Quality.Default)
-	return diagnostics.Settings{
+	out := diagnostics.Settings{
 		LogLevel:              cfg.Server.LogLevel,
 		FriendlyName:          cfg.Server.FriendlyName,
 		QualityDefault:        cfg.Quality.Default,
@@ -65,7 +67,33 @@ func supportSettings(cfg config.Config) diagnostics.Settings {
 		RemoteAccess:          cfg.Plex.RemoteAccess,
 		CertificateConfigured: cfg.Plex.CertFile != "" || cfg.Plex.KeyFile != "",
 		CacheBudgetBytes:      cfg.Cache.BudgetBytes,
+		ReleaseMode:           cfg.Availability.EffectiveMode(),
+		ShowUpcomingEpisodes:  cfg.Catalog.ShowUpcomingEpisodes,
+		ShowUpcomingMovies:    cfg.Catalog.ShowUpcomingMovies,
+		VisibilityDefault:     cfg.Catalog.VisibilityDefault,
 	}
+	for _, r := range cfg.Catalog.Exclusions {
+		if len(out.CatalogRules) >= 100 {
+			out.CatalogRulesTruncated = true
+			break
+		}
+		rule := diagnostics.CatalogRuleFact{Action: r.Action, MediaType: r.MediaType, Match: r.Match, Scope: r.Scope}
+		for _, c := range r.Rules {
+			if len(rule.Conditions) >= 50 {
+				out.CatalogRulesTruncated = true
+				break
+			}
+			value := ""
+			if len(c.Value) <= 4096 {
+				value = string(c.Value)
+			} else {
+				out.CatalogRulesTruncated = true
+			}
+			rule.Conditions = append(rule.Conditions, diagnostics.CatalogConditionFact{Field: c.Field, Op: c.Op, Value: value})
+		}
+		out.CatalogRules = append(out.CatalogRules, rule)
+	}
+	return out
 }
 
 func profileFacts(cfg config.Config, name string) (string, int, bool) {
@@ -223,6 +251,26 @@ func containerHint() string {
 		return "no"
 	}
 	return ""
+}
+
+func supportInstallType(container string) string {
+	if container == "yes" {
+		return "container"
+	}
+	switch runtime.GOOS {
+	case "windows":
+		return "windows"
+	case "darwin":
+		return "macos"
+	case "linux":
+		if _, err := os.Stat("/etc/synoinfo.conf"); err == nil {
+			return "synology"
+		}
+		if _, err := os.Stat("/etc/config/uLinux.conf"); err == nil {
+			return "qnap"
+		}
+	}
+	return "unknown"
 }
 
 func (a *App) supportViewer(userID int64) (diagnostics.ViewerFacts, error) {

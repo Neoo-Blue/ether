@@ -34,7 +34,7 @@ func (s *Server) observeRequest(r *http.Request, sr *statusRecorder, elapsed tim
 		ev.Kind = diagnostics.KindRequest
 		ev.Duration = elapsed
 		ev.Cancelled = r.Context().Err() != nil
-		ev.Query = supportQuery(r.URL.Query())
+		ev.Query = diagnostics.SafeQuery(r.URL.Query())
 		if stats := store.QueryStatsFrom(r.Context()); stats != nil {
 			ev.DBQueries = stats.Queries()
 			ev.DBTime = stats.DBTime()

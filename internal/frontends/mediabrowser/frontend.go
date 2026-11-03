@@ -11,6 +11,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/frontend"
 	"github.com/braedonsaunders/ether/internal/frontend/kit/conformance"
 	"github.com/braedonsaunders/ether/internal/frontend/kit/route"
+	"github.com/braedonsaunders/ether/internal/frontend/kit/support"
 )
 
 // Jellyfin provides the native Jellyfin API on an independent surface.
@@ -147,6 +148,16 @@ func (i *instance) Handler() http.Handler {
 	if i.pages != nil && i.host.PageFreshness != nil {
 		inner = i.pages.wrap(inner, i.host.PageFreshness)
 	}
+	inner = support.Wrap(i.host.Support, string(i.protocol), func(r *http.Request) (*frontend.Viewer, frontend.Device) {
+		if _, ok := i.host.Identity.(frontend.GrantDeviceIdentity); !ok {
+			return nil, frontend.Device{}
+		}
+		v, _, err := i.viewer(r)
+		if err != nil {
+			return nil, frontend.Device{}
+		}
+		return v, device(r)
+	}, func(path string) string { return path }, inner)
 	next := StripPrefix("/"+string(i.protocol), inner)
 	if i.protocol == "jellyfin" {
 		// Stored blurhashes and dimensions are joined on every request. This

@@ -103,6 +103,6 @@ func (s *Server) SupportViewer(ctx context.Context, user *core.User) (diagnostic
 			out.Candidates = append(out.Candidates, diagnostics.ViewerCandidate{Key: int64(ti.Key), Title: ti.Title, Reason: "finished; history may supply the next episode"})
 		}
 	}
-	out.Notes = append(out.Notes, "Snapshot taken when the archive was built; selection may differ from an earlier response.")
+	out.Notes = append(out.Notes, "Snapshot taken when the archive was built; selection may differ from an earlier response. Section IDs and selection follow Plex.")
 	return out, ctx.Err()
 }

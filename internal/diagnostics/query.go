@@ -1,0 +1,75 @@
+package diagnostics
+
+import (
+	"net/url"
+	"regexp"
+	"strings"
+)
+
+// Query values whose syntax and meaning are known not to contain credentials.
+// Unknown keys and their values are masked: clients can send
+// arbitrary credentials in extension parameters.
+var supportQueryValue = regexp.MustCompile(`^[A-Za-z0-9_,-]{0,256}$`)
+var supportDirectoryValue = regexp.MustCompile(`^(?:[0-9]+|playlists)(?:,(?:[0-9]+|playlists))*$`)
+var supportNumericValue = regexp.MustCompile(`^[0-9]{1,10}$`)
+var supportQueryKeys = map[string]bool{
+	"contentdirectoryid": true, "pinnedcontentdirectoryid": true,
+	"excludecontinuewatching": true, "count": true, "excludeelements": true,
+	"excludefields": true, "excludemusic": true, "excludephotos": true,
+	"includerecentchannels": true, "includedetails": true, "includemeta": true,
+	"includeondeck": true, "includecollections": true, "includestations": true,
+	"includeexternalmetadata": true, "includelibraryplaylists": true,
+	"x-plex-container-start": true, "x-plex-container-size": true,
+	"startindex": true, "limit": true, "skip": true, "recursive": true,
+	"includetotalrecordcount": true, "enableimages": true, "enableuserdata": true,
+	"isplayed": true, "sortorder": true,
+}
+
+var supportFieldNames = map[string]bool{
+	"actor": true, "collection": true, "country": true, "director": true, "label": true,
+	"location": true, "mood": true, "part": true, "producer": true, "similar": true,
+	"photo": true, "vast": true, "topic": true, "writer": true, "file": true, "tagline": true,
+	"genre": true, "guid": true, "media": true, "role": true, "studio": true,
+}
+
+func SafeQuery(q url.Values) string {
+	out := url.Values{}
+	for key, values := range q {
+		// Keys are untrusted too; do not reflect arbitrary text into the ZIP.
+		if !supportQueryValue.MatchString(key) || len(key) > 80 {
+			continue
+		}
+		safe := supportQueryKeys[strings.ToLower(key)]
+		if !safe {
+			out.Add("[redacted-key]", "[redacted]")
+			continue
+		}
+		for _, v := range values {
+			name := strings.ToLower(key)
+			valid := supportNumericValue.MatchString(v)
+			switch name {
+			case "recursive", "includetotalrecordcount", "enableimages", "enableuserdata", "isplayed":
+				valid = v == "0" || v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "false")
+			case "sortorder":
+				valid = strings.EqualFold(v, "ascending") || strings.EqualFold(v, "descending")
+			}
+			if name == "contentdirectoryid" || name == "pinnedcontentdirectoryid" {
+				valid = supportDirectoryValue.MatchString(v)
+			}
+			if name == "excludeelements" || name == "excludefields" {
+				valid = len(v) <= 256
+				for _, field := range strings.Split(v, ",") {
+					if !supportFieldNames[strings.ToLower(field)] {
+						valid = false
+						break
+					}
+				}
+			}
+			if !safe || !valid {
+				v = "[redacted]"
+			}
+			out.Add(key, v)
+		}
+	}
+	return out.Encode()
+}

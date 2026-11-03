@@ -48,6 +48,17 @@ func boundEvent(e Event, uses []secretUse) Event {
 	e.Query = clipFree(e.Query, 4096, uses)
 	if e.Response != nil {
 		v := *e.Response
+		if v.TotalSize != nil {
+			n := *v.TotalSize
+			v.TotalSize = &n
+		}
+		if v.More != nil {
+			more := *v.More
+			v.More = &more
+		}
+		v.Decision = clipFree(redactNetworkText(v.Decision), 80, uses)
+		v.ErrorCode = clipFree(redactNetworkText(v.ErrorCode), 80, uses)
+		v.Error = clipFree(redactNetworkText(v.Error), maxExcerpt, uses)
 		remaining := 64
 		v.Items = boundTitles(v.Items, uses, &remaining, &v.Truncated)
 		if len(v.Hubs) > 64 {

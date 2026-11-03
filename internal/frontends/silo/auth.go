@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/braedonsaunders/ether/internal/frontend"
+	"github.com/braedonsaunders/ether/internal/frontend/kit/support"
 )
 
 // reply encodes before writing the status, so an unencodable value is a 500,
@@ -79,6 +80,7 @@ func (i *instance) deviceViewer(r *http.Request) (*frontend.Viewer, string, erro
 	if profile := r.Header.Get("X-Profile-Id"); profile != "" && profile != strconv.FormatInt(v.ID, 10) {
 		return nil, "", errors.New("profile mismatch")
 	}
+	support.Seen(r, i.host.Support, "silo", v, device(r))
 	return v, a[1], nil
 }
 func (i *instance) viewer(r *http.Request) (*frontend.Viewer, string, error) {

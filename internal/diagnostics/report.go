@@ -11,9 +11,10 @@ import (
 )
 
 type Finding struct {
-	Code  string `json:"code"`
-	Text  string `json:"text"`
-	Lines []int  `json:"journalLines"`
+	Code      string `json:"code"`
+	Text      string `json:"text"`
+	Lines     []int  `json:"journalLines"`
+	Truncated bool   `json:"truncated,omitempty"`
 }
 type reportRow struct {
 	line  int
@@ -41,10 +42,17 @@ func analyzeJournal(body string) ([]reportRow, []Finding) {
 	}
 	seen := map[string][]occurrence{}
 	var errors, slow, empty, hero, cancelled, playbackFailures []int
+	failureLines := map[int]bool{}
+	addFailure := func(line int) {
+		if !failureLines[line] {
+			failureLines[line] = true
+			playbackFailures = append(playbackFailures, line)
+		}
+	}
 	for _, row := range rows {
 		e := row.event
 		if e.Kind == KindSourceRejected || e.Kind == KindEncoderFailed || (e.Kind == KindRequest && strings.Contains(e.Route, "/decision") && e.Status >= 400) {
-			playbackFailures = append(playbackFailures, row.line)
+			addFailure(row.line)
 		}
 		if e.Kind != KindRequest {
 			continue
@@ -60,6 +68,9 @@ func analyzeJournal(body string) ([]reportRow, []Finding) {
 		}
 		if e.Response == nil {
 			continue
+		}
+		if e.Response.ErrorCode != "" {
+			addFailure(row.line)
 		}
 		q, _ := url.ParseQuery(e.Query)
 		for _, h := range e.Response.Hubs {
@@ -111,6 +122,15 @@ func analyzeJournal(body string) ([]reportRow, []Finding) {
 	if len(playbackFailures) >= 2 {
 		add("repeated_playback_failures", "Multiple playback decision or encoder failures were observed.", playbackFailures)
 	}
+	if len(findings) > 128 {
+		findings = append(findings[:128], Finding{Code: "findings_truncated", Text: "Additional findings were omitted to keep the report bounded.", Truncated: true})
+	}
+	for i := range findings {
+		if len(findings[i].Lines) > 64 {
+			findings[i].Lines = findings[i].Lines[:64]
+			findings[i].Truncated = true
+		}
+	}
 	return rows, findings
 }
 
@@ -121,21 +141,26 @@ func reportMarkdown(rows []reportRow, findings []Finding, extra []archived) []by
 		b.WriteString("No automated rule matched the retained requests.\n")
 	}
 	for _, f := range findings {
-		fmt.Fprintf(&b, "- %s (journal lines %v)\n", f.Text, f.Lines)
+		fmt.Fprintf(&b, "- %s (journal lines %v)", f.Text, f.Lines)
+		if f.Truncated {
+			b.WriteString(" (additional detail omitted)")
+		}
+		b.WriteByte('\n')
 	}
 	for _, file := range extra {
 		switch file.name {
 		case "server.json":
 			var server struct {
-				Version   string `json:"version"`
-				Commit    string `json:"commit"`
-				BuildDate string `json:"buildDate"`
-				Platform  string `json:"platform"`
-				Container string `json:"container"`
-				Uptime    int64  `json:"uptimeSeconds"`
+				Version     string `json:"version"`
+				Commit      string `json:"commit"`
+				BuildDate   string `json:"buildDate"`
+				Platform    string `json:"platform"`
+				Container   string `json:"container"`
+				InstallType string `json:"installType"`
+				Uptime      int64  `json:"uptimeSeconds"`
 			}
 			if json.Unmarshal(file.body, &server) == nil {
-				fmt.Fprintf(&b, "\n## Server\n\nVersion %s, commit %s, build date %s, platform %s, container %s, uptime %d seconds. Empty values were not available.\n", strconv.Quote(server.Version), strconv.Quote(server.Commit), strconv.Quote(server.BuildDate), strconv.Quote(server.Platform), strconv.Quote(server.Container), server.Uptime)
+				fmt.Fprintf(&b, "\n## Server\n\nVersion %s, commit %s, build date %s, platform %s, install type %s, container %s, uptime %d seconds. Empty values were not available.\n", strconv.Quote(server.Version), strconv.Quote(server.Commit), strconv.Quote(server.BuildDate), strconv.Quote(server.Platform), strconv.Quote(server.InstallType), strconv.Quote(server.Container), server.Uptime)
 			}
 		case "storage.json":
 			var storage StorageFact
@@ -175,15 +200,27 @@ func reportMarkdown(rows []reportRow, findings []Finding, extra []archived) []by
 			fmt.Fprintf(&b, "?%s", e.Query)
 		}
 		fmt.Fprintf(&b, " → HTTP %d, %d ms, %d bytes, %d database statements in %d ms.\n", e.Status, e.DurationMS, e.Bytes, e.DBQueries, e.DBTimeMS)
-		if e.Product != "" || e.Platform != "" || e.DeviceType != "" || e.Model != "" || e.AppVersion != "" {
-			fmt.Fprintf(&b, "  - Client: product %s, version %s, platform %s, device %s, model %s.\n", strconv.Quote(e.Product), strconv.Quote(e.AppVersion), strconv.Quote(e.Platform), strconv.Quote(e.DeviceType), strconv.Quote(e.Model))
+		if e.Protocol != "" || e.Product != "" || e.Platform != "" || e.DeviceType != "" || e.Model != "" || e.AppVersion != "" {
+			fmt.Fprintf(&b, "  - Client: protocol %s, product %s, version %s, platform %s, device %s, model %s.\n", strconv.Quote(e.Protocol), strconv.Quote(e.Product), strconv.Quote(e.AppVersion), strconv.Quote(e.Platform), strconv.Quote(e.DeviceType), strconv.Quote(e.Model))
 		}
 		if e.Response == nil {
 			continue
 		}
+		if e.Response.Decision != "" {
+			fmt.Fprintf(&b, "  - Playback decision: %s.\n", strconv.Quote(e.Response.Decision))
+		}
+		if e.Response.ErrorCode != "" {
+			fmt.Fprintf(&b, "  - Error code: %s.\n", strconv.Quote(e.Response.ErrorCode))
+		}
+		if e.Response.Error != "" {
+			fmt.Fprintf(&b, "  - Error: %s.\n", strconv.Quote(e.Response.Error))
+		}
 		fmt.Fprintf(&b, "  - Container size %d", e.Response.Size)
 		if e.Response.TotalSize != nil {
 			fmt.Fprintf(&b, ", total %d", *e.Response.TotalSize)
+		}
+		if e.Response.More != nil {
+			fmt.Fprintf(&b, ", more %t", *e.Response.More)
 		}
 		if e.Response.Truncated {
 			b.WriteString(" (summary truncated)")
@@ -197,6 +234,34 @@ func reportMarkdown(rows []reportRow, findings []Finding, extra []archived) []by
 		}
 		for _, title := range e.Response.Items {
 			fmt.Fprintf(&b, "  - item: %s\n", strconv.Quote(title))
+		}
+	}
+	for _, file := range extra {
+		if file.name != "logs/capture.log" {
+			continue
+		}
+		printed := 0
+		for i, line := range bytes.Split(file.body, []byte("\n")) {
+			var entry exportLog
+			if json.Unmarshal(line, &entry) != nil || (!strings.EqualFold(entry.Level, "WARN") && !strings.EqualFold(entry.Level, "ERROR")) {
+				continue
+			}
+			if printed == 0 {
+				b.WriteString("\n## Server warnings and errors\n\n")
+			}
+			if printed == 64 {
+				b.WriteString("Additional log records are in logs/capture.log.\n")
+				break
+			}
+			fmt.Fprintf(&b, "- %s: %s", entry.At.UTC().Format("15:04:05.000"), strconv.Quote(entry.Msg))
+			if entry.Route != "" {
+				fmt.Fprintf(&b, " on %s", strconv.Quote(entry.Route))
+			}
+			if entry.Dur != "" {
+				fmt.Fprintf(&b, " (%s)", strconv.Quote(entry.Dur))
+			}
+			fmt.Fprintf(&b, " (logs/capture.log line %d).\n", i+1)
+			printed++
 		}
 	}
 	return b.Bytes()

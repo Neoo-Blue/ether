@@ -316,6 +316,16 @@ func retainedIdentity(files []archived, flags [3]bool) IdentityPreview {
 		collectJSONLIdentity(b, flags, &p)
 	}
 	if flags[0] {
+		if b, ok := body["settings.json"]; ok {
+			var settings Settings
+			if json.Unmarshal(b, &settings) == nil {
+				for _, rule := range settings.CatalogRules {
+					for _, condition := range rule.Conditions {
+						p.Titles = mergeStrings(p.Titles, []string{condition.Value})
+					}
+				}
+			}
+		}
 		if b, ok := body["sessions.json"]; ok {
 			collectSessionTitles(b, &p)
 		}
@@ -607,6 +617,7 @@ func eventsJSONL(events []Event, flags [3]bool, captureID string, uses []secretU
 			v.Hubs = append([]HubSummary(nil), v.Hubs...)
 			if !flags[0] {
 				v.Items = nil
+				v.Error = ""
 				for i := range v.Hubs {
 					v.Hubs[i].Title = ""
 					v.Hubs[i].Items = nil

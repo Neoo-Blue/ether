@@ -14,11 +14,12 @@ func (r *Recorder) collect(snap finishSnap, uses []secretUse) ([]archived, []Gap
 		files = append(files, archived{name: name, body: body})
 	}
 	server := map[string]any{
-		"version":   redactString(r.deps.Version, uses),
-		"commit":    redactString(r.deps.Commit, uses),
-		"buildDate": redactString(r.deps.BuildDate, uses),
-		"platform":  redactString(r.deps.Platform, uses),
-		"container": redactString(r.deps.Container, uses),
+		"version":     redactString(r.deps.Version, uses),
+		"commit":      redactString(r.deps.Commit, uses),
+		"buildDate":   redactString(r.deps.BuildDate, uses),
+		"platform":    redactString(r.deps.Platform, uses),
+		"container":   redactString(r.deps.Container, uses),
+		"installType": redactString(r.deps.InstallType, uses),
 	}
 	if r.deps.Uptime != nil {
 		server["uptimeSeconds"] = int64(r.deps.Uptime().Seconds())
@@ -60,7 +61,7 @@ func (r *Recorder) collect(snap finishSnap, uses []secretUse) ([]archived, []Gap
 	} else if s, err := r.deps.Settings(); err != nil {
 		gaps = append(gaps, Gap{Collector: "settings", Status: "failed", Detail: "Settings could not be collected."})
 	} else {
-		put("settings.json", redactSettings(s, uses))
+		put("settings.json", redactSettings(s, snap.flags[0], uses))
 	}
 	if r.deps.Sessions == nil {
 		gaps = append(gaps, Gap{Collector: "sessions", Status: "unavailable", Detail: "Sessions were not collected."})
@@ -117,7 +118,7 @@ func (r *Recorder) collect(snap finishSnap, uses []secretUse) ([]archived, []Gap
 	return files, gaps
 }
 
-func redactSettings(s Settings, uses []secretUse) Settings {
+func redactSettings(s Settings, titles bool, uses []secretUse) Settings {
 	s.LogLevel = redactString(s.LogLevel, uses)
 	s.FriendlyName = redactString(s.FriendlyName, uses)
 	s.QualityDefault = redactString(s.QualityDefault, uses)
@@ -125,6 +126,25 @@ func redactSettings(s Settings, uses []secretUse) Settings {
 	s.ProfileName = redactString(s.ProfileName, uses)
 	s.HWAccel = redactString(s.HWAccel, uses)
 	s.SecureConnections = redactString(s.SecureConnections, uses)
+	s.ReleaseMode = clipFree(s.ReleaseMode, 40, uses)
+	s.VisibilityDefault = clipFree(s.VisibilityDefault, 40, uses)
+	for i := range s.CatalogRules {
+		r := &s.CatalogRules[i]
+		r.Action = clipFree(redactNetworkText(r.Action), 40, uses)
+		r.MediaType = clipFree(redactNetworkText(r.MediaType), 40, uses)
+		r.Match = clipFree(redactNetworkText(r.Match), 40, uses)
+		r.Scope = clipFree(redactNetworkText(r.Scope), 40, uses)
+		for j := range r.Conditions {
+			c := &r.Conditions[j]
+			c.Field = clipFree(redactNetworkText(c.Field), 80, uses)
+			c.Op = clipFree(redactNetworkText(c.Op), 40, uses)
+			if titles {
+				c.Value = clipFree(redactNetworkText(c.Value), maxString, uses)
+			} else {
+				c.Value = ""
+			}
+		}
+	}
 	return s
 }
 

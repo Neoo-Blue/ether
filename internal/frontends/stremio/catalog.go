@@ -27,7 +27,7 @@ func (i *instance) catalog(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	i.observeClient(credential)
+	i.observeClient(r, credential, viewer)
 	typ, id := r.PathValue("type"), r.PathValue("id")
 	catalogID := strings.TrimSuffix(id, ".json")
 	purpose := map[string]frontend.RowPurpose{"ether-continue": frontend.RowContinue, "ether-recent": frontend.RowRecentlyReleased, "ether-recommendations": frontend.RowRecommendation}[catalogID]

@@ -6,10 +6,12 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/braedonsaunders/ether/internal/diagnostics"
 )
 
 func TestSupportJournalPrivacyAndProjection(t *testing.T) {
-	q := supportQuery(url.Values{"contentDirectoryID": {"1,2,playlists"}, "count": {"20"}, "password": {"secret"}, "extension": {"192.0.2.1"}, "X-Plex-Token": {"unknown-token"}})
+	q := diagnostics.SafeQuery(url.Values{"contentDirectoryID": {"1,2,playlists"}, "count": {"20"}, "password": {"secret"}, "extension": {"192.0.2.1"}, "X-Plex-Token": {"unknown-token"}})
 	if !strings.Contains(q, "contentDirectoryID=1%2C2%2Cplaylists") || !strings.Contains(q, "count=20") {
 		t.Fatalf("missing safe parameters: %s", q)
 	}
@@ -36,5 +38,9 @@ func TestSupportJournalPrivacyAndProjection(t *testing.T) {
 	}
 	if s := summarizePlexResponse(compressed.Bytes(), false, "gzip"); s == nil || len(s.Hubs) != 1 || s.Hubs[0].ItemCount != 1 {
 		t.Fatalf("gzip summary: %+v", s)
+	}
+	decision := summarizePlexResponse([]byte(`{"MediaContainer":{"size":1,"generalDecisionCode":2000,"generalDecisionText":"No sources"}}`), false, "")
+	if decision == nil || decision.Decision != "failed" || decision.ErrorCode != "2000" || decision.Error != "No sources" {
+		t.Fatalf("decision summary: %+v", decision)
 	}
 }
