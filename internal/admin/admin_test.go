@@ -319,8 +319,8 @@ func TestStremioAddonCountsAsSource(t *testing.T) {
 	store := newStore(t, func(c *config.Config) {
 		c.Plex.Token, c.Plex.Claimed = "owner-token", true
 		c.Indexers = []config.Indexer{{
-			ID: "addon", Name: "Torrentio", URL: "https://torrentio.strem.fun/manifest.json",
-			Kind: config.IndexerKindStremio, Protocol: "torrent", Enabled: true,
+			ID: "addon", Name: "Torrentio", Plugin: "addon.torrentio",
+			Kind: config.IndexerKindAddon, Protocol: "torrent", Enabled: true,
 		}}
 		c.Catalog.TMDBKey = "bundled-test-key"
 		c.Cache.Dir = t.TempDir()
