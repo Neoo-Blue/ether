@@ -36,6 +36,8 @@ func (m *Manager) Handler() http.Handler {
 	mux.HandleFunc("GET /{id}/auto-update", m.handleGetAutoUpdate)
 	mux.HandleFunc("PUT /{id}/auto-update", m.handlePutAutoUpdate)
 	mux.HandleFunc("PUT /{id}/roles", m.handlePutRoles)
+	mux.HandleFunc("POST /addons/preview", m.handleAddonPreview)
+	mux.HandleFunc("POST /addons", m.handleAddonInstall)
 	mux.HandleFunc("POST /{id}/shadow", m.handleShadow)
 	mux.HandleFunc("GET /{id}/shadow", m.handleShadowReport)
 	mux.HandleFunc("GET /{id}/journal", m.handleJournal)
@@ -412,6 +414,109 @@ func (m *Manager) handlePutRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, roleState(rec))
+}
+
+// AddonPreview is what the console shows before adding a Stremio add-on:
+// the add-on, the roles it can play, and whether that link is already
+// installed (adding it again only switches roles on).
+type AddonPreview struct {
+	ID               string      `json:"id"`
+	Name             string      `json:"name"`
+	Description      string      `json:"description,omitempty"`
+	Logo             string      `json:"logo,omitempty"`
+	Version          string      `json:"version,omitempty"`
+	Host             string      `json:"host"`
+	Roles            []RoleState `json:"roles"`
+	Catalogs         []AddonCat  `json:"catalogs,omitempty"`
+	AlreadyInstalled bool        `json:"alreadyInstalled,omitempty"`
+	ConfigureFirst   bool        `json:"configureFirst,omitempty"`
+}
+
+// AddonCat is one catalog an add-on lists, for pickers.
+type AddonCat struct {
+	Key  string `json:"key"`
+	Type string `json:"type"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+func addonCats(man Manifest) []AddonCat {
+	var out []AddonCat
+	for _, c := range man.Catalogs {
+		name := c.Name
+		if name == "" {
+			name = c.ID
+		}
+		out = append(out, AddonCat{Key: c.Key(), Type: c.Type, ID: c.ID, Name: name})
+	}
+	return out
+}
+
+// handleAddonPreview reads an add-on link without installing it:
+// {"url": "..."}.
+func (m *Manager) handleAddonPreview(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		URL string `json:"url"`
+	}
+	if err := decode(r, &body); err != nil || strings.TrimSpace(body.URL) == "" {
+		writeErr(w, http.StatusBadRequest, "invalid", "Paste the add-on's install link.", nil)
+		return
+	}
+	id, base, err := StremioInstallID(body.URL)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid", "That is not an add-on install link. Paste the link the add-on's configure page gives you.", nil)
+		return
+	}
+	out := AddonPreview{ID: id}
+	if u, err := url.Parse(base); err == nil {
+		out.Host = u.Hostname()
+	}
+	if rec, err := m.Get(r.Context(), id); err == nil {
+		out.AlreadyInstalled = true
+		out.Name, out.Description, out.Logo, out.Version = rec.Name, rec.Manifest.Description, rec.Manifest.Logo, rec.Version
+		out.Roles = roleState(rec)["roles"].([]RoleState)
+		out.Catalogs = addonCats(rec.Manifest)
+		writeJSON(w, http.StatusOK, out)
+		return
+	}
+	p, err := m.PreviewInstall(r.Context(), Source{Kind: "url", URL: base, LAN: privateHost(base)})
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	if !p.Manifest.IsStremioOnly() {
+		writeErr(w, http.StatusBadRequest, "invalid", "This link is an Ether plugin, not a Stremio add-on. Install it from Plugins.", nil)
+		return
+	}
+	man := p.Manifest
+	out.Name, out.Description, out.Logo, out.Version = man.Name, man.Description, man.Logo, man.Version
+	out.ConfigureFirst = man.ConfigurationRequired()
+	for _, c := range man.AddonRoles() {
+		out.Roles = append(out.Roles, RoleState{Role: c, On: true})
+	}
+	out.Catalogs = addonCats(man)
+	writeJSON(w, http.StatusOK, out)
+}
+
+// handleAddonInstall adds a Stremio add-on, or switches roles on for one
+// already installed from the same link: {"url": "...", "roles": [...]}.
+// An empty roles list switches every role the add-on offers on.
+func (m *Manager) handleAddonInstall(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		URL   string       `json:"url"`
+		Roles []Capability `json:"roles"`
+	}
+	if err := decode(r, &body); err != nil || strings.TrimSpace(body.URL) == "" {
+		writeErr(w, http.StatusBadRequest, "invalid", "Paste the add-on's install link.", nil)
+		return
+	}
+	rec, err := m.InstallAddon(r.Context(), AddonInstall{Link: body.URL, Roles: body.Roles, Exclusive: len(body.Roles) > 0})
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	h, _ := m.store.health(r.Context(), rec.ID)
+	writeJSON(w, http.StatusOK, m.summary(rec, h.Status))
 }
 
 // RoleState is one role of an add-on for the console.

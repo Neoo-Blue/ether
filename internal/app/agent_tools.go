@@ -469,7 +469,7 @@ func (s *appSourceService) AddStremio(ctx context.Context, addonURL string) (bui
 	if _, _, err := plugins.StremioInstallID(addonURL); err != nil {
 		return builtin.SourceInfo{}, tools.Userf("%s", err.Error())
 	}
-	rec, err := s.a.installAddon(ctx, addonInstall{Link: addonURL, Roles: []plugins.Capability{plugins.CapStreamSource}})
+	rec, err := s.a.installAddon(ctx, plugins.AddonInstall{Link: addonURL, Roles: []plugins.Capability{plugins.CapStreamSource}})
 	if err != nil {
 		return builtin.SourceInfo{}, tools.Userf("%s", err.Error())
 	}
