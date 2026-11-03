@@ -1022,6 +1022,7 @@ func pluginInstallTool(deps ToolDeps) tools.Tool {
 					if err != nil {
 						return tools.Result{}, tools.Userf("Could not install plugin: %s", err.Error())
 					}
+					deps.Studio.NotifyInstalled(applyCtx, rec)
 					return tools.Result{
 						Data: map[string]any{
 							"id":      rec.ID,

@@ -15,6 +15,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/extend"
 	"github.com/braedonsaunders/ether/internal/identity"
+	"github.com/braedonsaunders/ether/internal/livetv"
 	"github.com/braedonsaunders/ether/internal/notify"
 	"github.com/braedonsaunders/ether/internal/playback"
 	"github.com/braedonsaunders/ether/internal/plugins"
@@ -290,6 +291,9 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 			return nil
 		},
 		Logger: a.log.With("component", "plugins-studio"),
+		Installed: func(_ context.Context, rec plugins.Record) {
+			a.startPluginLiveTV(rec)
+		},
 	})
 
 	if err := studioSvc.OpenStorage(ctx, a.db); err != nil {
@@ -425,4 +429,39 @@ func (a *App) pluginTextResolver() extend.TextResolver {
 		return nil
 	}
 	return a.pluginsRT.mgr.TextResolver()
+}
+
+// startPluginLiveTV adds a Live TV source for a channels plugin installed
+// from Studio, so its lineup lands in the guide without a second setup step.
+// It runs once per install; an owner who later removes the source keeps
+// that choice.
+func (a *App) startPluginLiveTV(rec plugins.Record) {
+	if a.livetv == nil || !rec.Manifest.HasCapability(plugins.CapLiveTV) {
+		return
+	}
+	kind := extend.PluginID(rec.ID, "channels")
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		// The source kind registers when the install syncs; wait for it.
+		for attempt := 0; attempt < 10; attempt++ {
+			sources, err := a.livetv.Sources(ctx)
+			if err == nil {
+				for _, s := range sources {
+					if s.Kind == kind {
+						return
+					}
+				}
+			}
+			if _, err = a.livetv.ImportSource(ctx, livetv.Source{Name: rec.Name, Kind: kind}); err == nil {
+				return
+			}
+			a.log.Debug("plugin live tv source not ready", "plugin", rec.ID, "err", err)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Second):
+			}
+		}
+	}()
 }

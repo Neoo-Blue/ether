@@ -369,6 +369,7 @@ export default function LiveStudio() {
               folders={grantFolders}
               onChangeFolders={setGrantFolders}
               addedPermissions={installing.addedPermissions}
+              ownDraft
             />
             {installError ? (
               <p role="alert" className="text-sm text-danger">

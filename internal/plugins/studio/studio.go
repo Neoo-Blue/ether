@@ -34,6 +34,9 @@ type Deps struct {
 	Publish func(ctx context.Context, typ string, data any) error
 	Logger  *slog.Logger
 	Now     func() time.Time
+	// Installed runs after Studio or its agent installs a plugin, so the
+	// app can switch on what it adds (a Live TV source for channels).
+	Installed func(ctx context.Context, rec plugins.Record)
 }
 
 // Project is one in-progress plugin project in Studio.
@@ -153,6 +156,7 @@ type Studio struct {
 	publish   func(ctx context.Context, typ string, data any) error
 	log       *slog.Logger
 	now       func() time.Time
+	installed func(ctx context.Context, rec plugins.Record)
 
 	mu       sync.Mutex
 	projects map[string]*Project
@@ -180,6 +184,7 @@ func New(deps Deps) *Studio {
 		eng:       eng,
 		ownEngine: ownEngine,
 		publish:   deps.Publish,
+		installed: deps.Installed,
 		log:       log,
 		now:       now,
 		projects:  map[string]*Project{},
@@ -912,7 +917,18 @@ func (s *Studio) InstallProject(ctx context.Context, id string, opts plugins.Ins
 	if err != nil {
 		return plugins.Record{}, err
 	}
-	return s.mgr.Install(ctx, preview, opts)
+	rec, err := s.mgr.Install(ctx, preview, opts)
+	if err == nil {
+		s.NotifyInstalled(ctx, rec)
+	}
+	return rec, err
+}
+
+// NotifyInstalled tells the app a plugin was installed from Studio.
+func (s *Studio) NotifyInstalled(ctx context.Context, rec plugins.Record) {
+	if s != nil && s.installed != nil {
+		s.installed(ctx, rec)
+	}
 }
 
 // installBundlePath is where an installed Studio plugin's compiled bundle lives.
