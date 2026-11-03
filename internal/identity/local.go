@@ -19,13 +19,20 @@ import (
 
 // Local authenticates unique local usernames, independent of display names.
 // Membership is checked at authentication time against the viewer record.
-type Local struct{ db *sql.DB }
+type Local struct {
+	db     *sql.DB
+	verify func(string, string) bool
+}
+
+var loginKDFSlots = make(chan struct{}, 4)
+
+const dummyPasswordHash = "$argon2id$v=19$m=19456,t=2,p=1$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
 func NewLocal(db *sql.DB) (*Local, error) {
 	if db == nil {
 		return nil, errors.New("identity: database required")
 	}
-	return &Local{db: db}, nil
+	return &Local{db: db, verify: verifyPassword}, nil
 }
 
 func validUsername(s string) bool {
@@ -161,13 +168,21 @@ func (l *Local) Authenticate(ctx context.Context, username, password string) (vi
 	}
 	var hash string
 	err = l.db.QueryRowContext(ctx, `SELECT l.viewer_id,l.id,l.password_hash FROM identity_links l JOIN auth_users u ON u.id=l.viewer_id WHERE l.provider='local' AND l.subject=? AND u.active=1 AND u.origin<>'dlna_guest'`, username).Scan(&viewerID, &identityID, &hash)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, 0, core.ErrUnauthorized
-	}
-	if err != nil {
+	missing := errors.Is(err, sql.ErrNoRows)
+	if err != nil && !missing {
 		return 0, 0, err
 	}
-	if !verifyPassword(hash, password) {
+	if missing {
+		hash = dummyPasswordHash
+	}
+	select {
+	case loginKDFSlots <- struct{}{}:
+	case <-ctx.Done():
+		return 0, 0, ctx.Err()
+	}
+	verified := l.verify(hash, password)
+	<-loginKDFSlots
+	if missing || !verified {
 		return 0, 0, core.ErrUnauthorized
 	}
 	if strings.HasPrefix(hash, argonLegacy.prefix()) {
