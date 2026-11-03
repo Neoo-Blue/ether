@@ -29,7 +29,7 @@ var errProvider = errors.New("artwork: provider unavailable")
 
 func (im *Images) posterSettings() config.Posters {
 	if im.o.Posters != nil {
-		return im.o.Posters()
+		return im.o.Posters().Selected()
 	}
 	return config.Posters{}
 }

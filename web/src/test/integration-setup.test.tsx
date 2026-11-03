@@ -1,0 +1,102 @@
+import { fireEvent, screen, waitFor, within, cleanup } from "@testing-library/react";
+import { afterEach, it, expect } from "vitest";
+import { renderApp } from "./harness";
+afterEach(cleanup);
+it.each([
+  "Trakt",
+  "Simkl",
+  "Language model",
+  "OpenSubtitles",
+  "TheIntroDB",
+  "TMDB",
+  "OMDb and MDBList",
+  "PostersPlus",
+  "XRDB",
+  "BetterPosters",
+  "RPDB",
+  "Custom posters",
+])("%s opens setup before activation", async (name) => {
+  renderApp("/services/overview", {}, (f) => {
+    f.state.config.posters = undefined;
+    f.state.config.trakt.enabled = false;
+    f.state.config.simkl = { enabled: false, clientId: "", clientSecret: "" };
+    f.state.config.llm.enabled = false;
+    f.state.config.openSubtitles.enabled = false;
+    f.state.config.markers = { theIntroDb: false, apiKey: "" };
+  });
+  const toggle = await screen.findByRole("switch", { name: name + " enabled" });
+  await waitFor(() => expect(toggle).toBeEnabled());
+  fireEvent.click(toggle);
+  const dialog = await screen.findByRole("dialog");
+  expect(within(dialog).getByRole("button", { name: "Save and enable" })).toBeInTheDocument();
+  expect(
+    dialog.querySelectorAll('input,select,button[aria-haspopup="listbox"]').length,
+  ).toBeGreaterThan(0);
+  const fields = Array.from(dialog.querySelectorAll("label")).map((el) => el.textContent);
+  const routes: Record<string, string> = {
+    Trakt: "trakt",
+    Simkl: "simkl",
+    "Language model": "llm",
+    OpenSubtitles: "opensubtitles",
+    TheIntroDB: "introdb",
+    TMDB: "tmdb",
+    "OMDb and MDBList": "ratings",
+    PostersPlus: "postersplus",
+    XRDB: "xrdb",
+    BetterPosters: "betterposters",
+    RPDB: "rpdb",
+    "Custom posters": "custom",
+  };
+  cleanup();
+  renderApp("/services/" + routes[name], {}, (f) => {
+    f.state.config.trakt.enabled = true;
+    f.state.config.simkl = { enabled: true, clientId: "", clientSecret: "" };
+    f.state.config.llm.enabled = true;
+    f.state.config.openSubtitles.enabled = true;
+    f.state.config.markers = { accountEnabled: true, theIntroDb: false, apiKey: "" };
+    f.state.config.posters = {
+      version: 1,
+      enabled: false,
+      source: "tmdb",
+      baseUrl: "",
+      apiKey: "",
+      urlTemplate: "",
+      accounts: ["postersplus", "xrdb", "betterposters", "rpdb", "custom"].includes(routes[name]!)
+        ? {
+            [routes[name]!]: {
+              enabled: true,
+              source: routes[name]!,
+              baseUrl: "",
+              apiKey: "",
+              urlTemplate: "",
+            },
+          }
+        : {},
+    };
+  });
+  await waitFor(() =>
+    expect(
+      screen.getByRole("tab", {
+        name: name === "OMDb and MDBList" ? "Ratings" : name,
+      }),
+    ).toHaveAttribute("aria-selected", "true"),
+  );
+  for (const field of fields)
+    if (field) expect((await screen.findAllByText(field)).length).toBeGreaterThan(0);
+  if (name === "Language model")
+    expect(screen.getByRole("button", { name: "Provider" })).toBeInTheDocument();
+});
+
+it("configures TheIntroDB without enabling playback lookup", async () => {
+  const { fake } = renderApp("/services/overview", {}, (f) => {
+    f.state.config.markers = { theIntroDb: false, apiKey: "" };
+  });
+  fireEvent.click(await screen.findByRole("switch", { name: "TheIntroDB enabled" }));
+  const dialog = await screen.findByRole("dialog");
+  fireEvent.change(within(dialog).getByLabelText("Optional TheIntroDB key"), {
+    target: { value: "intro-key" },
+  });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Save and enable" }));
+  await waitFor(() => expect(fake.state.config.markers?.accountEnabled).toBe(true));
+  expect(fake.state.config.markers?.theIntroDb).toBe(false);
+});

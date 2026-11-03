@@ -314,6 +314,11 @@ export const PAGES = localized<PageDef[]>(() => [
         title: t("Integrations"),
         keywords: searchTerms(msg("status tmdb debrid prowlarr ratings")),
       },
+      { key: "postersplus", href: "/services/overview#postersplus", title: "PostersPlus" },
+      { key: "xrdb", href: "/services/overview#xrdb", title: "XRDB" },
+      { key: "betterposters", href: "/services/overview#betterposters", title: "BetterPosters" },
+      { key: "rpdb", href: "/services/overview#rpdb", title: "RPDB" },
+      { key: "custom", href: "/services/overview#custom", title: t("Custom posters") },
       { key: "tmdb", title: "TMDB", keywords: searchTerms(msg("tmdb api key catalogue")) },
       // Tabs for these only exist once the service is on, so ⌘K lands on the
       // overview card where it can be enabled or configured.

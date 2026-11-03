@@ -17,7 +17,7 @@ import { ErrorPanel, MutationError } from "../../components/feedback";
 import { TestButton, type TestState } from "../../components/fields";
 import { IntegrationAppCard } from "../../components/IntegrationAppCard";
 import { secretConfigured } from "../../components/IntegrationAccount";
-import { SimklMark, TraktMark } from "../../components/integration-brands";
+import { SimklMark, TraktMark, TmdbMark } from "../../components/integration-brands";
 import { SaveBar } from "../../components/SaveBar";
 import { LevelBadge } from "../../components/status";
 import { localized, t, tx } from "../../i18n";
@@ -35,10 +35,27 @@ import * as S from "./schema";
 type Obj = Record<string, unknown>;
 
 export type ServiceTab =
-  "overview" | "tmdb" | "trakt" | "simkl" | "llm" | "opensubtitles" | "ratings" | "introdb";
+  | "postersplus"
+  | "xrdb"
+  | "betterposters"
+  | "rpdb"
+  | "custom"
+  | "overview"
+  | "tmdb"
+  | "trakt"
+  | "simkl"
+  | "llm"
+  | "opensubtitles"
+  | "ratings"
+  | "introdb";
 
 const TAB_ORDER: ServiceTab[] = [
   "overview",
+  "postersplus",
+  "xrdb",
+  "betterposters",
+  "rpdb",
+  "custom",
   "tmdb",
   "trakt",
   "simkl",
@@ -53,6 +70,11 @@ export function integrationTabs(
   enabled: Partial<Record<ServiceTab, boolean>>,
 ): { key: ServiceTab; label: string }[] {
   const labels: Record<ServiceTab, string> = {
+    postersplus: "PostersPlus",
+    xrdb: "XRDB",
+    betterposters: "BetterPosters",
+    rpdb: "RPDB",
+    custom: t("Custom posters"),
     overview: t("Overview"),
     tmdb: "TMDB",
     trakt: "Trakt",
@@ -75,7 +97,7 @@ interface Service {
   configKey: "trakt" | "simkl" | "llm" | "openSubtitles" | "markers";
   endpoint: string;
   /** Boolean this card's switch writes. Omitted fields stay stored. */
-  flag: "enabled" | "theIntroDb";
+  flag: "enabled" | "accountEnabled";
   label: string;
   groups: FieldGroup[];
   form?: (props: {
@@ -154,7 +176,7 @@ const SERVICES: Service[] = localized(() => [
     tab: "introdb",
     configKey: "markers",
     endpoint: "markers",
-    flag: "theIntroDb",
+    flag: "accountEnabled",
     label: "TheIntroDB",
     groups: S.MARKERS,
     testLabel: t("Test TheIntroDB"),
@@ -320,7 +342,8 @@ function mergeSection(
       return {
         ...base,
         markers: {
-          theIntroDb: boolField(section, "theIntroDb", prev.theIntroDb),
+          ...prev,
+          accountEnabled: boolField(section, "accountEnabled", prev.accountEnabled ?? false),
           apiKey: textField(section, "apiKey", prev.apiKey),
         },
       };
@@ -376,6 +399,9 @@ export function ConnectedServices({
     } as Record<string, Obj>;
   }, [cfg]);
   const { draft, setDraft, dirty, reset } = useSectionDrafts(stored);
+  const [tmdbSetup, setTmdbSetup] = useState(false);
+  const [ratingsSetup, setRatingsSetup] = useState(false);
+  const [posterFlags, setPosterFlags] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<unknown>(null);
   const [saving, setSaving] = useState(false);
@@ -407,7 +433,7 @@ export function ConnectedServices({
 
   // i18n: memo holds no copy — only stable tab keys and boolean flags.
   const enabled = useMemo(() => {
-    const flags: Partial<Record<ServiceTab, boolean>> = {};
+    const flags: Partial<Record<ServiceTab, boolean>> = { ...posterFlags };
     for (const service of SERVICES) {
       flags[service.tab] = flagOf(stored?.[service.configKey], service.flag);
     }
@@ -415,7 +441,7 @@ export function ConnectedServices({
     flags.tmdb = true;
     flags.introdb = true;
     return flags;
-  }, [stored]);
+  }, [stored, posterFlags]);
 
   const flagSig = TAB_ORDER.map((key) => (enabled[key] ? "1" : "0")).join("");
   const reported = useRef("");
@@ -426,7 +452,7 @@ export function ConnectedServices({
   }, [flagSig, enabled, onEnabled]);
 
   useEffect(() => {
-    if (!draft) return;
+    if (!draft || Object.keys(posterFlags).length === 0) return;
     if (!requested || requested === "overview") {
       skipSetupOffer.current = false;
       return;
@@ -441,7 +467,7 @@ export function ConnectedServices({
     }
     // Setup openers are stable setState wrappers. Re-running would reset a drawer mid-edit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft, requested, enabled, navigate]);
+  }, [draft, requested, enabled, navigate, posterFlags]);
 
   const runTest = useCallback((s: Service, value: Obj) => {
     if (!s.test) return;
@@ -526,6 +552,7 @@ export function ConnectedServices({
           savedLabels.push(s.label);
         }
         toast.success(t("Settings saved"), { description: savedLabels.join(", ") });
+        setTmdbSetup(false);
         void refreshDashboard();
       } catch (e) {
         setError(e);
@@ -548,8 +575,8 @@ export function ConnectedServices({
       if (!draftNow || !storedNow) return;
       const current = draftNow[service.configKey] ?? {};
       if (!next) skipSetupOffer.current = true;
-      const blocked = next ? service.blockEnable?.(current) : null;
-      if (blocked) {
+
+      if (next) {
         openSectionSetup(service, current);
         return;
       }
@@ -660,8 +687,95 @@ export function ConnectedServices({
     );
 
   const setupService = sectionSetup?.service;
+  const tmdbForm = (
+    <SettingsSection
+      title="TMDB"
+      description={t("Ether uses this key to name titles, fetch artwork and fill the catalogue.")}
+      footer={
+        <TestButton
+          label={t("Test TMDB key")}
+          state={tests.catalog ?? { status: "idle" }}
+          onTest={() => {
+            setTests((prev) => ({ ...prev, catalog: { status: "running" } }));
+            api.testTMDB(String(draft.catalog?.tmdbKey ?? "")).then(
+              (r) =>
+                setTests((prev) => ({
+                  ...prev,
+                  catalog: r.ok
+                    ? { status: "ok", durationMs: r.durationMs }
+                    : { status: "fail", message: r.error ?? t("failed") },
+                })),
+              (e) =>
+                setTests((prev) => ({
+                  ...prev,
+                  catalog: { status: "fail", message: (e as Error).message },
+                })),
+            );
+          }}
+        />
+      }
+    >
+      <p className="mb-3 text-sm text-fg-muted">
+        {tx("Create a free API key in your {link} account settings, then paste it below.", {
+          link: (
+            <a
+              href="https://www.themoviedb.org/settings/api"
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-primary underline"
+            >
+              themoviedb.org
+            </a>
+          ),
+        })}
+      </p>
+      <SchemaField
+        def={{
+          key: "tmdbKey",
+          label: t("TMDB API key"),
+          kind: "secret",
+          help: t("Your personal TMDB v3 API key or v4 read-access token."),
+        }}
+        value={draft.catalog?.tmdbKey}
+        path="catalog.tmdbKey"
+        error={errors["catalog.tmdbKey"]}
+        onChange={(v) => setDraft({ ...draft, catalog: { ...draft.catalog, tmdbKey: v } })}
+      />
+    </SettingsSection>
+  );
   return (
     <>
+      <Drawer
+        open={tmdbSetup}
+        onClose={() => {
+          setTmdbSetup(false);
+          reset();
+        }}
+        title={t("Set up {app}", { app: "TMDB" })}
+        footer={
+          <Button onClick={() => void save()} disabled={locked}>
+            {t("Save and enable")}
+          </Button>
+        }
+      >
+        {tmdbForm}
+      </Drawer>
+      <Drawer
+        open={ratingsSetup}
+        onClose={() => setRatingsSetup(false)}
+        title={t("OMDb and MDBList")}
+      >
+        <RatingSources
+          setup
+          keysOnly
+          saved={ratings.data ?? null}
+          persist={enqueue}
+          onPersisted={(next) => {
+            ratings.setData(next);
+            setRatingsSetup(false);
+          }}
+        />
+      </Drawer>
       <Drawer
         open={sectionSetup !== null}
         onClose={() => {
@@ -715,76 +829,54 @@ export function ConnectedServices({
           </div>
         ) : null}
       </Drawer>
-      {tab === "tmdb" || visited.has("tmdb") ? (
-        <div hidden={tab !== "tmdb"}>
-          <SettingsSection
-            title="TMDB"
-            description={t(
-              "Ether uses this key to name titles, fetch artwork and fill the catalogue.",
-            )}
-            footer={
-              <TestButton
-                label={t("Test TMDB key")}
-                state={tests.catalog ?? { status: "idle" }}
-                onTest={() => {
-                  setTests((prev) => ({ ...prev, catalog: { status: "running" } }));
-                  api.testTMDB(String(draft.catalog?.tmdbKey ?? "")).then(
-                    (r) =>
-                      setTests((prev) => ({
-                        ...prev,
-                        catalog: r.ok
-                          ? { status: "ok", durationMs: r.durationMs }
-                          : { status: "fail", message: r.error ?? t("failed") },
-                      })),
-                    (e) =>
-                      setTests((prev) => ({
-                        ...prev,
-                        catalog: { status: "fail", message: (e as Error).message },
-                      })),
-                  );
-                }}
-              />
-            }
-          >
-            <p className="mb-3 text-sm text-fg-muted">
-              {tx("Create a free API key in your {link} account settings, then paste it below.", {
-                link: (
-                  <a
-                    href="https://www.themoviedb.org/settings/api"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-medium text-primary underline"
-                  >
-                    themoviedb.org
-                  </a>
-                ),
-              })}
-            </p>
-            <SchemaField
-              def={{
-                key: "tmdbKey",
-                label: t("TMDB API key"),
-                kind: "secret",
-                help: t("Your personal TMDB v3 API key or v4 read-access token."),
+      {tab === "tmdb" || visited.has("tmdb") ? <div hidden={tab !== "tmdb"}>{tmdbForm}</div> : null}
+      <PosterAccounts locked={locked} tab={tab} onEnabled={setPosterFlags}>
+        {(posterCards) => (
+          <div hidden={tab !== "overview"}>
+            <ServiceOverview
+              posterCards={posterCards}
+              onTmdbSetup={(next) => {
+                if (next) {
+                  setTmdbSetup(true);
+                  return;
+                }
+                void enqueue(async () => {
+                  try {
+                    const res = await api.putSection("catalog", { ...cfg.catalog, tmdbKey: "" });
+                    const section = { tmdbKey: textField(asObj(res.value), "tmdbKey", "") };
+                    applySection("catalog", section, { ...draft, catalog: section });
+                  } catch (e) {
+                    setError(e);
+                  }
+                });
               }}
-              value={draft.catalog?.tmdbKey}
-              path="catalog.tmdbKey"
-              error={errors["catalog.tmdbKey"]}
-              onChange={(v) => setDraft({ ...draft, catalog: { ...draft.catalog, tmdbKey: v } })}
+              onRatingsSetup={(next) => {
+                if (next) {
+                  setRatingsSetup(true);
+                  return;
+                }
+                void enqueue(async () => {
+                  try {
+                    const res = await apiFetch<RatingSettings>("/discovery/ratings/settings", {
+                      method: "PUT",
+                      body: JSON.stringify({ ...ratings.data, apiKey: "" }),
+                    });
+                    ratings.setData(res);
+                  } catch (e) {
+                    setError(e);
+                  }
+                });
+              }}
+              draft={draft}
+              stored={stored}
+              ratings={ratings.data}
+              busyId={busyId}
+              locked={locked}
+              onToggle={(service, next) => void toggleService(service, next)}
             />
-          </SettingsSection>
-        </div>
-      ) : null}
-      <div hidden={tab !== "overview"}>
-        <ServiceOverview
-          draft={draft}
-          stored={stored}
-          ratings={ratings.data}
-          busyId={busyId}
-          locked={locked}
-          onToggle={(service, next) => void toggleService(service, next)}
-        />
-      </div>
+          </div>
+        )}
+      </PosterAccounts>
       {SERVICES.map((s) => {
         if (tab !== s.tab && !visited.has(s.tab)) return null;
         const value = draft[s.configKey] ?? {};
@@ -869,7 +961,8 @@ function SchemaGroups({
   footer?: ReactNode;
 }) {
   const known = new Set(service.groups.flatMap((g) => g.fields.map((f) => f.key)));
-  const extra = Object.keys(value).filter((k) => !known.has(k));
+  const extra =
+    service.configKey === "markers" ? [] : Object.keys(value).filter((k) => !known.has(k));
   return service.groups.map((g, i) => {
     const last = i === service.groups.length - 1;
     return (
@@ -909,7 +1002,13 @@ function ServiceOverview({
   busyId,
   locked,
   onToggle,
+  posterCards,
+  onTmdbSetup,
+  onRatingsSetup,
 }: {
+  onTmdbSetup: (next: boolean) => void;
+  onRatingsSetup: (next: boolean) => void;
+  posterCards: ReactNode;
   draft: Record<string, Obj>;
   stored: Record<string, Obj> | null;
   ratings: RatingSettings | undefined;
@@ -930,6 +1029,7 @@ function ServiceOverview({
       <IntegrationGroup title={t("Required")}>
         <IntegrationAppCard
           identity={{ id: "tmdb", name: "TMDB" }}
+          logo={<TmdbMark />}
           description={t("Names titles, fetches artwork and fills the catalogue.")}
           status={
             secretConfigured(tmdbKey) ? (
@@ -942,6 +1042,8 @@ function ServiceOverview({
               <Badge variant="warning">{t("Needs an API key")}</Badge>
             )
           }
+          enabled={secretConfigured(tmdbKey)}
+          onToggle={onTmdbSetup}
           configureHref="/services/tmdb"
           configureLabel={secretConfigured(tmdbKey) ? t("Manage TMDB") : t("Set up TMDB")}
         />
@@ -982,20 +1084,20 @@ function ServiceOverview({
           configureLabel={on("simkl") ? t("Manage Simkl") : t("Set up Simkl")}
         />
       </IntegrationGroup>
-      <PosterAccounts locked={switchesHeld}>
-        {(cards) => (
-          <IntegrationGroup title={t("Artwork and ratings")}>
-            {cards}
-            <IntegrationAppCard
-              identity={{ id: "ratings", name: t("OMDb and MDBList") }}
-              description={t("IMDb, Rotten Tomatoes and other rating badges.")}
-              status={ratingsStatus(ratings)}
-              configureHref="/services/ratings"
-              configureLabel={t("Manage")}
-            />
-          </IntegrationGroup>
-        )}
-      </PosterAccounts>
+      <>
+        <IntegrationGroup title={t("Artwork and ratings")}>
+          {posterCards}
+          <IntegrationAppCard
+            identity={{ id: "ratings", name: t("OMDb and MDBList") }}
+            description={t("IMDb, Rotten Tomatoes and other rating badges.")}
+            status={ratingsStatus(ratings)}
+            enabled={secretConfigured(ratings?.apiKey)}
+            onToggle={onRatingsSetup}
+            configureHref="/services/ratings"
+            configureLabel={t("Manage")}
+          />
+        </IntegrationGroup>
+      </>
       <IntegrationGroup title={t("Playback extras")}>
         <IntegrationAppCard
           identity={{ id: "opensubtitles", name: "OpenSubtitles" }}
@@ -1018,6 +1120,9 @@ function ServiceOverview({
           identity={{ id: "introdb", name: "TheIntroDB" }}
           description={t("Intro and credits markers so viewers can skip them.")}
           status={introStatus(on("introdb"), saved("introdb").apiKey)}
+          enabled={on("introdb")}
+          onToggle={(next) => onToggle(service("introdb"), next)}
+          disabled={switchesHeld}
           configureHref="/services/introdb"
           configureLabel={t("Manage")}
         />

@@ -42,3 +42,19 @@ func TestXRDBSecretRedaction(t *testing.T) {
 		t.Fatal("retained key sent to changed instance")
 	}
 }
+
+func TestIndependentPosterAccountSecrets(t *testing.T) {
+	c := config.Defaults(t.TempDir())
+	c.Posters = config.Posters{Version: 1, Source: "tmdb"}
+	c.Posters.Accounts.RPDB = config.PosterAccount{Enabled: true, APIKey: "rpdb-secret"}
+	c.Posters.Accounts.Custom = config.PosterAccount{Enabled: true, APIKey: "custom-secret", URLTemplate: "https://example.com/{type}/{tmdb_id}?key={api_key}"}
+	redacted := RedactConfig(c)
+	if redacted.Posters.Accounts.RPDB.APIKey != RedactedSecret || redacted.Posters.Accounts.Custom.URLTemplate != RedactedSecret {
+		t.Fatal("account secret leaked")
+	}
+	redacted.Posters.Source = "custom"
+	restored, errs := UnredactConfig(redacted, c)
+	if len(errs) > 0 || restored.Posters.Accounts != c.Posters.Accounts {
+		t.Fatal("selecting a source lost another account's credentials", errs)
+	}
+}

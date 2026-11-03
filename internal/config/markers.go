@@ -1,8 +1,9 @@
 package config
 
 type Markers struct {
-	TheIntroDB bool   `json:"theIntroDb"`
-	APIKey     string `json:"apiKey"`
+	AccountEnabled bool   `json:"accountEnabled,omitempty"`
+	TheIntroDB     bool   `json:"theIntroDb"`
+	APIKey         string `json:"apiKey"`
 	// SkipIntro and SkipCredits turn the skip buttons off.
 	// A missing value keeps the button, which is the existing behaviour.
 	SkipIntro   *bool `json:"skipIntro,omitempty"`

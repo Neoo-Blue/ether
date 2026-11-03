@@ -88,6 +88,7 @@ export function RatingSources({
   disabled,
   accountOnIntegrations,
   keysOnly,
+  setup = false,
 }: {
   /** Parent-owned saved document. Omit on the metadata page, which loads its own. */
   saved?: RatingSettings | null;
@@ -101,6 +102,7 @@ export function RatingSources({
   accountOnIntegrations?: boolean;
   /** Integrations: only the provider account (provider and API key). */
   keysOnly?: boolean;
+  setup?: boolean;
 } = {}) {
   const controlled = saved !== undefined;
   const doc = useAsync(() => apiFetch<RatingSettings>("/discovery/ratings/settings"), []);
@@ -225,7 +227,13 @@ export function RatingSources({
           {providerRow}
           {keyRow}
         </SettingsSection>
-        {saveBar}
+        {setup ? (
+          <Button disabled={saving || disabled} onClick={() => void save()}>
+            {t("Save and enable")}
+          </Button>
+        ) : (
+          saveBar
+        )}
       </>
     );
 

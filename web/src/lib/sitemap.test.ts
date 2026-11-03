@@ -26,6 +26,9 @@ describe("sitemap", () => {
         .map((d) => [d.title, d.href]),
     );
     for (const [title, card] of [
+      ["RPDB", "rpdb"],
+      ["PostersPlus", "postersplus"],
+      ["Custom posters", "custom"],
       ["Trakt", "trakt"],
       ["Simkl", "simkl"],
       ["Language model", "llm"],

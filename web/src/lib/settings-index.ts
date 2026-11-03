@@ -73,6 +73,18 @@ export function settingsIndex(): SettingHit[] {
   const plex = "Plex";
   const away = t("Away from home");
   return [
+    {
+      title: t("Poster source"),
+      where: t("Artwork"),
+      href: "/metadata/artwork",
+      keywords: "TMDB RPDB Custom PostersPlus XRDB BetterPosters",
+    },
+    ...["PostersPlus", "XRDB", "BetterPosters", "RPDB"].map((title) => ({
+      title,
+      where: t("Integrations"),
+      href: "/services/overview",
+      keywords: "poster API key",
+    })),
     // General
     ...groupHits(S.SERVER, "/server", general),
     ...rows("/server", general, [

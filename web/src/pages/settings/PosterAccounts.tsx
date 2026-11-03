@@ -1,26 +1,23 @@
-import { Badge, Button, buttonVariants, toast } from "@braedonsaunders/appkit-ui";
-import { Link } from "react-router-dom";
-import { useState, type ReactNode } from "react";
+import { Badge, Button, Input, SettingsSection, toast } from "@braedonsaunders/appkit-ui";
+import { useEffect, useState, type ReactNode } from "react";
 import { Drawer } from "../../components/Drawer";
 import { MutationError } from "../../components/feedback";
 import { Field, SecretInput } from "../../components/fields";
 import { IntegrationAppCard } from "../../components/IntegrationAppCard";
-import { secretConfigured } from "../../components/IntegrationAccount";
+import { SaveBar } from "../../components/SaveBar";
 import { localized, t } from "../../i18n";
 import { api, apiFetch } from "../../lib/api";
 import { useAsync } from "../../lib/hooks";
 import type { PosterProviderConfig as Posters } from "../../lib/types";
-
-const empty: Posters = {
+export const emptyPoster: Posters = {
   enabled: false,
-  source: "postersplus",
+  source: "tmdb",
   baseUrl: "",
   apiKey: "",
   urlTemplate: "",
   profile: "",
 };
-
-const SERVICES = localized(() => [
+export const POSTER_SERVICES = localized(() => [
   {
     id: "postersplus",
     name: "PostersPlus",
@@ -58,41 +55,115 @@ const SERVICES = localized(() => [
   },
 ]);
 
-function normalize(value?: Posters | null): Posters {
-  return { ...empty, ...value, source: value?.source || "postersplus" };
+export function normalizePosters(value?: Posters | null): Posters {
+  const p = { ...emptyPoster, ...value };
+  if (!p.version)
+    return {
+      ...emptyPoster,
+      version: 1,
+      source: p.enabled ? p.source : "tmdb",
+      accounts: p.enabled ? { [p.source]: p } : {},
+    };
+  return {
+    ...p,
+    accounts: Object.fromEntries(
+      Object.entries(p.accounts ?? {}).map(([id, a]) => [id, { ...emptyPoster, ...a, source: id }]),
+    ),
+  };
 }
-
-function active(posters: Posters, id: string) {
-  return posters.enabled && posters.source === id;
+export function PosterAccountForm({
+  value,
+  onChange,
+}: {
+  value: Posters;
+  onChange: (p: Posters) => void;
+}) {
+  const service = POSTER_SERVICES.find((s) => s.id === value.source)!;
+  return (
+    <SettingsSection title={service.name}>
+      <div className="space-y-4 p-5">
+        {["postersplus", "xrdb"].includes(value.source) && (
+          <Field label={t("Server URL")} htmlFor="poster-url">
+            <Input
+              id="poster-url"
+              value={value.baseUrl}
+              onChange={(e) => onChange({ ...value, baseUrl: e.target.value })}
+            />
+          </Field>
+        )}
+        {value.source === "xrdb" && (
+          <Field label={t("Profile")} htmlFor="poster-profile">
+            <Input
+              id="poster-profile"
+              value={value.profile ?? ""}
+              onChange={(e) => onChange({ ...value, profile: e.target.value })}
+            />
+          </Field>
+        )}
+        {(service.key || service.template) && (
+          <Field label={t("API key")} htmlFor="poster-key">
+            <SecretInput
+              id="poster-key"
+              value={value.apiKey}
+              onChange={(apiKey) => onChange({ ...value, apiKey })}
+            />
+          </Field>
+        )}
+        {(service.template || value.source === "betterposters") && (
+          <Field label={t("Poster URL template")} htmlFor="poster-template">
+            <SecretInput
+              id="poster-template"
+              value={value.urlTemplate}
+              onChange={(urlTemplate) => onChange({ ...value, urlTemplate })}
+            />
+          </Field>
+        )}
+      </div>
+    </SettingsSection>
+  );
 }
-
-/**
- * Poster-service keys. Artwork keeps which style to use and links here.
- * `children` receives one card per service so the parent can place them in
- * the same grid as the other cards in the group.
- */
 export function PosterAccounts({
   locked,
   children,
+  tab = "overview",
+  onEnabled,
 }: {
   locked: boolean;
-  children: (cards: ReactNode) => ReactNode;
+  children?: (cards: ReactNode) => ReactNode;
+  tab?: string;
+  onEnabled?: (flags: Record<string, boolean>) => void;
 }) {
-  const config = useAsync(async () => normalize((await api.getConfig()).posters), []);
-  const posters = config.data ? normalize(config.data) : null;
+  const config = useAsync(async () => normalizePosters((await api.getConfig()).posters), []);
   const [draft, setDraft] = useState<Posters | null>(null);
+  const [editing, setEditing] = useState<Posters | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [saving, setSaving] = useState(false);
-
-  const save = async (next: Posters) => {
+  useEffect(() => {
+    if (config.data)
+      onEnabled?.(
+        Object.fromEntries(
+          POSTER_SERVICES.map((s) => [s.id, !!config.data?.accounts?.[s.id]?.enabled]),
+        ),
+      );
+  }, [config.data, onEnabled]);
+  useEffect(() => {
+    setEditing(config.data?.accounts?.[tab] ?? null);
+  }, [tab, config.data]);
+  async function save(account: Posters) {
+    if (!config.data) return;
     setSaving(true);
     setError(null);
     try {
+      const next = {
+        ...config.data,
+        accounts: { ...config.data.accounts, [account.source]: account },
+      };
+      if (!account.enabled && next.source === account.source) next.source = "tmdb";
       const result = await apiFetch<{ value: Posters }>("/config/posters", {
         method: "PUT",
-        body: JSON.stringify(next),
+        body: JSON.stringify(posterPayload(next)),
       });
-      config.setData(normalize(result.value));
+      config.setData(normalizePosters(result.value));
       setDraft(null);
       toast.success(t("Poster provider saved"));
     } catch (e) {
@@ -100,104 +171,82 @@ export function PosterAccounts({
     } finally {
       setSaving(false);
     }
-  };
-
-  if (!posters) return children(null);
-  const service = SERVICES.find((item) => item.id === draft?.source);
+  }
+  const cards = POSTER_SERVICES.map((s) => (
+    <IntegrationAppCard
+      key={s.id}
+      identity={{ id: s.id, name: s.name }}
+      description={s.description}
+      enabled={!!config.data?.accounts?.[s.id]?.enabled}
+      disabled={locked || saving || !config.data}
+      status={
+        <Badge variant={config.data?.accounts?.[s.id]?.enabled ? "success" : "secondary"}>
+          {config.data?.accounts?.[s.id]?.enabled ? t("On") : t("Off")}
+        </Badge>
+      }
+      onToggle={(on) => {
+        const value = {
+          ...emptyPoster,
+          ...config.data?.accounts?.[s.id],
+          source: s.id,
+          enabled: on,
+        };
+        if (on) setDraft(value);
+        else void save(value);
+      }}
+      configureHref={config.data?.accounts?.[s.id]?.enabled ? "/services/" + s.id : undefined}
+    />
+  ));
   return (
     <>
-      {children(
-        SERVICES.map((item) => {
-          const on = active(posters, item.id);
-          const keyed = secretConfigured(posters.apiKey) || secretConfigured(posters.urlTemplate);
-          return (
-            <IntegrationAppCard
-              key={item.id}
-              identity={{ id: item.id, name: item.name }}
-              description={item.description}
-              status={
-                !on ? (
-                  <Badge variant="secondary">{t("Not in use")}</Badge>
-                ) : keyed || !item.key ? (
-                  <Badge variant="success">{keyed ? t("Key saved") : t("In use")}</Badge>
-                ) : (
-                  <Badge variant="warning">{t("Needs an API key")}</Badge>
-                )
-              }
-              action={
-                on && !item.key && !item.template ? undefined : on ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={locked || saving}
-                    onClick={() => {
-                      setError(null);
-                      setDraft({ ...posters });
-                    }}
-                  >
-                    {t("Manage")}
-                  </Button>
-                ) : (
-                  <Link
-                    to="/metadata/artwork"
-                    className={buttonVariants({ variant: "outline", size: "sm" })}
-                  >
-                    {t("Choose in Artwork")}
-                  </Link>
-                )
-              }
-            />
-          );
-        }),
+      {children?.(cards)}
+      {editing && (
+        <>
+          <PosterAccountForm value={editing} onChange={setEditing} />
+          <SaveBar
+            dirty={JSON.stringify(editing) !== JSON.stringify(config.data?.accounts?.[tab])}
+            saving={saving}
+            error={error}
+            onSave={() => save(editing)}
+            onDiscard={() => setEditing(config.data?.accounts?.[tab] ?? null)}
+          />
+        </>
       )}
       <Drawer
-        open={draft !== null}
+        open={!!draft}
         onClose={() => {
-          if (saving) return;
-          setDraft(null);
+          if (!saving) setDraft(null);
         }}
-        title={service?.name ?? t("Poster service")}
-        description={t("The key for the poster service Artwork uses.")}
+        title={t("Set up {app}", {
+          app: POSTER_SERVICES.find((s) => s.id === draft?.source)?.name ?? "",
+        })}
         footer={
-          <div className="flex w-full flex-wrap items-center gap-2">
-            <span className="flex-1" />
-            <Button variant="ghost" size="sm" onClick={() => setDraft(null)} disabled={saving}>
-              {t("Cancel")}
-            </Button>
-            <Button size="sm" disabled={saving || !draft} onClick={() => draft && void save(draft)}>
-              {saving ? t("Saving…") : t("Save")}
-            </Button>
-          </div>
+          <Button disabled={saving} onClick={() => draft && void save(draft)}>
+            {t("Save and enable")}
+          </Button>
         }
       >
-        {draft && service ? (
-          <div className="space-y-3">
-            {error ? <MutationError error={error} /> : null}
-            {service.key ? (
-              <Field label={t("API key")} htmlFor="poster-account-key">
-                <SecretInput
-                  id="poster-account-key"
-                  value={draft.apiKey}
-                  onChange={(apiKey) => setDraft({ ...draft, apiKey })}
-                />
-              </Field>
-            ) : null}
-            {service.template ? (
-              <Field
-                label={t("Poster URL template")}
-                htmlFor="poster-account-template"
-                hint={t("Put the key in the template where the service expects it.")}
-              >
-                <SecretInput
-                  id="poster-account-template"
-                  value={draft.urlTemplate}
-                  onChange={(urlTemplate) => setDraft({ ...draft, urlTemplate })}
-                />
-              </Field>
-            ) : null}
-          </div>
-        ) : null}
+        {error ? <MutationError error={error} /> : null}
+        {draft && <PosterAccountForm value={draft} onChange={setDraft} />}
       </Drawer>
     </>
   );
+}
+
+export function posterPayload(p: Posters) {
+  return {
+    ...p,
+    accounts: Object.fromEntries(
+      Object.entries(p.accounts ?? {}).map(([id, a]) => [
+        id,
+        {
+          enabled: a.enabled,
+          baseUrl: a.baseUrl,
+          apiKey: a.apiKey,
+          urlTemplate: a.urlTemplate,
+          profile: a.profile ?? "",
+        },
+      ]),
+    ),
+  };
 }
