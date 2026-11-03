@@ -189,7 +189,7 @@ it("opens Studio when an x-ray anchor is selected", async () => {
     </>,
   );
   fireEvent.click(screen.getByRole("button", { name: "New plugin for slot" }));
-  expect(screen.getByText("/plugins/develop")).toBeTruthy();
+  expect(screen.getByText("/plugins/studio")).toBeTruthy();
 });
 
 it("shows a job toast without applying other action effects", async () => {

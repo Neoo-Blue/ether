@@ -9,6 +9,7 @@ package studio
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/braedonsaunders/ether/internal/plugins"
@@ -1261,9 +1262,11 @@ func applyProjectOptions(tpl Template, opts CreateProjectOptions) (pluginID, nam
 		}
 	}
 
-	if stremioURL := strings.TrimSpace(opts.StremioURL); stremioURL != "" {
+	// Add-on links often carry a debrid key in the path, so only the host is
+	// written into source; the link itself is never stored with the draft.
+	if u, err := url.Parse(strings.TrimSpace(opts.StremioURL)); err == nil && u.Host != "" {
 		if src, ok := files["src/plugin.ts"]; ok {
-			files["src/plugin.ts"] = fmt.Sprintf("// Upstream Stremio add-on: %s\n", stremioURL) + src
+			files["src/plugin.ts"] = fmt.Sprintf("// Upstream Stremio add-on host: %s\n", u.Host) + src
 		}
 	}
 

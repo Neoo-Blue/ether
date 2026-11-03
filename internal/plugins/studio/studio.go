@@ -41,7 +41,6 @@ type Project struct {
 	Name        string            `json:"name"`
 	PluginID    string            `json:"pluginId"`
 	Slot        string            `json:"slot,omitempty"`
-	StremioURL  string            `json:"stremioUrl,omitempty"`
 	Files       map[string]string `json:"files"`
 	Shadow      bool              `json:"shadow"`
 	Settings    map[string]any    `json:"settings,omitempty"`
@@ -221,7 +220,6 @@ func (s *Studio) CreateProject(ctx context.Context, opts CreateProjectOptions) (
 		Name:        name,
 		PluginID:    pluginID,
 		Slot:        strings.TrimSpace(opts.Slot),
-		StremioURL:  strings.TrimSpace(opts.StremioURL),
 		Files:       files,
 		Shadow:      true,
 		Settings:    map[string]any{},

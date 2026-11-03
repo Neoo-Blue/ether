@@ -385,3 +385,22 @@ func TestInstalledDraftRunsItsHandler(t *testing.T) {
 		t.Fatalf("installed draft did not answer: %v %+v", err, resp)
 	}
 }
+
+// A remix's add-on link can hold a debrid key: it must not land in the
+// draft's source or its stored record.
+func TestRemixDoesNotPersistAddonLink(t *testing.T) {
+	s, _, _ := newTestStudio(t)
+	ctx := context.Background()
+	link := "https://addon.example/realdebrid=SECRETKEY123/manifest.json"
+	p, err := s.CreateProject(ctx, CreateProjectOptions{Template: "stremio_remix", Name: "Remix", StremioURL: link})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(p)
+	if strings.Contains(string(raw), "SECRETKEY123") {
+		t.Fatalf("add-on key persisted with the draft")
+	}
+	if !strings.Contains(p.Files["src/plugin.ts"], "addon.example") {
+		t.Fatal("upstream host not noted in source")
+	}
+}
