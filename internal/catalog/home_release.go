@@ -15,7 +15,7 @@ const homeReleaseAge = 120 * 24 * time.Hour
 
 // HomeReleaseAgeAdmitted reports admission based on a known cinema date.
 func HomeReleaseAgeAdmitted(t *core.Title, now time.Time) bool {
-	return t.Type == core.TypeMovie && !t.Released.IsZero() && t.Released.Before(now.Add(-homeReleaseAge))
+	return t.Type == core.TypeMovie && !t.Released.IsZero() && t.Released.Unix() != 0 && t.Released.Before(now.Add(-homeReleaseAge))
 }
 
 func homeReleaseCutoff(now time.Time) int64 {
