@@ -5,6 +5,8 @@ import { t, tx } from "../../i18n";
 import { prerollsApi, type Preroll, type Selection } from "./prerolls-api";
 
 export function Prerolls() {
+  const [importing, setImporting] = useState(false);
+  const [paths, setPaths] = useState("");
   const [editing, setEditing] = useState<Preroll | "new" | null>(null);
   const [items, setItems] = useState<Preroll[]>([]);
   const [selection, setSelection] = useState<Selection>("priority");
@@ -40,6 +42,7 @@ export function Prerolls() {
           <h2 className="text-xl font-semibold">{t("Pre-rolls")}</h2>
           <p className="text-fg-muted">{t("Play your own videos before the feature.")}</p>
         </div>
+        <button onClick={() => setImporting(true)}>{t("Import from Plex Media Server")}</button>
         <button
           onClick={() => setEditing("new")}
           className="rounded bg-primary px-4 py-2 text-white"
@@ -47,6 +50,30 @@ export function Prerolls() {
           {t("Add pre-roll")}
         </button>
       </div>
+      {importing && (
+        <div className="rounded border border-border p-4 space-y-3">
+          <label className="block">
+            {t("Paste the Movie pre-roll video value from Plex Media Server")}{" "}
+            <input value={paths} onChange={(e) => setPaths(e.currentTarget.value)} />
+          </label>
+          <button
+            disabled={!paths.trim()}
+            onClick={async () => {
+              try {
+                await prerollsApi.importPms(paths);
+                setImporting(false);
+                setPaths("");
+                await reload();
+              } catch {
+                setError(t("Could not import pre-rolls."));
+              }
+            }}
+          >
+            {t("Import")}
+          </button>{" "}
+          <button onClick={() => setImporting(false)}>{t("Cancel")}</button>
+        </div>
+      )}
       <PrerollSimulation />
       {error && (
         <p role="alert" className="text-danger">
