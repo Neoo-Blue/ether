@@ -916,7 +916,7 @@ func (s *Service) startIPTVSource(ctx context.Context, ss *session) error {
 		defer probeCancel()
 	}
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, c.StreamURL, nil)
-	res, err := s.upstreamWithHeaders(ctx, c.StreamURL, req, ss.inputHeaders)
+	res, err := s.upstreamWithHeaders(ctx, c.StreamURL, req, ss.inputHeaders, c.StreamURL)
 	if err != nil {
 		return err
 	}

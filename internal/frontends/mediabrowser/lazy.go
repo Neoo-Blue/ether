@@ -1,6 +1,7 @@
 package mediabrowser
 
 import (
+	"github.com/braedonsaunders/ether/internal/frontend/kit/mediasafety"
 	"net/http"
 	"net/url"
 	"strings"
@@ -66,6 +67,7 @@ func (i *instance) lazyHLSSourceURL(r *http.Request, credential string, plan fro
 }
 
 func (i *instance) lazyMedia(w http.ResponseWriter, r *http.Request) {
+	mediasafety.SetHeaders(w)
 	if i.host.LazyStreams == nil {
 		http.Error(w, "Unavailable", http.StatusServiceUnavailable)
 		return

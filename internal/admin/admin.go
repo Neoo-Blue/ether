@@ -242,15 +242,16 @@ type Deps struct {
 // Handler is the admin HTTP handler. Use NewHandler when you need access
 // to the log buffer the handler created.
 type Handler struct {
-	deps       Deps
-	log        *slog.Logger
-	logs       *LogBuffer
-	mux        *http.ServeMux
-	version    string
-	pins       *pinHandles
-	portalPins *pinHandles
-	linkPins   *pinHandles
-	authLimit  *authLimiter
+	deps           Deps
+	log            *slog.Logger
+	logs           *LogBuffer
+	mux            *http.ServeMux
+	version        string
+	pins           *pinHandles
+	portalPins     *pinHandles
+	linkPins       *pinHandles
+	authLimit      *authLimiter
+	loginBodySlots chan struct{}
 }
 
 // New returns the admin handler per the work-package contract.
@@ -277,7 +278,7 @@ func NewHandler(deps Deps) *Handler {
 	if version == "" {
 		version = "dev"
 	}
-	h := &Handler{deps: deps, log: deps.Logger, logs: deps.Logs, version: version, pins: newPINHandles(), portalPins: newPINHandles(), linkPins: newPINHandles(), authLimit: newAuthLimiter()}
+	h := &Handler{deps: deps, log: deps.Logger, logs: deps.Logs, version: version, pins: newPINHandles(), portalPins: newPINHandles(), linkPins: newPINHandles(), authLimit: newAuthLimiter(), loginBodySlots: make(chan struct{}, 32)}
 	h.mux = h.routes()
 	return h
 }

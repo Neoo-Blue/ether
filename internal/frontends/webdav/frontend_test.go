@@ -244,7 +244,8 @@ func TestBrowseDistinguishesUnavailableFromMissing(t *testing.T) {
 }
 
 type authenticatedRanges struct {
-	calls int
+	calls  int
+	active bool
 }
 
 func (*authenticatedRanges) Issue(context.Context, string, frontend.PlanRequest) (string, error) {
@@ -257,6 +258,11 @@ func (f *authenticatedRanges) ServeAuthenticated(w http.ResponseWriter, r *http.
 	f.calls++
 	if credential != "grant" || request.Viewer.ID != 7 || request.Protocol != "webdav" || request.Item != frontend.RatingKey(1000000000000042) || !strings.HasPrefix(request.Device.ID, "webdav-") || !request.Intent.Options.DirectPlay || r.Header.Get("Range") != "bytes=0-2" {
 		http.Error(w, "wrong scope", 500)
+		return
+	}
+	if f.active {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<script>bad()</script>`))
 		return
 	}
 	w.WriteHeader(http.StatusPartialContent)
@@ -306,7 +312,7 @@ func TestWebDAVGETDelegatesAuthenticatedRanges(t *testing.T) {
 		}
 		body, _ := io.ReadAll(res.Body)
 		res.Body.Close()
-		if method == http.MethodGet && (res.StatusCode != http.StatusPartialContent || string(body) != "abc") {
+		if method == http.MethodGet && (res.StatusCode != http.StatusPartialContent || string(body) != "abc" || !strings.Contains(res.Header.Get("Content-Security-Policy"), "sandbox") || res.Header.Get("X-Content-Type-Options") != "nosniff") {
 			t.Fatalf("range status=%d body=%q", res.StatusCode, body)
 		}
 		if method != http.MethodGet && ranges.calls != 0 {
@@ -315,6 +321,19 @@ func TestWebDAVGETDelegatesAuthenticatedRanges(t *testing.T) {
 	}
 	if ranges.calls != 1 {
 		t.Fatalf("range calls: %d", ranges.calls)
+	}
+	ranges.active = true
+	req, _ := http.NewRequest(http.MethodGet, server.URL+"/webdav/Movies/Film%20%282024%29/Film%20%282024%29.mkv", nil)
+	req.SetBasicAuth("7", "grant")
+	req.Header.Set("Range", "bytes=0-2")
+	res, err := server.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+	if res.StatusCode != 200 || string(body) != `<script>bad()</script>` || !strings.Contains(res.Header.Get("Content-Security-Policy"), "sandbox") || res.Header.Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("active content: %d %v %q", res.StatusCode, res.Header, body)
 	}
 }
 

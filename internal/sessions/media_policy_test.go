@@ -100,6 +100,9 @@ func TestMediaRechecksCurrentPolicyAndScopedDevice(t *testing.T) {
 		if w.Code != want {
 			t.Fatalf("%s %s: got %d want %d", method, path, w.Code, want)
 		}
+		if want == 200 && (!strings.Contains(w.Header().Get("Content-Security-Policy"), "sandbox") || w.Header().Get("X-Content-Type-Options") != "nosniff") {
+			t.Fatalf("%s %s headers %v", method, path, w.Header())
+		}
 	}
 	check("GET", direct, access, 200)
 	check("HEAD", direct, access, 200)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/braedonsaunders/ether/internal/frontend"
@@ -39,7 +40,7 @@ func TestEmbyDirectStreamCacheHeaderAfterRedirect(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusPartialContent || resp.Header.Get("Cache-Control") != "private, no-transform" {
+	if resp.StatusCode != http.StatusPartialContent || resp.Header.Get("Cache-Control") != "private, no-transform" || !strings.Contains(resp.Header.Get("Content-Security-Policy"), "sandbox") || resp.Header.Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatal(resp.StatusCode, resp.Header)
 	}
 	other := httptest.NewRecorder()

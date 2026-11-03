@@ -1,6 +1,7 @@
 package admin_test
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"github.com/braedonsaunders/ether/internal/admin"
@@ -9,6 +10,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/identity"
 	"github.com/braedonsaunders/ether/internal/store"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -572,5 +574,46 @@ func TestLocalPasswordMinimumLength(t *testing.T) {
 	r.Header.Set("Authorization", "Bearer "+v.Token)
 	if res := serve(h, r); res.Code != 400 || !strings.Contains(res.Body.String(), "at least 12 characters") {
 		t.Fatalf("short me password: %d %s", res.Code, res.Body)
+	}
+}
+
+// The real HTTP server must stop reading an unfinished login body. The client
+// deadline is only a deadlock guard: a passing response comes from the server.
+func TestLoginStalledBodyDeadline(t *testing.T) {
+	ctx := context.Background()
+	db := store.OpenTest(t)
+	users, err := auth.New(ctx, db, auth.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	local, _ := identity.NewLocal(db)
+	grants, _ := identity.NewGrants(db, users, time.Hour, nil)
+	limiter, _ := identity.NewLoginLimiter(db, time.Minute, 100, 20, nil)
+	h := admin.New(admin.Deps{Config: newStore(t, nil), LocalIdentity: local, IdentityGrants: grants, IdentityLimiter: limiter})
+	server := httptest.NewServer(h)
+	defer server.Close()
+	for _, prefix := range []string{`{"username":`, `{"username":"alice","password":"secret-pass1"}}`} {
+		t.Run(prefix, func(t *testing.T) {
+			conn, err := net.Dial("tcp", server.Listener.Addr().String())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer conn.Close()
+			if err := conn.SetDeadline(time.Now().Add(12 * time.Second)); err != nil {
+				t.Fatal(err)
+			}
+			_, err = fmt.Fprintf(conn, "POST /ether/api/auth/local HTTP/1.1\r\nHost: localhost\r\nX-Ether-Request: 1\r\nContent-Type: application/json\r\nContent-Length: 80\r\n\r\n%s", prefix)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response, err := http.ReadResponse(bufio.NewReader(conn), nil)
+			if err != nil {
+				t.Fatalf("stalled request did not receive server response: %v", err)
+			}
+			defer response.Body.Close()
+			if response.StatusCode != http.StatusBadRequest {
+				t.Fatalf("status %d", response.StatusCode)
+			}
+		})
 	}
 }

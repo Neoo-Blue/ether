@@ -3,6 +3,7 @@ package sessions
 import (
 	"context"
 	"fmt"
+	"github.com/braedonsaunders/ether/internal/frontend/kit/mediasafety"
 	"io"
 	"net/http"
 	"strconv"
@@ -366,6 +367,7 @@ func (b *Broker) serveMedia(protocol frontend.Protocol, access *frontend.Session
 // serveMediaAt allows a broker-owned wrapper to keep live playlist resources
 // on its own authorized path. Empty base preserves the existing media URLs.
 func (b *Broker) serveMediaAt(protocol frontend.Protocol, access *frontend.SessionAccess, w http.ResponseWriter, r *http.Request, liveBase string) {
+	mediasafety.SetHeaders(w)
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.NotFound(w, r)
 		return

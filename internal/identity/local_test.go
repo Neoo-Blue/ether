@@ -116,3 +116,31 @@ func FuzzLocalHashParsing(f *testing.F) {
 	f.Add("$argon2id$v=19$m=999999999,t=3,p=1$bad$bad", "password")
 	f.Fuzz(func(t *testing.T, hash, password string) { verifyPassword(hash, password) })
 }
+
+func TestMissingAndInactiveRunAdmittedVerification(t *testing.T) {
+	ctx := context.Background()
+	db := store.OpenTest(t)
+	if _, err := db.Exec(`INSERT INTO auth_users (id,plex_id,username,title,email,created_at,updated_at,active) VALUES (1,42,'a','a','a',1,1,0)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO identity_links (viewer_id,provider,subject,display,verified_at,password_hash) VALUES (1,'local','inactive','inactive',1,'unused')`); err != nil {
+		t.Fatal(err)
+	}
+	l, _ := NewLocal(db)
+	calls := 0
+	l.verify = func(hash, password string) bool {
+		calls++
+		if hash != dummyPasswordHash || len(loginKDFSlots) == 0 {
+			t.Errorf("dummy verification was not admitted")
+		}
+		return true
+	}
+	for _, name := range []string{"absent", "inactive"} {
+		if _, _, err := l.Authenticate(ctx, name, "password"); !errors.Is(err, core.ErrUnauthorized) {
+			t.Fatal(err)
+		}
+	}
+	if calls != 2 {
+		t.Fatalf("verification calls = %d", calls)
+	}
+}

@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"github.com/braedonsaunders/ether/internal/frontend/kit/mediasafety"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -50,6 +51,7 @@ func normalizeLiveTail(tail string) string {
 }
 
 func (l sessionLive) Serve(w http.ResponseWriter, r *http.Request, viewer *core.Viewer, id, tail, base string) {
+	mediasafety.SetHeaders(w)
 	// Live TV's Plex adapter can propagate Plex credentials into playlists.
 	// Scoped broker paths carry the grant already, so strip credential inputs.
 	clean := r.Clone(r.Context())

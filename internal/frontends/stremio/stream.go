@@ -2,6 +2,7 @@ package stremio
 
 import (
 	"context"
+	"github.com/braedonsaunders/ether/internal/frontend/kit/mediasafety"
 	"net/http"
 	"strings"
 	"time"
@@ -108,6 +109,7 @@ func (i *instance) autoVersionName(r *http.Request, viewer *frontend.Viewer, dev
 }
 
 func (i *instance) serveLazy(w http.ResponseWriter, r *http.Request) {
+	mediasafety.SetHeaders(w)
 	if i.host.LazyStreams == nil {
 		http.NotFound(w, r)
 		return

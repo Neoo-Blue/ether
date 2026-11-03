@@ -3,6 +3,7 @@ package livetv
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/braedonsaunders/ether/internal/frontend/kit/mediasafety"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -79,12 +80,14 @@ func (s *Service) previewRoutes(r chi.Router, owner *core.User) {
 		json.NewEncoder(w).Encode(map[string]any{"id": info.ID, "activeSourceId": info.ActiveSourceID, "programme": info.Programme})
 	})
 	r.Get("/sessions/{session}/index.m3u8", func(w http.ResponseWriter, r *http.Request) {
+		mediasafety.SetHeaders(w)
 		id := chi.URLParam(r, "session")
 		pw := relativePlaylists(w, r, id)
 		s.ServePlaylist(pw, r, id, owner)
 		pw.finish()
 	})
 	r.Get("/sessions/{session}/relay/{segment}", func(w http.ResponseWriter, r *http.Request) {
+		mediasafety.SetHeaders(w)
 		n, err := strconv.Atoi(strings.TrimSuffix(chi.URLParam(r, "segment"), ".ts"))
 		if err != nil {
 			http.NotFound(w, r)
@@ -93,12 +96,14 @@ func (s *Service) previewRoutes(r chi.Router, owner *core.User) {
 		s.ServeRelaySegment(w, r, chi.URLParam(r, "session"), n, owner)
 	})
 	r.Get("/sessions/{session}/resource/{resource}", func(w http.ResponseWriter, r *http.Request) {
+		mediasafety.SetHeaders(w)
 		id := chi.URLParam(r, "session")
 		pw := relativePlaylists(w, r, id)
 		s.ServeResource(pw, r, id, chi.URLParam(r, "resource"), owner)
 		pw.finish()
 	})
 	r.Get("/sessions/{session}/program/{start}/{segment}", func(w http.ResponseWriter, r *http.Request) {
+		mediasafety.SetHeaders(w)
 		start, e := strconv.ParseInt(chi.URLParam(r, "start"), 10, 64)
 		n, e2 := strconv.Atoi(strings.TrimSuffix(chi.URLParam(r, "segment"), ".ts"))
 		if e != nil || e2 != nil {

@@ -66,6 +66,27 @@ func decodeJSON(r *http.Request, dst any) error {
 	return nil
 }
 
+// decodeLoginJSON consumes the entire bounded body before authentication. This
+// prevents a valid prefix followed by a stalled body from escaping the deadline.
+func decodeLoginJSON(w http.ResponseWriter, r *http.Request, dst any) error {
+	if r.Body == nil {
+		return errBadJSON
+	}
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 16<<10))
+	if err != nil {
+		return errBadJSON
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		return errBadJSON
+	}
+	if err := dec.Decode(new(any)); err != io.EOF {
+		return errBadJSON
+	}
+	return nil
+}
+
 // decodeJSONLenient is decodeJSON without unknown-field rejection, for
 // test payloads that may carry extra client-side bookkeeping fields.
 func decodeJSONLenient(r *http.Request, dst any) error {
