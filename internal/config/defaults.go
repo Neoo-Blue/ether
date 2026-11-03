@@ -29,6 +29,7 @@ func Defaults(dataDir string) Config {
 		Extras:   Extras{PrewarmBytes: 48 << 20, ResolverTimeout: Duration(20 * time.Second)},
 		Outbound: Outbound{Indexers: true, Stremio: true, Debrid: true, Usenet: true},
 		Server: Server{
+			StartupAnimation:   true,
 			Port:               DefaultPort,
 			BindAddress:        "0.0.0.0",
 			FriendlyName:       "Ether",

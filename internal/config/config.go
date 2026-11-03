@@ -79,6 +79,8 @@ type Frontend struct {
 }
 
 type Server struct {
+	// StartupAnimation controls the owner console splash for all administrators.
+	StartupAnimation bool `json:"startupAnimation"`
 	// TrustedProxyCIDRs are proxy peer networks whose forwarding headers are trusted.
 	TrustedProxyCIDRs []string `json:"trustedProxyCIDRs,omitempty"`
 	// AllowRemoteConsole lets the owner console (/ether/) answer clients

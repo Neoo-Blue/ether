@@ -238,6 +238,7 @@ export interface EtherConfig {
   posters?: PosterProviderConfig;
   availability?: AvailabilityConfig;
   server: {
+    startupAnimation?: boolean;
     port: number;
     bindAddress: string;
     friendlyName: string;
@@ -506,6 +507,7 @@ export interface Bootstrap {
   authenticated: boolean;
   authRequired: boolean;
   serverName: string;
+  startupAnimation?: boolean;
   /** False when the Plex app is off. Omitted means Plex is on. */
   plexEnabled?: boolean;
 }
