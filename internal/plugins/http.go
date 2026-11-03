@@ -85,6 +85,9 @@ func (m *Manager) summary(r Record, health string) Summary {
 		Verified: r.Verified, Shadow: r.Shadow, AutoUpdate: r.AutoUpdate, UpdateVersion: r.UpdateVersion,
 		PrevVersion: r.PrevVersion, Health: health, SourceKind: r.SourceKind,
 		StremioOnly: r.Manifest.IsStremioOnly(), InstalledAt: r.InstalledAt.Unix()}
+	if r.Manifest.IsStremioOnly() {
+		s.Summary, s.Icon = r.Manifest.Description, r.Manifest.Logo
+	}
 	if r.Manifest.Ether != nil {
 		s.Summary = r.Manifest.Ether.Summary
 		s.Icon = r.Manifest.Ether.Icon

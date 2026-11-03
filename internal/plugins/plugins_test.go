@@ -690,3 +690,22 @@ func TestFetchSiblingsIncludesRelativeIcon(t *testing.T) {
 		t.Fatalf("icon not fetched: %v", files)
 	}
 }
+
+// An adapter-reported failure clears once the plugin answers again, so an
+// add-on without a runtime health check does not show a problem forever.
+func TestSuccessfulCallClearsRecordedFailure(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	rec := env.installHello(t, "1.0.0")
+	env.m.RecordFailure(ctx, rec.ID, "catalog returned invalid JSON")
+	if h, _ := env.m.HealthOf(ctx, rec.ID); h.Status != "error" {
+		t.Fatalf("failure not recorded: %+v", h)
+	}
+	if _, err := env.m.Call(ctx, rec.ID, Request{Method: http.MethodGet, Path: "/ether/health"}); err != nil {
+		t.Fatal(err)
+	}
+	h, _ := env.m.HealthOf(ctx, rec.ID)
+	if h.Status != "ok" || h.LastOK.IsZero() || h.LastError == "" {
+		t.Fatalf("health after a good call: %+v", h)
+	}
+}

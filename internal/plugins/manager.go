@@ -86,6 +86,9 @@ type Manager struct {
 	// healthMu serializes health read-modify-writes so concurrent calls
 	// (resolves on the hot path, scheduled jobs) never lose an update.
 	healthMu sync.Mutex
+	// failing caches which plugins last recorded an error, so a successful
+	// call clears it without a health read on every call (nil = not loaded).
+	failing map[string]bool
 	pickMu   sync.Mutex
 	picks    map[string]subtitlePick
 	// warming holds plugin ids whose runtime is loading in the background
@@ -530,7 +533,38 @@ func (m *Manager) Call(ctx context.Context, pluginID string, req Request) (Respo
 	if ms > deadline.Milliseconds()/2 && ms > 1000 {
 		m.RecordSlow(ctx, pluginID, 1)
 	}
+	if resp.Status < 400 {
+		m.recoverHealth(ctx, pluginID)
+	}
 	return resp, nil
+}
+
+// recoverHealth clears a recorded error once the plugin answers again.
+// Without it an add-on with no runtime health check (Stremio add-ons) kept
+// showing a problem forever after one bad response.
+func (m *Manager) recoverHealth(ctx context.Context, pluginID string) {
+	m.healthMu.Lock()
+	if m.failing == nil {
+		m.failing = map[string]bool{}
+	}
+	failing, known := m.failing[pluginID]
+	m.healthMu.Unlock()
+	if known && !failing {
+		return
+	}
+	if !known {
+		h, err := m.store.health(ctx, pluginID)
+		if err != nil {
+			return
+		}
+		m.healthMu.Lock()
+		m.failing[pluginID] = h.Status == "error"
+		m.healthMu.Unlock()
+		if h.Status != "error" {
+			return
+		}
+	}
+	m.recordOK(ctx, pluginID)
 }
 
 // redactJSON masks values under secret-looking keys before anything is
@@ -608,6 +642,10 @@ func (m *Manager) recordFailure(ctx context.Context, pluginID, reason string, re
 	h.LastError = reason
 	h.Status = "error"
 	h.Reason = reason
+	if m.failing == nil {
+		m.failing = map[string]bool{}
+	}
+	m.failing[pluginID] = true
 	_ = m.store.putHealth(ctx, pluginID, h)
 	if len(kept) >= 5 {
 		if r, err := m.store.record(ctx, pluginID); err == nil && r.Enabled {
@@ -660,6 +698,10 @@ func (m *Manager) recordOK(ctx context.Context, pluginID string) {
 	h.Reason = ""
 	h.LastOK = m.now()
 	_ = m.store.putHealth(ctx, pluginID, h)
+	if m.failing == nil {
+		m.failing = map[string]bool{}
+	}
+	m.failing[pluginID] = false
 }
 
 // Revoke disables an installed plugin that was marked revoked in the

@@ -261,12 +261,21 @@ function PluginCard({
         onClick={onOpen}
         className="flex items-start gap-3 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
       >
-        <Artwork
-          src={plugin.icon}
-          alt={plugin.name}
-          icon={kindIcon(plugin.kind, 20)}
-          className="size-11 shrink-0 rounded-lg"
-        />
+        {plugin.icon ? (
+          <Artwork
+            src={plugin.icon}
+            alt={plugin.name}
+            icon={kindIcon(plugin.kind, 20)}
+            className="size-11 shrink-0 rounded-lg"
+          />
+        ) : (
+          <span
+            aria-hidden
+            className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
+          >
+            {kindIcon(plugin.kind, 22)}
+          </span>
+        )}
         <div className="min-w-0 flex-1 space-y-1">
           <h3 className="truncate font-semibold text-fg">{plugin.name}</h3>
           <div className="flex flex-wrap items-center gap-1.5">
