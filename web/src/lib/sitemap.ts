@@ -257,8 +257,13 @@ export const PAGES = localized<PageDef[]>(() => [
       {
         key: "extras",
         title: t("Extras"),
+        keywords: searchTerms(msg("intro credits skip chapters up next post-play")),
+      },
+      {
+        key: "prerolls",
+        title: t("Pre-rolls"),
         keywords: searchTerms(
-          msg("trailers cinema yt-dlp intro credits skip chapters up next post-play"),
+          msg("pre-roll preroll intro video before feature trailers cinema yt-dlp"),
         ),
       },
       {
@@ -448,7 +453,14 @@ export function destinationsFrom(pages: Descriptor<PageMeta>[]): Destination[] {
   ]);
 }
 
-export function destinations(): Destination[] { return PAGES.flatMap(p=>[
- {href:p.href,title:p.title,page:t("Page"),keywords:p.keywords,isPage:true},
- ...p.sections.map(s=>({href:s.href??`${p.href}/${s.key}`,title:s.title,page:p.title,keywords:s.keywords}))
-]); }
+export function destinations(): Destination[] {
+  return PAGES.flatMap((p) => [
+    { href: p.href, title: p.title, page: t("Page"), keywords: p.keywords, isPage: true },
+    ...p.sections.map((s) => ({
+      href: s.href ?? `${p.href}/${s.key}`,
+      title: s.title,
+      page: p.title,
+      keywords: s.keywords,
+    })),
+  ]);
+}

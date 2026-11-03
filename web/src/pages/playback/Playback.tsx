@@ -1,6 +1,7 @@
 import * as S from "../settings/schema";
 import { Link } from "react-router-dom";
 import { ConfigSection } from "../../components/ConfigSection";
+import { SectionHeading } from "../../components/feedback";
 import { DomainPage, useRouteTab } from "../../components/layout";
 import { localized, t, tx } from "../../i18n";
 import { DeviceCapabilities } from "./Devices";
@@ -9,6 +10,7 @@ import { MarkerCoverage } from "./Markers";
 import { SkipButtons } from "./SkipButtons";
 import { HouseholdAudio } from "./HouseholdAudio";
 import { SubtitleProviders } from "./SubtitleProviders";
+import { Prerolls } from "./Prerolls";
 import { SubtitleTiming } from "./SubtitleTiming";
 
 const TABS = localized(
@@ -18,6 +20,7 @@ const TABS = localized(
       { key: "transcoding", label: t("Streams & transcoding") },
       { key: "devices", label: t("App compatibility") },
       { key: "extras", label: t("Extras") },
+      { key: "prerolls", label: t("Pre-rolls") },
     ] as const,
 );
 
@@ -57,13 +60,22 @@ export default function Playback() {
         label={t("Streams & transcoding")}
       />
       {tab === "devices" ? <DeviceCapabilities /> : null}
+      {tab === "prerolls" ? (
+        <SectionHeading
+          title={t("Before the feature")}
+          description={t(
+            "What plays before a movie or episode starts: your pre-rolls and cinema trailers.",
+          )}
+        />
+      ) : null}
       <ConfigSection
-        hidden={tab !== "extras"}
+        hidden={tab !== "prerolls"}
         configKey="extras"
         groups={S.EXTRAS}
         label={t("Trailers")}
         before={(draft) => <TrailerStatus draft={draft} />}
       />
+      {tab === "prerolls" ? <Prerolls /> : null}
       <SkipButtons hidden={tab !== "extras"} />
       {tab === "extras" ? <MarkerCoverage /> : null}
       <ConfigSection

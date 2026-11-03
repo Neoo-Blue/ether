@@ -1,4 +1,5 @@
 import { routeApiImagesThroughFetch } from "../lib/api";
+import { fetchUpload, setUploadTransport } from "../pages/playback/prerolls-api";
 import { createFakeServer } from "./server";
 
 /** Route same-origin /ether/api requests to the in-browser fake (mock mode only). */
@@ -21,6 +22,7 @@ export function installMockBackend(): void {
     damagedDatabase: params.has("damaged"),
     cacheRestart: params.has("cacheRestart"),
     restore: params.get("restore") ?? undefined,
+    prerolls: params.has("prerolls"),
   });
   fake.state.config.frontends = Object.fromEntries(
     ["plex", "jellyfin", "emby", "silo", "stremio", "webdav", "m3u", "dlna"].map((id) => [
@@ -78,5 +80,14 @@ export function installMockBackend(): void {
   };
   // Generated artwork (/ether/api/collections/{id}/artwork) must come from the fake too.
   routeApiImagesThroughFetch(true);
+  // Pre-roll uploads go through the fake too, with progress paced like a LAN upload.
+  setUploadTransport(async (url, form, onProgress, signal) => {
+    for (let p = 0; p < 100; p += 7) {
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      onProgress(p);
+      await new Promise((r) => setTimeout(r, 120));
+    }
+    return fetchUpload(url, form, onProgress, signal);
+  });
   console.info("[ether] mock backend active: all /ether/api calls are served in the browser.");
 }

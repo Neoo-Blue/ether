@@ -186,7 +186,7 @@ export function settingsIndex(): SettingHit[] {
     ),
     ...groupHits(S.STREAM_LIMITS, "/playback/transcoding", playback),
     ...groupHits(S.TRANSCODE, "/playback/transcoding", playback),
-    ...groupHits(S.EXTRAS, "/playback/extras", playback),
+    ...groupHits(S.EXTRAS, "/playback/prerolls", playback),
     ...rows("/playback/extras", `${playback} › ${t("Skip buttons")}`, [
       t("Skip intro"),
       t("Skip credits"),

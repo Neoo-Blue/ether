@@ -69,7 +69,7 @@ describe("settings index", () => {
     expect(at("Log level")[0]).toMatchObject({ href: "/maintenance/logs" });
     expect(at("Streams per viewer")[0]).toMatchObject({ href: "/playback/transcoding" });
     expect(at("Allow downloads")[0]).toMatchObject({ href: "/apps/plex/downloads" });
-    expect(at("Trailers and Cinema Trailers")[0]).toMatchObject({ href: "/playback/extras" });
+    expect(at("Trailers and Cinema Trailers")[0]).toMatchObject({ href: "/playback/prerolls" });
     expect(at("Custom server URLs")[0]).toMatchObject({ href: "/apps/overview" });
     expect(at("Bitrate limit")[0]).toMatchObject({ href: "/quality/profiles" });
     expect(at("Watchlist monitoring")[0]).toMatchObject({ href: "/catalog/settings" });

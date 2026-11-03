@@ -4,6 +4,7 @@
  * catalogue and builds context-aware Home rows so every screen behaves
  * realistically offline.
  */
+import { createPrerollsMock } from "./prerolls";
 import type {
   ActivityDay,
   CollectionSpec,
@@ -103,6 +104,8 @@ export interface FakeOptions {
   restore?: string;
   /** Household audio and subtitle choices, for the Playback screen in the browser mock. */
   householdAudio?: boolean;
+  /** Seed pre-rolls, their recent plays and a video still converting. */
+  prerolls?: boolean;
 }
 
 function json(body: unknown, status = 200): Response {
@@ -554,6 +557,11 @@ export function createFakeServer(opts: FakeOptions = {}) {
   const safetyPolicies = new Map<number, Record<string, unknown>>();
   const simklAccounts = new Map<number, { connected: boolean; lastSync?: string }>();
   const extendMock = createExtendMock();
+  const prerolls = createPrerollsMock({
+    seed: opts.prerolls,
+    title: (key) => byKey.get(key),
+    viewerName: (id) => VIEWERS.find((v) => v.id === id)?.title ?? `Viewer ${id}`,
+  });
   const state = {
     boot: {
       ok: true,
@@ -3880,6 +3888,7 @@ export function createFakeServer(opts: FakeOptions = {}) {
     const gate = ops.handle(method, seg, body, new Headers(init?.headers ?? req?.headers));
     if (gate === UNREACHABLE) throw new TypeError("Failed to fetch");
     if (gate) return json(gate.body, gate.status);
+    if (seg[0] === "admin" && seg[1] === "prerolls") return prerolls(url, init);
     return handle(method, url, body);
   }
 
