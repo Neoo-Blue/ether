@@ -66,11 +66,15 @@ type sessionInput struct {
 	inputLease         core.EncoderInputLease
 	inputHeaders       map[string]string
 	input              string
-	info               core.MediaInfo
-	decision           core.Decision
-	forceCPU           bool // hardware encoder failed; stay on CPU
-	noPause            bool // platform cannot suspend ffmpeg
-	inputFailed        bool // exhausted this input; HTTP retries cannot restart it
+	// clockInput is the input whose run wrote the retained fMP4 clock. Only a
+	// run reading that same input may be forced onto it (a short-video tail
+	// restart); a swapped-in source must match the clock on its own or be refused.
+	clockInput  string
+	info        core.MediaInfo
+	decision    core.Decision
+	forceCPU    bool // hardware encoder failed; stay on CPU
+	noPause     bool // platform cannot suspend ffmpeg
+	inputFailed bool // exhausted this input; HTTP retries cannot restart it
 	// contract is the delivered video a static-header session keeps
 	// across failovers; nil for every other session (contract.go).
 	contract       *videoContract

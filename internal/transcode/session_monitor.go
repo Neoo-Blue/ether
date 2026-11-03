@@ -145,6 +145,9 @@ func (s *Session) noteInitLocked(r *run, t int) error {
 	s.initFiles[t] = rel
 	if t == 0 {
 		s.initFile = rel
+		if s.clockInput == "" {
+			s.clockInput = r.spec.Input
+		}
 	}
 	return nil
 }

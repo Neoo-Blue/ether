@@ -245,7 +245,7 @@ func (s *Session) startRunLocked(seg int, bigProbe bool) error {
 	}
 	if s.container == ContainerFMP4 && !s.isDASH() {
 		_, retained := s.clockLocked(&run{startSeg: seg}, s.wantTrack)
-		if video, ok := retained["vide"]; ok {
+		if video, ok := retained["vide"]; ok && s.input == s.clockInput {
 			spec.VideoTimescale = video.scale
 		}
 	}
