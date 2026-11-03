@@ -129,10 +129,7 @@ describe("Settings", () => {
     const required = await screen.findByRole("region", { name: "Required" }, WAIT);
     expect(screen.queryByRole("region", { name: "Essentials" })).toBeNull();
     expect(within(required).getByRole("listitem", { name: "TMDB" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Set up TMDB" })).toHaveAttribute(
-      "href",
-      "/services/tmdb",
-    );
+    expect(screen.getByRole("button", { name: "Set up TMDB" })).toBeEnabled();
     const artwork = screen.getByRole("region", { name: "Artwork and ratings" });
     const posters = await within(artwork).findByRole("listitem", { name: "PostersPlus" }, WAIT);
     const ratings = within(artwork).getByRole("listitem", { name: "OMDb and MDBList" });
@@ -143,7 +140,7 @@ describe("Settings", () => {
       expect(screen.queryByRole("link", { name })).toBeNull();
     for (const [name, href] of [
       [/Set up Trakt/, "/services/trakt"],
-      [/Manage language model/, "/services/llm"],
+      [/Manage Language model/, "/services/llm"],
       [/Set up OpenSubtitles/, "/services/opensubtitles"],
     ] as const)
       expect(screen.getByRole("link", { name })).toHaveAttribute("href", href);
@@ -153,10 +150,12 @@ describe("Settings", () => {
       ["TheIntroDB", "/services/introdb"],
     ] as const) {
       const item = screen.getByRole("listitem", { name: card });
-      expect(within(item).getByRole("link", { name: "Manage" })).toHaveAttribute("href", href);
-      expect(within(item).queryByRole("switch")).toBeNull();
+      expect(
+        within(item).getByRole("link", { name: new RegExp(`^(Manage|Set up) ${card}$`) }),
+      ).toHaveAttribute("href", href);
+      expect(within(item).getByRole("switch")).toBeInTheDocument();
     }
-    expect(within(posters).queryByRole("switch")).toBeNull();
+    expect(within(posters).getByRole("switch")).toBeInTheDocument();
     expect(within(screen.getByRole("listitem", { name: "Language model" })).getByText("On"));
     expect(screen.queryByRole("button", { name: "Test Trakt" })).toBeNull();
     expect(screen.getByRole("listitem", { name: "TheIntroDB" })).toBeInTheDocument();
@@ -167,7 +166,7 @@ describe("Settings", () => {
 
   it("keeps the TheIntroDB key, health and test on its integration tab", async () => {
     const { fake } = renderApp("/services/introdb", {}, (f) => {
-      f.state.config.markers = { theIntroDb: true, apiKey: "" };
+      f.state.config.markers = { accountEnabled: true, theIntroDb: true, apiKey: "" };
     });
     expect(await screen.findByLabelText("Optional TheIntroDB key", {}, WAIT)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Test TheIntroDB" })).toBeInTheDocument();
@@ -212,8 +211,9 @@ describe("Settings", () => {
     });
     fireEvent.click(screen.getByRole("tab", { name: "Overview" }));
     fireEvent.click(await screen.findByRole("switch", { name: "OpenSubtitles enabled" }, WAIT));
+    fireEvent.click(await screen.findByRole("button", { name: "Save and enable" }));
     await waitFor(() => expect(calls(fake, "PUT", "/config/opensubtitles")).toHaveLength(1), WAIT);
-    expect(calls(fake, "PUT", "/config/opensubtitles")[0]!.body).toEqual({ enabled: true });
+    expect(calls(fake, "PUT", "/config/opensubtitles")[0]!.body).toMatchObject({ enabled: true });
     expect(calls(fake, "PUT", "/config/trakt")).toHaveLength(0);
     fireEvent.click(screen.getByRole("tab", { name: "Trakt" }));
     expect(await screen.findByLabelText("Client ID", {}, WAIT)).toHaveValue("my-client");
@@ -281,7 +281,7 @@ describe("Settings", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Save and enable" }));
     expect((await screen.findAllByText("looks malformed", {}, WAIT)).length).toBeGreaterThan(0);
     expect(screen.getByRole("dialog", { name: "Set up Trakt" })).toBeInTheDocument();
-    expect(screen.getByRole("switch", { name: "Trakt enabled" })).not.toBeChecked();
+    expect(screen.getByRole("switch", { name: "Trakt enabled", hidden: true })).not.toBeChecked();
     expect(screen.queryByRole("tab", { name: "Trakt" })).toBeNull();
     expect(calls(fake, "PUT", "/config/trakt")).toHaveLength(1);
   });
@@ -735,6 +735,7 @@ describe("Settings", () => {
     await waitFor(() => expect(simklSwitch()).toBeEnabled(), WAIT);
     expect(screen.queryByRole("tab", { name: "Simkl" })).toBeNull();
     fireEvent.click(simklSwitch());
+    fireEvent.click(await screen.findByRole("button", { name: "Save and enable" }));
     await waitFor(() => expect(calls(fake, "PUT", "/config/simkl")).toHaveLength(2), WAIT);
     expect(calls(fake, "PUT", "/config/simkl")[1]!.body).toMatchObject({
       enabled: true,
@@ -760,7 +761,7 @@ describe("Settings", () => {
     expect(screen.getByRole("switch", { name: "Simkl enabled" })).toBeChecked();
     expect(await screen.findByRole("tab", { name: "Simkl" }, WAIT)).toBeInTheDocument();
 
-    expect(screen.queryByRole("switch", { name: "OMDb and MDBList enabled" })).toBeNull();
+    expect(screen.getByRole("switch", { name: "OMDb and MDBList enabled" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Ratings" }));
     fireEvent.change(await screen.findByLabelText("API key", {}, WAIT), {
       target: { value: "omdb-key" },
@@ -779,7 +780,7 @@ describe("Settings", () => {
     expect(calls(fake, "PUT", "/discovery/ratings/settings")[0]!.body).toMatchObject({
       apiKey: "omdb-key",
     });
-    expect(screen.queryByText(/^Connected/)).toBeNull();
+    expect(screen.getByText("Connected")).toBeInTheDocument();
   });
 
   it("shows ratings status on its card and keeps score choices off Integrations", async () => {
@@ -801,7 +802,7 @@ describe("Settings", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Overview" }));
     const card = await screen.findByRole("listitem", { name: "OMDb and MDBList" }, WAIT);
     expect(within(card).getByText("Configured")).toBeInTheDocument();
-    expect(within(card).queryByRole("switch")).toBeNull();
+    expect(within(card).getByRole("switch")).toBeInTheDocument();
     expect(calls(fake, "PUT", "/discovery/ratings/settings")).toHaveLength(0);
   });
 

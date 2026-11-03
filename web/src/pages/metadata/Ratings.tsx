@@ -88,6 +88,7 @@ export function RatingSources({
   disabled,
   accountOnIntegrations,
   keysOnly,
+  setup = false,
 }: {
   /** Parent-owned saved document. Omit on the metadata page, which loads its own. */
   saved?: RatingSettings | null;
@@ -101,6 +102,7 @@ export function RatingSources({
   accountOnIntegrations?: boolean;
   /** Integrations: only the provider account (provider and API key). */
   keysOnly?: boolean;
+  setup?: boolean;
 } = {}) {
   const controlled = saved !== undefined;
   const doc = useAsync(() => apiFetch<RatingSettings>("/discovery/ratings/settings"), []);
@@ -215,7 +217,7 @@ export function RatingSources({
     return (
       <>
         <SettingsSection
-          title={t("OMDb and MDBList")}
+          title={undefined}
           footer={
             <Link to="/metadata/ratings" className="text-sm text-primary underline">
               {t("Choose which scores apps show")}
@@ -225,7 +227,17 @@ export function RatingSources({
           {providerRow}
           {keyRow}
         </SettingsSection>
-        {saveBar}
+        {setup ? (
+          <form
+            id="ratings-integration-setup"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!saving && !disabled) void save();
+            }}
+          />
+        ) : (
+          saveBar
+        )}
       </>
     );
 

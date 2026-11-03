@@ -116,6 +116,23 @@ function err(status: number, code: string, message: string): Response {
 
 function defaultConfig(): EtherConfig {
   return {
+    posters: {
+      version: 1,
+      enabled: false,
+      source: "tmdb",
+      baseUrl: "",
+      apiKey: "",
+      urlTemplate: "",
+      accounts: {
+        rpdb: {
+          enabled: true,
+          source: "rpdb",
+          baseUrl: "",
+          apiKey: "[configured]",
+          urlTemplate: "",
+        },
+      },
+    },
     availability: {
       mode: "playable",
       monitor: true,

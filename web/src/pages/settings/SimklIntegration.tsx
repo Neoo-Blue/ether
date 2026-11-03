@@ -28,7 +28,7 @@ export function SimklSettings({
 }) {
   return (
     <SettingsSection
-      title="Simkl"
+      title={undefined}
       description={t("Each viewer connects their own Simkl account from their Limits tab.")}
       footer={footer ?? undefined}
     >
