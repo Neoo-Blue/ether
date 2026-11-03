@@ -1,4 +1,5 @@
 import { Badge, Button, Dialog, Input, cn, toast } from "@braedonsaunders/appkit-ui";
+import { useLocale } from "../../i18n/react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -37,7 +38,8 @@ export function Marketplace({
   const [view, setView] = useState<View>(
     initial ? { kind: "detail", id: initial } : { kind: "browse" },
   );
-  const all = useMemo(listings, []);
+  const { locale } = useLocale();
+  const all = useMemo(() => listings(), [locale]);
   const current = view.kind === "browse" ? undefined : all.find((l) => l.id === view.id);
   return (
     <Dialog

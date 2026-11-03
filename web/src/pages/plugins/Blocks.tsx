@@ -1,4 +1,5 @@
 import { Badge, Button, Skeleton, cn } from "@braedonsaunders/appkit-ui";
+import { useLocale } from "../../i18n/react";
 import {
   ArrowDown,
   ArrowDownWideNarrow,
@@ -28,7 +29,15 @@ import { PosterCard } from "../../components/Poster";
 import { t } from "../../i18n";
 import type { CollectionSpec, Rule, TitleCard } from "../../lib/contract";
 import { RuleRow } from "../collections/RuleRow";
-import { KIDS_EXCLUDE, ROW_NAME, recipeSpec, ruleTrace, studioSpec, usePreview, type Result } from "./preview";
+import {
+  KIDS_EXCLUDE,
+  ROW_NAME,
+  recipeSpec,
+  ruleTrace,
+  studioSpec,
+  usePreview,
+  type Result,
+} from "./preview";
 
 type Kind = "input" | "step" | "output";
 
@@ -179,7 +188,8 @@ export function BlocksView({
   skipKids: boolean;
   onSkipKids: (v: boolean) => void;
 }) {
-  const blocks = useMemo(() => blocksFor(skipKids), [skipKids]);
+  const { locale } = useLocale();
+  const blocks = useMemo(() => blocksFor(skipKids), [skipKids, locale]);
   const [selected, setSelected] = useState("rated");
   const [codeOpen, setCodeOpen] = useState<string | null>(null);
   const [day, setDay] = useState(6);
@@ -218,7 +228,10 @@ export function BlocksView({
         ))}
       </aside>
 
-      <main aria-label={t("Flow")} className="app-scroll min-w-0 bg-bg lg:min-h-0 lg:overflow-y-auto">
+      <main
+        aria-label={t("Flow")}
+        className="app-scroll min-w-0 bg-bg lg:min-h-0 lg:overflow-y-auto"
+      >
         <div className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b border-border bg-bg/95 px-5 py-2.5 backdrop-blur">
           <span className="text-sm text-fg-muted">{t("Run as of")}</span>
           <input
@@ -231,7 +244,9 @@ export function BlocksView({
             className="w-40 accent-[rgb(var(--ch-primary))]"
           />
           <span className="text-sm font-medium text-fg">{dayLabel(day)}</span>
-          <span className="ml-auto text-xs text-fg-subtle">{t("Hover a poster to see why it's in")}</span>
+          <span className="ml-auto text-xs text-fg-subtle">
+            {t("Hover a poster to see why it's in")}
+          </span>
         </div>
         <ol className="mx-auto max-w-3xl space-y-0 px-5 py-5">
           {blocks.map((b, i) => (
@@ -307,7 +322,9 @@ function BlockCard({
       aria-label={block.label}
       className={cn(
         "rounded-xl border bg-surface transition",
-        selected ? "border-primary/60 shadow-sm ring-1 ring-primary/25" : "border-border hover:border-border-strong",
+        selected
+          ? "border-primary/60 shadow-sm ring-1 ring-primary/25"
+          : "border-border hover:border-border-strong",
       )}
     >
       <button
@@ -315,7 +332,12 @@ function BlockCard({
         onClick={onSelect}
         className="flex w-full items-center gap-3 px-4 py-3 text-left focus-visible:outline-none"
       >
-        <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg", KIND_TILE[block.kind])}>
+        <span
+          className={cn(
+            "flex size-9 shrink-0 items-center justify-center rounded-lg",
+            KIND_TILE[block.kind],
+          )}
+        >
           <block.icon size={18} aria-hidden />
         </span>
         <span className="min-w-0 flex-1">
@@ -383,7 +405,11 @@ function MiniStrip({ result }: { result: Result | null }) {
 }
 
 function OutputStrip({ result, skipKids }: { result: Result | null; skipKids: boolean }) {
-  const reasons = useMemo(() => (result ? ruleTrace(result.items, skipKids) : {}), [result, skipKids]);
+  const { locale } = useLocale();
+  const reasons = useMemo(
+    () => (result ? ruleTrace(result.items, skipKids) : {}),
+    [result, skipKids, locale],
+  );
   if (!result) return <MiniStrip result={null} />;
   return (
     <div className="grid grid-cols-6 gap-2">
@@ -442,7 +468,9 @@ function Inspector({
 function inspectorLine(block: Block): string {
   switch (block.id) {
     case "input":
-      return t("Every title with a 4K release. Change the input to use channels, events or a web page.");
+      return t(
+        "Every title with a 4K release. Change the input to use channels, events or a web page.",
+      );
     case "sort":
       return t("Highest rated first. Ties keep their catalogue order.");
     case "limit":

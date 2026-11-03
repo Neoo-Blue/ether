@@ -1,4 +1,5 @@
 import { autocompletion } from "@codemirror/autocomplete";
+import { useLocale } from "../../../i18n/react";
 import { javascript } from "@codemirror/lang-javascript";
 import { json } from "@codemirror/lang-json";
 import { unifiedMergeView } from "@codemirror/merge";
@@ -62,10 +63,16 @@ const etherTheme = EditorView.theme({
 });
 
 const etherHighlight = HighlightStyle.define([
-  { tag: [tags.keyword, tags.modifier, tags.controlKeyword], color: "rgb(var(--ch-accent-violet))" },
+  {
+    tag: [tags.keyword, tags.modifier, tags.controlKeyword],
+    color: "rgb(var(--ch-accent-violet))",
+  },
   { tag: [tags.string, tags.special(tags.string)], color: "rgb(var(--ch-accent-emerald))" },
   { tag: [tags.number, tags.bool, tags.null], color: "rgb(var(--ch-accent-amber))" },
-  { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], color: "rgb(var(--ch-accent-sky))" },
+  {
+    tag: [tags.function(tags.variableName), tags.function(tags.propertyName)],
+    color: "rgb(var(--ch-accent-sky))",
+  },
   { tag: [tags.propertyName], color: "rgb(var(--ch-accent-teal))" },
   { tag: [tags.typeName, tags.className], color: "rgb(var(--ch-accent-rose))" },
   { tag: [tags.comment], color: "rgb(var(--ch-fg-subtle))", fontStyle: "italic" },
@@ -84,6 +91,7 @@ export default function CodeMirrorPane({
   /** When set, shows `value` as the agent's change against this original. */
   original?: string;
 }) {
+  const { locale } = useLocale();
   const extensions = useMemo(() => {
     const base = [etherTheme, syntaxHighlighting(etherHighlight), EditorView.lineWrapping];
     if (file !== "plugin.ts") return [...base, json()];
@@ -106,7 +114,7 @@ export default function CodeMirrorPane({
     ];
     // The TypeScript environment is created once per file.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [file, original]);
+  }, [file, original, locale]);
   return (
     <CodeMirror
       value={value}

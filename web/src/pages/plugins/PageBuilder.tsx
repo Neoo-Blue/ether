@@ -1,4 +1,5 @@
 import { Badge, Input, SearchSelect, cn } from "@braedonsaunders/appkit-ui";
+import { useLocale } from "../../i18n/react";
 import {
   BarChart3,
   GripVertical,
@@ -38,7 +39,8 @@ const HOURS = [82, 74, 91, 66, 58, 49, 63, 70, 88, 104, 112, 97];
  */
 export function PageBuilder() {
   const [selected, setSelected] = useState<WidgetId>("months");
-  const top = usePreview(useMemo(() => studioSpec(false), []));
+  const { locale } = useLocale();
+  const top = usePreview(useMemo(() => studioSpec(false), [locale]));
   return (
     <div className="app-scroll min-h-0 flex-1 overflow-y-auto lg:grid lg:grid-cols-[13rem_minmax(0,1fr)_19rem] lg:overflow-hidden">
       <aside
@@ -65,10 +67,15 @@ export function PageBuilder() {
         </ul>
       </aside>
 
-      <main aria-label={t("Page")} className="app-scroll min-w-0 bg-bg lg:min-h-0 lg:overflow-y-auto">
+      <main
+        aria-label={t("Page")}
+        className="app-scroll min-w-0 bg-bg lg:min-h-0 lg:overflow-y-auto"
+      >
         <div className="mx-auto max-w-4xl space-y-4 p-5">
           <div className="flex items-baseline justify-between">
-            <h2 className="text-xl font-semibold tracking-tight text-fg">{t("Household year in review")}</h2>
+            <h2 className="text-xl font-semibold tracking-tight text-fg">
+              {t("Household year in review")}
+            </h2>
             <span className="text-xs text-fg-subtle">{t("Drop widgets anywhere on the grid")}</span>
           </div>
           <div className="grid grid-cols-6 gap-3">
@@ -89,7 +96,12 @@ export function PageBuilder() {
                 data={MONTHS.map((m, i) => ({ key: m, label: m, value: HOURS[i]! }))}
               />
             </Cell>
-            <Cell id="top" span="col-span-6 sm:col-span-4" selected={selected} onSelect={setSelected}>
+            <Cell
+              id="top"
+              span="col-span-6 sm:col-span-4"
+              selected={selected}
+              onSelect={setSelected}
+            >
               <p className="mb-3 text-sm font-semibold text-fg">{t("Most watched")}</p>
               <div className="grid grid-cols-6 gap-2">
                 {(top?.items ?? []).slice(0, 6).map((it) => (
@@ -97,7 +109,12 @@ export function PageBuilder() {
                 ))}
               </div>
             </Cell>
-            <Cell id="people" span="col-span-6 sm:col-span-2" selected={selected} onSelect={setSelected}>
+            <Cell
+              id="people"
+              span="col-span-6 sm:col-span-2"
+              selected={selected}
+              onSelect={setSelected}
+            >
               <p className="mb-2 text-sm font-semibold text-fg">{t("Who watched most")}</p>
               <table className="w-full text-sm">
                 <tbody>

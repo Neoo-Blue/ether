@@ -18,7 +18,10 @@ loader.config({ monaco });
 
 function token(name: string): string {
   const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  const parts = raw.split(/[\s,/]+/).map(Number).slice(0, 3);
+  const parts = raw
+    .split(/[\s,/]+/)
+    .map(Number)
+    .slice(0, 3);
   if (parts.length !== 3 || parts.some(Number.isNaN)) return "#888888";
   return `#${parts.map((n) => n.toString(16).padStart(2, "0")).join("")}`;
 }

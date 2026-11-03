@@ -21,19 +21,29 @@ export type Engine = "monaco" | "codemirror";
 /** Session-owned drafts survive switching between Describe, Blocks and Code. */
 export function useCodeDraft(skipKids: boolean) {
   const [docs, setDocs] = useState<Record<FileKey, string>>(() => ({
-    "plugin.ts": pluginSource(skipKids), "manifest.json": MANIFEST,
-    "strings.json": STRINGS, "settings.schema.json": SETTINGS,
+    "plugin.ts": pluginSource(skipKids),
+    "manifest.json": MANIFEST,
+    "strings.json": STRINGS,
+    "settings.schema.json": SETTINGS,
   }));
   const [dirty, setDirty] = useState(false);
   useEffect(() => {
-    setDocs(d => d["plugin.ts"] === pluginSource(!skipKids)
-      ? { ...d, "plugin.ts": pluginSource(skipKids) } : d);
+    setDocs((d) =>
+      d["plugin.ts"] === pluginSource(!skipKids)
+        ? { ...d, "plugin.ts": pluginSource(skipKids) }
+        : d,
+    );
   }, [skipKids]);
   return { docs, setDocs, dirty, setDirty };
 }
 
 /** Edits are retained locally; this prototype never compiles or executes them. */
-export function CodeView({ engine, onSkipKids, preview, draft }: {
+export function CodeView({
+  engine,
+  onSkipKids,
+  preview,
+  draft,
+}: {
   engine: Engine;
   onSkipKids: (v: boolean) => void;
   preview: ReactNode;
@@ -138,7 +148,7 @@ export function CodeView({ engine, onSkipKids, preview, draft }: {
               onClick={() => {
                 onSkipKids(true);
                 setAsk("idle");
-                setDocs(d => ({ ...d, "plugin.ts": pluginSource(true) }));
+                setDocs((d) => ({ ...d, "plugin.ts": pluginSource(true) }));
                 setDirty(true);
               }}
             >
@@ -174,12 +184,23 @@ export function CodeView({ engine, onSkipKids, preview, draft }: {
           </Suspense>
         </div>
         <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border bg-bg-subtle px-3 py-1.5 text-xs text-fg-muted">
-          <span>{dirty ? t("Unsaved draft · kept in this Studio session · not executed") : t("Sample code · not executed")}</span>
-          <span className="font-mono">TypeScript · {engine === "monaco" ? "Monaco" : "CodeMirror"}</span>
+          <span>
+            {dirty
+              ? t("Unsaved draft · kept in this Studio session · not executed")
+              : t("Sample code · not executed")}
+          </span>
+          <span className="font-mono">
+            TypeScript · {engine === "monaco" ? "Monaco" : "CodeMirror"}
+          </span>
         </div>
       </section>
-      <section aria-label={t("Preview")} className="min-w-0 bg-bg lg:col-span-2 lg:min-h-0 lg:overflow-y-auto">
-        <p className="border-b border-border px-4 py-2 text-xs text-fg-muted">{t("Sample preview · independent of code edits")}</p>
+      <section
+        aria-label={t("Preview")}
+        className="min-w-0 bg-bg lg:col-span-2 lg:min-h-0 lg:overflow-y-auto"
+      >
+        <p className="border-b border-border px-4 py-2 text-xs text-fg-muted">
+          {t("Sample preview · independent of code edits")}
+        </p>
         {preview}
       </section>
     </div>
@@ -191,7 +212,13 @@ function AgentNote({ children, onClose }: { children: ReactNode; onClose: () => 
     <div className="flex shrink-0 items-start gap-2 border-b border-border bg-primary/5 px-3 py-2.5 text-sm text-fg">
       <Sparkles size={15} className="mt-0.5 shrink-0 text-primary" aria-hidden />
       <p className="flex-1">{children}</p>
-      <Button variant="ghost" size="icon" aria-label={t("Close")} onClick={onClose} className="size-7">
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label={t("Close")}
+        onClick={onClose}
+        className="size-7"
+      >
         <X size={14} />
       </Button>
     </div>

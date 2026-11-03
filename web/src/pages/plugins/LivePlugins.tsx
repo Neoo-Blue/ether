@@ -266,7 +266,8 @@ function PluginCard({
             src={plugin.icon}
             alt={plugin.name}
             icon={kindIcon(plugin.kind, 20)}
-            className="size-11 shrink-0 rounded-lg"
+            className="size-11 shrink-0 rounded-lg bg-bg-subtle"
+            imgClassName="object-contain p-1"
           />
         ) : (
           <span

@@ -4,6 +4,7 @@
  * a ViewSpec part on the agent's stream, bound to the tool result; here a
  * fixed script stands in for the agent so the motion can be reviewed.
  */
+import { useLocale } from "../../i18n/react";
 import { Badge, Skeleton, cn } from "@braedonsaunders/appkit-ui";
 import {
   Check,
@@ -26,8 +27,18 @@ import "./stage.css";
 
 export type Moment =
   | { kind: "intent"; text: string; tool: string }
-  | { kind: "sweep"; tool: string; title: string; sources: { name: string; found: string; icon: LucideIcon }[] }
-  | { kind: "found"; tool: string; title: string; cards: { name: string; url: string; via: string }[] }
+  | {
+      kind: "sweep";
+      tool: string;
+      title: string;
+      sources: { name: string; found: string; icon: LucideIcon }[];
+    }
+  | {
+      kind: "found";
+      tool: string;
+      title: string;
+      cards: { name: string; url: string; via: string }[];
+    }
   | { kind: "streams"; tool: string; title: string; tiles: StreamTile[] }
   | { kind: "repair"; text: string }
   | { kind: "guide"; tool: string; title: string; channels: GuideChannel[] }
@@ -63,9 +74,27 @@ export function scriptFor(prompt: string): Script {
 }
 
 const CHANNELS: GuideChannel[] = [
-  { number: 801, name: "Kigali Sport 1", now: "Rwanda Premier League", next: "Sports news", progress: 0.62 },
-  { number: 802, name: "Amahoro Sports", now: "Basketball Africa League", next: "Cycling: Tour du Rwanda", progress: 0.35 },
-  { number: 803, name: "Rwanda Sports Live", now: "Volleyball final", next: "Match of the week", progress: 0.81 },
+  {
+    number: 801,
+    name: "Kigali Sport 1",
+    now: "Rwanda Premier League",
+    next: "Sports news",
+    progress: 0.62,
+  },
+  {
+    number: 802,
+    name: "Amahoro Sports",
+    now: "Basketball Africa League",
+    next: "Cycling: Tour du Rwanda",
+    progress: 0.35,
+  },
+  {
+    number: 803,
+    name: "Rwanda Sports Live",
+    now: "Volleyball final",
+    next: "Match of the week",
+    progress: 0.81,
+  },
 ];
 
 function channelsScript(): Script {
@@ -73,7 +102,14 @@ function channelsScript(): Script {
     key: "channels",
     end: 17_500,
     moments: [
-      { at: 0, moment: { kind: "intent", tool: "understand", text: t("Sports channels from Rwanda, in Live TV with a guide") } },
+      {
+        at: 0,
+        moment: {
+          kind: "intent",
+          tool: "understand",
+          text: t("Sports channels from Rwanda, in Live TV with a guide"),
+        },
+      },
       {
         at: 1_000,
         moment: {
@@ -95,10 +131,26 @@ function channelsScript(): Script {
           tool: "fetch",
           title: t("4 channels after removing duplicates"),
           cards: [
-            { name: "Kigali Sport 1", url: "kigalisport.example/live/1.m3u8", via: t("Public IPTV lists") },
-            { name: "Amahoro Sports", url: "amahoro.example/hls/sport.m3u8", via: t("Free channel directories") },
-            { name: "Rwanda Sports Live", url: "rsl.example/stream/index.m3u8", via: t("Broadcaster websites") },
-            { name: "Inkuru TV Sport", url: "inkuru.example/tv/sport.m3u8", via: t("Public IPTV lists") },
+            {
+              name: "Kigali Sport 1",
+              url: "kigalisport.example/live/1.m3u8",
+              via: t("Public IPTV lists"),
+            },
+            {
+              name: "Amahoro Sports",
+              url: "amahoro.example/hls/sport.m3u8",
+              via: t("Free channel directories"),
+            },
+            {
+              name: "Rwanda Sports Live",
+              url: "rsl.example/stream/index.m3u8",
+              via: t("Broadcaster websites"),
+            },
+            {
+              name: "Inkuru TV Sport",
+              url: "inkuru.example/tv/sport.m3u8",
+              via: t("Public IPTV lists"),
+            },
           ],
         },
       },
@@ -116,8 +168,19 @@ function channelsScript(): Script {
           ],
         },
       },
-      { at: 11_000, moment: { kind: "repair", text: t("Dropped Inkuru TV Sport: no picture after 3.2 s") } },
-      { at: 11_900, moment: { kind: "guide", tool: "test_probe", title: t("Building the guide"), channels: CHANNELS } },
+      {
+        at: 11_000,
+        moment: { kind: "repair", text: t("Dropped Inkuru TV Sport: no picture after 3.2 s") },
+      },
+      {
+        at: 11_900,
+        moment: {
+          kind: "guide",
+          tool: "test_probe",
+          title: t("Building the guide"),
+          channels: CHANNELS,
+        },
+      },
       {
         at: 14_600,
         moment: {
@@ -130,18 +193,35 @@ function channelsScript(): Script {
           ],
         },
       },
-      { at: 16_400, moment: { kind: "done", text: t("3 sports channels, ready to add to Live TV") } },
+      {
+        at: 16_400,
+        moment: { kind: "done", text: t("3 sports channels, ready to add to Live TV") },
+      },
     ],
   };
 }
 
 function homeScript(facts?: ReturnType<typeof useHomeFacts>): Script {
-  const lines = facts ? homeSummary(facts) : [t("Reading the sample catalogue"), t("Checking watch history"), t("Applying the rating filter"), t("Building the sample row")];
+  const lines = facts
+    ? homeSummary(facts)
+    : [
+        t("Reading the sample catalogue"),
+        t("Checking watch history"),
+        t("Applying the rating filter"),
+        t("Building the sample row"),
+      ];
   return {
     key: "home",
     end: 10_500,
     moments: [
-      { at: 0, moment: { kind: "intent", tool: "understand", text: t("A Home row of 4K titles that no viewer has started") } },
+      {
+        at: 0,
+        moment: {
+          kind: "intent",
+          tool: "understand",
+          text: t("A Home row of 4K titles that no viewer has started"),
+        },
+      },
       {
         at: 900,
         moment: {
@@ -155,8 +235,14 @@ function homeScript(facts?: ReturnType<typeof useHomeFacts>): Script {
           ],
         },
       },
-      { at: 3_300, moment: { kind: "posters", tool: "collection_preview", title: t("Building the row") } },
-      { at: 7_000, moment: { kind: "repair", text: t("Sorted by rating and applied the row limit") } },
+      {
+        at: 3_300,
+        moment: { kind: "posters", tool: "collection_preview", title: t("Building the row") },
+      },
+      {
+        at: 7_000,
+        moment: { kind: "repair", text: t("Sorted by rating and applied the row limit") },
+      },
       {
         at: 7_800,
         moment: {
@@ -177,29 +263,41 @@ export function StageRunner({ script, onDone }: { script: Script; onDone: () => 
   const moments = script.key === "home" ? homeScript(facts).moments : script.moments;
   useEffect(() => {
     setShown(1);
-    const timers = script.moments.map((m, i) =>
-      window.setTimeout(() => setShown(i + 1), m.at),
-    );
+    const timers = script.moments.map((m, i) => window.setTimeout(() => setShown(i + 1), m.at));
     timers.push(window.setTimeout(onDone, script.end));
     return () => timers.forEach(window.clearTimeout);
   }, [script, onDone]);
   const arrived = moments.slice(0, shown);
   const current = arrived[arrived.length - 1]!.moment;
-  const result = [...arrived].reverse().find(({moment}) => moment.kind === "posters" || moment.kind === "guide");
+  const result = [...arrived]
+    .reverse()
+    .find(({ moment }) => moment.kind === "posters" || moment.kind === "guide");
   return (
     <div className="mx-auto w-full max-w-4xl space-y-4 px-4 py-6 sm:px-6">
       <p className="text-xs text-fg-muted">{t("Prototype · sample results")}</p>
-      <div className="stage-rise" key={shown}><MomentView moment={current} /></div>
+      <div className="stage-rise" key={shown}>
+        <MomentView moment={current} />
+      </div>
       {result && result.moment !== current ? <MomentView moment={result.moment} /> : null}
       <details className="rounded-xl border border-border bg-surface p-4">
-        <summary className="cursor-pointer text-sm text-fg-muted">{t("Completed steps ({count})", { count: Math.max(0, shown - 1) })}</summary>
+        <summary className="cursor-pointer text-sm text-fg-muted">
+          {t("Completed steps ({count})", { count: Math.max(0, shown - 1) })}
+        </summary>
         <ul className="mt-3 space-y-2 text-sm text-fg-muted">
-          {arrived.slice(0, -1).map(({moment}, i) => <li key={i}>{"title" in moment ? moment.title : moment.text}</li>)}
+          {arrived.slice(0, -1).map(({ moment }, i) => (
+            <li key={i}>{"title" in moment ? moment.title : moment.text}</li>
+          ))}
         </ul>
       </details>
       <details className="rounded-xl border border-border bg-surface p-4">
         <summary className="cursor-pointer text-sm text-fg-muted">{t("Inspector")}</summary>
-        <pre className="mt-3 overflow-auto text-xs text-fg-muted">{JSON.stringify(arrived.map(({moment}) => moment), null, 2)}</pre>
+        <pre className="mt-3 overflow-auto text-xs text-fg-muted">
+          {JSON.stringify(
+            arrived.map(({ moment }) => moment),
+            null,
+            2,
+          )}
+        </pre>
       </details>
     </div>
   );
@@ -295,10 +393,12 @@ function MomentView({ moment }: { moment: Moment }) {
 
 function Panel({ title, children }: { title: string; tool?: string; children: ReactNode }) {
   return (
-    <section aria-label={title} className="rounded-xl border border-border bg-surface p-4 shadow-sm">
+    <section
+      aria-label={title}
+      className="rounded-xl border border-border bg-surface p-4 shadow-sm"
+    >
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-fg">{title}</h3>
-        
       </div>
       {children}
     </section>
@@ -340,7 +440,9 @@ function Sweep({
                 {s.name}
               </span>
               {finished ? (
-                <span className="stage-pop text-xs font-medium tabular-nums text-success">{s.found}</span>
+                <span className="stage-pop text-xs font-medium tabular-nums text-success">
+                  {s.found}
+                </span>
               ) : scanning ? (
                 <span className="text-xs text-fg-muted">{t("Searching")}</span>
               ) : null}
@@ -391,7 +493,10 @@ function StreamTileView({ tile, delay }: { tile: StreamTile; delay: number }) {
         ) : null}
       </div>
       <figcaption className="flex items-center gap-1.5 text-xs">
-        <StatusDot level={phase === "playing" ? "ok" : phase === "failed" ? "error" : "unknown"} pulse={phase === "failed"} />
+        <StatusDot
+          level={phase === "playing" ? "ok" : phase === "failed" ? "error" : "unknown"}
+          pulse={phase === "failed"}
+        />
         <span className="min-w-0 flex-1 truncate text-fg">{tile.name}</span>
         <span className="shrink-0 tabular-nums text-fg-muted">
           {phase === "playing"
@@ -407,7 +512,12 @@ function StreamTileView({ tile, delay }: { tile: StreamTile; delay: number }) {
 
 function cssColor(name: string): string {
   const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  return raw ? `rgb(${raw.split(/[\s,]+/).slice(0, 3).join(" ")})` : "#0f766e";
+  return raw
+    ? `rgb(${raw
+        .split(/[\s,]+/)
+        .slice(0, 3)
+        .join(" ")})`
+    : "#0f766e";
 }
 
 /** An animated test card on a real <video>, from a canvas stream. */
@@ -495,7 +605,10 @@ export function GuideStrip({ channels, animate }: { channels: GuideChannel[]; an
           <span className="min-w-0 rounded-md bg-primary/10 px-2 py-1.5">
             <span className="block truncate text-xs font-medium text-fg">{c.now}</span>
             <span className="mt-1 block h-1 overflow-hidden rounded-full bg-primary/15">
-              <span className="block h-full rounded-full bg-primary" style={{ width: `${c.progress * 100}%` }} />
+              <span
+                className="block h-full rounded-full bg-primary"
+                style={{ width: `${c.progress * 100}%` }}
+              />
             </span>
           </span>
           <span className="min-w-0 truncate rounded-md bg-bg-subtle px-2 py-1.5 text-xs text-fg-muted">
@@ -508,7 +621,8 @@ export function GuideStrip({ channels, animate }: { channels: GuideChannel[]; an
 }
 
 function PosterFlow({ title, tool }: { title: string; tool: string }) {
-  const spec = useMemo(() => studioSpec(false), []);
+  const { locale } = useLocale();
+  const spec = useMemo(() => studioSpec(false), [locale]);
   const result = usePreview(spec);
   return (
     <Panel title={title} tool={tool}>

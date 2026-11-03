@@ -1,4 +1,5 @@
 import { Badge, Skeleton, cn } from "@braedonsaunders/appkit-ui";
+import { useLocale } from "../../i18n/react";
 import { useEffect, useMemo, useState } from "react";
 import { Shelf } from "../../components/Poster";
 import { PanelHead } from "../../components/workspace";
@@ -105,9 +106,10 @@ export function HomePreview({
   reloaded?: boolean;
 }) {
   const previewReady = ready && result !== null;
+  const { locale } = useLocale();
   const reasons = useMemo(
     () => (result ? ruleTrace(result.items, skipKids) : {}),
-    [result, skipKids],
+    [result, skipKids, locale],
   );
   return (
     <div className="flex min-h-full flex-col">
@@ -124,11 +126,7 @@ export function HomePreview({
         </div>
       </PanelHead>
       <div className="space-y-7 p-4 sm:p-5">
-        <HomeRowPreview
-          title={t("Continue watching")}
-          items={titles?.slice(0, 10) ?? null}
-          dim
-        />
+        <HomeRowPreview title={t("Continue watching")} items={titles?.slice(0, 10) ?? null} dim />
         <div
           className={cn(
             "-mx-2 rounded-xl p-2 transition",
@@ -198,11 +196,17 @@ export function ShelfSkeleton() {
 }
 
 /** One recipe supplies every Home-demo count, including the installed collection. */
-export function recipeSpec(step: "input" | "unstarted" | "rated" | "output", skipKids = false): CollectionSpec {
+export function recipeSpec(
+  step: "input" | "unstarted" | "rated" | "output",
+  skipKids = false,
+): CollectionSpec {
   const spec = studioSpec(skipKids);
   if (step === "input") spec.rules = [];
   if (step === "unstarted") spec.rules = spec.rules.slice(0, 1);
-  if (step !== "output") { spec.limit = 0; spec.exclude = []; }
+  if (step !== "output") {
+    spec.limit = 0;
+    spec.exclude = [];
+  }
   return spec;
 }
 export function useHomeFacts(skipKids = false) {
@@ -213,7 +217,7 @@ export function useHomeFacts(skipKids = false) {
   return { input, unstarted, rated, output };
 }
 export function homeSummary(facts: ReturnType<typeof useHomeFacts>): string[] {
-  const count = (result: Result | null) => result ? String(result.total) : "…";
+  const count = (result: Result | null) => (result ? String(result.total) : "…");
   return [
     t("{count} titles in the 4K demo catalogue", { count: count(facts.input) }),
     t("{count} titles nobody has started", { count: count(facts.unstarted) }),

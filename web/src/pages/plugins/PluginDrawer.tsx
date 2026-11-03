@@ -35,8 +35,16 @@ export function PluginDrawer({
         <ActionMenu
           label={t("More actions")}
           items={[
-            { key: "update", label: t("Update to {version}", { version: detail.next }), onSelect: () => undefined },
-            { key: "rollback", label: t("Roll back to {version}", { version: detail.previous }), onSelect: () => undefined },
+            {
+              key: "update",
+              label: t("Update to {version}", { version: detail.next }),
+              onSelect: () => undefined,
+            },
+            {
+              key: "rollback",
+              label: t("Roll back to {version}", { version: detail.previous }),
+              onSelect: () => undefined,
+            },
             { key: "sep", separator: true },
             { key: "remove", label: t("Uninstall"), onSelect: () => undefined, danger: true },
           ]}
@@ -87,7 +95,9 @@ export function PluginDrawer({
               ) : null}
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => navigate(`/plugins/studio?open=${encodeURIComponent(plugin.id)}`)}>
+              <Button
+                onClick={() => navigate(`/plugins/studio?open=${encodeURIComponent(plugin.id)}`)}
+              >
                 <Sparkles size={15} /> {t("Open in Studio")}
               </Button>
               <Button
@@ -108,9 +118,7 @@ export function PluginDrawer({
 
         {tab === "permissions" ? (
           <section className="rounded-xl border border-border bg-surface p-4">
-            <PermissionRows
-              items={detail.permissions}
-            />
+            <PermissionRows items={detail.permissions} />
             <p className="mt-4 text-xs text-fg-subtle">{detail.network}</p>
           </section>
         ) : null}
@@ -146,7 +154,9 @@ export function PluginDrawer({
 }
 
 interface DrawerFixture {
-  version: string; next: string; previous: string;
+  version: string;
+  next: string;
+  previous: string;
   permissions: { icon: PermissionIcon; label: string }[];
   network: string;
   activity: { id: string; what: string; when: string }[];
@@ -155,56 +165,77 @@ interface DrawerFixture {
 function drawerFixture(id: string): DrawerFixture {
   const base = { version: "1.0.2", next: "1.1.0", previous: "1.0.1" };
   switch (id) {
-    case "dev.ether.pluto-tv": return {
-      version: "1.2.0", next: "1.2.1", previous: "1.1.0",
-      permissions: [
-        { icon: "network", label: t("Reads the Pluto TV channel list and guide") },
-        { icon: "collections", label: t("Adds channels to Live TV") },
-      ],
-      network: t("Sample activity: contacted the channel and guide service."),
-      activity: [
-        { id: "channels", what: t("Refreshed 120 channels"), when: t("2 h ago") },
-        { id: "guide", what: t("Updated the guide: 98% coverage"), when: t("2 h ago") },
-        { id: "logos", what: t("Added channel logos"), when: t("Yesterday") },
-      ],
-      logs: "12:04:51  channels_refresh  120 channels\n12:04:52  guide_refresh  coverage=98%\n12:04:52  refresh_complete",
-    };
-    case "dev.ether.wrapped": return {
-      ...base,
-      permissions: [
-        { icon: "history", label: t("Reads watch history for the yearly recap") },
-        { icon: "collections", label: t("Shows a recap page and Home panel") },
-      ],
-      network: t("Contacted no other sites this week."),
-      activity: [
-        { id: "recap", what: t("Rebuilt the household yearly recap"), when: t("Yesterday") },
-        { id: "panel", what: t("Updated the recap panel on Home"), when: t("Yesterday") },
-      ],
-      logs: "00:05:00  recap_build  period=12_months\n00:05:01  recap_ready  widgets=6\n12:04:51  page_views  weekly=14",
-    };
-    case "community.subdl": return {
-      ...base,
-      permissions: [{ icon: "network", label: t("Searches SubDL for subtitles") }],
-      network: t("Sample activity: searched SubDL; downloaded no subtitles."),
-      activity: [
-        { id: "search", what: t("Found 9 subtitle matches while trying out"), when: t("This week") },
-        { id: "dry", what: t("Kept existing subtitle choices unchanged"), when: t("This week") },
-      ],
-      logs: "12:04:51  subtitle_search  mode=tryout\n12:04:52  matches  weekly=9\n12:04:52  downloads=0",
-    };
-    case "dev.ether.dub-language": return {
-      ...base,
-      permissions: [
-        { icon: "history", label: t("Reads viewer language preferences") },
-        { icon: "kv", label: t("Remembers each viewer's language") },
-      ],
-      network: t("Contacted no other sites this week."),
-      activity: [
-        { id: "dub", what: t("Picked the Spanish dub of Velvet Comet for Lucía"), when: t("2 h ago") },
-        { id: "language", what: t("Saved Lucía's language as Spanish"), when: t("Yesterday") },
-      ],
-      logs: "12:04:51  rank_key  4 releases\n12:04:51  picked Spanish dub  viewer=Lucía\n12:04:51  language_preference=Spanish",
-    };
-    default: return { ...base, permissions: [], network: t("No sample activity available."), activity: [], logs: "" };
+    case "dev.ether.pluto-tv":
+      return {
+        version: "1.2.0",
+        next: "1.2.1",
+        previous: "1.1.0",
+        permissions: [
+          { icon: "network", label: t("Reads the Pluto TV channel list and guide") },
+          { icon: "collections", label: t("Adds channels to Live TV") },
+        ],
+        network: t("Sample activity: contacted the channel and guide service."),
+        activity: [
+          { id: "channels", what: t("Refreshed 120 channels"), when: t("2 h ago") },
+          { id: "guide", what: t("Updated the guide: 98% coverage"), when: t("2 h ago") },
+          { id: "logos", what: t("Added channel logos"), when: t("Yesterday") },
+        ],
+        logs: "12:04:51  channels_refresh  120 channels\n12:04:52  guide_refresh  coverage=98%\n12:04:52  refresh_complete",
+      };
+    case "dev.ether.wrapped":
+      return {
+        ...base,
+        permissions: [
+          { icon: "history", label: t("Reads watch history for the yearly recap") },
+          { icon: "collections", label: t("Shows a recap page and Home panel") },
+        ],
+        network: t("Contacted no other sites this week."),
+        activity: [
+          { id: "recap", what: t("Rebuilt the household yearly recap"), when: t("Yesterday") },
+          { id: "panel", what: t("Updated the recap panel on Home"), when: t("Yesterday") },
+        ],
+        logs: "00:05:00  recap_build  period=12_months\n00:05:01  recap_ready  widgets=6\n12:04:51  page_views  weekly=14",
+      };
+    case "community.subdl":
+      return {
+        ...base,
+        permissions: [{ icon: "network", label: t("Searches SubDL for subtitles") }],
+        network: t("Sample activity: searched SubDL; downloaded no subtitles."),
+        activity: [
+          {
+            id: "search",
+            what: t("Found 9 subtitle matches while trying out"),
+            when: t("This week"),
+          },
+          { id: "dry", what: t("Kept existing subtitle choices unchanged"), when: t("This week") },
+        ],
+        logs: "12:04:51  subtitle_search  mode=tryout\n12:04:52  matches  weekly=9\n12:04:52  downloads=0",
+      };
+    case "dev.ether.dub-language":
+      return {
+        ...base,
+        permissions: [
+          { icon: "history", label: t("Reads viewer language preferences") },
+          { icon: "kv", label: t("Remembers each viewer's language") },
+        ],
+        network: t("Contacted no other sites this week."),
+        activity: [
+          {
+            id: "dub",
+            what: t("Picked the Spanish dub of Velvet Comet for Lucía"),
+            when: t("2 h ago"),
+          },
+          { id: "language", what: t("Saved Lucía's language as Spanish"), when: t("Yesterday") },
+        ],
+        logs: "12:04:51  rank_key  4 releases\n12:04:51  picked Spanish dub  viewer=Lucía\n12:04:51  language_preference=Spanish",
+      };
+    default:
+      return {
+        ...base,
+        permissions: [],
+        network: t("No sample activity available."),
+        activity: [],
+        logs: "",
+      };
   }
 }

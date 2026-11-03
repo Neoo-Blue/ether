@@ -1,4 +1,5 @@
 import LiveStudio from "./LiveStudio";
+import { useLocale } from "../../i18n/react";
 import { Badge, Button, Dialog, Skeleton, Textarea, cn } from "@braedonsaunders/appkit-ui";
 import {
   ArrowLeft,
@@ -62,6 +63,7 @@ function PrototypeStudio() {
   const [params] = useSearchParams();
   const demo = params.get("demo") ?? (params.get("open") ? "home" : null);
   const remix = params.get("remix");
+  const { locale } = useLocale();
   const remixName = useMemo(() => {
     if (!remix) return "";
     return (
@@ -69,7 +71,7 @@ function PrototypeStudio() {
       listings().find((l) => l.id === remix)?.name ??
       ""
     );
-  }, [remix]);
+  }, [remix, locale]);
   const [prompt, setPrompt] = useState(
     remixName ? t("Start from {name} and ", { name: remixName }) : "",
   );
@@ -83,7 +85,7 @@ function PrototypeStudio() {
           ? t("Make a Home row of 4K titles nobody has watched")
           : "",
   );
-  const script = useMemo(() => scriptFor(asked), [asked]);
+  const script = useMemo(() => scriptFor(asked), [asked, locale]);
   const start = (text: string) => {
     if (!text.trim()) return;
     setAsked(text.trim());
@@ -141,8 +143,9 @@ function PrototypeStudio() {
 }
 
 function StageHome({ remixName, onPick }: { remixName: string; onPick: (text: string) => void }) {
-  const chips = useMemo(suggestions, []);
-  const cards = useMemo(templates, []);
+  const { locale } = useLocale();
+  const chips = useMemo(() => suggestions(), [locale]);
+  const cards = useMemo(() => templates(), [locale]);
   return (
     <div className="mx-auto max-w-3xl space-y-9 px-4 pb-10 pt-[min(10vh,5rem)]">
       <div className="space-y-4 text-center">
@@ -300,7 +303,8 @@ function Editor({
   const [confirm, setConfirm] = useState(false);
   const [pane, setPane] = useState<"steps" | "preview">("preview");
   const titles = useContextTitles();
-  const result = usePreview(useMemo(() => studioSpec(kids), [kids]));
+  const { locale } = useLocale();
+  const result = usePreview(useMemo(() => studioSpec(kids), [kids, locale]));
   const channels = script.key === "channels" && !page;
 
   const refine = (text: string) => {

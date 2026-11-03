@@ -518,13 +518,22 @@ export function InstalledPluginDrawer({
           {/* Header summary bar */}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-bg-subtle p-4">
             <div className="flex min-w-0 items-center gap-3.5">
-              <Artwork
-                src={detail.icon ?? detail.manifest.ether?.icon ?? detail.manifest.logo}
-                alt={detail.name}
-                title={detail.name}
-                icon={kindIcon(detail.kind, 20)}
-                className="size-12 shrink-0 rounded-lg border border-border"
-              />
+              {detail.icon || detail.manifest.ether?.icon || detail.manifest.logo ? (
+                <Artwork
+                  src={detail.icon ?? detail.manifest.ether?.icon ?? detail.manifest.logo}
+                  alt={detail.name}
+                  icon={kindIcon(detail.kind, 20)}
+                  className="size-12 shrink-0 rounded-lg border border-border bg-bg-subtle"
+                  imgClassName="object-contain p-1"
+                />
+              ) : (
+                <span
+                  aria-hidden
+                  className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
+                >
+                  {kindIcon(detail.kind, 22)}
+                </span>
+              )}
               <div className="min-w-0 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="truncate text-base font-semibold text-fg">{detail.name}</span>
