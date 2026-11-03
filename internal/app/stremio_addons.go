@@ -11,6 +11,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/config"
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/plugins"
+	"github.com/braedonsaunders/ether/internal/plugins/adapters"
 	"github.com/braedonsaunders/ether/internal/stremio"
 )
 
@@ -37,31 +38,10 @@ func (a *App) installAddon(ctx context.Context, in plugins.AddonInstall) (plugin
 	return mgr.InstallAddon(ctx, in)
 }
 
-// addonIndexers expands the indexer list for the running search manager:
-// an add-on row searches when its add-on is installed, enabled and its
-// stream role is on; it carries the add-on's link in memory only (search
-// cache identity and secret scrubbing), never in the saved config.
+// addonIndexers expands the indexer list for the running search manager
+// (adapters.ExpandAddonIndexers).
 func (a *App) addonIndexers(ctx context.Context, rows []config.Indexer) []config.Indexer {
-	out := make([]config.Indexer, len(rows))
-	copy(out, rows)
-	mgr := a.pluginManager()
-	for i := range out {
-		if !out[i].IsAddon() {
-			continue
-		}
-		out[i].Enabled = false
-		if mgr == nil || out[i].Plugin == "" {
-			continue
-		}
-		rec, err := mgr.Get(ctx, out[i].Plugin)
-		if err != nil {
-			continue
-		}
-		out[i].URL = rec.SourceURL
-		out[i].Protocol = "torrent"
-		out[i].Enabled = rec.Enabled && rec.Manifest.HasCapability(plugins.CapStreamSource)
-	}
-	return out
+	return adapters.ExpandAddonIndexers(ctx, a.pluginManager(), rows)
 }
 
 // syncAddonIndexers keeps one indexer row per add-on that can serve

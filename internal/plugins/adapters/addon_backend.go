@@ -466,3 +466,29 @@ func directStream(guid string) (plugin, kind, ref string, ok bool) {
 func defaultNZBClient() *http.Client {
 	return (&safefetch.Guard{}).Client(egress.Client(egress.CapPlugins, nzbTimeout))
 }
+
+// ExpandAddonIndexers prepares the indexer list for the running search
+// manager: an add-on row searches when its add-on is installed, enabled
+// and its stream role is on, and carries the add-on's link in memory only
+// (search-cache identity and secret scrubbing), never in the saved config.
+func ExpandAddonIndexers(ctx context.Context, mgr *plugins.Manager, rows []config.Indexer) []config.Indexer {
+	out := make([]config.Indexer, len(rows))
+	copy(out, rows)
+	for i := range out {
+		if !out[i].IsAddon() {
+			continue
+		}
+		out[i].Enabled = false
+		if mgr == nil || out[i].Plugin == "" {
+			continue
+		}
+		rec, err := mgr.Get(ctx, out[i].Plugin)
+		if err != nil {
+			continue
+		}
+		out[i].URL = rec.SourceURL
+		out[i].Protocol = "torrent"
+		out[i].Enabled = rec.Enabled && rec.Manifest.HasCapability(plugins.CapStreamSource)
+	}
+	return out
+}

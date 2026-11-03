@@ -112,6 +112,11 @@ func Convert(streams []Stream, req core.SearchRequest, look Lookup, opts Convert
 		if text == "" {
 			text = s.Title
 		}
+		if text == "" {
+			// Some add-ons put the release only in the stream's name,
+			// which is otherwise their own label.
+			text = s.Name
+		}
 		torrent, file := names(text, s.BehaviorHints.Filename)
 		var name string
 		if packs {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/braedonsaunders/ether/internal/newznab"
 	"io"
 	"log/slog"
 	"net/http/httptest"
@@ -58,6 +59,27 @@ type streamTestEnv struct {
 	res     *resolver.Service
 	rts     map[string]*fakePluginRuntime
 	mu      sync.Mutex
+	nzb     *newznab.Manager
+}
+
+// syncRows keeps one add-on indexer row per stream-capable plugin, as the
+// app does on every plugin sync.
+func (e *streamTestEnv) syncRows(ctx context.Context) {
+	recs, err := e.mgr.List(ctx)
+	if err != nil {
+		return
+	}
+	var rows []config.Indexer
+	for _, r := range recs {
+		stream := r.Manifest.Ether != nil && r.Manifest.HasCapability(plugins.CapStreamSource)
+		for _, c := range r.Manifest.AddonRoles() {
+			stream = stream || c == plugins.CapStreamSource
+		}
+		if stream {
+			rows = append(rows, config.Indexer{ID: "addon-" + r.ID, Name: r.Name, Kind: config.IndexerKindAddon, Plugin: r.ID, Enabled: true})
+		}
+	}
+	e.nzb.Reload(adapters.ExpandAddonIndexers(ctx, e.mgr, rows))
 }
 
 func newStreamTestEnv(t *testing.T) *streamTestEnv {
@@ -117,8 +139,16 @@ func newStreamTestEnv(t *testing.T) *streamTestEnv {
 		},
 	}
 	debSvc := debrid.NewService(cfg.Debrid, debrid.Options{DB: db, Logger: log})
-	ss := adapters.NewStreamSources(nil)
+	// Add-on streams are indexer rows in the search manager, as in the app.
+	var ss *adapters.StreamSources
+	nzb := newznab.NewManager(db, nil, newznab.Options{Logger: log, Backend: func(ix config.Indexer) (newznab.Backend, error) {
+		return ss.Backend(ix)
+	}})
+	ss = adapters.NewStreamSources(nzb)
 	ss.Bind(mgr, debSvc)
+	env.nzb = nzb
+	mgr.OnSync(func(ctx context.Context, _ plugins.Record) { env.syncRows(ctx) })
+	mgr.OnRemove(func(ctx context.Context, _ string) { env.syncRows(ctx) })
 	eng := ss.WrapEngine(nil)
 	media := debrid.NewEngine(debSvc, debrid.EngineOptions{
 		Inner:  eng,
@@ -572,8 +602,14 @@ func TestDynamicEnableDisableAndBudgets(t *testing.T) {
 		t.Fatalf("expected torrent release, got protocol=%q hash=%q", rels[0].Protocol, rels[0].InfoHash)
 	}
 
-	// Second search within the hour hits searchPerHour=1 limit.
-	if _, err := env.sources.Search(ctx, sreq); !errors.Is(err, core.ErrBudgetExhausted) {
+	// The same search again is answered from the search cache; another
+	// title within the hour hits the plugin's searchPerHour=1 limit.
+	if again, err := env.sources.Search(ctx, sreq); err != nil || len(again) != 1 {
+		t.Fatalf("cached search: rels=%d err=%v", len(again), err)
+	}
+	other := sreq
+	other.Title, other.IDs = "Ronin", core.IDs{IMDB: "tt0122690", TMDB: 8195}
+	if _, err := env.sources.Search(ctx, other); !errors.Is(err, core.ErrBudgetExhausted) {
 		t.Fatalf("expected ErrBudgetExhausted on second search, got %v", err)
 	}
 
@@ -780,9 +816,10 @@ func TestOrdinaryStremioStreamsUseSharedSources(t *testing.T) {
 			t.Fatal("release identity changed after re-enable")
 		}
 	}
+	// Re-enabled, the same search is answered from the search cache.
 	unsupported := req
 	unsupported.IDs = core.IDs{TMDB: 19}
-	if got, err = env.sources.Search(ctx, unsupported); err != nil || len(got) != 0 || calls != 2 {
+	if got, err = env.sources.Search(ctx, unsupported); err != nil || len(got) != 0 || calls != 1 {
 		t.Fatalf("undeclared identity was requested: calls=%d err=%v", calls, err)
 	}
 	if err := env.mgr.Remove(ctx, id, false); err != nil {
@@ -791,7 +828,7 @@ func TestOrdinaryStremioStreamsUseSharedSources(t *testing.T) {
 	if _, ok := env.reg.Get(extend.KindSourceKind, descriptor); ok {
 		t.Fatal("uninstalled contribution remains")
 	}
-	if got, err = env.sources.Search(ctx, req); err != nil || len(got) != 0 || calls != 2 {
-		t.Fatalf("uninstalled source called: calls=%d err=%v", calls, err)
+	if got, err = env.sources.Search(ctx, req); err != nil || len(got) != 0 || calls != 1 {
+		t.Fatalf("uninstalled source called: got=%d calls=%d err=%v", len(got), calls, err)
 	}
 }
