@@ -40,6 +40,13 @@ func (e *Engine) Check(ctx context.Context, nzbData []byte) (healthy bool, err e
 type healthWorkKey struct{}
 
 func (e *Engine) CheckRelease(ctx context.Context, releaseID string, nzbData []byte) (healthy bool, err error) {
+	var healthFile string
+	var healthSize int64
+	if rec, ok := e.cache.(core.CacheProvenanceRecorder); ok && releaseID != "" {
+		defer func() {
+			rec.RecordProvenance(core.CacheProvenance{ReleaseID: releaseID, File: healthFile, Size: healthSize, Cause: core.CacheCauseQualityCheck})
+		}()
+	}
 	if e.repairOptions().Enabled {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, 15*time.Second)
@@ -190,6 +197,7 @@ func (e *Engine) CheckRelease(ctx context.Context, releaseID string, nzbData []b
 		}
 	}
 	p := ready.p
+	healthFile, healthSize = p.name, p.size
 	if !sameFiles(res.files, p.vols) {
 		started := time.Now()
 		out := e.statSample(ctx, p.vols, func(ref slotRef) bool { return e.repairHealthSample(ctx, rel, ref, fo) })

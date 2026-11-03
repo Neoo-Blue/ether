@@ -7,10 +7,11 @@ import (
 
 // Reasons for PrewarmOptions.Reason.
 const (
-	PrewarmDetail   = "detail"   // a detail page was opened
-	PrewarmTrailer  = "trailer"  // a trailer or Cinema Trailer for the title is playing
-	PrewarmPostPlay = "postplay" // the viewer is near the end of something and this is up next
-	PrewarmBrowse   = "browse"   // a home/section row is on screen; open the debrid link only
+	PrewarmDetail      = "detail"      // a detail page was opened
+	PrewarmTrailer     = "trailer"     // a trailer or Cinema Trailer for the title is playing
+	PrewarmPostPlay    = "postplay"    // the viewer is near the end of something and this is up next
+	PrewarmBrowse      = "browse"      // a home/section row is on screen; open the debrid link only
+	PrewarmNextEpisode = "nextepisode" // the viewer is nearing the end of an episode; warm the next one
 )
 
 // PrewarmOptions tune a speculative warm-up of a title before the viewer

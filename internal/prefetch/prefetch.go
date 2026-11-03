@@ -51,6 +51,9 @@ type Deps struct {
 	Hints    Hints
 	Logger   *slog.Logger
 
+	// Cache records why background bytes were warmed when it supports
+	// provenance (optional).
+	Cache core.CacheProvenanceRecorder
 	// PostPlay ranks the personalized hook queue (optional; #30). With
 	// it set, the end of a movie or season/series finale pre-buffers the
 	// #1 pick instead of relying on next-episode prefetch.
@@ -92,6 +95,26 @@ type Options struct {
 	Now func() time.Time
 }
 
+func (p *Prefetcher) noteCause(releaseID, cause, title string) {
+	if releaseID == "" || p.deps.Cache == nil {
+		return
+	}
+	p.deps.Cache.RecordProvenance(core.CacheProvenance{ReleaseID: releaseID, Title: title, Cause: cause})
+}
+
+func (p *Prefetcher) setCurrent(title, cause string) {
+	p.mu.Lock()
+	p.stats.Current = &WarmCurrent{Title: title, Cause: cause}
+	p.mu.Unlock()
+}
+
+func episodeLabel(t *core.Title) string {
+	if t.ShowTitle != "" && t.Season > 0 && t.Episode > 0 {
+		return fmt.Sprintf("%s · S%02dE%02d · %s", t.ShowTitle, t.Season, t.Episode, t.Title)
+	}
+	return t.Title
+}
+
 func (o *Options) defaults() {
 	if o.Concurrency <= 0 {
 		o.Concurrency = 2
@@ -125,13 +148,20 @@ func (o *Options) defaults() {
 	}
 }
 
+// WarmCurrent names the item being warmed and its cache cause.
+type WarmCurrent struct {
+	Title string `json:"title"`
+	Cause string `json:"cause"`
+}
+
 // Stats are counters for the admin dashboard.
 type Stats struct {
-	Queued    int   `json:"queued"`
-	Running   int   `json:"running"`
-	Completed int64 `json:"completed"`
-	Failed    int64 `json:"failed"`
-	Dropped   int64 `json:"dropped"`
+	Queued    int          `json:"queued"`
+	Running   int          `json:"running"`
+	Completed int64        `json:"completed"`
+	Failed    int64        `json:"failed"`
+	Dropped   int64        `json:"dropped"`
+	Current   *WarmCurrent `json:"current,omitempty"`
 }
 
 type jobState int
@@ -356,6 +386,11 @@ func (p *Prefetcher) runJob(j job) {
 		e.state = stateRunning
 	}
 	p.mu.Unlock()
+	defer func() {
+		p.mu.Lock()
+		p.stats.Current = nil
+		p.mu.Unlock()
+	}()
 
 	ctx, cancel := context.WithTimeout(p.ctx, p.opts.JobTimeout)
 	var err error
@@ -423,6 +458,7 @@ func (p *Prefetcher) nextEpisode(ctx context.Context, user *core.User, key core.
 	if next == nil || (!next.Released.IsZero() && next.Released.After(p.now())) {
 		return nil // not aired yet; don't spend indexer budget
 	}
+	p.setCurrent(episodeLabel(next), core.CacheCauseNextEpisode)
 	if p.postplayEnabled() && next.Key.Season() != key.Season() {
 		// Season finale: the post-play hook queue owns the pre-buffer
 		// (its #1 pick may not be next season's opener) — don't warm both.
@@ -439,7 +475,7 @@ func (p *Prefetcher) nextEpisode(ctx context.Context, user *core.User, key core.
 	// the critical path when the player advances to this episode.
 	if p.deps.Prewarmer != nil {
 		if p.deps.Prewarmer.Prewarm(ctx, user, next.Key, caps, core.PrewarmOptions{
-			Reason: core.PrewarmPostPlay, PrefetchBytes: length, DuringPlayback: true,
+			Reason: core.PrewarmNextEpisode, PrefetchBytes: length, DuringPlayback: true,
 		}) {
 			log.Info("preparing next episode for playback")
 		} else {
@@ -455,6 +491,7 @@ func (p *Prefetcher) nextEpisode(ctx context.Context, user *core.User, key core.
 		}
 		if rp != nil {
 			log.Debug("warming stored release of next episode", "release", rp.Release.Name)
+			p.noteCause(rp.ReleaseID(), core.CacheCauseNextEpisode, episodeLabel(next))
 			return p.deps.Engine.Prefetch(ctx, rp.ReleaseID(), rp.NZB, 0, clampLen(0, length, rp.Size))
 		}
 	}
@@ -473,6 +510,7 @@ func (p *Prefetcher) nextEpisode(ctx context.Context, user *core.User, key core.
 		}
 	}
 	log.Info("prefetching next episode", "release", res.Release.Name, "bytes", length)
+	p.noteCause(res.Release.ID, core.CacheCauseNextEpisode, episodeLabel(next))
 	return p.deps.Engine.Prefetch(ctx, res.Release.ID, res.NZB, 0, clampLen(0, length, res.Release.Size))
 }
 
@@ -575,6 +613,8 @@ func (p *Prefetcher) warmPass(ctx context.Context) error {
 				id:  fmt.Sprintf("warm:%s:%d", releaseID, bucket),
 				ttl: p.opts.WarmInterval / 2,
 				run: func(ctx context.Context) error {
+					p.setCurrent(rp.Release.Name, core.CacheCauseResumeWarm)
+					p.noteCause(releaseID, core.CacheCauseResumeWarm, rp.Release.Name)
 					return p.deps.Engine.Prefetch(ctx, releaseID, nzb, start, length)
 				},
 			})

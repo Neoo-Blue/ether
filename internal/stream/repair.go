@@ -593,6 +593,9 @@ func (e *Engine) persistRepair(cacheID string, first, last int, seg *segData) {
 	if e.cache == nil || cacheID == "" {
 		return
 	}
+	if rec, ok := e.cache.(core.CacheProvenanceRecorder); ok {
+		rec.RecordProvenance(core.CacheProvenance{ReleaseID: cacheID, Cause: core.CacheCauseRepair})
+	}
 	select {
 	case e.repairPersist <- struct{}{}:
 	default:

@@ -66,6 +66,21 @@ func (a *App) cacheHandler() http.Handler {
 		}
 		used, budget := a.cache.Usage()
 		releases := a.cache.Releases()
+		live := map[string]core.CacheCause{}
+		for _, session := range a.playback.Sessions() {
+			if session.Resolution == nil || session.Resolution.Release.ID == "" {
+				continue
+			}
+			switch session.ViewerState {
+			case "playing", "paused":
+				live[session.Resolution.Release.ID] = core.CacheCause{Code: session.ViewerState, FirstSeen: session.StartedAt}
+			}
+		}
+		for i := range releases {
+			if cause, ok := live[releases[i].ReleaseID]; ok {
+				releases[i].Reason.AddCause(cause)
+			}
+		}
 		protected := a.protectedReleases()
 		var pinnedBytes int64
 		for _, item := range releases {
@@ -110,6 +125,9 @@ func (a *App) cacheHandler() http.Handler {
 		var err error
 		if body.Pinned {
 			err = a.cache.Pin(body.ReleaseID, "owner")
+			if err == nil {
+				a.cache.RecordProvenance(core.CacheProvenance{ReleaseID: body.ReleaseID, Cause: core.CacheCauseOwnerPin})
+			}
 		} else {
 			err = a.cache.Unpin(body.ReleaseID, "owner")
 		}

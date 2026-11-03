@@ -922,6 +922,10 @@ func (m *Manager) failoverWith(ctx context.Context, s *session, observed *genera
 	}
 	s.mu.Unlock()
 
+	if rec, ok := m.deps.Cache.(core.CacheProvenanceRecorder); ok && g.src != nil {
+		rec.RecordProvenance(core.CacheProvenance{ReleaseID: g.releaseID(), File: g.src.Name(), Size: g.src.Size(), Source: releaseLabel(g.res.Release), Cause: core.CacheCauseFailover})
+	}
+
 	m.mu.Lock()
 	delete(m.tokens, s.id+"/"+cur.token)
 	m.mu.Unlock()

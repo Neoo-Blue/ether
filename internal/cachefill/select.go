@@ -3,6 +3,7 @@ package cachefill
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"sort"
 	"time"
@@ -18,13 +19,16 @@ type WatchReader interface {
 }
 
 type Selection struct {
-	Key       core.RatingKey `json:"key"`
-	Title     string         `json:"title"`
-	Type      core.MediaType `json:"type"`
-	Score     float64        `json:"score"`
-	Catalogue float64        `json:"catalogue"`
-	Household float64        `json:"household"`
-	Reason    string         `json:"reason"`
+	Key         core.RatingKey `json:"key"`
+	Title       string         `json:"title"`
+	Type        core.MediaType `json:"type"`
+	Score       float64        `json:"score"`
+	Catalogue   float64        `json:"catalogue"`
+	Household   float64        `json:"household"`
+	Reason      string         `json:"reason"`
+	ReasonCodes []string       `json:"reasonCodes,omitempty"`
+	ReasonArgs  map[string]int `json:"reasonArgs,omitempty"`
+	State       string         `json:"state,omitempty"` // cached | queued | failed
 }
 type candidate struct {
 	Title core.Title
@@ -259,17 +263,23 @@ func (m *Manager) selectCandidates(ctx context.Context, cfg config.Cache, maxTit
 		}
 		household := s.score(t)
 		reason := "Catalogue popularity"
+		codes := []string{"catalogue-popularity"}
+		args := map[string]int{}
 		if cfg.PreloadSource == "recent" {
 			reason = "Recent release"
+			codes = []string{"recent-release"}
 		}
 		if weight > 0 && household > 0 {
 			if s.viewers[t.Key] > 0 {
 				reason = fmt.Sprintf("Recent viewing from %d household viewer(s)", s.viewers[t.Key])
+				codes = []string{"household-viewing"}
+				args["viewers"] = s.viewers[t.Key]
 			} else {
 				reason = "Matches household genre interests"
+				codes = []string{"household-genres"}
 			}
 		}
-		ranked = append(ranked, candidate{Title: t, Selection: Selection{Key: t.Key, Title: displayTitle(t), Type: t.Type, Score: 100 * ((1-weight)*cat + weight*household), Catalogue: 100 * cat, Household: 100 * household, Reason: reason}})
+		ranked = append(ranked, candidate{Title: t, Selection: Selection{Key: t.Key, Title: displayTitle(t), Type: t.Type, Score: 100 * ((1-weight)*cat + weight*household), Catalogue: 100 * cat, Household: 100 * household, Reason: reason, ReasonCodes: codes, ReasonArgs: args}})
 	}
 	sortCandidates(ranked)
 	var out []candidate
@@ -304,13 +314,18 @@ func (m *Manager) selectCandidates(ctx context.Context, cfg config.Cache, maxTit
 			ec.Selection.Title = displayTitle(t)
 			ec.Selection.Type = core.TypeEpisode
 			ec.Score *= math.Pow(.92, float64(i))
+			ec.ReasonCodes = append([]string(nil), c.ReasonCodes...)
+			ec.ReasonArgs = maps.Clone(c.ReasonArgs)
 			if len(s.cursors[c.Title.Key]) > 0 {
 				ec.Reason += " · next in a household viewing sequence"
+				ec.ReasonCodes = append(ec.ReasonCodes, "next-in-sequence")
 			} else {
 				ec.Reason += " · series opening"
+				ec.ReasonCodes = append(ec.ReasonCodes, "series-opening")
 			}
 			if s.resumes[t.Key] {
 				ec.Reason = "Continue an in-progress episode · " + c.Reason
+				ec.ReasonCodes = append(ec.ReasonCodes, "continue-in-progress")
 			}
 			out = append(out, ec)
 		}

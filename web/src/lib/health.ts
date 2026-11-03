@@ -752,6 +752,8 @@ export interface NowPlaying {
   remote: boolean;
   bytesServed: number;
   size: number;
+  /** 0..1 of the file downloaded ahead of the reader. */
+  buffered: number;
   speedBps: number;
   startedAt: Date | null;
   durationMs: number;
@@ -785,6 +787,14 @@ export function normalizeSessions(v: unknown): NowPlaying[] {
       progress = Math.max(0, Math.min(1, explicit));
     else if (typeof offsetMs === "number" && Number.isFinite(offsetMs) && durationMs > 0)
       progress = Math.max(0, Math.min(1, offsetMs / durationMs));
+    const size = num(pick(info, "size", "Size"));
+    const bufferedBytes = num(pick(s, "BufferedBytes", "bufferedBytes"));
+    const bufferedUntilNs = num(pick(s, "BufferedUntil", "bufferedUntil"));
+    let buffered = 0;
+    if (bufferedUntilNs > 0 && durationMs > 0)
+      buffered = Math.min(1, bufferedUntilNs / 1e6 / durationMs);
+    else if (size > 0 && bufferedBytes > 0)
+      buffered = Math.min(1, (progress ?? 0) + bufferedBytes / size);
     return {
       protocol: str(pick(client, "protocol", "Protocol")) || "plex",
       id: str(pick(s, "ID", "id")),
@@ -802,7 +812,8 @@ export function normalizeSessions(v: unknown): NowPlaying[] {
       audioCopy: pick(s, "decisionAudioCopy", "DecisionAudioCopy") === true,
       remote: pick(client, "remote") === true,
       bytesServed: num(pick(s, "BytesServed", "bytesServed")),
-      size: num(pick(info, "size", "Size")),
+      size,
+      buffered,
       speedBps: num(pick(s, "SpeedBps", "speedBps")),
       startedAt: parseTime(pick(s, "StartedAt", "startedAt")),
       durationMs,

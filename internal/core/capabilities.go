@@ -114,6 +114,9 @@ type PlaybackDurationSetter interface{ SetPlaybackDuration(time.Duration) }
 // PlaybackPosition exposes the optional RequestedPosition capability.
 type PlaybackPosition interface{ RequestedPosition() time.Duration }
 
+// BufferedSource reports contiguous bytes downloaded ahead of the reader.
+type BufferedSource interface{ BufferedAhead() int64 }
+
 // PlaybackPreparer warms a title without reserving playback or changing history.
 type PlaybackPreparer interface {
 	PreResolve(context.Context, *User, RatingKey, ClientCaps) bool

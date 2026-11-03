@@ -132,6 +132,28 @@ func (h *fakeHints) ClientCaps(userID int64, key core.RatingKey) (core.ClientCap
 	return h.caps, h.live[key], true
 }
 
+type fakeProvenance struct {
+	mu   sync.Mutex
+	seen []core.CacheProvenance
+}
+
+func (f *fakeProvenance) RecordProvenance(p core.CacheProvenance) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.seen = append(f.seen, p)
+}
+
+func (f *fakeProvenance) has(releaseID, cause string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, p := range f.seen {
+		if p.ReleaseID == releaseID && p.Cause == cause {
+			return true
+		}
+	}
+	return false
+}
+
 type fakeState struct {
 	core.State
 	byUser map[int64][]core.WatchStatus
@@ -269,7 +291,7 @@ func TestNextEpisodePreparesProbeThroughPlayback(t *testing.T) {
 	f.p.OnTimeline(user, ep1, 41*time.Minute, 50*time.Minute, "playing")
 	f.wait(t)
 	calls := w.got()
-	if len(calls) != 1 || calls[0].key != ep2 || calls[0].caps.ClientID != "tv" || !calls[0].opts.DuringPlayback || calls[0].opts.PrefetchBytes != f.p.config().PrefetchBytes {
+	if len(calls) != 1 || calls[0].key != ep2 || calls[0].caps.ClientID != "tv" || calls[0].opts.Reason != core.PrewarmNextEpisode || !calls[0].opts.DuringPlayback || calls[0].opts.PrefetchBytes != f.p.config().PrefetchBytes {
 		t.Fatalf("next episode preparation = %+v", calls)
 	}
 	if f.resolver.count() != 0 || len(f.engine.got()) != 0 {
@@ -360,6 +382,40 @@ func TestConcurrencyLimitAndNonBlocking(t *testing.T) {
 	}
 	if n := len(f.engine.got()); n != 5 { // 2 running + 3 queued; the rest dropped
 		t.Fatalf("prefetches = %d", n)
+	}
+}
+
+func TestStatsNamesCurrentWarm(t *testing.T) {
+	f := newFixture(t, Options{}, nil)
+	f.p.setCurrent("Show · S01E02 · Two", core.CacheCauseNextEpisode)
+	s := f.p.Stats()
+	if s.Current == nil || s.Current.Title != "Show · S01E02 · Two" || s.Current.Cause != core.CacheCauseNextEpisode {
+		t.Fatalf("current = %+v", s.Current)
+	}
+}
+
+func TestBackgroundWarmsRecordCauses(t *testing.T) {
+	f := newFixture(t, Options{}, nil)
+	rec := &fakeProvenance{}
+	f.p.deps.Cache = rec
+	f.p.OnTimeline(user, ep1, 41*time.Minute, 50*time.Minute, "playing")
+	f.wait(t)
+	if !rec.has(fmt.Sprintf("rel-%d", ep2), core.CacheCauseNextEpisode) {
+		t.Fatalf("next-episode cause missing: %+v", rec.seen)
+	}
+
+	movie := core.MovieKey(42)
+	f.hints.points[[2]int64{user.ID, int64(movie)}] = &playback.ResumePoint{
+		Release: core.Release{ID: "m", Name: "Movie.Release"}, NZB: []byte("nzb-m"), Size: 1000 << 20, Duration: 100 * time.Minute,
+	}
+	f.state.byUser[user.ID] = []core.WatchStatus{{Key: movie, ViewOffset: 50 * time.Minute}}
+	f.auth.users = []core.User{*user}
+	if err := f.p.warmPass(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	f.wait(t)
+	if !rec.has("m", core.CacheCauseResumeWarm) {
+		t.Fatalf("resume-warm cause missing: %+v", rec.seen)
 	}
 }
 

@@ -5,6 +5,7 @@ import type { EtherConfig } from "../../lib/types";
 import { t, tn } from "../../i18n";
 import { formatBytes, formatPercent } from "../../lib/format";
 import type { CacheSnapshot } from "./Cache";
+import { causeLabel, pinLabel } from "./reasons";
 
 export function CacheOverview({
   snapshot: s,
@@ -33,6 +34,22 @@ export function CacheOverview({
   const reads = (s?.metrics.hits ?? 0) + (s?.metrics.misses ?? 0);
   const percent = budget > 0 ? Math.min(100, (used / budget) * 100) : 0;
   const warming = p.mode !== "off" && !p.disableSpeculation;
+  const groups = new Map<string, number>();
+  for (const r of s?.releases ?? []) {
+    const codes = new Set((r.reason?.causes ?? []).map((c) => c.code));
+    const pins = r.Pins ?? [];
+    let cause = "";
+    if (codes.has("playing")) cause = "playing";
+    else if (codes.has("paused")) cause = "paused";
+    else if (pins.includes("playback:live")) cause = "playback:live";
+    else if (pins.includes("playback:inprogress")) cause = "playback:inprogress";
+    else if (pins.includes("owner")) cause = "owner";
+    else if (pins.includes("preloaded")) cause = "preloaded";
+    if (!cause) continue;
+    groups.set(cause, (groups.get(cause) ?? 0) + r.Bytes);
+  }
+  const current = s?.prefetch.current;
+  const shelfWarming = s?.preload.state === "filling";
   return (
     <div className="flex min-h-0 flex-col gap-4 cockpit:h-full">
       <div className="grid shrink-0 grid-cols-2 gap-3 lg:grid-cols-4">
@@ -172,11 +189,26 @@ export function CacheOverview({
                 style={{ width: `${used ? ((used - protectedBytes) / used) * 100 : 0}%` }}
               />
             </div>
-            <div className="flex justify-between gap-3 text-[11px] text-fg-muted">
-              <span>
-                <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-primary" />
-                {t("{size} protected", { size: formatBytes(protectedBytes) })}
-              </span>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-fg-muted">
+              {groups.size ? (
+                [...groups].map(([code, bytes]) => (
+                  <span key={code}>
+                    <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-primary" />
+                    {t("{cause}: {size}", {
+                      cause:
+                        code.startsWith("playback:") || code === "owner" || code === "preloaded"
+                          ? pinLabel(code)
+                          : causeLabel(code),
+                      size: formatBytes(bytes),
+                    })}
+                  </span>
+                ))
+              ) : (
+                <span>
+                  <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-primary" />
+                  {t("{size} protected", { size: formatBytes(protectedBytes) })}
+                </span>
+              )}
               <span>{t("{size} reclaimable", { size: formatBytes(used - protectedBytes) })}</span>
             </div>
           </div>
@@ -203,6 +235,14 @@ export function CacheOverview({
               <p className="text-xl font-semibold tabular-nums">{s?.prefetch.running ?? 0}</p>
               <p className="text-[11px] text-fg-muted">{t("Warming now")}</p>
             </div>
+            {(current || shelfWarming) && (
+              <div className="col-span-2 -mt-1 min-w-0 text-[11px] text-fg-subtle">
+                <span className="truncate">
+                  {current?.title || s?.preload.title} ·{" "}
+                  {current ? causeLabel(current.cause) : causeLabel("shelf")}
+                </span>
+              </div>
+            )}
             <div>
               <p className="text-xl font-semibold tabular-nums">{s?.prefetch.queued ?? 0}</p>
               <p className="text-[11px] text-fg-muted">{t("Queued")}</p>

@@ -8,6 +8,7 @@ import { localized, t, tn } from "../../i18n";
 import { useRouteTab } from "../../components/layout";
 import { CacheOverview } from "./CacheOverview";
 import { CacheExplorer } from "./CacheExplorer";
+import { selectionReason, shelfStateLabel } from "./reasons";
 import { WarmNewArrivals } from "../viewers/sections/WatchlistDefaults";
 const CACHE_TABS = localized(
   () =>
@@ -29,6 +30,24 @@ import { useAsync, useInterval } from "../../lib/hooks";
 import type { EtherConfig } from "../../lib/types";
 
 type Policy = EtherConfig["cache"];
+export type CacheCause = {
+  code: string;
+  firstSeen?: string;
+  shelf?: { reasonCodes?: string[]; score?: number; state?: string };
+};
+export type CacheRetention = {
+  kind: "pinned" | "expiry" | "replay" | "lru";
+  pins?: string[];
+  days?: number;
+  hours?: number;
+  until?: string;
+};
+export type ReleaseReason = {
+  causes: CacheCause[];
+  retention: CacheRetention;
+  file: string;
+  source: string;
+};
 type Release = {
   ReleaseID: string;
   Title: string;
@@ -39,6 +58,7 @@ type Release = {
   LastUsed: string;
   LastPlayed: string;
   Pins: string[] | null;
+  reason?: ReleaseReason;
 };
 type PreloadStatus = {
   state: string;
@@ -59,8 +79,18 @@ type PreloadStatus = {
     catalogue: number;
     household: number;
     reason: string;
+    reasonCodes?: string[];
+    reasonArgs?: Record<string, number>;
+    state?: string;
   }[];
-  items: { key: number; title: string; releaseId: string; size: number; complete: boolean }[];
+  items: {
+    key: number;
+    title: string;
+    releaseId: string;
+    size: number;
+    complete: boolean;
+    state?: string;
+  }[];
 };
 export type CacheSnapshot = {
   policy?: Policy;
@@ -75,7 +105,14 @@ export type CacheSnapshot = {
   protectedBytes: number;
   releases: Release[];
   metrics: { hits: number; misses: number; servedBytes: number; evictedBytes: number };
-  prefetch: { queued: number; running: number; completed: number; failed: number; dropped: number };
+  prefetch: {
+    queued: number;
+    running: number;
+    completed: number;
+    failed: number;
+    dropped: number;
+    current?: { title: string; cause: string };
+  };
 };
 const GiB = 1024 ** 3,
   MiB = 1024 ** 2;
@@ -448,23 +485,49 @@ export default function Cache() {
                       )}
                     </p>
                   )}
+                  {!!snap?.preload.items?.length && (
+                    <div className="border-t border-border pt-3">
+                      <h3 className="text-sm font-medium">{t("Shelf manifest")}</h3>
+                      <ul className="mt-2 space-y-2">
+                        {snap.preload.items.slice(0, 8).map((it) => (
+                          <li
+                            key={it.key}
+                            className="flex items-center justify-between gap-2 text-xs"
+                          >
+                            <span className="truncate">{it.title}</span>
+                            <Badge
+                              variant={
+                                it.state === "failed"
+                                  ? "destructive"
+                                  : it.state === "cached"
+                                    ? "success"
+                                    : "secondary"
+                              }
+                            >
+                              {shelfStateLabel(it.state)}
+                            </Badge>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               </section>
               <section className="app-scroll lg:col-span-7 min-h-0 overflow-y-auto rounded-xl border border-border bg-surface">
                 <div className="flex items-start justify-between gap-3 border-b border-border p-4">
                   <div>
                     <h2 className="flex items-center gap-2 text-sm font-semibold">
-                      <Sparkles size={16} className="text-primary" /> {t("Why these titles?")}
+                      <Sparkles size={16} className="text-primary" /> {t("Preload selection")}
                     </h2>
                     <p className="mt-1 text-xs text-fg-muted">
                       {tn(
                         snap?.preload.viewers ?? 0,
-                        "Highest-ranked selections from the last pass · {count} active viewer considered",
-                        "Highest-ranked selections from the last pass · {count} active viewers considered",
+                        "Titles chosen for the local shelf from the last pass · {count} active viewer considered",
+                        "Titles chosen for the local shelf from the last pass · {count} active viewers considered",
                       )}
                     </p>
                   </div>
-                  <Badge>{t("Explainable selection")}</Badge>
+                  <Badge>{t("Local shelf choices")}</Badge>
                 </div>
                 {snap?.preload.selection?.length ? (
                   <div className="divide-y divide-border">
@@ -479,8 +542,28 @@ export default function Cache() {
                             <span className="shrink-0 text-[10px] uppercase text-fg-subtle">
                               {item.type === "episode" ? t("TV") : t("Film")}
                             </span>
+                            {(() => {
+                              const state =
+                                snap.preload.items.find((it) => it.key === item.key)?.state ??
+                                item.state;
+                              return (
+                                <Badge
+                                  variant={
+                                    state === "failed"
+                                      ? "destructive"
+                                      : state === "cached"
+                                        ? "success"
+                                        : "secondary"
+                                  }
+                                >
+                                  {shelfStateLabel(state)}
+                                </Badge>
+                              );
+                            })()}
                           </div>
-                          <p className="mt-1 text-xs text-fg-muted">{item.reason}</p>
+                          <p className="mt-1 text-xs text-fg-muted">
+                            {selectionReason(item.reasonCodes, item.reasonArgs)}
+                          </p>
                           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-fg-subtle">
                             <span>
                               {t("Catalogue {score}/100", { score: Math.round(item.catalogue) })}

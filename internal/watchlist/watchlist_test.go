@@ -42,6 +42,28 @@ func (f *fakeResolver) Resolve(_ context.Context, r core.ResolveRequest) (*core.
 	return &core.Resolution{Title: r.Title.Key, Release: core.Release{ID: "release-1"}, NZB: []byte("nzb")}, nil
 }
 
+type fakeProvenance struct {
+	mu   sync.Mutex
+	seen []core.CacheProvenance
+}
+
+func (f *fakeProvenance) RecordProvenance(p core.CacheProvenance) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.seen = append(f.seen, p)
+}
+
+func (f *fakeProvenance) has(releaseID, cause string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, p := range f.seen {
+		if p.ReleaseID == releaseID && p.Cause == cause {
+			return true
+		}
+	}
+	return false
+}
+
 type fakeEngine struct {
 	core.Engine
 	calls int
@@ -83,6 +105,19 @@ func setup(t *testing.T) (*Service, *fakeResolver, *fakeEngine, *fakeNotifier, *
 		t.Fatal(e)
 	}
 	return s, res, eng, note, src, &now
+}
+
+func TestPrewarmRecordsWatchlistCause(t *testing.T) {
+	s, _, eng, _, _, _ := setup(t)
+	rec := &fakeProvenance{}
+	s.o.Cache = rec
+	res := &core.Resolution{Release: core.Release{ID: "rel"}, NZB: []byte("nzb")}
+	if err := s.prewarm(context.Background(), res); err != nil {
+		t.Fatal(err)
+	}
+	if eng.calls != 1 || !rec.has("rel", core.CacheCauseWatchlist) {
+		t.Fatalf("calls=%d causes=%+v", eng.calls, rec.seen)
+	}
 }
 
 func TestAvailableEventFiresOnceWhenATitleBecomesPlayable(t *testing.T) {

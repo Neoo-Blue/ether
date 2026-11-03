@@ -1894,6 +1894,8 @@ export function createFakeServer(opts: FakeOptions = {}) {
             decisionVideoCopy: true,
             decisionAudioCopy: true,
             BytesServed: 2.1 * 1024 ** 3,
+            BufferedBytes: 183 * 1024 ** 2,
+            BufferedUntil: 3000e9,
             SpeedBps: 3.2e6,
             StartedAt: new Date(Date.now() - 40 * 60000).toISOString(),
             Info: { size: 5.4 * 1024 ** 3, duration: 118 * 60 * 1e9 },
