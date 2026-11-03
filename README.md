@@ -31,24 +31,6 @@
   <img src=".github/assets/overview.png" alt="Ether Server Overview" width="100%" />
 </p>
 
----
-
-## Things to know first
-
-- **What Ether is not:** Ether is not a local-file media server. It does not scan folders of video files on your disk, and it does not replace Plex Media Server, Jellyfin, or Emby for your personal media collection. Ether also ships no media content, no Usenet providers, no debrid accounts, no indexers, and no tracker definitions.
-- **What accounts you need:**
-  1. A free [**TMDB API key**](https://www.themoviedb.org/settings/api) for catalogue metadata and artwork.
-  2. At least one **streaming source**: a Usenet provider, a debrid service (Real-Debrid, TorBox, AllDebrid, Premiumize, Debrid-Link, or Offcloud), or both.
-  3. At least one **indexer**: a Newznab or Torznab indexer, a Prowlarr instance, or a Stremio stream addon.
-  4. **Optional:** a Plex account if you want to use official Plex apps. Jellyfin, Emby, Silo, Stremio, WebDAV, M3U/XMLTV, and DLNA work with local Ether accounts alone.
-- **System requirements:**
-  - **CPU and RAM:** 2 CPU cores and 1 GiB of RAM are enough for direct play, container remuxing, and audio transcoding. Video transcoding requires a supported GPU (NVIDIA NVENC, Intel QuickSync, VAAPI, or Apple VideoToolbox) or 4+ CPU cores for software encoding.
-  - **Disk space:** Configurable from **0 GiB** (pass-through mode) to **32+ GiB** on an SSD for the default segment cache, or multiple terabytes if you enable household preloading.
-- **Outbound network activity:** Ether sends no analytics or usage telemetry. By default it checks GitHub's signed release feed once a day for updates and queries TheIntroDB (`api.theintrodb.org`) for intro and credits skip timestamps during playback; both can be turned off in the console. When Plex is claimed and enabled, it communicates with `plex.tv`; turning the Plex app off stops all `plex.tv` traffic. See [What outbound connections does Ether make?](#what-outbound-connections-does-ether-make) for the full list.
-- **Legal responsibility:** You supply your own accounts, providers, and indexers, and you are responsible for complying with applicable laws and service terms. Read [**LEGAL.md**](LEGAL.md).
-
----
-
 ## Why Ether exists
 
 A typical automated media setup is built from several separate projects: Sonarr, Radarr, Prowlarr, SABnzbd, Overseerr, Kometa, Tautulli, and debrid mount tools. Wiring them together means download clients, path mappings, webhooks, and FUSE or WebDAV mounts that a media server has to scan. A new title still has to download, unpack, and be indexed before anyone can press Play.
@@ -285,6 +267,22 @@ Open **`http://localhost:32400/ether/`** and complete the setup wizard:
 5. **Paste a free [TMDB API key](https://www.themoviedb.org/settings/api)** and optional integrations (Trakt, Simkl, OpenSubtitles, local Ollama/LM Studio).
 
 **Documentation:** [**Installation & Clustering Guide**](docs/install.md) · [**Owner & User Guide**](docs/user-guide.md) · [**Multi-App Architecture & Watch Party**](docs/apps.md) · [**Performance Architecture**](docs/performance.md) · [**NAS & Homelab Templates**](packaging/community/README.md)
+
+---
+
+## Things to know first
+
+- **What Ether is not:** Ether is not a local-file media server. It does not scan folders of video files on your disk, and it does not replace Plex Media Server, Jellyfin, or Emby for your personal media collection. Ether also ships no media content, no Usenet providers, no debrid accounts, no indexers, and no tracker definitions.
+- **What accounts you need:**
+  1. A free [**TMDB API key**](https://www.themoviedb.org/settings/api) for catalogue metadata and artwork.
+  2. At least one **streaming source**: a Usenet provider, a debrid service (Real-Debrid, TorBox, AllDebrid, Premiumize, Debrid-Link, or Offcloud), or both.
+  3. At least one **indexer**: a Newznab or Torznab indexer, a Prowlarr instance, or a Stremio stream addon.
+  4. **Optional:** a Plex account if you want to use official Plex apps. Jellyfin, Emby, Silo, Stremio, WebDAV, M3U/XMLTV, and DLNA work with local Ether accounts alone.
+- **System requirements:**
+  - **CPU and RAM:** 2 CPU cores and 1 GiB of RAM are enough for direct play, container remuxing, and audio transcoding. Video transcoding requires a supported GPU (NVIDIA NVENC, Intel QuickSync, VAAPI, or Apple VideoToolbox) or 4+ CPU cores for software encoding.
+  - **Disk space:** Configurable from **0 GiB** (pass-through mode) to **32+ GiB** on an SSD for the default segment cache, or multiple terabytes if you enable household preloading.
+- **Outbound network activity:** Ether sends no analytics or usage telemetry. By default it checks GitHub's signed release feed once a day for updates and queries TheIntroDB (`api.theintrodb.org`) for intro and credits skip timestamps during playback; both can be turned off in the console. When Plex is claimed and enabled, it communicates with `plex.tv`; turning the Plex app off stops all `plex.tv` traffic. See [What outbound connections does Ether make?](#what-outbound-connections-does-ether-make) for the full list.
+- **Legal responsibility:** You supply your own accounts, providers, and indexers, and you are responsible for complying with applicable laws and service terms. Read [**LEGAL.md**](LEGAL.md).
 
 ---
 
