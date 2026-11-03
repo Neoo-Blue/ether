@@ -290,12 +290,7 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 		}
 		a.reapplyAddonIndexers()
 	})
-	go func() {
-		mctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-		a.migrateLegacyStremio(mctx)
-		a.reapplyAddonIndexers()
-	}()
+
 	if a.resolver != nil {
 		a.resolver.SetRankingHooks(adapters.Ranking{Manager: mgr, Registry: a.extendRT.registry})
 	}

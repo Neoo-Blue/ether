@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/braedonsaunders/ether/internal/agent/tools"
 	"github.com/braedonsaunders/ether/internal/config"
@@ -37,6 +38,14 @@ func (a *App) buildExtensibility(ctx context.Context, cfg config.Config) error {
 	if a.pluginsRT, err = a.buildPlugins(ctx, cfg); err != nil {
 		return fmt.Errorf("plugins: %w", err)
 	}
+	// Add-ons entered before they had one home move into installed
+	// add-ons; playback never waits on it.
+	go func() {
+		mctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		a.migrateLegacyStremio(mctx)
+		a.reapplyAddonIndexers()
+	}()
 	if err := studio.RegisterTools(a.extendRT.tools, studio.ToolDeps{Studio: a.pluginsRT.studio, Registry: a.extendRT.registry, TextResolver: a.pluginTextResolver(), Manager: a.pluginsRT.mgr}); err != nil {
 		return fmt.Errorf("Studio tools: %w", err)
 	}
