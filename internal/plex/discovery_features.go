@@ -121,6 +121,12 @@ func (s *Server) decorateDiscoveryMetadata(ctx context.Context, pr *Request, t *
 		cfg, ce := d.Ratings.Settings(ctx)
 		if e == nil && ce == nil && cfg.Enabled {
 			d.Ratings.Queue(*t)
+			if cfg.Audience != "" && cfg.Audience != "none" && cfg.Missing == "tmdb" {
+				m.AudienceRating, m.AudienceRatingImage = 0, ""
+				if t.VoteCount > 0 && t.Rating > 0 && t.Rating <= 10 {
+					m.AudienceRating, m.AudienceRatingImage = math.Round(t.Rating*10)/10, "themoviedb://image.rating"
+				}
+			}
 			if cfg.Audience == "none" || (cfg.Audience != "" && cfg.Missing == "none") {
 				m.AudienceRating, m.AudienceRatingImage = 0, ""
 			}

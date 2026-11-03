@@ -108,6 +108,10 @@ func (s *Service) paintBadges(dst *image.RGBA, labels []string, cfg Settings) er
 	accentBytes, _ := hex.DecodeString(cfg.Accent[1:])
 	accent := color.NRGBA{R: accentBytes[0], G: accentBytes[1], B: accentBytes[2], A: 255}
 	padding, gap, margin := 13, 8, 22
+	markerWidth := 12
+	if cfg.HideDot && cfg.Style != "minimal" {
+		markerWidth = 0
+	}
 	height := int(size) + 22
 	maxWidth := dst.Bounds().Dx() - 2*margin
 	type badge struct {
@@ -124,14 +128,14 @@ func (s *Service) paintBadges(dst *image.RGBA, labels []string, cfg Settings) er
 			return r
 		}, label)
 		runes := []rune(label)
-		for len(runes) > 0 && font.MeasureString(face, string(runes)).Ceil() > maxWidth-2*padding-12 {
+		for len(runes) > 0 && font.MeasureString(face, string(runes)).Ceil() > maxWidth-2*padding-markerWidth {
 			runes = runes[:len(runes)-1]
 		}
 		text := string(runes)
 		if text != label && len(runes) > 0 {
 			text = string(runes[:len(runes)-1]) + "…"
 		}
-		width := font.MeasureString(face, text).Ceil() + 2*padding + 12
+		width := font.MeasureString(face, text).Ceil() + 2*padding + markerWidth
 		if x+width > dst.Bounds().Dx()-margin && x > margin {
 			row++
 			x = margin
@@ -174,10 +178,7 @@ func (s *Service) paintBadges(dst *image.RGBA, labels []string, cfg Settings) er
 				rounded(dst, image.Rect(b.x+padding, y+height/2-3, b.x+padding+6, y+height/2+3), 3, accent)
 			}
 		}
-		textOffset := 12
-		if cfg.HideDot && cfg.Style != "minimal" {
-			textOffset = 0
-		}
+		textOffset := markerWidth
 		dot := fixed.P(b.x+padding+textOffset, y+(height-face.Metrics().Height.Ceil())/2+face.Metrics().Ascent.Ceil())
 		if cfg.Style == "minimal" {
 			shadow := font.Drawer{Dst: dst, Src: image.NewUniform(color.NRGBA{A: 200}), Face: face, Dot: dot.Add(fixed.P(0, 1))}
