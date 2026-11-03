@@ -191,8 +191,8 @@ func TestHomeReleaseGateBackfillAndCorrections(t *testing.T) {
 func TestHomeReleaseBoundary(t *testing.T) {
 	start := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	t1 := core.Title{Type: core.TypeMovie, Released: start, HomeReleaseChecked: true}
-	if homeReleaseVisible(&t1, start.Add(10*365*24*time.Hour)) {
-		t.Fatal("age alone admitted an unknown home date")
+	if homeReleaseVisible(&t1, start.Add(120*24*time.Hour)) || !homeReleaseVisible(&t1, start.Add(120*24*time.Hour+time.Second)) {
+		t.Fatal("cinema age boundary")
 	}
 	t1.HomeReleased = start.Add(100 * 24 * time.Hour)
 	if homeReleaseVisible(&t1, start.Add(90*24*time.Hour)) || !homeReleaseVisible(&t1, t1.HomeReleased) {
@@ -235,7 +235,7 @@ func TestCachedGetManyDoesNotFetchOrAdmitFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := c.CachedGetMany(ctx, []core.RatingKey{movie.Key, before.Key, known.Key, unknown.Key, core.MovieKey(999)})
-	if err != nil || len(got) != 1 || got[known.Key].Key != known.Key {
+	if err != nil || len(got) != 3 || got[known.Key].Key != known.Key || got[movie.Key].Key != movie.Key || got[unknown.Key].Key != unknown.Key {
 		t.Fatalf("eligibility: %v %v", got, err)
 	}
 	var admitted int
@@ -244,5 +244,58 @@ func TestCachedGetManyDoesNotFetchOrAdmitFallback(t *testing.T) {
 	}
 	if client.calls != 0 {
 		t.Fatalf("remote calls: %d", client.calls)
+	}
+}
+
+func TestDigitalAgeAdmissionBrowseSearchGet(t *testing.T) {
+	ctx := context.Background()
+	db, err := store.OpenMemory(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Date(2025, 8, 1, 0, 0, 0, 0, time.UTC)
+	c, err := New(db, nil, config.Catalog{ReleaseMode: config.ModeDigital}, nil, WithNow(func() time.Time { return now }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, age := range []time.Duration{121 * 24 * time.Hour, 100 * 24 * time.Hour, 100 * 24 * time.Hour} {
+		title := core.Title{Key: core.MovieKey(int64(i + 701)), Type: core.TypeMovie, Title: "Admission test", Released: now.Add(-age)}
+		if err := c.UpsertTitle(ctx, title, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO catalog_home_release(key,checked,earliest_ts) VALUES(?,1,?)`, int64(core.MovieKey(703)), now.Add(24*time.Hour).Unix()); err != nil {
+		t.Fatal(err)
+	}
+	check := func(want int, visible map[int64]bool) {
+		t.Helper()
+		page, err := c.Browse(ctx, core.BrowseQuery{Limit: 20})
+		if err != nil || page.Total != want || len(page.Items) != want {
+			t.Fatalf("browse: %+v %v", page, err)
+		}
+		found, err := c.Search(ctx, "Admission test", []core.MediaType{core.TypeMovie}, 20)
+		if err != nil || len(found) != want {
+			t.Fatalf("search: %+v %v", found, err)
+		}
+		for id := int64(701); id <= 703; id++ {
+			_, err := c.Get(ctx, core.MovieKey(id))
+			if (err == nil) != visible[id] {
+				t.Fatalf("get %d: %v", id, err)
+			}
+		}
+	}
+	check(1, map[int64]bool{701: true})
+	if _, err := db.ExecContext(ctx, `INSERT INTO catalog_home_release(key,checked,earliest_ts) VALUES(?,1,?)`, int64(core.MovieKey(702)), now.Unix()); err != nil {
+		t.Fatal(err)
+	}
+	c, err = New(db, nil, config.Catalog{ReleaseMode: config.ModeDigital}, nil, WithNow(func() time.Time { return now }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(2, map[int64]bool{701: true, 702: true})
+	for _, mode := range []string{config.ModePlayable, config.ModeImmediate} {
+		c.UpdateConfig(config.Catalog{ReleaseMode: mode})
+		check(3, map[int64]bool{701: true, 702: true, 703: true})
 	}
 }

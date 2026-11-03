@@ -389,7 +389,7 @@ func (c *Catalog) browseWhere(f core.Filter) (string, []any, error) {
 			args = append(args, nowTS)
 		}
 		conds = append(conds, gateSQL)
-		args = append(args, nowTS)
+		args = append(args, homeReleaseCutoff(c.now()), nowTS)
 	}
 	if f.IncludeKeys != nil {
 		if len(f.IncludeKeys) == 0 {

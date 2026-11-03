@@ -73,7 +73,7 @@ func TestCachedCreditTitlesUsesOwnedConfigAndTime(t *testing.T) {
 	// catalog so this test specifically exercises the stricter owned snapshot.
 	c.UpdateConfig(config.Catalog{})
 	keys := []core.RatingKey{key}
-	now := time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
+	now := time.Date(2000, 4, 1, 0, 0, 0, 0, time.UTC)
 	rows, err := c.CachedCreditTitles(ctx, keys, config.Catalog{}, now)
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("open snapshot %+v %v", rows, err)

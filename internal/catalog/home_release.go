@@ -10,19 +10,34 @@ import (
 	"github.com/braedonsaunders/ether/internal/tmdb"
 )
 
-// homeReleaseVisible requires a known digital or physical release date that has passed.
-// Old fallback admissions do not bypass the selected digital release mode.
+// homeReleaseAge is the owner-approved cinema-to-home admission window.
+const homeReleaseAge = 120 * 24 * time.Hour
+
+// HomeReleaseAgeAdmitted reports admission based on a known cinema date.
+func HomeReleaseAgeAdmitted(t *core.Title, now time.Time) bool {
+	return t.Type == core.TypeMovie && !t.Released.IsZero() && t.Released.Before(now.Add(-homeReleaseAge))
+}
+
+func homeReleaseCutoff(now time.Time) int64 {
+	cutoff := now.Add(-homeReleaseAge)
+	if cutoff.Nanosecond() != 0 {
+		return cutoff.Unix() + 1
+	}
+	return cutoff.Unix()
+}
+
+// homeReleaseVisible accepts a passed home date or the cinema-age admission.
 func homeReleaseVisible(t *core.Title, now time.Time) bool {
 	if t.Type != core.TypeMovie {
 		return true
 	}
-	return t.HomeReleaseChecked && !t.HomeReleased.IsZero() && !t.HomeReleased.After(now)
+	return HomeReleaseAgeAdmitted(t, now) || (t.HomeReleaseChecked && !t.HomeReleased.IsZero() && !t.HomeReleased.After(now))
 }
 
 func (c *Catalog) homeVisible(t *core.Title) bool { return homeReleaseVisible(t, c.now()) }
 
 func homeReleaseSQL(alias string) string {
-	return "(" + alias + ".type<>'movie' OR EXISTS (SELECT 1 FROM catalog_home_release hr WHERE hr.key=" + alias + ".key AND hr.checked=1 AND hr.earliest_ts<>0 AND hr.earliest_ts<=?))"
+	return "(" + alias + ".type<>'movie' OR (" + alias + ".release_known=1 AND " + alias + ".released_ts<?) OR EXISTS (SELECT 1 FROM catalog_home_release hr WHERE hr.key=" + alias + ".key AND hr.checked=1 AND hr.earliest_ts<>0 AND hr.earliest_ts<=?))"
 }
 
 func (c *Catalog) hydrateHomeRelease(ctx context.Context, items []core.Title) error {
@@ -46,7 +61,7 @@ func (c *Catalog) hydrateHomeRelease(ctx context.Context, items []core.Title) er
 	for start := 0; start < len(keys); start += batchSize {
 		args := keys[start:min(start+batchSize, len(keys))]
 		err := func() error {
-			rows, err := c.db.QueryContext(ctx, `SELECT h.key,h.checked,h.earliest_ts,h.fallback_admitted,t.released_ts,t.year FROM catalog_home_release h JOIN catalog_titles t ON t.key=h.key WHERE h.key IN (`+placeholders(len(args))+`)`, args...)
+			rows, err := c.db.QueryContext(ctx, `SELECT t.key,COALESCE(h.checked,0),COALESCE(h.earliest_ts,0),COALESCE(h.fallback_admitted,0),t.released_ts,t.year FROM catalog_titles t LEFT JOIN catalog_home_release h ON t.key=h.key WHERE t.key IN (`+placeholders(len(args))+`)`, args...)
 			if err != nil {
 				return err
 			}
