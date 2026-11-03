@@ -195,12 +195,15 @@ export function PrerollDrawer({
       return;
     }
     setBusy(null);
-    toast.success(isNew ? t("Added {name}", { name: saved.name }) : t("Saved {name}", { name: saved.name }), {
-      description:
-        saved.video.state === "processing"
-          ? t("Ether is converting the video so every app can play it.")
-          : undefined,
-    });
+    toast.success(
+      isNew ? t("Added {name}", { name: saved.name }) : t("Saved {name}", { name: saved.name }),
+      {
+        description:
+          saved.video.state === "processing"
+            ? t("Ether is converting the video so every app can play it.")
+            : undefined,
+      },
+    );
     onClose();
   }
 
@@ -646,7 +649,9 @@ function Dropzone({ onFile, onCancel }: { onFile: (f: File) => void; onCancel?: 
             choose: <span className="text-primary underline">{t("choose a file")}</span>,
           })}
         </span>
-        <span className="text-xs text-fg-muted">{t("MP4, MKV, MOV and other common formats.")}</span>
+        <span className="text-xs text-fg-muted">
+          {t("MP4, MKV, MOV and other common formats.")}
+        </span>
         <input
           ref={input}
           type="file"
@@ -777,7 +782,9 @@ function PlaysBeforeSection({
               <Field
                 label={t("New session after")}
                 htmlFor="preroll-gap"
-                hint={t("Minutes without watching before the next episode counts as a new session.")}
+                hint={t(
+                  "Minutes without watching before the next episode counts as a new session.",
+                )}
               >
                 <div className="flex items-center gap-2">
                   <NumberInput
@@ -853,7 +860,10 @@ function PlaysBeforeSection({
           </Select>
         </Field>
       </div>
-      <Field label={t("Dates")} hint={allYear ? undefined : t("Repeats every year. The end date can be in the next year.")}>
+      <Field
+        label={t("Dates")}
+        hint={allYear ? undefined : t("Repeats every year. The end date can be in the next year.")}
+      >
         <div className="space-y-3">
           <Segmented
             ariaLabel={t("Dates")}
@@ -969,7 +979,8 @@ function ActivitySection({ id, locale }: { id?: string; locale: string }) {
           <Spinner size={14} label={t("Loading…")} /> {t("Loading…")}
         </p>
       );
-    if (!plays.length) return <p className="text-sm text-fg-muted">{t("Nobody has seen it yet.")}</p>;
+    if (!plays.length)
+      return <p className="text-sm text-fg-muted">{t("Nobody has seen it yet.")}</p>;
     return (
       <ul className="divide-y divide-border-subtle">
         {plays.map((p, i) => (

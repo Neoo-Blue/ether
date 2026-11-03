@@ -384,7 +384,12 @@ function ImportDrawer({
           <Button type="button" variant="outline" size="sm" onClick={onClose}>
             {t("Cancel")}
           </Button>
-          <Button type="button" size="sm" disabled={busy || !paths.trim()} onClick={() => void run()}>
+          <Button
+            type="button"
+            size="sm"
+            disabled={busy || !paths.trim()}
+            onClick={() => void run()}
+          >
             <Download size={14} aria-hidden /> {busy ? t("Importing…") : t("Import")}
           </Button>
         </div>
@@ -394,7 +399,9 @@ function ImportDrawer({
         <ol className="list-decimal space-y-1.5 pl-5 text-sm text-fg-muted">
           <li>{t("In Plex Media Server, open Settings, then Extras.")}</li>
           <li>{t("Copy everything in “Movie pre-roll video”.")}</li>
-          <li>{t("Paste it below. Ether reads the same files, so they must be on this server.")}</li>
+          <li>
+            {t("Paste it below. Ether reads the same files, so they must be on this server.")}
+          </li>
         </ol>
         <Field
           label={t("Movie pre-roll video")}

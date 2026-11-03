@@ -120,13 +120,18 @@ export function describePlaysBefore(
           ? t("{genres} movies", { genres })
           : t("{genres} episodes", { genres }),
     );
-  else parts.push(movies && episodes ? t("Movies and episodes") : movies ? t("Movies") : t("Episodes"));
+  else
+    parts.push(
+      movies && episodes ? t("Movies and episodes") : movies ? t("Movies") : t("Episodes"),
+    );
   if (episodes && r.firstEpisodeOnly) parts.push(t("First episode of a session"));
   if (r.excludeGenres.length)
     parts.push(t("Not {genres}", { genres: list(r.excludeGenres, "disjunction") }));
   if (r.collections.length)
     parts.push(
-      t("In {collections}", { collections: list(r.collections.map(collectionName), "disjunction") }),
+      t("In {collections}", {
+        collections: list(r.collections.map(collectionName), "disjunction"),
+      }),
     );
   if (r.maxContentRating)
     parts.push(t("Rated {rating} or lower", { rating: canonicalRating(r.maxContentRating) }));
@@ -235,9 +240,7 @@ export function reasonSentence(code: string, ok: boolean): string {
         ? t("This starts a new viewing session.")
         : t("The viewer is still in the middle of a viewing session.");
     case "genre":
-      return ok
-        ? t("The title has one of its genres.")
-        : t("The title has none of its genres.");
+      return ok ? t("The title has one of its genres.") : t("The title has none of its genres.");
     case "excluded_genre":
       return ok
         ? t("The title has none of its excluded genres.")
@@ -292,7 +295,9 @@ export function plainError(e: unknown, what: string): PlainError {
   if (e.status === 401 || e.status === 403)
     return { message: t("Your session has ended. Sign in again, then try again.") };
   if (e.status === 404)
-    return { message: t("That pre-roll no longer exists. Reload the page to see the current list.") };
+    return {
+      message: t("That pre-roll no longer exists. Reload the page to see the current list."),
+    };
   const detail = e.fields?.length ? e.fields.map((f) => f.message).join(" ") : e.message;
   return { message: what, detail: detail?.trim() || undefined };
 }

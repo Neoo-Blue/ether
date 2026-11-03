@@ -35,7 +35,10 @@ export function Disclosure({
         {label}
       </button>
       {open ? (
-        <div id={id} className="mt-3 space-y-4 rounded-lg border border-border-subtle bg-bg-subtle p-3">
+        <div
+          id={id}
+          className="mt-3 space-y-4 rounded-lg border border-border-subtle bg-bg-subtle p-3"
+        >
           {children}
         </div>
       ) : null}

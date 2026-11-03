@@ -10,7 +10,13 @@ import { t, tn } from "../../i18n";
 import { searchSelectLabels } from "../../i18n/appkit-labels";
 import type { TitleCard } from "../../lib/contract";
 import { Disclosure, ErrorNote, PrerollThumb } from "./PrerollParts";
-import { prerollsApi, type Candidate, type DeviceKind, type Preroll, type Simulation } from "./prerolls-api";
+import {
+  prerollsApi,
+  type Candidate,
+  type DeviceKind,
+  type Preroll,
+  type Simulation,
+} from "./prerolls-api";
 import { DEVICES, plainError, reasonSentence, type PlainError } from "./prerolls-copy";
 
 /**
@@ -61,7 +67,9 @@ export function PrerollSimulation({ prerolls }: { prerolls: Preroll[] }) {
   return (
     <Section
       title={t("What would play?")}
-      description={t("Pick a viewer and a title to see which pre-roll plays, and why the others don't.")}
+      description={t(
+        "Pick a viewer and a title to see which pre-roll plays, and why the others don't.",
+      )}
     >
       <div className="grid gap-4 md:grid-cols-2">
         <Field label={t("Viewer")}>
@@ -81,12 +89,22 @@ export function PrerollSimulation({ prerolls }: { prerolls: Preroll[] }) {
         <Field label={t("Title")}>
           {title ? (
             <div className="flex items-center gap-3 rounded-md border border-border bg-surface p-1.5 pr-2">
-              <Artwork src={title.poster} alt="" title={title.title} className="h-12 w-8 shrink-0 rounded" />
+              <Artwork
+                src={title.poster}
+                alt=""
+                title={title.title}
+                className="h-12 w-8 shrink-0 rounded"
+              />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium text-fg">{title.title}</span>
                 <span className="block truncate text-xs text-fg-muted">{titleSubtitle(title)}</span>
               </span>
-              <Button type="button" variant="ghost" size="sm" onClick={() => change(setTitle)(null)}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => change(setTitle)(null)}
+              >
                 {t("Change")}
               </Button>
             </div>
@@ -179,13 +197,9 @@ function SimulationResult({
             </span>
           )}
           <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-wide text-primary">
-              {t("Plays")}
-            </p>
+            <p className="text-xs font-medium uppercase tracking-wide text-primary">{t("Plays")}</p>
             <p className="truncate text-lg font-semibold text-fg">{sim.winner.name}</p>
-            <p className="text-sm text-fg-muted">
-              {t("Before {title}", { title: title.title })}
-            </p>
+            <p className="text-sm text-fg-muted">{t("Before {title}", { title: title.title })}</p>
           </div>
         </div>
       ) : (
@@ -201,7 +215,10 @@ function SimulationResult({
           </div>
         </div>
       )}
-      <ul className="divide-y divide-border rounded-xl border border-border" aria-label={t("Every pre-roll")}>
+      <ul
+        className="divide-y divide-border rounded-xl border border-border"
+        aria-label={t("Every pre-roll")}
+      >
         {ordered.map((c) => (
           <CandidateRow key={c.id} candidate={c} />
         ))}
@@ -258,7 +275,11 @@ function CandidateRow({ candidate: c }: { candidate: Candidate }) {
         >
           {showPassed
             ? t("Hide the checks it passed")
-            : tn(passed.length, "Show the {count} check it passed", "Show the {count} checks it passed")}
+            : tn(
+                passed.length,
+                "Show the {count} check it passed",
+                "Show the {count} checks it passed",
+              )}
         </button>
       ) : null}
     </li>

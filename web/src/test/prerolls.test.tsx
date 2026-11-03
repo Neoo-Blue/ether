@@ -97,7 +97,9 @@ describe("pre-rolls console", () => {
     fireEvent.click(within(card).getByRole("button", { name: "Viewer" }));
     fireEvent.click(await screen.findByRole("option", { name: "Sam Rivera" }));
     fireEvent.change(within(card).getByLabelText("Title"), { target: { value: horror.title } });
-    fireEvent.click(await within(card).findByRole("button", { name: new RegExp(horror.title) }, WAIT));
+    fireEvent.click(
+      await within(card).findByRole("button", { name: new RegExp(horror.title) }, WAIT),
+    );
     fireEvent.click(within(card).getByRole("button", { name: "More options" }));
     fireEvent.change(within(card).getByLabelText("Date and time"), {
       target: { value: "2026-10-30T20:00" },
@@ -106,9 +108,9 @@ describe("pre-rolls console", () => {
 
     expect(await within(card).findByText("Before " + horror.title, {}, WAIT)).toBeInTheDocument();
     const list = within(card).getByRole("list", { name: "Every pre-roll" });
-    const [first, ...others] = within(list).getAllByRole("listitem", { name: undefined }).filter(
-      (li) => li.parentElement === list,
-    );
+    const [first, ...others] = within(list)
+      .getAllByRole("listitem", { name: undefined })
+      .filter((li) => li.parentElement === list);
     expect(within(first!).getByText("Halloween sting")).toBeInTheDocument();
     expect(within(first!).getByText("The date is within its dates.")).toBeInTheDocument();
     const intro = others.find((li) => within(li).queryByText("Cinema intro"))!;
@@ -130,14 +132,11 @@ describe("pre-rolls console", () => {
     fireEvent.click(within(empty.parentElement!).getByRole("button", { name: "Add pre-roll" }));
     const dialog = await screen.findByRole("dialog", {}, WAIT);
     const save = () =>
-      fireEvent.click(
-        within(dialog)
-          .getAllByRole("button", { name: "Add pre-roll" })
-          .at(-1)!,
-      );
+      fireEvent.click(within(dialog).getAllByRole("button", { name: "Add pre-roll" }).at(-1)!);
     save();
     expect(await within(dialog).findByText("Give the pre-roll a name.")).toBeInTheDocument();
-    const creates = () => calls(fake, "POST", "/admin/prerolls").filter((c) => c.path === "/admin/prerolls");
+    const creates = () =>
+      calls(fake, "POST", "/admin/prerolls").filter((c) => c.path === "/admin/prerolls");
     expect(creates()).toHaveLength(0);
 
     fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "Welcome" } });
@@ -146,7 +145,9 @@ describe("pre-rolls console", () => {
     expect(within(dialog).getByText("welcome.mp4")).toBeInTheDocument();
     setUploadTransport(() => Promise.reject(new ApiError(413, "too_large", "file too large")));
     save();
-    expect(await within(dialog).findByText("That file is too large to upload.", {}, WAIT)).toBeInTheDocument();
+    expect(
+      await within(dialog).findByText("That file is too large to upload.", {}, WAIT),
+    ).toBeInTheDocument();
     expect(creates()).toHaveLength(1);
 
     setUploadTransport(fetchUpload);
