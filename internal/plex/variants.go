@@ -59,8 +59,6 @@ const (
 	variantIDSpace = 7_199_254_740_990 // ids stay below 2^53
 
 	maxVariantIDs       = 200_000
-	renderedVariantsTTL = 30 * time.Minute
-	maxRenderedTitles   = 10_000
 	variantRenderBudget = 3 * time.Second // incl. the resolver's in-flight wait
 )
 
@@ -193,103 +191,95 @@ func (s *Server) partTitle(partID int64) (key core.RatingKey, releaseID string, 
 }
 
 // ---------------------------------------------------------------------------
-// Rendered variant lists (for mediaIndex resolution)
-
-type renderedVariantKey struct {
-	userID   int64
-	clientID string
-	key      core.RatingKey
-}
-
-type renderedVariantSet struct {
-	releaseIDs []string // rendered order, Auto first
-	at         time.Time
-}
-
-// renderedVariants remembers, per viewer+client+title, the variant order
-// last rendered on a detail page. Clients select a version by position
-// (mediaIndex) without naming the release, so playback must resolve the
-// position against what that viewer actually saw — variant order depends
-// on the client's capabilities.
-type renderedVariants struct {
-	mu sync.Mutex
-	m  map[renderedVariantKey]renderedVariantSet
-}
-
-func newRenderedVariants() *renderedVariants {
-	return &renderedVariants{m: map[renderedVariantKey]renderedVariantSet{}}
-}
-
-func (r *renderedVariants) put(k renderedVariantKey, releaseIDs []string, now time.Time) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if len(r.m) >= maxRenderedTitles {
-		r.m = map[renderedVariantKey]renderedVariantSet{}
-	}
-	r.m[k] = renderedVariantSet{releaseIDs: append([]string(nil), releaseIDs...), at: now}
-}
-
-func (r *renderedVariants) get(k renderedVariantKey, now time.Time) ([]string, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	e, ok := r.m[k]
-	if !ok || now.Sub(e.at) > renderedVariantsTTL {
-		return nil, false
-	}
-	return append([]string(nil), e.releaseIDs...), true
-}
-
-func (r *renderedVariants) expire(now time.Time, ttl time.Duration) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for k, e := range r.m {
-		if now.Sub(e.at) > ttl {
-			delete(r.m, k)
-		}
-	}
-}
-
-// ---------------------------------------------------------------------------
 // Rendering
 
 // mediaForVariants renders one Media per release variant for a detail
 // page. It returns (nil, "") to fall back to the single virtual Media:
 // no variant resolver wired, nothing cached yet, or only Auto exists.
 // The second value is the item's editionTitle, or "".
-func (s *Server) mediaForVariants(ctx context.Context, pr *Request, t *core.Title, stamp int64, probed core.MediaInfo, probedRelease string) ([]model.Media, string) {
+//
+// The list is pinned per viewer, client and title (play_identity.go).
+// While a session is admitted or live the pinned list is rendered instead
+// of a new resolver answer, and the Media it was admitted on stays the
+// selected one through probes and failovers.
+func (s *Server) mediaForVariants(ctx context.Context, pr *Request, t *core.Title, stamp int64, probed core.MediaInfo, probedRelease string, ps *core.PlaySession) ([]model.Media, string) {
 	if s.d.Variants == nil || pr.User == nil {
 		return nil, ""
 	}
-	caps := s.clientCaps(pr)
-	vctx, cancel := context.WithTimeout(ctx, variantRenderBudget)
-	defer cancel()
-	vs, err := s.d.Variants.Variants(vctx, core.ResolveRequest{Title: t, Client: caps, User: pr.User, PlayedRelease: probedRelease}, core.MaxVariants)
-	if err != nil {
-		s.log.Debug("variants unavailable", "key", t.Key, "err", err)
-		s.watchVariants(pr, t)
-		return nil, ""
+	ik := s.playIdentityFor(pr, t.Key)
+	live := ps != nil
+	now := s.now()
+	pin := s.playIDs.pinned(ik, live, now)
+	var vs []core.ReleaseVariant
+	if pin.frozen && pin.resolved {
+		if len(pin.variants) < 2 {
+			return nil, ""
+		}
+		vs = cloneVariants(pin.variants)
+		// The resolver names Auto after the release Auto actually opened.
+		// Ask once for the admitted release, not again after a failover.
+		if rel := pin.admittedRelease; live && rel != "" && pin.autoAligned != rel && vs[0].Auto && vs[0].Release.ID != rel {
+			vctx, cancel := context.WithTimeout(ctx, variantRenderBudget)
+			resolved, err := s.d.Variants.Variants(vctx, core.ResolveRequest{Title: t, Client: s.clientCaps(pr), User: pr.User, PlayedRelease: rel}, core.MaxVariants)
+			cancel()
+			var auto *core.ReleaseVariant
+			if err == nil && len(resolved) > 0 && resolved[0].Auto && resolved[0].Release.ID == rel {
+				auto = &resolved[0]
+				vs[0] = resolved[0]
+			}
+			s.playIDs.alignAuto(ik, auto, rel)
+		}
+	} else {
+		caps := s.clientCaps(pr)
+		vctx, cancel := context.WithTimeout(ctx, variantRenderBudget)
+		resolved, err := s.d.Variants.Variants(vctx, core.ResolveRequest{Title: t, Client: caps, User: pr.User, PlayedRelease: probedRelease}, core.MaxVariants)
+		cancel()
+		if err != nil {
+			s.log.Debug("variants unavailable", "key", t.Key, "err", err)
+			resolved = nil
+		}
+		s.playIDs.issueList(ik, resolved, live, now)
+		if len(resolved) < 2 {
+			if !live {
+				s.watchVariants(pr, t)
+			}
+			return nil, ""
+		}
+		vs = cloneVariants(resolved)
 	}
-	if len(vs) < 2 {
-		s.watchVariants(pr, t)
-		return nil, ""
-	}
-	ids := make([]string, len(vs))
-	for i, v := range vs {
-		ids[i] = v.Release.ID
-	}
-	s.renderedVariants.put(renderedVariantKey{userID: pr.User.ID, clientID: pr.ClientID, key: t.Key}, ids, s.now())
 
-	alignPlayedAutoVariant(vs, probedRelease)
+	alignRelease := probedRelease
+	if pin.frozen && pin.admittedRelease != "" {
+		alignRelease = pin.admittedRelease
+	}
+	alignPlayedAutoVariant(vs, alignRelease)
 	probedReady := !probed.Estimated && len(probed.Streams) > 0 && probed.Video() != nil
-	matchedNonAuto := false
-	if probedRelease != "" && probedReady && probedRelease != vs[0].Release.ID {
-		for _, v := range vs {
-			if !v.Auto && v.Release.ID == probedRelease {
-				matchedNonAuto = true
+	// playedIdx is the Media the session plays: the one it was admitted on
+	// when known, otherwise the version whose release is playing (Auto
+	// when the playing release is not one of the explicit non-Auto picks,
+	// e.g. Auto resolved past an uncached top candidate).
+	playedIdx := -1
+	if pin.frozen && pin.selected != 0 {
+		for i, v := range vs {
+			if s.variantMediaID(t, v) == pin.selected {
+				playedIdx = i
 				break
 			}
 		}
 	}
+	admittedIdx := playedIdx
+	if playedIdx < 0 && probedRelease != "" {
+		playedIdx = 0
+		if probedReady && probedRelease != vs[0].Release.ID {
+			for i, v := range vs {
+				if !v.Auto && v.Release.ID == probedRelease {
+					playedIdx = i
+					break
+				}
+			}
+		}
+	}
+	matchedNonAuto := playedIdx > 0
 	autoDuplicatesRow := false
 	for _, v := range vs[1:] {
 		if sameVariantRelease(v.Release, vs[0].Release) {
@@ -299,15 +289,13 @@ func (s *Server) mediaForVariants(ctx context.Context, pr *Request, t *core.Titl
 	}
 	stored := s.selections.get(pr.User.ID, int64(t.Key))
 	out := make([]model.Media, 0, len(vs))
-	for _, v := range vs {
+	for i, v := range vs {
+		// The played version carries the session's probe; before playback
 		// Auto carries the completed detail warm-up probe when available,
-		// otherwise its estimate. A resumed or playing probe is drawn on
-		// the matching version only, never on a different explicit pick,
-		// and that version is selected; when the probed release is not one
-		// of the explicit non-Auto picks (e.g. Auto resolved past an
-		// uncached top candidate), it belongs to Auto.
-		played := probedRelease != "" && probedReady && ((v.Auto && !matchedNonAuto) || (!v.Auto && matchedNonAuto && v.Release.ID == probedRelease))
-		warmAuto := probedRelease == "" && probedReady && v.Auto
+		// otherwise its estimate. A probe is drawn on the played version
+		// only, never on a different explicit pick.
+		played := probedReady && i == playedIdx
+		warmAuto := playedIdx < 0 && probedReady && v.Auto
 		variant := v
 		if played || warmAuto {
 			keepReleaseBitrate := !probeDisagrees(v.Info, probed) && v.Info.BitrateKbps > 0 && (probedRelease != "" || autoDuplicatesRow || probed.BitrateKbps <= 0)
@@ -316,6 +304,7 @@ func (s *Server) mediaForVariants(ctx context.Context, pr *Request, t *core.Titl
 			variant.Info = mergeProbedVariantInfo(v.Info, probed, v.Info.BitrateKbps > 0)
 		}
 		m := buildMediaVariant(t, variant, stamp, s.variantIDs)
+		m.Part[0].Key = s.playIDs.partKey(ik, m.ID, m.Part[0].Key, now)
 		if s.d.Trickplay != nil && s.d.Trickplay.TrickplayAvailable(v.Release.ID) {
 			m.Part[0].Indexes = "sd"
 		}
@@ -331,8 +320,10 @@ func (s *Server) mediaForVariants(ctx context.Context, pr *Request, t *core.Titl
 		}
 		sel := resolveSelection(stored, info)
 		sel = s.preferredSelection(ctx, pr.User, t.Key, info, t.Language, sel)
-		m.Part[0].Stream = s.buildStreams(t.Key, info, sel, pr.User)
-		if played {
+		m.Part[0].Stream = s.issuedStreams(t.Key, ik, m.ID, info, sel, pr.User)
+		// The admitted version stays selected while its probe is pending,
+		// so the selection does not move from Auto to it once probed.
+		if played || i == admittedIdx {
 			m.Selected = model.Ptr(true)
 			m.Part[0].Selected = model.Ptr(true)
 		}
@@ -366,6 +357,14 @@ func (s *Server) mediaForVariants(ctx context.Context, pr *Request, t *core.Titl
 		edition = vs[0].Edition
 	}
 	return out, edition
+}
+
+// variantMediaID is the Media/Part id buildMediaVariant gives v.
+func (s *Server) variantMediaID(t *core.Title, v core.ReleaseVariant) int64 {
+	if v.Auto || s.variantIDs == nil {
+		return int64(t.Key)
+	}
+	return s.variantIDs.idFor(t.Key, v.Release.ID)
 }
 
 // buildMediaVariant renders one variant's Media/Part. Auto keeps the
@@ -439,8 +438,7 @@ func (s *Server) resolveVariantSelection(ctx context.Context, pr *Request, p *pl
 	if p.mediaIndex <= 0 || pr.User == nil {
 		return ""
 	}
-	k := renderedVariantKey{userID: pr.User.ID, clientID: pr.ClientID, key: p.key}
-	if ids, ok := s.renderedVariants.get(k, s.now()); ok {
+	if ids, ok := s.playIDs.releases(s.playIdentityFor(pr, p.key), s.now()); ok {
 		if p.mediaIndex < len(ids) {
 			return ids[p.mediaIndex]
 		}
@@ -699,7 +697,25 @@ func plexAudioPhrase(info core.ReleaseInfo) string {
 // pick when the playback manager supports it.
 func (s *Server) preparePlayback(ctx context.Context, pr *Request, p *playRequest) (*core.PlaySession, error) {
 	releaseID := s.resolveVariantSelection(ctx, pr, p)
+	p.variantRelease = releaseID
 	return s.prepareForRelease(ctx, pr.User, p.key, p.caps, releaseID)
+}
+
+// admittedMedia is the Media id a prepared request plays: the Part it
+// addressed, the Play Version it picked by position, or Auto.
+func (s *Server) admittedMedia(p *playRequest) int64 {
+	if p.requestedPart != 0 {
+		if k, rel, ok := s.partTitle(p.requestedPart); ok && k == p.key {
+			if rel == "" {
+				return int64(p.key)
+			}
+			return p.requestedPart
+		}
+	}
+	if p.variantRelease != "" && p.mediaIndex > 0 && s.variantIDs != nil {
+		return s.variantIDs.idFor(p.key, p.variantRelease)
+	}
+	return int64(p.key)
 }
 
 // prepareForRelease prepares a session on a specific release ("" = Auto).

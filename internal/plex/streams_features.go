@@ -123,7 +123,7 @@ func (s *Server) rememberStreamRequest(r *http.Request, user *core.User, key cor
 		if kind == "subtitle" && id == 0 {
 		} else {
 			pr := FromContext(r.Context())
-			binding, rerr := s.resolveStream(sessions.WithPlexServe(r.Context(), pr.Remote, ""), user, id)
+			binding, rerr := s.resolveIssuedStream(sessions.WithPlexServe(r.Context(), pr.Remote, ""), user, pr.ClientID, id)
 			if rerr != nil {
 				if !streamMiss(rerr) {
 					return

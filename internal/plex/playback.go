@@ -150,6 +150,11 @@ type playRequest struct {
 	// it plays, so a direct-play decision hands the picked embedded track
 	// over as a separate file. Response shaping, zeroed by sameSettings.
 	sidecarText bool
+	// variantRelease is the release a Play Version pick resolved to ("" =
+	// Auto) and mediaID the Media id the session was admitted on; both are
+	// set by prepare and zeroed by sameSettings.
+	variantRelease string
+	mediaID        int64
 }
 
 // androidFamilyClient reports whether the decision lists every probed track.
@@ -180,6 +185,8 @@ func (p playRequest) sameSettings(other playRequest) bool {
 	p.caps, other.caps = core.ClientCaps{}, core.ClientCaps{}
 	p.listAllTracks, other.listAllTracks = false, false
 	p.sidecarText, other.sidecarText = false, false
+	p.variantRelease, other.variantRelease = "", ""
+	p.mediaID, other.mediaID = 0, 0
 	return reflect.DeepEqual(p, other)
 }
 
@@ -273,7 +280,7 @@ func (s *Server) parsePlayRequest(r *http.Request) (playRequest, error) {
 		p.subSel, p.subSet, p.subStream = sel.subtitle, true, sel.subtitleStream
 	}
 	if id, err := strconv.ParseInt(q.Get("audioStreamID"), 10, 64); err == nil {
-		binding, rerr := s.resolveStream(sessions.WithPlexServe(r.Context(), pr.Remote, ""), pr.User, id)
+		binding, rerr := s.resolveIssuedStream(sessions.WithPlexServe(r.Context(), pr.Remote, ""), pr.User, pr.ClientID, id)
 		if rerr != nil && !streamMiss(rerr) {
 			return playRequest{}, rerr
 		}
@@ -287,7 +294,7 @@ func (s *Server) parsePlayRequest(r *http.Request) (playRequest, error) {
 			if id == 0 {
 				p.subSel, p.subSet, p.subStream = -1, true, nil
 			} else {
-				binding, rerr := s.resolveStream(sessions.WithPlexServe(r.Context(), pr.Remote, ""), pr.User, id)
+				binding, rerr := s.resolveIssuedStream(sessions.WithPlexServe(r.Context(), pr.Remote, ""), pr.User, pr.ClientID, id)
 				if rerr != nil && !streamMiss(rerr) {
 					return playRequest{}, rerr
 				}
@@ -395,7 +402,20 @@ func (s *Server) prepare(ctx context.Context, pr *Request, p *playRequest) (*cor
 	if !s.transcodes.claim(p.sessionID, pr.User.ID, pr.ClientID, s.now()) {
 		return t, nil, core.Decision{}, core.ErrUnauthorized
 	}
+	// The version list this client was issued stays pinned while the
+	// session is admitted, so a page render racing a background refill
+	// cannot move the Media the request's mediaIndex names.
+	ik := s.playIdentityFor(pr, p.key)
+	s.playIDs.beginAdmission(ik, s.now())
 	var ps *core.PlaySession
+	admitted := false
+	defer func() {
+		release := ""
+		if admitted && ps.Resolution != nil {
+			release = ps.Resolution.Release.ID
+		}
+		s.playIDs.endAdmission(ik, p.mediaID, release, admitted, s.now())
+	}()
 	dec, err := s.openPlexPlan(ctx, pr, p, func(ctx context.Context) (sessions.PlexAdmission, error) {
 		var prepErr error
 		ps, prepErr = s.preparePlayback(ctx, pr, p)
@@ -435,6 +455,8 @@ func (s *Server) prepare(ctx context.Context, pr *Request, p *playRequest) (*cor
 	if err != nil {
 		return t, nil, core.Decision{}, err
 	}
+	p.mediaID = s.admittedMedia(p)
+	admitted = true
 	if v := ps.Info.Video(); v != nil {
 		s.log.Debug("playback media decision", "key", p.key, "client", pr.ClientID, "device", pr.Device, "model", pr.Model, "platformVersion", pr.PlatformVersion, "video", v.Codec, "videoProfile", v.Profile, "height", v.Height, "bitDepth", v.BitDepth, "transfer", v.ColorTransfer, "dvProfile", v.DolbyVisionProfile, "dvLevel", v.DolbyVisionLevel, "dvCompatibility", v.DolbyVisionCompatibilityID, "kind", dec.Kind, "outputContainer", dec.Container, "videoCopy", dec.VideoCopy, "audioCopy", dec.AudioCopy, "hdrCap", p.caps.HDR10, "dvCap", p.caps.DolbyVision, "profileExtra", pr.ProfileExtra)
 	}
@@ -711,6 +733,18 @@ func (s *Server) decisionMedia(t *core.Title, ps *core.PlaySession, dec core.Dec
 	}
 	info := ps.Info
 	m := buildMedia(t, info, stamp)
+	// The decision names the Media the session was admitted on, with the
+	// Part key and stream ids that Media was issued (play_identity.go).
+	var ik playIdentityKey
+	if p.mediaID != 0 && u != nil {
+		ik = playIdentityKey{userID: u.ID, clientID: p.caps.ClientID, key: t.Key}
+		if p.mediaID != int64(t.Key) {
+			m.ID = p.mediaID
+			m.Part[0].ID = p.mediaID
+			m.Part[0].Key = fmt.Sprintf("/library/parts/%d/%d/file.%s", p.mediaID, stamp, containerExt(m.Container))
+		}
+		m.Part[0].Key = s.playIDs.partKey(ik, m.ID, m.Part[0].Key, s.now())
+	}
 	if ps.Resolution != nil && s.d.Trickplay != nil && s.d.Trickplay.TrickplayAvailable(ps.Resolution.Release.ID) {
 		m.Part[0].Indexes = "sd"
 	}
@@ -720,7 +754,7 @@ func (s *Server) decisionMedia(t *core.Title, ps *core.PlaySession, dec core.Dec
 	part.Selected = model.Ptr(true)
 	part.SetAlphabetical()
 	sel := selection{audio: p.audioSel, audioSet: p.audioSel >= 0, subtitle: p.subSel, subtitleSet: p.subSet}
-	streams := s.buildStreams(t.Key, info, sel, u)
+	streams := s.issuedStreams(t.Key, ik, m.ID, info, sel, u)
 	for i := range streams {
 		streams[i].SetAlphabetical()
 		if streams[i].StreamType == 1 {
@@ -739,7 +773,7 @@ func (s *Server) decisionMedia(t *core.Title, ps *core.PlaySession, dec core.Dec
 	applyTranscodeMedia(&m, dec, p.protocol)
 	var kept []model.Stream
 	for _, st := range streams {
-		binding, rerr := s.resolveStream(context.Background(), u, st.ID)
+		binding, rerr := s.resolveIssuedStream(context.Background(), u, p.caps.ClientID, st.ID)
 		if rerr != nil && !streamMiss(rerr) {
 			continue
 		}
@@ -1448,6 +1482,18 @@ func (s *Server) handlePart(w http.ResponseWriter, r *http.Request) {
 		s.observePlaybackDecision(ctx, pr, &playRequest{key: key, caps: caps, partReleaseID: releaseID, requestedPart: id}, ps)
 	}
 	if r.Method != http.MethodHead && r.URL.Query().Get("download") != "1" {
+		// A part read is the playing Media for clients that skip the
+		// decision; a decision's admission keeps its selection unless this
+		// read prepared another release.
+		media := int64(key)
+		if releaseID != "" {
+			media = id
+		}
+		release := ""
+		if ps.Resolution != nil {
+			release = ps.Resolution.Release.ID
+		}
+		s.playIDs.admit(s.playIdentityFor(pr, key), media, release, !ok, s.now())
 		s.playbackOwners.Bind(pr.User.ID, pr.ClientID, key, pr.SessionID, ps.ID, false, s.now())
 		sessionID := pr.SessionID
 		if sessionID == "" {
@@ -1541,7 +1587,7 @@ func (s *Server) handlePartSelect(w http.ResponseWriter, r *http.Request) {
 	var audio *sessions.PlexStreamBinding
 	if v := q.Get("audioStreamID"); v != "" {
 		if sid, err := strconv.ParseInt(v, 10, 64); err == nil {
-			binding, rerr := s.resolveStream(ctx, pr.User, sid)
+			binding, rerr := s.resolveIssuedStream(ctx, pr.User, pr.ClientID, sid)
 			if rerr != nil && !streamMiss(rerr) {
 				writeHTTPError(w, http.StatusUnauthorized)
 				return
@@ -1558,7 +1604,7 @@ func (s *Server) handlePartSelect(w http.ResponseWriter, r *http.Request) {
 			if sid == 0 {
 				clearSub = true
 			} else {
-				binding, rerr := s.resolveStream(ctx, pr.User, sid)
+				binding, rerr := s.resolveIssuedStream(ctx, pr.User, pr.ClientID, sid)
 				if rerr != nil && !streamMiss(rerr) {
 					writeHTTPError(w, http.StatusUnauthorized)
 					return
@@ -1617,7 +1663,7 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 		writeHTTPError(w, http.StatusNotFound)
 		return
 	}
-	binding, rerr := s.resolveStream(r.Context(), pr.User, id)
+	binding, rerr := s.resolveIssuedStream(r.Context(), pr.User, pr.ClientID, id)
 	if rerr != nil {
 		if errors.Is(rerr, core.ErrUnauthorized) {
 			writeHTTPError(w, http.StatusUnauthorized)

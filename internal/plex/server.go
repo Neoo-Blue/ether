@@ -193,7 +193,7 @@ type Server struct {
 	channelLogos      *artwork.Images
 	boundStreams      sessions.PlexStreamAPI
 	variantIDs        *variantIDRegistry
-	renderedVariants  *renderedVariants
+	playIDs           *playIdentities
 	variantWatch      variantWatches
 	downloads         *downloadStore
 	queues            *playQueueStore
@@ -263,7 +263,7 @@ func NewServer(d Deps) *Server {
 		images:            artworkservice.NewRemoteCache(d.ImageCacheBytes, d.HTTPClient),
 		channelLogos:      artwork.NewImages(artwork.ImagesOptions{HTTPClient: d.HTTPClient}),
 		variantIDs:        newVariantIDRegistry(d.DB),
-		renderedVariants:  newRenderedVariants(),
+		playIDs:           newPlayIdentities(),
 		downloads:         newDownloadStore(),
 		queues:            newPlayQueueStore(),
 		sessions:          newSessionActivities(),
@@ -523,7 +523,7 @@ func (s *Server) janitor() {
 			s.expireTrickplayHolders()
 			s.expireDownloads(now)
 			s.queues.expire(now, 6*time.Hour)
-			s.renderedVariants.expire(now, renderedVariantsTTL)
+			s.playIDs.expire(now, s.playIdentityAlive)
 			s.expireTranscodes(now, 2*time.Hour)
 			s.playbackOwners.Expire(now, 2*time.Hour)
 			s.extraPlay.expire(now, 2*time.Hour)

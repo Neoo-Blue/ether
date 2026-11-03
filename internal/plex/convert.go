@@ -34,6 +34,9 @@ type renderOpts struct {
 	state map[core.RatingKey]core.WatchStatus
 	// skipLeafCounts skips applyListLeafCounts when the caller calls applyLeafCounts itself.
 	skipLeafCounts bool
+	// session renders /status/sessions: the Media is the one the session
+	// was admitted on.
+	session bool
 	// storedOnly renders from stored catalogue rows only without scheduling
 	// background TMDB detail, show-children, or Plex GUID refreshes.
 	storedOnly bool
@@ -411,7 +414,7 @@ func (s *Server) metadata(ctx context.Context, pr *Request, t *core.Title, o ren
 
 	if o.media && isPlayable(t.Type) {
 		var editionTitle string
-		m.Media, editionTitle = s.mediaFor(ctx, pr, t, detail, o.detail)
+		m.Media, editionTitle = s.mediaFor(ctx, pr, t, detail, o.detail, o.session)
 		applyEditionTitle(&m, editionTitle)
 		if s.downloadsAllowed(pr.User) {
 			m.AllowSync = model.Ptr(true)
@@ -591,7 +594,7 @@ func (s *Server) resumedTracks(ctx context.Context, pr *Request, t *core.Title) 
 // is the item's editionTitle, or "". During a live session Plex Web keeps
 // the same version list, with the version actually playing selected and
 // carrying the session's probed info; other apps see that version alone.
-func (s *Server) mediaFor(ctx context.Context, pr *Request, t *core.Title, withStreams bool, withVariants bool) ([]model.Media, string) {
+func (s *Server) mediaFor(ctx context.Context, pr *Request, t *core.Title, withStreams, withVariants, sessionMedia bool) ([]model.Media, string) {
 	info, ps, probedSource := s.mediaInfoWithSource(ctx, pr, t)
 	stamp := unixOrZero(t.UpdatedAt)
 	if ps != nil && !ps.StartedAt.IsZero() {
@@ -622,11 +625,25 @@ func (s *Server) mediaFor(ctx context.Context, pr *Request, t *core.Title, withS
 		} else if !info.Estimated && len(info.Streams) > 0 && info.Video() != nil {
 			probed = info
 		}
-		if media, edition := s.mediaForVariants(ctx, pr, t, stamp, probed, probedRelease); len(media) > 0 {
+		if media, edition := s.mediaForVariants(ctx, pr, t, stamp, probed, probedRelease, ps); len(media) > 0 {
 			return media, edition
 		}
 	}
 	m := buildMedia(t, info, stamp)
+	// Detail pages and live sessions render with the ids this client was
+	// issued (play_identity.go); /status/sessions names the Media the
+	// session was admitted on.
+	var ik playIdentityKey
+	if withStreams || ps != nil {
+		ik = s.playIdentityFor(pr, t.Key)
+		pin := s.playIDs.pinned(ik, ps != nil, s.now())
+		if sessionMedia && ps != nil && pin.selected != 0 && pin.selected != int64(t.Key) {
+			m.ID = pin.selected
+			m.Part[0].ID = pin.selected
+			m.Part[0].Key = fmt.Sprintf("/library/parts/%d/%d/file.%s", pin.selected, stamp, containerExt(m.Container))
+		}
+		m.Part[0].Key = s.playIDs.partKey(ik, m.ID, m.Part[0].Key, s.now())
+	}
 	if ps != nil && ps.Resolution != nil && s.d.Trickplay != nil && s.d.Trickplay.TrickplayAvailable(ps.Resolution.Release.ID) {
 		m.Part[0].Indexes = "sd"
 	}
@@ -645,7 +662,7 @@ func (s *Server) mediaFor(ctx context.Context, pr *Request, t *core.Title, withS
 		}
 		sel := resolveSelection(stored, info)
 		sel = s.preferredSelection(ctx, pr.User, t.Key, info, t.Language, sel)
-		m.Part[0].Stream = s.buildStreams(t.Key, info, sel, pr.User)
+		m.Part[0].Stream = s.issuedStreams(t.Key, ik, m.ID, info, sel, pr.User)
 	}
 	return []model.Media{m}, ""
 }
@@ -758,7 +775,24 @@ func audioProfile(st *core.StreamInfo) string {
 
 // buildStreams renders Stream elements and registers their ids.
 func (s *Server) buildStreams(key core.RatingKey, info core.MediaInfo, sel selection, u *core.User) []model.Stream {
+	out, _ := s.renderStreams(key, info, sel, u)
+	return out
+}
+
+// issuedStreams renders a Media's streams with the ids this client was
+// already issued for that Media (see play_identity.go).
+func (s *Server) issuedStreams(key core.RatingKey, ik playIdentityKey, mediaID int64, info core.MediaInfo, sel selection, u *core.User) []model.Stream {
+	out, src := s.renderStreams(key, info, sel, u)
+	if ik.valid() && ik.key == key && s.playIDs != nil {
+		s.playIDs.issueStreams(ik, mediaID, out, src, info, s.now())
+	}
+	return out
+}
+
+// renderStreams also returns, per rendered stream, its index in info.Streams.
+func (s *Server) renderStreams(key core.RatingKey, info core.MediaInfo, sel selection, u *core.User) ([]model.Stream, []int) {
 	var out []model.Stream
+	var src []int
 	audioSelected := -1
 	if sel.audioSet {
 		audioSelected = sel.audio
@@ -850,8 +884,9 @@ func (s *Server) buildStreams(key core.RatingKey, info core.MediaInfo, sel selec
 			continue
 		}
 		out = append(out, ps)
+		src = append(src, i)
 	}
-	return out
+	return out, src
 }
 
 // extendedTitle is PMS's extendedDisplayTitle for audio and subtitle

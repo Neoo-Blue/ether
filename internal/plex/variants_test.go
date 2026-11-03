@@ -255,7 +255,7 @@ func TestDetailRendersPlayVersionMedia(t *testing.T) {
 		t.Errorf("json variant label missing: %d %s", rec.Code, rec.Body.String())
 	}
 	// The rendered order is remembered for mediaIndex.
-	ids, ok := f.srv.renderedVariants.get(renderedVariantKey{userID: ownerUser.ID, clientID: "client-1", key: fightClub.Key}, fixedNow)
+	ids, ok := f.srv.playIDs.releases(playIdentityKey{userID: ownerUser.ID, clientID: "client-1", key: fightClub.Key}, fixedNow)
 	if !ok || len(ids) != 3 || ids[0] != "rel-auto" || ids[1] != "rel-4k" || ids[2] != "rel-compat" {
 		t.Errorf("rendered set %v ok=%v", ids, ok)
 	}

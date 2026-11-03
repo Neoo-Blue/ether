@@ -132,10 +132,10 @@ func (s *Server) observePlaybackDecision(ctx context.Context, pr *Request, p *pl
 }
 
 func (s *Server) playbackVariants(pr *Request, key core.RatingKey, tr core.DecisionTrace, requested string, requestedPart int64) []diagnostics.PlaybackVariant {
-	if pr == nil || pr.User == nil || s.renderedVariants == nil {
+	if pr == nil || pr.User == nil || s.playIDs == nil {
 		return nil
 	}
-	ids, ok := s.renderedVariants.get(renderedVariantKey{userID: pr.User.ID, clientID: pr.ClientID, key: key}, s.now())
+	ids, ok := s.playIDs.releases(s.playIdentityFor(pr, key), s.now())
 	if !ok || len(ids) == 0 {
 		return nil
 	}
