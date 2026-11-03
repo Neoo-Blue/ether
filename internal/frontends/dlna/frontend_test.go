@@ -277,6 +277,7 @@ func TestNotificationPacketsAdvertiseAndWithdrawEveryTarget(t *testing.T) {
 type lanStreamFixture struct {
 	issued int
 	served int
+	active bool
 }
 
 func (f *lanStreamFixture) IssueLAN(_ context.Context, _ *http.Request, req frontend.PlanRequest) (string, error) {
@@ -288,6 +289,11 @@ func (f *lanStreamFixture) IssueLAN(_ context.Context, _ *http.Request, req fron
 }
 func (f *lanStreamFixture) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 	f.served++
+	if f.active {
+		w.Header().Set("Content-Type", "image/svg+xml")
+		_, _ = w.Write([]byte(`<svg onload="bad()"/>`))
+		return
+	}
 	_, _ = w.Write([]byte("media"))
 }
 
@@ -326,14 +332,21 @@ func TestBrowseIssuesOnlyViewerScopedLANMedia(t *testing.T) {
 	}
 	w = httptest.NewRecorder()
 	inst.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/dlna/sessions/lazy/opaque/file", nil))
-	if w.Code != 200 || w.Body.String() != "media" || streams.served != 1 {
+	if w.Code != 200 || w.Body.String() != "media" || streams.served != 1 || !strings.Contains(w.Header().Get("Content-Security-Policy"), "sandbox") || w.Header().Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatalf("media %d %q", w.Code, w.Body.String())
+	}
+
+	streams.active = true
+	active := httptest.NewRecorder()
+	inst.Handler().ServeHTTP(active, httptest.NewRequest(http.MethodGet, "/dlna/sessions/lazy/opaque/file", nil))
+	if active.Code != 200 || active.Body.String() != `<svg onload="bad()"/>` || !strings.Contains(active.Header().Get("Content-Security-Policy"), "sandbox") || active.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("active %d %v %q", active.Code, active.Header(), active.Body.String())
 	}
 	r = httptest.NewRequest(http.MethodGet, "/dlna/sessions/lazy/opaque/file", nil)
 	r.Header.Set("X-Remote", "1")
 	w = httptest.NewRecorder()
 	inst.Handler().ServeHTTP(w, r)
-	if w.Code != 403 || streams.served != 1 {
+	if w.Code != 403 || streams.served != 2 {
 		t.Fatalf("remote media %d", w.Code)
 	}
 }

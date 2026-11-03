@@ -249,7 +249,7 @@ func (m *Manager) SearchWith(ctx context.Context, req core.SearchRequest, arrive
 	sem := make(chan struct{}, parallel)
 	var wg sync.WaitGroup
 	for i, cl := range clients {
-		if !cl.Config().Enabled {
+		if !cl.Config().Enabled || core.IndexerSkipped(ctx, cl.indexerID()) {
 			slots[i].skipped = true
 			continue
 		}

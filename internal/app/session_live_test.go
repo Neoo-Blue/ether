@@ -47,9 +47,12 @@ func TestLiveAdapterRewritesNestedResourcesToLazyCapability(t *testing.T) {
 			_, _ = io.WriteString(w, "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000\n/variant?secret=source-token\n")
 		case "/variant":
 			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
-			_, _ = io.WriteString(w, "#EXTM3U\n#EXTINF:4,\n/segment?secret=source-token\n")
+			_, _ = io.WriteString(w, "#EXTM3U\n#EXTINF:4,\n/segment?secret=source-token\n#EXTINF:4,\n/active\n")
 		case "/segment":
 			_, _ = io.WriteString(w, "media-bytes")
+		case "/active":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = io.WriteString(w, "<script>bad()</script>")
 		default:
 			http.NotFound(w, r)
 		}
@@ -101,6 +104,18 @@ func TestLiveAdapterRewritesNestedResourcesToLazyCapability(t *testing.T) {
 	if segment.Code != 200 || segment.Body.String() != "media-bytes" {
 		t.Fatalf("segment %d %q", segment.Code, segment.Body.String())
 	}
+	var activeURI string
+	for _, line := range strings.Split(variant.Body.String(), "\n") {
+		if strings.HasPrefix(line, "../resource/") && !strings.HasPrefix(line, "../resource/"+segmentKey+"?") {
+			activeURI = strings.TrimPrefix(line, "../resource/")
+		}
+	}
+	activeKey, _, _ := strings.Cut(activeURI, "?")
+	active := read("resource/"+activeKey, "../")
+	if active.Code != 200 || active.Body.String() != "<script>bad()</script>" || !strings.Contains(active.Header().Get("Content-Security-Policy"), "sandbox") || active.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("active %d %v %q", active.Code, active.Header(), active.Body.String())
+	}
+
 }
 
 type liveTestHLS struct {

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/identity"
@@ -26,6 +27,15 @@ type localLogin struct {
 }
 
 func (h *Handler) localLogin(w http.ResponseWriter, r *http.Request, surface string) {
+	controller := http.NewResponseController(w)
+	_ = controller.SetReadDeadline(time.Now().Add(5 * time.Second))
+	select {
+	case h.loginBodySlots <- struct{}{}:
+		defer func() { <-h.loginBodySlots }()
+	default:
+		writeError(w, 503, "unavailable", "sign in unavailable")
+		return
+	}
 	if !csrfOK(r) {
 		writeError(w, 403, "csrf", "request rejected")
 		return
@@ -35,10 +45,11 @@ func (h *Handler) localLogin(w http.ResponseWriter, r *http.Request, surface str
 		return
 	}
 	var body localLogin
-	if decodeJSON(r, &body) != nil {
+	if decodeLoginJSON(w, r, &body) != nil {
 		writeError(w, 400, "invalid", "invalid request")
 		return
 	}
+	_ = controller.SetReadDeadline(time.Time{})
 	ip, _ := identity.ClientNet(r, h.proxyPrefixes()...)
 	allowed, err := h.deps.IdentityLimiter.Allow(r.Context(), body.Username, ip)
 	if err != nil || !allowed {

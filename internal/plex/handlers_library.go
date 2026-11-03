@@ -1207,6 +1207,12 @@ func (s *Server) handleSectionSubKey(w http.ResponseWriter, r *http.Request) {
 		q.Set(sub, val)
 		r2.URL.RawQuery = q.Encode()
 		s.sectionList(w, r2, sec, "all")
+	case "query":
+		if val != "parse" {
+			s.handleUnknown(w, r)
+			return
+		}
+		s.handleSectionQueryParse(w, r, sec)
 	default:
 		s.handleUnknown(w, r)
 	}

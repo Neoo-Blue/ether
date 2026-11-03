@@ -917,7 +917,19 @@ rate limits and exhausted daily allowances can still leave gaps; these stay
 visible instead of being reported as a successful sync. Sites without a feed
 remain search-only. Feed discovery is not equivalent to an Arr-completed download.
 These are normal API hits, not free RSS traffic. Playback retains the configured
-foreground reserve. Optional background health verification has separate request,
+foreground reserve.
+
+For a recent movie the feeds have not matched, Ether also looks the title up
+directly: once when it enters the window, again when its digital release date
+arrives, and at least weekly on every indexer. Between those, it skips an
+indexer whose feed has been polled without a gap since the last look; that
+feed would already have shown anything new. Scraper sites without a feed are
+still searched on the normal cadence. A movie with a suitable release is not
+looked up again for a month unless that release proves unplayable. At most ten
+of these lookups run per minute, so a restart never bursts every indexer at
+once. To keep background lookups on particular indexers while playback still
+uses all of them, list them in `availability.indexerIds`. Playback searches are
+unchanged. Optional background health verification has separate request,
 grab and byte budgets and pauses during playback; it is disabled by default.
 
 A listing establishes that an eligible release was observed, not guaranteed

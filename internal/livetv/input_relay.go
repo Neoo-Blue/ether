@@ -418,14 +418,11 @@ func (s *Service) serveRelayManifest(w http.ResponseWriter, g *inputGrant, base 
 	_, _ = w.Write(out)
 }
 
-// relayFetch fetches one upstream object. Headers wait at most
-// relayIOTimeout; the body is then bounded by the caller's idle reader.
-// Errors never carry the upstream URL to the caller's response.
-func (s *Service) relayFetch(ctx context.Context, cancel context.CancelFunc, g *inputGrant, raw string, in *http.Request) (*http.Response, error) {
-	client := *s.o.HTTPClient
-	client.Timeout = 0 // a live input is endless; idle time is bounded instead
-	checkRedirect := s.o.HTTPClient.CheckRedirect
-	ua := in.Header.Get("User-Agent")
+// scopeInputRedirects confines every configured source header to its origin.
+// The ffmpeg relay rejects HTTPS downgrades; the client resource proxy preserves
+// its existing public-CDN behavior while stripping headers across origins.
+func scopeInputRedirects(client *http.Client, origin string, headers http.Header, ua string, allowDowngrade bool) {
+	checkRedirect := client.CheckRedirect
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if checkRedirect != nil {
 			if err := checkRedirect(req, via); err != nil {
@@ -434,11 +431,14 @@ func (s *Service) relayFetch(ctx context.Context, cancel context.CancelFunc, g *
 		} else if len(via) >= 10 {
 			return errors.New("too many redirects")
 		}
-		if via[len(via)-1].URL.Scheme == "https" && req.URL.Scheme != "https" {
+		if !allowDowngrade && via[len(via)-1].URL.Scheme == "https" && req.URL.Scheme != "https" {
 			return errRelayDowngrade
 		}
-		if relayOrigin(req.URL) != g.origin {
-			for name := range g.headers {
+		if relayOrigin(req.URL) != origin {
+			// Go synthesizes Referer from the previous URL, which can carry
+			// source query credentials even without a configured header.
+			req.Header.Del("Referer")
+			for name := range headers {
 				req.Header.Del(name)
 			}
 			if ua != "" && req.Header.Get("User-Agent") == "" {
@@ -447,6 +447,16 @@ func (s *Service) relayFetch(ctx context.Context, cancel context.CancelFunc, g *
 		}
 		return nil
 	}
+}
+
+// relayFetch fetches one upstream object. Headers wait at most
+// relayIOTimeout; the body is then bounded by the caller's idle reader.
+// Errors never carry the upstream URL to the caller's response.
+func (s *Service) relayFetch(ctx context.Context, cancel context.CancelFunc, g *inputGrant, raw string, in *http.Request) (*http.Response, error) {
+	client := *s.o.HTTPClient
+	client.Timeout = 0 // a live input is endless; idle time is bounded instead
+	ua := in.Header.Get("User-Agent")
+	scopeInputRedirects(&client, g.origin, g.headers, ua, false)
 	u, err := url.Parse(raw)
 	if err != nil {
 		return nil, errRelayUnsupported

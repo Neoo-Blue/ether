@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"github.com/braedonsaunders/ether/internal/frontend/kit/mediasafety"
 	"math"
 	"net/http"
 	"strings"
@@ -82,6 +83,7 @@ func (i *instance) registerRoutes() error {
 }
 
 func (i *instance) serveLAN(w http.ResponseWriter, r *http.Request) {
+	mediasafety.SetHeaders(w)
 	if i.host.LANStreams == nil {
 		http.NotFound(w, r)
 		return

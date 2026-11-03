@@ -2,6 +2,7 @@ package experience
 
 import (
 	"context"
+	"time"
 
 	"github.com/braedonsaunders/ether/internal/core"
 )
@@ -14,7 +15,7 @@ func NextUp(ctx context.Context, viewer *core.User, key core.RatingKey, next fun
 		return row
 	}
 	title, err := next(ctx, key)
-	if err == nil && title != nil && visibility.Visible(ctx, viewer, title) {
+	if err == nil && title != nil && title.Key.Season() > 0 && (title.Released.IsZero() || !title.Released.After(time.Now())) && visibility.Visible(ctx, viewer, title) {
 		row.Items = []core.Title{*title}
 	}
 	return row

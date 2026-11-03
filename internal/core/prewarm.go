@@ -2,8 +2,16 @@ package core
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+// ErrPrepareSlow indicates that preparation continues after the caller's wait.
+var ErrPrepareSlow = errors.New("playback preparation is still running")
+
+type PlaybackPrepareWithin interface {
+	PrepareWithin(context.Context, time.Duration, *User, RatingKey, ClientCaps, string, bool) (*PlaySession, error)
+}
 
 // Reasons for PrewarmOptions.Reason.
 const (

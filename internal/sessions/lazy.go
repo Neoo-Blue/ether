@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/braedonsaunders/ether/internal/frontend/kit/mediasafety"
 	"io"
 	"net/http"
 	"strconv"
@@ -324,6 +325,7 @@ func (s *lazyStreams) ServeAuthenticated(w http.ResponseWriter, r *http.Request,
 }
 
 func (s *lazyStreams) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	mediasafety.SetHeaders(w)
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.NotFound(w, r)
 		return

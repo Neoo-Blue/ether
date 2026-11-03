@@ -10,6 +10,14 @@ import (
 )
 
 func init() {
+	// covered_since: since when a feed's head polls have overlapped without a
+	// gap, so it has shown every release posted since then. full_at: a
+	// title's last probe across every indexer (feed coverage aside). Its own
+	// component, so the availability versions upgrade fixtures pin stay put.
+	store.RegisterAfter("availability_coverage", "availability")
+	store.Register("availability_coverage", 1, `
+ALTER TABLE availability_feeds ADD COLUMN covered_since INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE availability_title_checks ADD COLUMN full_at INTEGER NOT NULL DEFAULT 0;`)
 	store.Register("availability", 5, `
 ALTER TABLE availability_budget ADD COLUMN ceiling INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE availability_feeds ADD COLUMN catchup_oldest INTEGER NOT NULL DEFAULT 0;
