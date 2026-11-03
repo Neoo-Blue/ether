@@ -98,3 +98,40 @@ func (m *Manager) handleStremioResource(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(resp.Body)
 }
+
+// AddonFetcher reads an installed add-on's routes through Call, so every
+// request is guarded, metered, redacted and counted in its health.
+type AddonFetcher struct {
+	m      *Manager
+	plugin string
+}
+
+// Fetcher returns the stremio.Fetcher for an installed plugin.
+func (m *Manager) Fetcher(plugin string) AddonFetcher { return AddonFetcher{m: m, plugin: plugin} }
+
+// Fetch implements stremio.Fetcher.
+func (f AddonFetcher) Fetch(ctx context.Context, route string, limit int64) ([]byte, error) {
+	resp, err := f.m.Call(ctx, f.plugin, Request{Method: http.MethodGet, Path: route})
+	if err != nil {
+		return nil, err
+	}
+	if resp.Status < 200 || resp.Status > 299 {
+		retry := ""
+		for k, v := range resp.Headers {
+			if strings.EqualFold(k, "Retry-After") {
+				retry = v
+			}
+		}
+		return nil, &stremio.HTTPError{Status: resp.Status, RetryAfter: retry}
+	}
+	if limit > 0 && int64(len(resp.Body)) > limit {
+		return nil, fmt.Errorf("the add-on answered with more than %d bytes", limit)
+	}
+	return resp.Body, nil
+}
+
+// Addon is the installed plugin as a Stremio add-on: its Stremio manifest
+// read through Fetcher.
+func (m *Manager) Addon(rec Record) stremio.Addon {
+	return stremio.Addon{Manifest: rec.Manifest.Stremio(), Fetcher: m.Fetcher(rec.ID)}
+}

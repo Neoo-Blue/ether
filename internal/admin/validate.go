@@ -12,7 +12,6 @@ import (
 	"github.com/braedonsaunders/ether/internal/libraryfilter"
 	"github.com/braedonsaunders/ether/internal/releasepolicy"
 	"github.com/braedonsaunders/ether/internal/remote"
-	"github.com/braedonsaunders/ether/internal/stremio"
 )
 
 // FieldError is one validation problem, addressed by dotted field path.
@@ -87,10 +86,6 @@ func ValidateConfig(cfg config.Config) []FieldError {
 				v.add(field+".kind", "OpenSubtitles can only appear once")
 			}
 			openSubtitles = true
-		case config.SubtitleProviderStremio:
-			if _, err := stremio.BaseURL(provider.URL); err != nil {
-				v.add(field+".url", "enter a valid Stremio add-on URL")
-			}
 		default:
 			if !strings.HasPrefix(provider.Kind, "plugin:") || !strings.HasSuffix(provider.Kind, "/subtitles") || provider.ID != provider.Kind {
 				v.add(field+".kind", "unknown subtitle provider")
@@ -222,15 +217,18 @@ func ValidateConfig(cfg config.Config) []FieldError {
 
 	for i, ix := range cfg.Indexers {
 		f := fmt.Sprintf("indexers[%d]", i)
-		v.httpURL(f+".url", ix.URL, true)
+		if ix.IsAddon() {
+			if strings.TrimSpace(ix.Plugin) == "" {
+				v.add(f+".plugin", "names the installed add-on")
+			}
+		} else {
+			v.httpURL(f+".url", ix.URL, true)
+		}
 		if ix.ClientIdentity != "" && !config.ValidSearchIdentity(ix.ClientIdentity) {
 			v.add(f+".clientIdentity", "must be a client that searches or empty to inherit")
 		}
 		if ix.Kind != "" {
-			v.oneOf(f+".kind", ix.Kind, config.IndexerKindNewznab, config.IndexerKindCardigann, config.IndexerKindStremio)
-		}
-		if ix.IsStremio() && ix.Protocol != "" && ix.Protocol != "torrent" {
-			v.add(f+".protocol", "must be torrent for a Stremio addon")
+			v.oneOf(f+".kind", ix.Kind, config.IndexerKindNewznab, config.IndexerKindCardigann, config.IndexerKindAddon)
 		}
 		if ix.IsBuiltin() && strings.TrimSpace(ix.Definition) == "" {
 			v.add(f+".definition", "is required for a built-in site")

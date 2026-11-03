@@ -274,8 +274,8 @@ func validateWith(reg *KindRegistry, s *core.CollectionSpec) error {
 	default:
 		ve.add("refresh", `must be "live", "hourly", "daily" or "weekly"`)
 	}
-	if s.Refresh == RefreshLive && hasStremioCatalog(*s) {
-		ve.add("refresh", "Stremio catalog sources refresh in the background (hourly, daily or weekly)")
+	if s.Refresh == RefreshLive && hasRemoteListSource(*s) {
+		ve.add("refresh", "Add-on list sources refresh in the background (hourly, daily or weekly)")
 	}
 	if s.Rotate != nil {
 		if s.Rotate.Size > 500 {

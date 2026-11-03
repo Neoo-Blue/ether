@@ -104,7 +104,6 @@ type scorerBox struct{ s core.PersonalScorer }
 type options struct {
 	tmdb        TMDB
 	httpClient  *http.Client
-	stremioHTTP *http.Client
 	userAgent   string
 	indexTTL    time.Duration
 	bases       *ExternalBases

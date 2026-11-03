@@ -194,7 +194,7 @@ type Options struct {
 	Playback           core.Playback
 	Transcoder         core.Transcoder
 	HTTPClient         *http.Client
-	StremioHTTP        *http.Client // optional test transport; nil uses the guarded Stremio client
+	LogoHTTP           *http.Client // optional test transport for the logo index; nil uses the guarded client
 	LogoIndexURL       func() string
 	HealthSweepMinutes func() int // 0 defaults to 15; negative disables
 	Now                func() time.Time

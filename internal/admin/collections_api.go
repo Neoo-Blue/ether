@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/braedonsaunders/ether/internal/collections"
 	"github.com/braedonsaunders/ether/internal/core"
 )
 
@@ -47,7 +46,6 @@ func (h *Handler) collectionRoutes(mux *http.ServeMux, api func(string, http.Han
 	api("GET /api/collections", h.handleListCollections)
 	api("POST /api/collections", h.handleCreateCollection)
 	api("POST /api/collections/preview", h.handlePreviewCollection)
-	api("POST /api/collections/stremio/manifest", h.handleInspectStremioManifest)
 	api("GET /api/collections/templates", h.handleCollectionTemplates)
 	api("POST /api/collections/generate", h.handleGenerateCollection)
 	api("GET /api/collections/{id}", h.handleGetCollection)
@@ -311,50 +309,6 @@ func (h *Handler) handlePreviewCollection(w http.ResponseWriter, r *http.Request
 		took = time.Since(started).Milliseconds()
 	}
 	writeJSON(w, http.StatusOK, previewResponse{Total: p.Total, Items: cardsFor(p.Items), Warnings: warnings, TookMs: took})
-}
-
-func (h *Handler) handleInspectStremioManifest(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		URL          string `json:"url"`
-		CollectionID string `json:"collectionId,omitempty"`
-		CatalogID    string `json:"catalogId,omitempty"`
-		MediaType    string `json:"mediaType,omitempty"`
-	}
-	if err := decodeJSON(r, &body); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_json", err.Error())
-		return
-	}
-	rawURL := strings.TrimSpace(body.URL)
-	if isRedactedStremioURL(rawURL) && strings.TrimSpace(body.CollectionID) != "" && h.deps.Collections != nil {
-		if existing, err := h.deps.Collections.GetSpec(r.Context(), body.CollectionID); err == nil && existing != nil {
-			var choices = map[string]bool{}
-			for _, old := range existing.Sources {
-				if old.Kind == "stremioCatalog" && old.List == body.CatalogID && old.MediaType == body.MediaType && redactStremioURL(old.URL) == rawURL {
-					choices[old.URL] = true
-				}
-			}
-			if len(choices) == 1 {
-				for choice := range choices {
-					rawURL = choice
-				}
-			}
-		}
-	}
-	inspector, ok := h.deps.Collections.(interface {
-		InspectStremioManifest(ctx context.Context, rawURL string) (*collections.StremioManifestSummary, error)
-	})
-	if !ok {
-		writeError(w, http.StatusNotImplemented, "not_configured", "Stremio catalog inspection is unavailable")
-		return
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
-	defer cancel()
-	info, err := inspector.InspectStremioManifest(ctx, rawURL)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, "upstream", err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, info)
 }
 
 func (h *Handler) handleRebuildCollection(w http.ResponseWriter, r *http.Request) {

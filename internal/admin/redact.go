@@ -108,7 +108,7 @@ func RedactConfig(cfg config.Config) config.Config {
 		for i, ix := range cfg.Indexers {
 			ix.APIKey = redact(ix.APIKey)
 			ix.SecretSettings = redactMap(ix.SecretSettings)
-			if ix.IsStremio() {
+			if (ix.Kind == config.IndexerKindStremio) {
 				ix.URL = redactStremioURL(ix.URL)
 			}
 			out.Indexers[i] = ix
@@ -374,12 +374,13 @@ func (e *placeholderErrors) unredactIndexer(field string, ix config.Indexer, fla
 			break
 		}
 	}
-	// A redacted Stremio install URL restores only for the same entry
+	// A legacy Stremio indexer row (migrated at start into an installed
+	// add-on) keeps its link redacted. A redacted install URL restores only for the same entry
 	// still pointing at the same host; anything else must be pasted again.
-	if ix.IsStremio() && isRedactedStremioURL(ix.URL) {
-		if found && old.IsStremio() && stremioURLHost(ix.URL) != "" && stremioURLHost(ix.URL) == stremioURLHost(old.URL) {
+	if (ix.Kind == config.IndexerKindStremio) && isRedactedStremioURL(ix.URL) {
+		if found && (old.Kind == config.IndexerKindStremio) && stremioURLHost(ix.URL) != "" && stremioURLHost(ix.URL) == stremioURLHost(old.URL) {
 			ix.URL = old.URL
-		} else if found && isRedacted(ix.URL) && old.IsStremio() {
+		} else if found && isRedacted(ix.URL) && (old.Kind == config.IndexerKindStremio) {
 			ix.URL = old.URL
 		} else {
 			e.add(field + ".url")

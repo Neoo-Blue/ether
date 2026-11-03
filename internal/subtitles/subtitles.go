@@ -605,9 +605,6 @@ func (s *Service) download(ctx context.Context, c Candidate) ([]byte, error) {
 		}
 		return unzipSubtitleCandidate(raw, c)
 	}
-	if c.DownloadURL != "" {
-		return s.downloadStremio(ctx, c)
-	}
 	link, err := s.requestLink(ctx, c)
 	if err != nil {
 		return nil, err

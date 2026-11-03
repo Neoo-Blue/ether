@@ -98,7 +98,7 @@ func (s *Service) UpdateSpec(ctx context.Context, id string, sp core.CollectionS
 
 func (s *Service) afterSave(ctx context.Context, row *specRow) (*core.CollectionSpec, error) {
 	if row.enabled {
-		if hasStremioCatalog(row.spec) {
+		if hasRemoteListSource(row.spec) {
 			go func() {
 				bctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 				defer cancel()

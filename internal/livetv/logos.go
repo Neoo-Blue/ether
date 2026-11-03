@@ -3,10 +3,17 @@ package livetv
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"strings"
+	"time"
 	"unicode"
 
-	"github.com/braedonsaunders/ether/internal/stremio"
+	"github.com/braedonsaunders/ether/internal/egress"
+	"github.com/braedonsaunders/ether/internal/safefetch"
 )
 
 func logoName(s string) string {
@@ -29,11 +36,7 @@ func (s *Service) matchLogos(ctx context.Context, cs []Channel) {
 	if raw == "" {
 		return
 	}
-	client, err := stremio.NewClient(raw, s.o.StremioHTTP)
-	if err != nil {
-		return
-	}
-	data, err := client.FetchBytes(ctx, raw, 8<<20)
+	data, err := s.fetchLogoIndex(ctx, raw)
 	if err != nil {
 		return
 	}
@@ -76,4 +79,35 @@ func (s *Service) matchLogos(ctx context.Context, cs []Channel) {
 			cs[i].LogoMatched = cs[i].Logo != ""
 		}
 	}
+}
+
+// fetchLogoIndex downloads the owner's logo index (8 MiB at most) through
+// the guarded client: public addresses only, no referrer.
+func (s *Service) fetchLogoIndex(ctx context.Context, raw string) ([]byte, error) {
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return nil, errors.New("livetv: invalid logo index URL")
+	}
+	client := s.o.LogoHTTP
+	if client == nil {
+		client = (&safefetch.Guard{}).Client(egress.Client(egress.CapStremio, 20*time.Second))
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("livetv: logo index from %s: download failed", u.Host)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return nil, fmt.Errorf("livetv: logo index from %s: HTTP %d", u.Host, resp.StatusCode)
+	}
+	const limit = 8 << 20
+	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	if err != nil || len(data) > limit {
+		return nil, fmt.Errorf("livetv: logo index from %s is unreadable or too large", u.Host)
+	}
+	return data, nil
 }

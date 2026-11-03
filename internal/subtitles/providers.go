@@ -1,6 +1,6 @@
 package subtitles
 
-// Stremio subtitle add-ons as subtitle providers beside OpenSubtitles.
+// Add-on subtitle providers beside OpenSubtitles.
 //
 // An add-on whose manifest resources include "subtitles" answers
 // GET /subtitles/{type}/{id}[/videoHash=…&videoSize=…].json with
@@ -13,18 +13,12 @@ package subtitles
 
 import (
 	"context"
-	"fmt"
-	"hash/fnv"
-	"net/url"
-	"path"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/braedonsaunders/ether/internal/config"
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/langtag"
-	"github.com/braedonsaunders/ether/internal/stremio"
 )
 
 type videoHashEntry struct {
@@ -108,10 +102,6 @@ func (s *Service) searchEnabled() bool {
 			if s.openSubtitlesEnabled() {
 				return true
 			}
-		case config.SubtitleProviderStremio:
-			if strings.TrimSpace(p.URL) != "" {
-				return true
-			}
 		}
 	}
 	return false
@@ -122,115 +112,6 @@ func (s *Service) UpdateProviders(ps []config.SubtitleProvider) {
 	s.mu.Lock()
 	s.providers = append([]config.SubtitleProvider(nil), ps...)
 	s.mu.Unlock()
-}
-
-// stremioFileID is a stable synthetic FileID for an add-on subtitle, in
-// a range OpenSubtitles file ids never reach.
-func stremioFileID(providerID, subID, rawURL string) int64 {
-	h := fnv.New64a()
-	_, _ = h.Write([]byte(providerID + "\x00" + subID + "\x00" + rawURL))
-	return int64(1)<<62 | int64(h.Sum64()&((1<<62)-1))
-}
-
-// stremioLookup is the add-on request identity for a title: IMDb id,
-// with :season:episode for episodes.
-func stremioLookup(title *core.Title) (typ, id string, ok bool) {
-	if title.Type == core.TypeEpisode {
-		imdb := title.ShowIDs.IMDB
-		if imdb == "" {
-			imdb = title.IDs.IMDB
-		}
-		season, episode := title.Season, title.Episode
-		if season == 0 && title.Key.Kind() == core.KindEpisode {
-			season, episode = title.Key.Season(), title.Key.Episode()
-		}
-		if imdb == "" || season <= 0 || episode <= 0 {
-			return "", "", false
-		}
-		return "series", fmt.Sprintf("%s:%d:%d", imdb, season, episode), true
-	}
-	if title.IDs.IMDB == "" {
-		return "", "", false
-	}
-	return "movie", title.IDs.IMDB, true
-}
-
-// searchStremio lists one add-on's subtitles for a title+language. It
-// never downloads a subtitle file.
-func (s *Service) searchStremio(ctx context.Context, p config.SubtitleProvider, title *core.Title, lang, movieHash string, videoSize int64) ([]Candidate, error) {
-	typ, id, ok := stremioLookup(title)
-	if !ok {
-		return nil, nil
-	}
-	client, err := stremio.NewClient(p.URL, s.stremioHTTP)
-	if err != nil {
-		return nil, err
-	}
-	extra := map[string]string{}
-	if movieHash != "" {
-		extra["videoHash"] = movieHash
-	}
-	if videoSize > 0 {
-		extra["videoSize"] = strconv.FormatInt(videoSize, 10)
-	}
-	subs, err := client.Subtitles(ctx, typ, id, extra)
-	if err != nil {
-		return nil, err
-	}
-	name := p.Name
-	if name == "" {
-		name = client.Host()
-	}
-	var out []Candidate
-	for _, sub := range subs {
-		subLang := langtag.Normalize(sub.Lang)
-		if subLang == "" || sub.URL == "" {
-			continue
-		}
-		if langtag.MatchTier(lang, subLang) == 0 {
-			continue
-		}
-		file := sub.Filename
-		if file == "" {
-			file = sub.SubFileName
-		}
-		if file == "" {
-			if u, err := url.Parse(sub.URL); err == nil {
-				file = path.Base(u.Path)
-			}
-		}
-		file = path.Base(strings.SplitN(strings.SplitN(file, "?", 2)[0], "#", 2)[0])
-		if file == "." || file == "/" {
-			file = "subtitle"
-		}
-		rel := strings.TrimSuffix(file, path.Ext(file))
-		hashMatch := sub.HashMatch || (movieHash != "" && strings.Contains(strings.ToLower(sub.ID+" "+sub.URL+" "+file), strings.ToLower(movieHash)))
-		out = append(out, Candidate{
-			FileID:      stremioFileID(p.ID, sub.ID, sub.URL),
-			FileName:    file,
-			Language:    subLang,
-			Release:     rel,
-			HashMatch:   hashMatch,
-			Provider:    name,
-			ProviderID:  p.ID,
-			DownloadURL: sub.URL,
-		})
-	}
-	return out, nil
-}
-
-// downloadStremio fetches a picked Stremio subtitle file and runs it
-// through the same zip/size check as OpenSubtitles downloads.
-func (s *Service) downloadStremio(ctx context.Context, c Candidate) ([]byte, error) {
-	client, err := stremio.NewClient(c.DownloadURL, s.stremioHTTP)
-	if err != nil {
-		return nil, err
-	}
-	raw, err := client.FetchBytes(ctx, c.DownloadURL, maxSubtitleBytes)
-	if err != nil {
-		return nil, err
-	}
-	return unzipSubtitleCandidate(raw, c)
 }
 
 // searchProviders runs every enabled provider in owner order and merges
@@ -256,11 +137,6 @@ func (s *Service) searchProviders(ctx context.Context, title *core.Title, lang, 
 					cands[j].ProviderID = "opensubtitles"
 				}
 			}
-		case config.SubtitleProviderStremio:
-			if strings.TrimSpace(p.URL) == "" {
-				continue
-			}
-			cands, err = s.searchStremio(ctx, p, title, lang, movieHash, videoSize)
 		default:
 			pluginID := strings.TrimSuffix(strings.TrimPrefix(p.Kind, "plugin:"), "/subtitles")
 			s.mu.Lock()

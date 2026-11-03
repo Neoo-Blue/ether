@@ -75,6 +75,7 @@ type Manager struct {
 	catalogue   Catalogue
 	fatories    map[string]RuntimeFactory
 	runtimes    map[string]Runtime
+	removeHooks []func(context.Context, string)
 	syncHooks   []func(ctx context.Context, r Record)
 	eventSubs   map[string]map[string]Record
 	notifyLocks sync.Map // plugin id -> *sync.Mutex
@@ -885,8 +886,21 @@ func (m *Manager) Remove(ctx context.Context, id string, undoFirst bool) error {
 	if err := m.store.purge(ctx, id); err != nil {
 		return err
 	}
+	m.mu.Lock()
+	hooks := append([]func(context.Context, string){}, m.removeHooks...)
+	m.mu.Unlock()
+	for _, fn := range hooks {
+		fn(ctx, id)
+	}
 	m.broadcast(ctx)
 	return nil
+}
+
+// OnRemove registers a callback run after a plugin is uninstalled.
+func (m *Manager) OnRemove(fn func(ctx context.Context, id string)) {
+	m.mu.Lock()
+	m.removeHooks = append(m.removeHooks, fn)
+	m.mu.Unlock()
 }
 
 // startActionJob lets a page action start long work: when the action's

@@ -319,13 +319,7 @@ func (k *listSourceKind) fetchCatalogPages(g *collections.Gather, catType, catID
 	if foreign {
 		for _, cat := range rec.Manifest.Catalogs {
 			if cat.Type == catType && cat.ID == catID {
-				var extras []plugins.StremioExtra
-				_ = json.Unmarshal(cat.Extra, &extras)
-				for _, x := range extras {
-					if x.Name == "skip" {
-						canPage = true
-					}
-				}
+				canPage = canPage || cat.SupportsSkip()
 			}
 		}
 	}

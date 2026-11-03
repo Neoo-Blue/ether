@@ -18,7 +18,6 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -26,9 +25,8 @@ import (
 
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/debrid"
-	"github.com/braedonsaunders/ether/internal/newznab"
 	"github.com/braedonsaunders/ether/internal/plugins"
-	"github.com/braedonsaunders/ether/internal/releaseparse"
+	"github.com/braedonsaunders/ether/internal/stremio"
 )
 
 const (
@@ -79,44 +77,6 @@ func DecodeLocalPayload(b []byte) (LocalPayload, error) {
 	return p, nil
 }
 
-// PluginStream is one stream object returned from GET /stream/{type}/{id}.json
-// (SPEC §5.1.4). Standard Stremio fields keep their Stremio meaning; Ether
-// additions live under Ether.
-type PluginStream struct {
-	Name          string            `json:"name,omitempty"`
-	Title         string            `json:"title,omitempty"`
-	Description   string            `json:"description,omitempty"`
-	InfoHash      string            `json:"infoHash,omitempty"`
-	FileIdx       *int              `json:"fileIdx,omitempty"`
-	URL           string            `json:"url,omitempty"`
-	NZBURL        string            `json:"nzbUrl,omitempty"`
-	Sources       []string          `json:"sources,omitempty"`
-	BehaviorHints *behaviorHints    `json:"behaviorHints,omitempty"`
-	Ether         *EtherStreamBlock `json:"ether,omitempty"`
-}
-
-type behaviorHints struct {
-	Filename     string `json:"filename,omitempty"`
-	VideoSize    int64  `json:"videoSize,omitempty"`
-	ProxyHeaders struct {
-		Request map[string]string `json:"request,omitempty"`
-	} `json:"proxyHeaders,omitempty"`
-}
-
-// EtherStreamBlock is the optional `ether` block on a stream object (SPEC §5.1.4).
-type EtherStreamBlock struct {
-	ID          string   `json:"id,omitempty"`
-	ReleaseName string   `json:"releaseName,omitempty"`
-	Size        int64    `json:"size,omitempty"`
-	Languages   []string `json:"languages,omitempty"`
-	Lazy        bool     `json:"lazy,omitempty"`
-	File        string   `json:"file,omitempty"`
-}
-
-type streamResponse struct {
-	Streams []PluginStream `json:"streams"`
-}
-
 type openResponse struct {
 	URL       string            `json:"url,omitempty"`
 	Headers   map[string]string `json:"headers,omitempty"`
@@ -131,17 +91,6 @@ type sourceLimits struct {
 	DailyGrabs    int `json:"dailyGrabs,omitempty"`
 	Searches      int `json:"searches,omitempty"`
 	Grabs         int `json:"grabs,omitempty"`
-}
-
-type rememberedStream struct {
-	pluginID   string
-	pluginName string
-	streamID   string
-	lazy       bool
-	file       string
-	url        string
-	headers    map[string]string
-	origin     string
 }
 
 // SourceStats reports per-plugin stream-source activity for the Sources -> Usage tab.
@@ -169,13 +118,15 @@ type StreamSources struct {
 	inner       core.Indexer
 	usenetReady func() bool
 
-	mu      sync.RWMutex
-	mgr     *plugins.Manager
-	debrid  *debrid.Service
-	order   []string
-	streams map[string]rememberedStream
-	usage   map[string]*pluginUsage
-	now     func() time.Time
+	mu       sync.RWMutex
+	mgr      *plugins.Manager
+	debrid   *debrid.Service
+	order    []string
+	usage    map[string]*pluginUsage
+	now      func() time.Time
+	backends map[string]*addonBackend
+	anime    stremio.AnimeIDs
+	nzb      *http.Client
 }
 
 var (
@@ -188,10 +139,9 @@ var (
 // NewStreamSources constructs a StreamSources adapter wrapping inner.
 func NewStreamSources(inner core.Indexer) *StreamSources {
 	return &StreamSources{
-		inner:   inner,
-		streams: map[string]rememberedStream{},
-		usage:   map[string]*pluginUsage{},
-		now:     func() time.Time { return time.Now().UTC() },
+		inner: inner,
+		usage: map[string]*pluginUsage{},
+		now:   func() time.Time { return time.Now().UTC() },
 	}
 }
 
@@ -308,44 +258,20 @@ func (s *StreamSources) Search(ctx context.Context, req core.SearchRequest) ([]c
 	return s.SearchWith(ctx, req, nil)
 }
 
-// SearchWith implements core.StreamingIndexer.
+// SearchWith implements core.StreamingIndexer. Add-on streams are
+// searched as indexer rows inside inner (see Backend).
 func (s *StreamSources) SearchWith(ctx context.Context, req core.SearchRequest, arrived func([]core.Release)) ([]core.Release, error) {
-	var (
-		innerRels []core.Release
-		innerErr  error
-		wg        sync.WaitGroup
-	)
-	if s.inner != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if st, ok := s.inner.(core.StreamingIndexer); ok && arrived != nil {
-				innerRels, innerErr = st.SearchWith(ctx, req, arrived)
-			} else {
-				innerRels, innerErr = s.inner.Search(ctx, req)
-				if arrived != nil && len(innerRels) > 0 {
-					arrived(innerRels)
-				}
-			}
-		}()
+	if s.inner == nil {
+		return nil, core.ErrNoSources
 	}
-
-	pluginRels, pluginErr := s.searchPlugins(ctx, req, arrived)
-	wg.Wait()
-
-	if len(innerRels) == 0 && len(pluginRels) == 0 {
-		if innerErr != nil && !errors.Is(innerErr, core.ErrNoSources) {
-			return nil, innerErr
-		}
-		if pluginErr != nil {
-			return nil, pluginErr
-		}
-		return nil, innerErr
+	if st, ok := s.inner.(core.StreamingIndexer); ok && arrived != nil {
+		return st.SearchWith(ctx, req, arrived)
 	}
-	out := make([]core.Release, 0, len(pluginRels)+len(innerRels))
-	out = append(out, pluginRels...)
-	out = append(out, innerRels...)
-	return out, nil
+	rels, err := s.inner.Search(ctx, req)
+	if arrived != nil && len(rels) > 0 {
+		arrived(rels)
+	}
+	return rels, err
 }
 
 // SearchRescue implements core.RescueIndexer.
@@ -371,18 +297,15 @@ func (s *StreamSources) SearchRescueWith(ctx context.Context, req core.SearchReq
 	return nil, nil
 }
 
-// FetchNZB implements core.Indexer. Plugin-backed local file and lazy streams
-// are resolved here; built-in Usenet releases delegate to the inner indexer.
+// FetchNZB implements core.Indexer. An Ether plugin's lazy and local-file
+// streams are opened here at play time (their GUID names the plugin and
+// the stream); everything else is the inner indexer's.
 func (s *StreamSources) FetchNZB(ctx context.Context, r core.Release) ([]byte, error) {
-	s.mu.RLock()
-	rem, isPlugin := s.streams[r.ID]
-	if !isPlugin && r.GUID != "" {
-		rem, isPlugin = s.streams[r.GUID]
-	}
-	usenetReady := s.usenetReady
-	s.mu.RUnlock()
-
-	if !isPlugin {
+	plugin, kind, ref, direct := directStream(r.GUID)
+	if !direct {
+		s.mu.RLock()
+		usenetReady := s.usenetReady
+		s.mu.RUnlock()
 		if r.Protocol == core.ProtocolUsenet && usenetReady != nil && !usenetReady() {
 			return nil, fmt.Errorf("usenet release %q: %w", r.Name, core.ErrNotAvailable)
 		}
@@ -391,70 +314,70 @@ func (s *StreamSources) FetchNZB(ctx context.Context, r core.Release) ([]byte, e
 		}
 		return s.inner.FetchNZB(ctx, r)
 	}
-
-	if err := s.spendGrab(ctx, rem.pluginID); err != nil {
+	if err := s.spendGrab(ctx, plugin); err != nil {
 		return nil, err
 	}
-
-	if rem.lazy {
-		return s.openLazyStream(ctx, r, rem)
+	name := plugin
+	s.mu.RLock()
+	mgr := s.mgr
+	s.mu.RUnlock()
+	if mgr != nil {
+		if rec, err := mgr.Get(ctx, plugin); err == nil {
+			name = rec.Name
+		}
 	}
-	if rem.file != "" {
-		return s.prepareLocalFile(ctx, r, rem.pluginID, rem.pluginName, rem.file)
+	if kind == "file" {
+		return s.prepareLocalFile(ctx, r, plugin, name, ref)
 	}
-	if rem.url != "" {
-		return s.prepareDirectURL(ctx, r, rem.url, rem.headers, rem.origin)
-	}
-	if s.inner != nil {
-		return s.inner.FetchNZB(ctx, r)
-	}
-	return nil, fmt.Errorf("plugin %s stream %q: %w", rem.pluginID, r.Name, core.ErrNotAvailable)
+	return s.openLazyStream(ctx, r, plugin, name, ref)
 }
 
-func (s *StreamSources) openLazyStream(ctx context.Context, r core.Release, rem rememberedStream) ([]byte, error) {
+func (s *StreamSources) openLazyStream(ctx context.Context, r core.Release, pluginID, pluginName, streamID string) ([]byte, error) {
+	origin := ""
+	if mgr := s.manager(); mgr != nil {
+		if rec, err := mgr.Get(ctx, pluginID); err == nil {
+			origin = pluginOrigin(rec.SourceURL)
+		}
+	}
 	s.mu.RLock()
 	mgr := s.mgr
 	s.mu.RUnlock()
 	if mgr == nil {
 		return nil, core.ErrSourceUnavailable
 	}
-	if rem.streamID == "" {
-		return nil, fmt.Errorf("plugin %s lazy stream missing id: %w", rem.pluginID, core.ErrSourceUnavailable)
+	if streamID == "" {
+		return nil, fmt.Errorf("plugin %s lazy stream missing id: %w", pluginID, core.ErrSourceUnavailable)
 	}
 
 	openCtx, cancel := context.WithTimeout(ctx, openDeadline)
 	defer cancel()
 
-	resp, err := mgr.Call(openCtx, rem.pluginID, plugins.Request{
+	resp, err := mgr.Call(openCtx, pluginID, plugins.Request{
 		Method: http.MethodGet,
-		Path:   "/ether/open/" + url.PathEscape(rem.streamID),
+		Path:   "/ether/open/" + url.PathEscape(streamID),
 	})
 	if err != nil {
-		s.noteFailure(rem.pluginID)
-		return nil, fmt.Errorf("plugin %s open %s: %w", rem.pluginID, rem.streamID, core.ErrSourceUnavailable)
+		s.noteFailure(pluginID)
+		return nil, fmt.Errorf("plugin %s open %s: %w", pluginID, streamID, core.ErrSourceUnavailable)
 	}
 	if resp.Status < 200 || resp.Status >= 300 {
-		s.noteFailure(rem.pluginID)
-		return nil, fmt.Errorf("plugin %s open %s status %d: %w", rem.pluginID, rem.streamID, resp.Status, core.ErrSourceUnavailable)
+		s.noteFailure(pluginID)
+		return nil, fmt.Errorf("plugin %s open %s status %d: %w", pluginID, streamID, resp.Status, core.ErrSourceUnavailable)
 	}
 
 	var opened openResponse
 	if err := json.Unmarshal(resp.Body, &opened); err != nil {
-		s.noteFailure(rem.pluginID)
-		return nil, fmt.Errorf("plugin %s open %s invalid json: %w", rem.pluginID, rem.streamID, core.ErrSourceUnavailable)
+		s.noteFailure(pluginID)
+		return nil, fmt.Errorf("plugin %s open %s invalid json: %w", pluginID, streamID, core.ErrSourceUnavailable)
 	}
 	if opened.File != "" {
-		return s.prepareLocalFile(ctx, r, rem.pluginID, rem.pluginName, opened.File)
+		return s.prepareLocalFile(ctx, r, pluginID, pluginName, opened.File)
 	}
 	if opened.URL != "" {
-		headers := opened.Headers
-		if len(headers) == 0 {
-			headers = rem.headers
-		}
-		return s.prepareDirectURL(ctx, r, opened.URL, headers, rem.origin)
+		return s.prepareDirectURL(ctx, r, opened.URL, opened.Headers, origin)
 	}
-	s.noteFailure(rem.pluginID)
-	return nil, fmt.Errorf("plugin %s open %s returned no url or file: %w", rem.pluginID, rem.streamID, core.ErrSourceUnavailable)
+	s.noteFailure(pluginID)
+	return nil, fmt.Errorf("plugin %s open %s returned no url or file: %w", pluginID, streamID, core.ErrSourceUnavailable)
 }
 
 func (s *StreamSources) prepareDirectURL(ctx context.Context, r core.Release, rawURL string, headers map[string]string, origin string) ([]byte, error) {
@@ -528,6 +451,12 @@ func (s *StreamSources) prepareLocalFile(ctx context.Context, r core.Release, pl
 		Origin:    origin,
 	}
 	return p.Encode(), nil
+}
+
+func (s *StreamSources) manager() *plugins.Manager {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.mgr
 }
 
 func (s *StreamSources) isRemote(ctx context.Context, id string) bool {
@@ -844,444 +773,6 @@ func (s *StreamSources) enabledPlugins(ctx context.Context) []plugins.Record {
 		})
 	}
 	return out
-}
-
-func (s *StreamSources) searchPlugins(ctx context.Context, req core.SearchRequest, arrived func([]core.Release)) ([]core.Release, error) {
-	switch req.Type {
-	case core.TypeMovie:
-	case core.TypeEpisode, core.TypeSeason:
-		if req.Season <= 0 {
-			return nil, nil
-		}
-	default:
-		return nil, nil
-	}
-
-	recs := s.enabledPlugins(ctx)
-	if len(recs) == 0 {
-		return nil, nil
-	}
-
-	s.mu.RLock()
-	mgr := s.mgr
-	s.mu.RUnlock()
-	if mgr == nil {
-		return nil, nil
-	}
-
-	type pluginResult struct {
-		rels []core.Release
-		err  error
-	}
-	results := make([]pluginResult, len(recs))
-	var wg sync.WaitGroup
-	for i, rec := range recs {
-		i, rec := i, rec
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			rels, err := s.searchOnePlugin(ctx, mgr, rec, req)
-			results[i] = pluginResult{rels: rels, err: err}
-			if arrived != nil && len(rels) > 0 {
-				arrived(rels)
-			}
-		}()
-	}
-	wg.Wait()
-
-	var (
-		all      []core.Release
-		firstErr error
-	)
-	for _, res := range results {
-		if len(res.rels) > 0 {
-			all = append(all, res.rels...)
-		} else if res.err != nil && firstErr == nil {
-			firstErr = res.err
-		}
-	}
-	return all, firstErr
-}
-
-func (s *StreamSources) searchOnePlugin(ctx context.Context, mgr *plugins.Manager, rec plugins.Record, req core.SearchRequest) ([]core.Release, error) {
-	kind, lookupID, ok := pluginLookupID(rec.Manifest, req)
-	if !ok {
-		return nil, nil
-	}
-	if err := s.spendSearch(ctx, rec); err != nil {
-		return nil, err
-	}
-	query := map[string]string{}
-	if req.Title != "" {
-		query["title"] = req.Title
-	}
-	if req.Year > 0 {
-		query["year"] = strconv.Itoa(req.Year)
-	}
-	if req.Season > 0 {
-		query["season"] = strconv.Itoa(req.Season)
-	}
-	if req.Episode > 0 {
-		query["episode"] = strconv.Itoa(req.Episode)
-	}
-	if req.IDs.IMDB != "" {
-		query["imdbId"] = req.IDs.IMDB
-	}
-	if req.IDs.TMDB > 0 {
-		query["tmdbId"] = strconv.FormatInt(req.IDs.TMDB, 10)
-	}
-
-	// Ordinary manifests use only the Stremio resource identity; Ether-only
-	// query hints are for native plugins that opt into that contract.
-	if rec.Manifest.Ether == nil {
-		query = nil
-	}
-	path := "/stream/" + kind + "/" + url.PathEscape(lookupID) + ".json"
-	resp, err := mgr.Call(ctx, rec.ID, plugins.Request{
-		Method: http.MethodGet,
-		Path:   path,
-		Query:  query,
-	})
-	if err != nil {
-		s.noteFailure(rec.ID)
-		return nil, err
-	}
-	if resp.Status < 200 || resp.Status >= 300 {
-		s.noteFailure(rec.ID)
-		return nil, fmt.Errorf("plugin %s answered HTTP %d", rec.ID, resp.Status)
-	}
-	var payload streamResponse
-	if err := json.Unmarshal(resp.Body, &payload); err != nil {
-		s.noteFailure(rec.ID)
-		return nil, fmt.Errorf("plugin %s returned invalid stream JSON: %w", rec.ID, err)
-	}
-	return s.convertPluginStreams(ctx, rec, req, payload.Streams), nil
-}
-
-func pluginLookupID(man plugins.Manifest, req core.SearchRequest) (kind, id string, ok bool) {
-	kind = "movie"
-	if req.Type != core.TypeMovie {
-		kind = "series"
-	}
-	if man.Ether == nil {
-		candidates := []string{}
-		if req.IDs.IMDB != "" {
-			candidates = append(candidates, normalizeIMDb(req.IDs.IMDB))
-		}
-		if req.IDs.TMDB > 0 {
-			candidates = append(candidates, fmt.Sprintf("tmdb:%d", req.IDs.TMDB))
-		}
-		if req.IDs.TVDB > 0 {
-			candidates = append(candidates, fmt.Sprintf("tvdb:%d", req.IDs.TVDB))
-		}
-		for _, candidate := range candidates {
-			if kind == "series" {
-				if req.Episode <= 0 {
-					continue
-				}
-				candidate = fmt.Sprintf("%s:%d:%d", candidate, req.Season, req.Episode)
-			}
-			if man.AcceptsResource("stream", kind, candidate) {
-				return kind, candidate, true
-			}
-		}
-		return "", "", false
-	}
-	if len(man.Types) > 0 {
-		found := false
-		for _, t := range man.Types {
-			if strings.EqualFold(t, kind) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return "", "", false
-		}
-	}
-
-	accepts := func(prefix string) bool {
-		if len(man.IDPrefixes) == 0 {
-			return true
-		}
-		for _, p := range man.IDPrefixes {
-			p = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(p)), ":")
-			if p == prefix {
-				return true
-			}
-		}
-		return false
-	}
-
-	baseID := ""
-	switch {
-	case req.IDs.IMDB != "" && accepts("tt"):
-		baseID = normalizeIMDb(req.IDs.IMDB)
-	case req.IDs.TMDB > 0 && accepts("tmdb"):
-		baseID = fmt.Sprintf("tmdb:%d", req.IDs.TMDB)
-	case req.IDs.TVDB > 0 && accepts("tvdb"):
-		baseID = fmt.Sprintf("tvdb:%d", req.IDs.TVDB)
-	case req.IDs.IMDB != "":
-		baseID = normalizeIMDb(req.IDs.IMDB)
-	case req.IDs.TMDB > 0:
-		baseID = fmt.Sprintf("tmdb:%d", req.IDs.TMDB)
-	case req.IDs.TVDB > 0:
-		baseID = fmt.Sprintf("tvdb:%d", req.IDs.TVDB)
-	case req.Title != "":
-		baseID = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(req.Title), " ", "-"))
-	}
-	if baseID == "" {
-		return "", "", false
-	}
-	if kind == "series" {
-		ep := req.Episode
-		if ep <= 0 {
-			ep = 1
-		}
-		id = fmt.Sprintf("%s:%d:%d", baseID, req.Season, ep)
-		return kind, id, man.Ether != nil || man.AcceptsResource("stream", kind, id)
-	}
-	return kind, baseID, man.Ether != nil || man.AcceptsResource("stream", kind, baseID)
-}
-
-func normalizeIMDb(id string) string {
-	id = strings.TrimSpace(strings.ToLower(id))
-	if id == "" {
-		return ""
-	}
-	if !strings.HasPrefix(id, "tt") {
-		id = "tt" + id
-	}
-	return id
-}
-
-func (s *StreamSources) convertPluginStreams(ctx context.Context, rec plugins.Record, req core.SearchRequest, streams []PluginStream) []core.Release {
-	if len(streams) == 0 {
-		return nil
-	}
-	origin := pluginOrigin(rec.SourceURL)
-	indexerName := rec.Name
-	if indexerName == "" {
-		indexerName = rec.ID
-	}
-	cat := movieCategory
-	if req.Type != core.TypeMovie {
-		cat = tvCategory
-	}
-
-	out := make([]core.Release, 0, min(len(streams), maxPluginStreams))
-	seen := make(map[string]bool, len(streams))
-
-	for idx := range streams {
-		if len(out) >= maxPluginStreams {
-			break
-		}
-		st := &streams[idx]
-		rel, rem, ok := s.convertOneStream(ctx, rec, indexerName, origin, cat, req, idx, st)
-		if !ok || seen[rel.ID] {
-			continue
-		}
-		seen[rel.ID] = true
-		if rem.pluginID != "" {
-			s.mu.Lock()
-			s.streams[rel.ID] = rem
-			if rel.GUID != "" {
-				s.streams[rel.GUID] = rem
-			}
-			s.mu.Unlock()
-		}
-		out = append(out, rel)
-	}
-	return out
-}
-
-func (s *StreamSources) convertOneStream(
-	ctx context.Context,
-	rec plugins.Record,
-	indexerName, origin string,
-	cat int,
-	req core.SearchRequest,
-	idx int,
-	st *PluginStream,
-) (core.Release, rememberedStream, bool) {
-	var (
-		etherID     string
-		releaseName string
-		size        int64
-		langs       []string
-		lazy        bool
-		localFile   string
-	)
-	if st.Ether != nil {
-		etherID = strings.TrimSpace(st.Ether.ID)
-		releaseName = strings.TrimSpace(st.Ether.ReleaseName)
-		size = st.Ether.Size
-		langs = st.Ether.Languages
-		lazy = st.Ether.Lazy
-		localFile = strings.TrimSpace(st.Ether.File)
-	}
-	var headers map[string]string
-	if st.BehaviorHints != nil {
-		if releaseName == "" && st.BehaviorHints.Filename != "" {
-			releaseName = strings.TrimSpace(st.BehaviorHints.Filename)
-		}
-		if size <= 0 && st.BehaviorHints.VideoSize > 0 {
-			size = st.BehaviorHints.VideoSize
-		}
-		if len(st.BehaviorHints.ProxyHeaders.Request) > 0 {
-			headers = st.BehaviorHints.ProxyHeaders.Request
-		}
-	}
-	if releaseName == "" {
-		for _, candidate := range []string{st.Description, st.Title, st.Name} {
-			if line := firstReleaseLine(candidate); line != "" {
-				releaseName = line
-				break
-			}
-		}
-	}
-	if releaseName == "" && localFile != "" {
-		releaseName = filepath.Base(localFile)
-	}
-	if releaseName == "" {
-		return core.Release{}, rememberedStream{}, false
-	}
-
-	// Parse release facts through Ether's own parser so plugins never rank
-	// their own results (SPEC §5.1.4).
-	info := releaseparse.Parse(releaseName)
-	if len(langs) > 0 {
-		info.Languages = mergeLanguages(info.Languages, langs)
-	}
-
-	streamID := etherID
-	if streamID == "" {
-		streamID = strconv.Itoa(idx)
-	}
-
-	rel := core.Release{
-		Indexer:  indexerName,
-		Name:     releaseName,
-		Size:     size,
-		Category: cat,
-		Info:     info,
-		TitleIDs: req.IDs,
-	}
-
-	switch {
-	case localFile != "":
-		var resolved string
-		var err error
-		if rec.Manifest.RuntimeKind() == "remote" {
-			resolved, _, err = s.validateRemoteFile(ctx, rec.ID, localFile)
-		} else {
-			resolved, _, err = s.validateLocalFile(ctx, rec.ID, localFile)
-		}
-		if err != nil {
-			return core.Release{}, rememberedStream{}, false
-		}
-		// Ensure a local file in an owner-granted folder satisfies identity
-		// and ranks at the top of its title's releases even when the file on
-		// disk is named plainly (e.g. "Movie (2024).mkv").
-		if rel.Info.Title == "" || (!releaseparse.TitleMatches(rel.Info, req.Title) && req.Title != "") {
-			rel.Info.Title = req.Title
-		}
-		if rel.Info.Year == 0 && req.Year > 0 {
-			rel.Info.Year = req.Year
-		}
-		if req.Type == core.TypeEpisode {
-			if len(rel.Info.Seasons) == 0 && req.Season > 0 {
-				rel.Info.Seasons = []int{req.Season}
-			}
-			if len(rel.Info.Episodes) == 0 && req.Episode > 0 {
-				rel.Info.Episodes = []int{req.Episode}
-			}
-		}
-		if rel.Info.Height == 0 {
-			rel.Info.Height = 2160
-		}
-		if rel.Info.Source == core.SourceUnknown {
-			rel.Info.Source = core.SourceRemux
-		}
-		rel.PubDate = s.now()
-		rel.Grabs = 1_000_000
-		rel.Protocol = "direct"
-		rel.GUID = fmt.Sprintf("plugin:%s:file:%s", rec.ID, resolved)
-		rel.ID = releaseIDFor(rec.ID, rel.GUID)
-		return rel, rememberedStream{
-			pluginID:   rec.ID,
-			pluginName: indexerName,
-			streamID:   streamID,
-			file:       localFile,
-			origin:     origin,
-		}, true
-
-	case lazy:
-		if etherID == "" {
-			return core.Release{}, rememberedStream{}, false
-		}
-		rel.Protocol = "direct"
-		rel.GUID = fmt.Sprintf("plugin:%s:lazy:%s", rec.ID, etherID)
-		rel.ID = releaseIDFor(rec.ID, rel.GUID)
-		return rel, rememberedStream{
-			pluginID:   rec.ID,
-			pluginName: indexerName,
-			streamID:   etherID,
-			lazy:       true,
-			headers:    headers,
-			origin:     origin,
-		}, true
-
-	case st.InfoHash != "":
-		hash := newznab.NormalizeInfoHash(st.InfoHash)
-		if hash == "" {
-			return core.Release{}, rememberedStream{}, false
-		}
-		suffix := ""
-		if st.FileIdx != nil && *st.FileIdx >= 0 {
-			suffix = "/" + strconv.Itoa(*st.FileIdx)
-		} else if req.Type != core.TypeMovie && req.Season > 0 && req.Episode > 0 {
-			suffix = fmt.Sprintf("/s%de%d", req.Season, req.Episode)
-		}
-		rel.Protocol = core.ProtocolTorrent
-		rel.InfoHash = hash
-		rel.MagnetURL = newznab.MagnetFor(hash, releaseName, extractTrackers(st.Sources))
-		rel.GUID = "btih:" + hash + suffix
-		rel.ID = releaseIDFor(rec.ID, rel.GUID)
-		if u := validHTTPURL(st.URL); u != "" {
-			rel.StreamURL = u
-			rel.StreamHeaders = headers
-			rel.StreamOrigin = origin
-		}
-		return rel, rememberedStream{}, true
-
-	case validHTTPURL(st.NZBURL) != "":
-		nzbURL := validHTTPURL(st.NZBURL)
-		rel.Protocol = core.ProtocolUsenet
-		rel.NZBURL = nzbURL
-		rel.GUID = fmt.Sprintf("plugin:%s:nzb:%s", rec.ID, streamID)
-		rel.ID = releaseIDFor(rec.ID, rel.GUID)
-		return rel, rememberedStream{}, true
-
-	case validHTTPURL(st.URL) != "":
-		streamURL := validHTTPURL(st.URL)
-		rel.Protocol = core.ProtocolHTTP
-		rel.StreamURL = streamURL
-		rel.StreamHeaders = headers
-		rel.StreamOrigin = origin
-		rel.GUID = fmt.Sprintf("plugin:%s:http:%s", rec.ID, streamID)
-		rel.ID = releaseIDFor(rec.ID, rel.GUID)
-		return rel, rememberedStream{
-			pluginID:   rec.ID,
-			pluginName: indexerName,
-			streamID:   streamID,
-			url:        streamURL,
-			headers:    headers,
-			origin:     origin,
-		}, true
-	}
-
-	return core.Release{}, rememberedStream{}, false
 }
 
 func (s *StreamSources) spendSearch(ctx context.Context, rec plugins.Record) error {

@@ -334,7 +334,6 @@ func builtinSourceKinds() []SourceKind {
 				return s.fetchAniList(ctx, src.URL)
 			}},
 		stevenLuKind{},
-		stremioCatalogKind{},
 	}
 }
 

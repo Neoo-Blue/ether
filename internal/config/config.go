@@ -206,11 +206,14 @@ type Indexer struct {
 	Protocol string `json:"protocol,omitempty"`
 	// Kind selects how the indexer is searched: "" or IndexerKindNewznab
 	// for a Newznab/Torznab API at URL, IndexerKindCardigann for a built-in
-	// site run from an owner-installed definition, IndexerKindStremio for a
-	// Stremio stream addon. For a built-in site URL is the site address and
-	// Protocol follows the definition; for an addon URL is its install URL
-	// and results are torrents.
+	// site run from an owner-installed definition, IndexerKindAddon for an
+	// installed add-on's streams (a Stremio add-on or an Ether source
+	// plugin). For a built-in site URL is the site address and Protocol
+	// follows the definition; an add-on row names its plugin in Plugin and
+	// keeps no URL (the add-on record holds its sealed link).
 	Kind string `json:"kind,omitempty"`
+	// Plugin is the installed add-on an IndexerKindAddon row searches.
+	Plugin string `json:"plugin,omitempty"`
 	// Definition is the installed definition id of a built-in site.
 	Definition string `json:"definition,omitempty"`
 	// Settings are the definition's setting values by name.
@@ -227,22 +230,26 @@ type Indexer struct {
 const (
 	IndexerKindNewznab   = "newznab"
 	IndexerKindCardigann = "cardigann"
-	IndexerKindStremio   = "stremio"
+	IndexerKindAddon     = "addon"
+	// IndexerKindStremio is the retired kind of a Stremio add-on entered
+	// as an indexer with its link. Such rows are migrated once into
+	// installed add-ons (internal/app stremio migration) and never written.
+	IndexerKindStremio = "stremio"
 )
 
 // IsTorrent reports whether the indexer's results are torrents (Torznab or
-// a Stremio addon).
-func (ix Indexer) IsTorrent() bool { return ix.Protocol == "torrent" || ix.IsStremio() }
+// an add-on, whose streams are mostly torrents).
+func (ix Indexer) IsTorrent() bool { return ix.Protocol == "torrent" || ix.IsAddon() }
 
 // IsBuiltin reports whether the indexer is a built-in site.
 func (ix Indexer) IsBuiltin() bool { return ix.Kind == IndexerKindCardigann }
 
-// IsStremio reports whether the indexer is a Stremio stream addon.
-func (ix Indexer) IsStremio() bool { return ix.Kind == IndexerKindStremio }
+// IsAddon reports whether the indexer is an installed add-on's streams.
+func (ix Indexer) IsAddon() bool { return ix.Kind == IndexerKindAddon }
 
 // UsesBackend reports whether the indexer is searched through a backend
-// rather than the Newznab API: a built-in site or a Stremio addon.
-func (ix Indexer) UsesBackend() bool { return ix.IsBuiltin() || ix.IsStremio() }
+// rather than the Newznab API: a built-in site or an add-on.
+func (ix Indexer) UsesBackend() bool { return ix.IsBuiltin() || ix.IsAddon() }
 
 type Cache struct {
 	Storage string `json:"storage,omitempty"` // local (default) or shared; restart required
@@ -444,15 +451,17 @@ type OpenSubtitles struct {
 	Password string `json:"password"`
 }
 
-// Subtitle provider kinds (SubtitleProvider.Kind).
+// Subtitle provider kinds (SubtitleProvider.Kind). An installed add-on's
+// subtitles are kind "plugin:<id>/subtitles".
 const (
 	SubtitleProviderOpenSubtitles = "opensubtitles"
-	SubtitleProviderStremio       = "stremio"
+	// SubtitleProviderStremio is the retired kind of a subtitle add-on
+	// entered with its link (URL, sealed at rest and redacted). Such
+	// entries are migrated once into installed add-ons and never written.
+	SubtitleProviderStremio = "stremio"
 )
 
 // SubtitleProvider is one entry of the owner's subtitle provider order.
-// For kind "stremio", URL is the add-on install URL: a secret, sealed at
-// rest (credentials.go secretIn) and redacted in API responses.
 type SubtitleProvider struct {
 	ID      string `json:"id"`
 	Name    string `json:"name,omitempty"`
