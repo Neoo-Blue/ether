@@ -8,7 +8,7 @@ import {
   Textarea,
   confirmDialog,
 } from "@braedonsaunders/appkit-ui";
-import { ChevronDown, Download, Plus, SlidersHorizontal } from "lucide-react";
+import { ChevronDown, Download, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { MoreOptions } from "../../components/ConfigSection";
@@ -20,6 +20,7 @@ import { DragHandle, SortableList, type DragHandleProps } from "../../components
 import { localized, t, tn, tx } from "../../i18n";
 import { searchSelectLabels } from "../../i18n/appkit-labels";
 import { api } from "../../lib/api";
+import { isPluginDescriptor, textOf } from "../../lib/extend";
 import { qualityGateLabel } from "../../lib/releases";
 import type { QualityProfile, ReleaseRule } from "../../lib/types";
 import { QUALITY_AUDIO, QUALITY_CODECS, QUALITY_SOURCES } from "../settings/schema";
@@ -40,6 +41,9 @@ import {
 import {
   useRankingRegistry,
   descriptorLabel,
+  descriptorOwnerName,
+  insertStepAtDefaultPosition,
+  PluginBadge,
   FilterRulesEditor,
   RuleEditorCard,
   RulePreview,
@@ -298,6 +302,141 @@ function WhatMattersMostSection({
     });
   }
 
+  const [stepToAdd, setStepToAdd] = useState("");
+  const isPluginStep = (step: string) => {
+    const desc = steps.find((d) => d.id === step);
+    return desc ? isPluginDescriptor(desc) : step.startsWith("plugin:");
+  };
+  const addable = steps.filter((d) => isPluginDescriptor(d) && !ladder.includes(d.id));
+  const chosen = addable.some((d) => d.id === stepToAdd) ? stepToAdd : (addable[0]?.id ?? "");
+
+  /** A ranking step a plugin contributes: its badge, its own editor, removal. */
+  function renderPluginStep(step: string, handle: DragHandleProps, index: number) {
+    const desc = steps.find((d) => d.id === step);
+    const meta = desc?.meta;
+    const title = desc ? textOf(desc.label) || step : step;
+    const editor = typeof meta?.editor === "object" ? meta.editor : null;
+    const editorKind =
+      editor?.kind ?? editor?.editor ?? (typeof meta?.editor === "string" ? meta.editor : "none");
+    const choices = (
+      editor?.options ??
+      editor?.choices ??
+      meta?.options ??
+      meta?.choices ??
+      []
+    ).map((o) =>
+      typeof o === "string"
+        ? { value: o, label: o }
+        : { value: o.value, label: textOf(o.label) || o.value },
+    );
+    const config = draft.rankingConfig?.[step] ?? {};
+    const setConfig = (next: Record<string, unknown>) =>
+      patch({ rankingConfig: { ...draft.rankingConfig, [step]: next } });
+    const expandable = ["ordered_list", "choice", "range", "toggle"].includes(editorKind);
+    const isExpanded = expanded === step;
+    const num = (v: unknown) => (typeof v === "number" ? v : 0);
+    return (
+      <div data-ranking-step={step} className="space-y-3 px-3 py-3">
+        <div className="flex items-center gap-2">
+          <DragHandle handle={handle} label={t("Move {name}", { name: title })} />
+          <span className="w-5 text-xs tabular-nums text-fg-muted">{index + 1}</span>
+          <div className="min-w-0 flex-1">
+            <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-fg">
+              {title}
+              {desc ? <PluginBadge owner={descriptorOwnerName(desc)} /> : null}
+            </p>
+            {desc ? null : (
+              <p className="truncate text-xs text-fg-muted">
+                {t("This plugin is off or removed. The step is skipped.")}
+              </p>
+            )}
+          </div>
+          {expandable && desc ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-expanded={isExpanded}
+              aria-label={t("Configure {name}", { name: title })}
+              onClick={() => setExpanded(isExpanded ? null : step)}
+            >
+              {t("Values")}
+              <ChevronDown size={13} />
+            </Button>
+          ) : null}
+          <OrderButtons
+            label={title}
+            i={index}
+            n={ladder.length}
+            onMove={(d) => updateRanking(swap(ladder, index, index + d))}
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={t("Remove step")}
+            onClick={() => updateRanking(ladder.filter((s) => s !== step))}
+          >
+            <Trash2 size={14} />
+          </Button>
+        </div>
+        {isExpanded && desc ? (
+          <div className="space-y-3 border-t border-border pt-3">
+            {editorKind === "toggle" ? (
+              <label className="flex items-center gap-2 text-sm">
+                <Switch
+                  aria-label={title}
+                  checked={config.value === true}
+                  onChange={(e) => setConfig({ value: e.currentTarget.checked })}
+                />
+                {t("Enabled")}
+              </label>
+            ) : null}
+            {editorKind === "choice" ? (
+              <SearchSelect
+                {...searchSelectLabels()}
+                ariaLabel={title}
+                value={typeof config.value === "string" ? config.value : ""}
+                options={choices}
+                onChange={(value) => setConfig({ value })}
+              />
+            ) : null}
+            {editorKind === "ordered_list" ? (
+              <PreferenceList
+                label={title}
+                all={choices.map((c) => c.value)}
+                value={
+                  Array.isArray(config.value)
+                    ? config.value.filter((v): v is string => typeof v === "string")
+                    : []
+                }
+                onChange={(value) => setConfig({ value })}
+              />
+            ) : null}
+            {editorKind === "range" ? (
+              <div className="grid grid-cols-2 gap-3">
+                <label className="space-y-1 text-sm">
+                  {t("Minimum")}
+                  <NumberInput
+                    aria-label={t("Minimum")}
+                    value={num(config.min)}
+                    onChange={(min) => setConfig({ min, max: Math.max(min, num(config.max)) })}
+                  />
+                </label>
+                <label className="space-y-1 text-sm">
+                  {t("Maximum")}
+                  <NumberInput
+                    aria-label={t("Maximum")}
+                    value={num(config.max)}
+                    onChange={(max) => setConfig({ min: Math.min(max, num(config.min)), max })}
+                  />
+                </label>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   function renderBuiltinStep(step: string, handle: DragHandleProps, index: number) {
     const fixed = step === "connection" || step === "verified";
     const stepMeta: Record<string, { title: string; summary: string; expandable?: boolean }> = {
@@ -362,8 +501,7 @@ function WhatMattersMostSection({
           : t("Off"),
       },
     };
-    const descriptor = steps.find(d=>d.id===step);
-    const meta = stepMeta[step] ?? { title: descriptor ? descriptorLabel(descriptor) : step, summary: descriptor?.group ?? "" };
+    const meta = stepMeta[step] ?? { title: step, summary: "" };
     const isExpanded = expanded === step;
 
     return (
@@ -495,9 +633,32 @@ function WhatMattersMostSection({
                 </div>
               );
             }
-            return renderBuiltinStep(step, handle, index);
+            return isPluginStep(step)
+              ? renderPluginStep(step, handle, index)
+              : renderBuiltinStep(step, handle, index);
           }}
         />
+        {addable.length > 0 ? (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="min-w-0 sm:flex-1">
+              <SearchSelect
+                {...searchSelectLabels()}
+                ariaLabel={t("Step to add")}
+                value={chosen}
+                options={addable.map((d) => ({ value: d.id, label: descriptorLabel(d) }))}
+                onChange={setStepToAdd}
+              />
+            </div>
+            <Button
+              size="sm"
+              disabled={!chosen}
+              onClick={() => updateRanking(insertStepAtDefaultPosition(ladder, steps, chosen))}
+            >
+              <Plus size={14} />
+              {t("Add a step")}
+            </Button>
+          </div>
+        ) : null}
       </div>
       <RulePreview profile={draft} />
     </SettingsSection>

@@ -226,7 +226,11 @@ describe("served settings schemas", () => {
     fireEvent.change(screen.getByLabelText("Text field"), { target: { value: "updated" } });
     expect(latest.textField).toBe("updated");
 
-    fireEvent.change(screen.getByLabelText("Duration field"), { target: { value: "2h" } });
+    // Durations are an amount plus a unit.
+    fireEvent.change(screen.getByLabelText("Duration field"), { target: { value: "2" } });
+    expect(latest.durationField).toBe("2m");
+    fireEvent.click(screen.getByRole("button", { name: "Duration field unit" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Hours" }));
     expect(latest.durationField).toBe("2h");
 
     fireEvent.change(screen.getByLabelText("Folder field"), { target: { value: "/srv/video" } });
