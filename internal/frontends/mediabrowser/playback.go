@@ -3,6 +3,7 @@ package mediabrowser
 import (
 	"encoding/json"
 	"errors"
+	"github.com/braedonsaunders/ether/internal/mediasafety"
 	"io"
 	"net/http"
 	"strconv"
@@ -776,6 +777,7 @@ func (i *instance) playbackRoutes() error {
 			return err
 		}
 		if err := i.router.Handle(method, "/sessions/media/{path...}", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			mediasafety.SetHeaders(w)
 			if i.host.Sessions == nil {
 				http.Error(w, "Unavailable", 503)
 				return
@@ -944,6 +946,7 @@ func directFilePath(path string) bool {
 
 // streamAlias translates client-generated URLs into broker-owned, scoped URLs.
 func (i *instance) streamAlias(w http.ResponseWriter, r *http.Request) {
+	mediasafety.SetHeaders(w)
 	name := strings.ToLower(r.PathValue("name"))
 	if i.protocol == "emby" && queryBool(r, "Static", false) && (name == "stream" || strings.HasPrefix(name, "stream.")) {
 		w = &embyStaticResponse{ResponseWriter: w}

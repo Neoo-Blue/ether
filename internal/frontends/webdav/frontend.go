@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"github.com/braedonsaunders/ether/internal/mediasafety"
 	"net/http"
 	"strconv"
 	"strings"
@@ -93,6 +94,7 @@ func (i *instance) authenticate(r *http.Request) (*frontend.Viewer, frontend.Dev
 	return viewer, device, token, nil
 }
 func (i *instance) serve(w http.ResponseWriter, r *http.Request) {
+	mediasafety.SetHeaders(w)
 	viewer, device, credential, err := i.authenticate(r)
 	if err != nil {
 		w.Header().Set("WWW-Authenticate", `Basic realm="Ether WebDAV", charset="UTF-8"`)

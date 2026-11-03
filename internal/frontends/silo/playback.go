@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/braedonsaunders/ether/internal/mediasafety"
 	"math"
 	"net/http"
 	"strconv"
@@ -1067,6 +1068,7 @@ type sessionMedia interface {
 }
 
 func (i *instance) serveSessionMedia(w http.ResponseWriter, r *http.Request, sessionID, resource string) {
+	mediasafety.SetHeaders(w)
 	if i.host.Sessions == nil {
 		http.Error(w, "Unavailable", 503)
 		return
