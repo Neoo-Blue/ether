@@ -67,6 +67,9 @@ func (a *App) buildPlex(ctx context.Context, cfg config.Config) (http.Handler, e
 		deps.Catalog = &availabilityCatalog{Catalog: a.catalog, availability: a.availability}
 		deps.FilterAvailable = a.availability.FilterDiscovery
 	}
+	if !cfg.Spike.Enabled {
+		deps.Search = a.searchSources()
+	}
 	deps.PrioritizeAvailable = func(ctx context.Context, items []core.Title) []core.Title {
 		if a.availability == nil {
 			return items

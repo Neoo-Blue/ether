@@ -114,7 +114,9 @@ func TestSearchResolveSourcePrecedence(t *testing.T) {
 		wantCatalog          bool
 	}{
 		{name: "flat skips collection source", handled: true, wantCatalog: true},
-		{name: "handled empty stays empty", collections: true, handled: true},
+		// A collection reading still checks whether the words are a title's
+		// name; this catalogue's result is not, so the result stays empty.
+		{name: "handled empty stays empty", collections: true, handled: true, wantCatalog: true},
 		{name: "unhandled falls back", collections: true, wantCatalog: true},
 		{name: "error stops fallback", collections: true, sourceErr: errors.New("vibe unavailable")},
 	} {
@@ -125,8 +127,43 @@ func TestSearchResolveSourcePrecedence(t *testing.T) {
 				return []core.Title{{Key: 1, Type: core.TypeMovie}}, nil
 			}}
 			result, err := search.Resolve(context.Background(), &core.User{}, "query", []core.MediaType{core.TypeMovie}, 3, tc.collections)
-			if (err != nil) != (tc.sourceErr != nil) || (calls == 1) != tc.wantCatalog || result.CollectionSearch != (tc.collections && tc.handled) {
+			if (err != nil) != (tc.sourceErr != nil) || (calls == 1) != tc.wantCatalog || result.CollectionSearch != (tc.collections && tc.handled) || (tc.handled && tc.collections && len(result.Items) != 0) {
 				t.Fatalf("result=%+v err=%v catalog calls=%d", result, err, calls)
+			}
+		})
+	}
+}
+
+// A query that is both a collection reading and a title's exact name
+// ("1917": the films of 1917, or the film) leads with the title and still
+// offers the collection.
+func TestSearchResolveTitleBeatsCollectionReading(t *testing.T) {
+	film := core.Title{Key: 7, Type: core.TypeMovie, Title: "1917", SearchScore: 1.05}
+	near := core.Title{Key: 8, Type: core.TypeMovie, Title: "1917: The Real October", SearchScore: 0.86}
+	for _, tc := range []struct {
+		name  string
+		items []core.Title
+		want  core.RatingKey
+	}{
+		{"exact title leads", []core.Title{film, near}, 7},
+		{"no exact title keeps the collection's items", []core.Title{near}, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			search := Search{Vibe: VibeSearch{Source: fakeVibe{ok: true}}, Catalog: func(context.Context, string, []core.MediaType, int) ([]core.Title, error) {
+				return tc.items, nil
+			}}
+			result, err := search.Resolve(context.Background(), &core.User{}, "1917", []core.MediaType{core.TypeMovie}, 3, true)
+			if err != nil || !result.CollectionSearch || result.Collection == nil {
+				t.Fatalf("result=%+v err=%v", result, err)
+			}
+			if tc.want == 0 {
+				if len(result.Items) != 0 {
+					t.Fatalf("items = %+v, want the collection's (none)", result.Items)
+				}
+				return
+			}
+			if len(result.Items) == 0 || result.Items[0].Key != tc.want {
+				t.Fatalf("items = %+v, want %v first", result.Items, tc.want)
 			}
 		})
 	}

@@ -93,17 +93,20 @@ type Deps struct {
 	PlexGUID            *plexguid.Service
 	PlexMeta            *plexmeta.Service
 	Discovery           *DiscoveryFeatures
-	LiveTV              *livetv.Service
-	AccessPolicy        AccessPolicy
-	Catalog             core.Catalog
-	Collections         core.Collections
-	VibeSearch          core.VibeSearcher
-	Recommender         core.Recommender
-	State               core.State
-	Playlists           core.Playlists
-	Auth                core.Auth
-	Playback            core.Playback
-	Transcoder          core.Transcoder
+	// Search is the app's shared search (every frontend's); zero builds it
+	// from this server's own dependencies.
+	Search       experience.SearchSources
+	LiveTV       *livetv.Service
+	AccessPolicy AccessPolicy
+	Catalog      core.Catalog
+	Collections  core.Collections
+	VibeSearch   core.VibeSearcher
+	Recommender  core.Recommender
+	State        core.State
+	Playlists    core.Playlists
+	Auth         core.Auth
+	Playback     core.Playback
+	Transcoder   core.Transcoder
 	// Variants lists distinct release versions for "Play Version" detail
 	// pages (optional: without it, detail pages stay single-Media).
 	Variants core.VariantResolver

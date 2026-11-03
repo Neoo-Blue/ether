@@ -283,6 +283,9 @@ type Catalog struct {
 	personHydrated map[int64]time.Time
 
 	saferRating SaferRatingSQL
+
+	// searchIx is the in-memory title search index (search_titles.go).
+	searchIx searchIndexState
 }
 
 // SaferRatingSQL is the optional Plex overlay predicate for viewer limits.

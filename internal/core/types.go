@@ -104,6 +104,10 @@ type Title struct {
 	Rating     float64 `json:"rating,omitempty"` // TMDB vote average 0-10
 	VoteCount  int     `json:"voteCount,omitempty"`
 	Popularity float64 `json:"popularity,omitempty"`
+	// SearchScore is how well the title answers the search that returned it
+	// (1 is the exact title; zero outside search results). Frontends order
+	// result groups and report relevance from it. Never persisted.
+	SearchScore float64 `json:"-"`
 
 	PosterPath   string `json:"posterPath,omitempty"`
 	BackdropPath string `json:"backdropPath,omitempty"`

@@ -54,7 +54,10 @@ func TestSearchYearFallbackAndLiteralTitles(t *testing.T) {
 
 func TestSearchRanksDiacriticsAsEquivalent(t *testing.T) {
 	items := []core.Title{{Title: "Shogun Warriors", Popularity: 100}, {Title: "Shōgun", Popularity: 1}}
-	sortTitlesForSearch(items, "Shogun")
+	for i := range items {
+		items[i].SearchScore = scoreSearchText(parseSearchQuery("Shogun"), &items[i])
+	}
+	sortTitlesForSearch(items)
 	if items[0].Title != "Shōgun" {
 		t.Fatalf("exact accented title lost to %q", items[0].Title)
 	}

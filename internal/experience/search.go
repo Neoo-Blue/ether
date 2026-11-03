@@ -2,6 +2,7 @@ package experience
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/braedonsaunders/ether/internal/core"
@@ -17,6 +18,42 @@ type Search struct {
 	// Unrestricted is a trusted host policy capability. Nil uses the
 	// restricted, inherited-policy and availability path.
 	Unrestricted func(*core.User) bool
+	// Familiar, when set, reports the viewer's affinity (core.AffinityViewer
+	// or core.AffinityServer) with titles among keys; the catalogue ranks
+	// those first among equal matches.
+	Familiar func(ctx context.Context, viewer *core.User, keys []core.RatingKey) map[core.RatingKey]int
+}
+
+// FamiliarSource is a watch-state store that can report a viewer's
+// history with titles (state.State).
+type FamiliarSource interface {
+	Familiar(ctx context.Context, userID int64, keys []core.RatingKey) (map[core.RatingKey]int, error)
+}
+
+// FamiliarFrom adapts a watch-state store to Search.Familiar; nil when the
+// store cannot report it.
+func FamiliarFrom(st any) func(context.Context, *core.User, []core.RatingKey) map[core.RatingKey]int {
+	src, ok := st.(FamiliarSource)
+	if !ok || src == nil {
+		return nil
+	}
+	return func(ctx context.Context, viewer *core.User, keys []core.RatingKey) map[core.RatingKey]int {
+		known, err := src.Familiar(ctx, viewer.ID, keys)
+		if err != nil {
+			return nil
+		}
+		return known
+	}
+}
+
+// withViewer attaches the viewer's search affinity to ctx.
+func (s Search) withViewer(ctx context.Context, viewer *core.User) context.Context {
+	if s.Familiar == nil || viewer == nil {
+		return ctx
+	}
+	return core.WithSearchAffinity(ctx, func(ctx context.Context, keys []core.RatingKey) map[core.RatingKey]int {
+		return s.Familiar(ctx, viewer, keys)
+	})
 }
 
 // Find is an explicit search: catalogue rules the owner limited to browsing
@@ -25,7 +62,7 @@ func (s Search) Find(ctx context.Context, viewer *core.User, query string, types
 	if strings.TrimSpace(query) == "" || len(types) == 0 {
 		return nil, nil
 	}
-	ctx = core.WithExplicitSearch(ctx)
+	ctx = s.withViewer(core.WithExplicitSearch(ctx), viewer)
 	allowed := make(map[core.MediaType]bool, len(types))
 	for _, typ := range types {
 		allowed[typ] = true
@@ -90,12 +127,27 @@ type SearchResults struct {
 	CollectionSearch bool
 }
 
-// Resolve chooses collection search before keyword search when requested.
+// TitleMatchScore is the catalogue relevance (core.Title.SearchScore) from
+// which a keyword result is the title the viewer typed, give or take an
+// article: such a title outranks a collection reading of the same words
+// ("1917" is the film, not the films of 1917).
+const TitleMatchScore = 0.96
+
+// Resolve chooses collection search before keyword search when requested,
+// unless the query is also a title's name: then the keyword results lead
+// and the collection is still offered beside them.
 func (s Search) Resolve(ctx context.Context, viewer *core.User, query string, types []core.MediaType, limit int, collections bool) (SearchResults, error) {
 	if collections {
 		collection, items, handled, err := s.Vibe.Find(ctx, viewer, query)
-		if err != nil || handled {
-			return SearchResults{Collection: collection, Items: items, CollectionSearch: handled}, err
+		if err != nil {
+			return SearchResults{}, err
+		}
+		if handled {
+			keyword, err := s.Find(ctx, viewer, query, types, limit)
+			if err == nil && slices.ContainsFunc(keyword, func(t core.Title) bool { return t.SearchScore >= TitleMatchScore }) {
+				items = keyword
+			}
+			return SearchResults{Collection: collection, Items: items, CollectionSearch: true}, nil
 		}
 	}
 	items, err := s.Find(ctx, viewer, query, types, limit)
@@ -108,7 +160,7 @@ func (s Search) Keyword(ctx context.Context, viewer *core.User, query string, ty
 	if strings.TrimSpace(query) == "" {
 		return nil, nil
 	}
-	items, err := s.Catalog(core.WithExplicitSearch(ctx), query, types, limit)
+	items, err := s.Catalog(s.withViewer(core.WithExplicitSearch(ctx), viewer), query, types, limit)
 	if err != nil {
 		return nil, err
 	}
