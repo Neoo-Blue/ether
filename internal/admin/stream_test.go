@@ -311,15 +311,13 @@ func TestStreamAuthBehindExtensionsMount(t *testing.T) {
 		t.Fatalf("unauthenticated status %d, want 401", rec.Code)
 	}
 
-	// The extension prefix redirects to its canonical trailing-slash path.
+	// Slashless extension roots now dispatch directly through authentication,
+	// avoiding redirects that drop the outer /ether console prefix.
 	rec = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodGet, "/api/stream", nil)
+	req = httptest.NewRequest(http.MethodGet, "/ether/api/stream", nil)
 	mux.ServeHTTP(rec, req)
-	if rec.Code < 300 || rec.Code > 308 {
-		t.Fatalf("prefix status %d, want a redirect to /api/stream/", rec.Code)
-	}
-	if loc := rec.Header().Get("Location"); !strings.HasSuffix(loc, "/api/stream/") {
-		t.Fatalf("redirect location %q, want the /api/stream/ suffix", loc)
+	if rec.Code != http.StatusUnauthorized || rec.Header().Get("Location") != "" {
+		t.Fatalf("slashless unauthenticated stream: status=%d location=%q", rec.Code, rec.Header().Get("Location"))
 	}
 
 	// An owner token opens the stream; the token travels in a header.

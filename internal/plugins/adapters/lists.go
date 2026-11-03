@@ -83,11 +83,11 @@ func (b *Bridge) Sync(_ context.Context, r plugins.Record) {
 		delete(b.livetvID, r.ID)
 	}
 
-	if !r.Enabled || r.Manifest.Ether == nil {
+	if !r.Enabled {
 		return
 	}
 
-	c := r.Manifest.Ether.Contributes
+	c := r.Manifest.EffectiveEther().Contributes
 	for _, ls := range c.ListSources {
 		if !r.Manifest.HasCapability(plugins.CapListSource) || ls.Key == "" {
 			continue
@@ -300,7 +300,7 @@ type catalogMeta struct {
 	Name        string `json:"name"`
 	Title       string `json:"title"`
 	ReleaseInfo string `json:"releaseInfo"`
-	Year        int    `json:"year"`
+	Year        any    `json:"year"`
 }
 
 func (k *listSourceKind) fetchCatalogPages(g *collections.Gather, catType, catID string, maxItems int) ([]collections.ExternalRef, bool) {
@@ -308,15 +308,48 @@ func (k *listSourceKind) fetchCatalogPages(g *collections.Gather, catType, catID
 	if catType == "series" || catType == "show" || catType == "tv" {
 		defaultMedia = "show"
 	}
+	rec, err := k.mgr.Get(g.Ctx, k.pluginID)
+	if err != nil {
+		g.Warn("%s: %v", k.label(), err)
+		return nil, false
+	}
+	foreign := rec.Manifest.Ether == nil
+	metadata := rec.Manifest.HasCapability(plugins.CapMetadata)
+	canPage := !foreign
+	if foreign {
+		for _, cat := range rec.Manifest.Catalogs {
+			if cat.Type == catType && cat.ID == catID {
+				var extras []plugins.StremioExtra
+				_ = json.Unmarshal(cat.Extra, &extras)
+				for _, x := range extras {
+					if x.Name == "skip" {
+						canPage = true
+					}
+				}
+			}
+		}
+	}
 	var refs []collections.ExternalRef
 	seenRaw := map[string]bool{}
 	skip := 0
 	for pageNum := 0; pageNum < maxItems && len(refs) < maxItems; pageNum++ {
 		path := buildCatalogPath(catType, catID, g.Src.Params, skip)
-		resp, err := k.mgr.Call(g.Ctx, k.pluginID, plugins.Request{
-			Method: "GET",
-			Path:   path,
-		})
+		var resp plugins.Response
+		var err error
+		if foreign {
+			extras := map[string]string{}
+			for key, value := range g.Src.Params {
+				if value != "" {
+					extras[key] = value
+				}
+			}
+			if skip > 0 {
+				extras["skip"] = strconv.Itoa(skip)
+			}
+			resp, err = k.mgr.StremioResource(g.Ctx, k.pluginID, "catalog", catType, catID, extras)
+		} else {
+			resp, err = k.mgr.Call(g.Ctx, k.pluginID, plugins.Request{Method: "GET", Path: path})
+		}
 		if err != nil {
 			if collections.IsPreview(g.Ctx) && errors.Is(err, context.DeadlineExceeded) {
 				g.Fail(fmt.Errorf("plugin list preview timed out: %w", err))
@@ -351,12 +384,17 @@ func (k *listSourceKind) fetchCatalogPages(g *collections.Gather, catType, catID
 				newOnPage++
 			}
 			ref, _ := parseCatalogMeta(item, defaultMedia)
+			if metadata && item.ID != "" {
+				ref.MetadataProvider = extend.PluginID(k.pluginID, "metadata")
+				ref.ProviderID = item.ID
+				ref.Type = defaultMedia
+			}
 			refs = append(refs, ref)
 			if len(refs) >= maxItems {
 				break
 			}
 		}
-		if collections.IsPreview(g.Ctx) {
+		if collections.IsPreview(g.Ctx) || !canPage {
 			break
 		}
 		if hasMore != nil && !*hasMore {
@@ -432,7 +470,7 @@ func parseCatalogMeta(m catalogMeta, defaultMedia string) (collections.ExternalR
 	ref := collections.ExternalRef{
 		Type:  media,
 		Title: strings.TrimSpace(firstNonEmpty(m.Name, m.Title)),
-		Year:  m.Year,
+		Year:  int(parseAnyInt64(m.Year)),
 	}
 	if ref.Year == 0 && m.ReleaseInfo != "" {
 		if match := yearPrefixRe.FindStringSubmatch(strings.TrimSpace(m.ReleaseInfo)); len(match) == 2 {

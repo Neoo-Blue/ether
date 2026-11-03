@@ -57,13 +57,15 @@ func (b ExternalBases) withDefaults() ExternalBases {
 
 // extRef is a title named by an external list.
 type extRef struct {
-	TMDB  int64
-	IMDB  string
-	TVDB  int64
-	Type  string // "movie", "show" or "" (unknown)
-	Title string
-	Year  int
-	Slug  string // Letterboxd film slug
+	MetadataProvider string
+	ProviderID       string
+	TMDB             int64
+	IMDB             string
+	TVDB             int64
+	Type             string // "movie", "show" or "" (unknown)
+	Title            string
+	Year             int
+	Slug             string // Letterboxd film slug
 }
 
 // webClient fetches public pages politely: it identifies itself, spaces

@@ -34,6 +34,7 @@ const (
 	KindChannelKind      Kind = "channelKind"
 	KindEventKind        Kind = "eventKind"
 	KindSubtitleProvider Kind = "subtitleProvider"
+	KindMetadataProvider Kind = "metadataProvider"
 	KindMarkerSource     Kind = "markerSource"
 	KindSourceKind       Kind = "sourceKind"
 	KindIntegration      Kind = "integration"
@@ -51,7 +52,7 @@ var knownKinds = map[Kind]bool{
 	KindLiveTVSource: true, KindChannelKind: true, KindEventKind: true, KindSubtitleProvider: true,
 	KindMarkerSource: true, KindSourceKind: true, KindIntegration: true, KindPage: true,
 	KindNavItem: true, KindCommand: true, KindSettingsSchema: true, KindSlot: true,
-	KindWidget: true, KindTool: true,
+	KindWidget: true, KindTool: true, KindMetadataProvider: true,
 }
 
 // Known reports whether k is a registered descriptor kind.

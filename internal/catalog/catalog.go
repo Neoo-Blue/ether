@@ -154,12 +154,12 @@ CREATE INDEX catalog_titles_episode_aired ON catalog_titles(show_key, released_t
 CREATE INDEX catalog_titles_season_episode_aired ON catalog_titles(show_key, season, released_ts DESC) WHERE type='episode' AND release_known=1;
 CREATE INDEX catalog_titles_episode_global_aired ON catalog_titles(released_ts DESC, key ASC) WHERE type='episode' AND release_known=1 AND adult=0;
 `)
-	store.Register("catalog", 23, `
-CREATE INDEX catalog_titles_type_browse_updated ON catalog_titles(type, browsable, adult, fetched_at DESC, key ASC);
-CREATE INDEX catalog_titles_episode_updated ON catalog_titles(fetched_at DESC, key ASC) WHERE type='episode' AND release_known=1 AND adult=0;
-CREATE INDEX catalog_titles_season_key ON catalog_titles(key ASC) WHERE type='season' AND adult=0;
-CREATE INDEX catalog_titles_season_updated ON catalog_titles(fetched_at DESC, key ASC) WHERE type='season' AND adult=0;
-CREATE INDEX catalog_titles_season_released ON catalog_titles(released_ts DESC, key ASC) WHERE type='season' AND release_known=1 AND adult=0;
+	store.Register("catalog", 26, `
+CREATE INDEX IF NOT EXISTS catalog_titles_type_browse_updated ON catalog_titles(type, browsable, adult, fetched_at DESC, key ASC);
+CREATE INDEX IF NOT EXISTS catalog_titles_episode_updated ON catalog_titles(fetched_at DESC, key ASC) WHERE type='episode' AND release_known=1 AND adult=0;
+CREATE INDEX IF NOT EXISTS catalog_titles_season_key ON catalog_titles(key ASC) WHERE type='season' AND adult=0;
+CREATE INDEX IF NOT EXISTS catalog_titles_season_updated ON catalog_titles(fetched_at DESC, key ASC) WHERE type='season' AND adult=0;
+CREATE INDEX IF NOT EXISTS catalog_titles_season_released ON catalog_titles(released_ts DESC, key ASC) WHERE type='season' AND release_known=1 AND adult=0;
 `)
 	store.Register("catalog", 7, `
 CREATE INDEX catalog_titles_type_browse_sort ON catalog_titles(type, browsable, adult, sort_title ASC, key ASC);
@@ -215,16 +215,19 @@ type tmdbRef struct{ client TMDB }
 
 // Catalog implements core.Catalog.
 type Catalog struct {
-	visibility     *libraryfilter.Filter // every rule: browsing and discovery
-	searchVis      *libraryfilter.Filter // rules scoped everywhere: explicit search
-	db             *sql.DB
-	remote         atomic.Pointer[tmdbRef]
-	configUpdateMu sync.Mutex // serializes transitions without blocking config readers
-	cfgMu          sync.RWMutex
-	cfg            config.Catalog
-	cfgVersion     *configVersion
-	log            *slog.Logger
-	clock          atomic.Value // func() time.Time
+	metadataMu        sync.RWMutex
+	metadataProviders map[string]*metadataRegistration
+	metadataFlights   flight.Group[string, *core.Title]
+	visibility        *libraryfilter.Filter // every rule: browsing and discovery
+	searchVis         *libraryfilter.Filter // rules scoped everywhere: explicit search
+	db                *sql.DB
+	remote            atomic.Pointer[tmdbRef]
+	configUpdateMu    sync.Mutex // serializes transitions without blocking config readers
+	cfgMu             sync.RWMutex
+	cfg               config.Catalog
+	cfgVersion        *configVersion
+	log               *slog.Logger
+	clock             atomic.Value // func() time.Time
 
 	staleAfter time.Duration
 	listTTL    time.Duration

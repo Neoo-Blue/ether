@@ -1,7 +1,9 @@
-import { Badge, Button, Input, SearchSelect } from "@braedonsaunders/appkit-ui";
+import { Badge, Button, Input, SearchSelect, Switch, Tooltip } from "@braedonsaunders/appkit-ui";
 import { ArrowDown, ArrowUp, Plus, Trash2, X } from "lucide-react";
 import { useId, useState } from "react";
 import { Link } from "react-router-dom";
+import { MoreOptions } from "../../components/ConfigSection";
+import { SettingsRow } from "../../components/SettingsRow";
 import { Artwork } from "../../components/Artwork";
 import { Field, SecretInput, Segmented } from "../../components/fields";
 import { LookupPicker, TitleSearch } from "../../components/pickers";
@@ -34,6 +36,7 @@ export function SourceEditor({
   removable,
   descriptor,
   descriptors,
+  lookupPolicy,
 }: {
   source: Source;
   collectionId?: string;
@@ -44,6 +47,7 @@ export function SourceEditor({
   removable: boolean;
   descriptor?: SourceDescriptor;
   descriptors: readonly SourceDescriptor[];
+  lookupPolicy?: { storedOnly: boolean; onChange: (storedOnly: boolean) => void };
 }) {
   const n = index + 1;
   const label = t("Source {n}", { n });
@@ -55,8 +59,8 @@ export function SourceEditor({
           <p className="flex flex-wrap items-center gap-1.5 text-sm font-medium text-fg">
             {descriptor ? textOf(descriptor.label) : source.kind}
             {plugin ? (
-              <Badge variant="secondary">
-                {t("From {owner}", { owner: descriptor?.owner ?? "" })}
+              <Badge variant="secondary" title={descriptor?.owner}>
+                {t("From {owner}", { owner: descriptor?.group || descriptor?.owner || "" })}
               </Badge>
             ) : null}
           </p>
@@ -81,6 +85,31 @@ export function SourceEditor({
           </Button>
         ) : null}
       </div>
+      {lookupPolicy ? (
+        <div className="mt-3">
+          <MoreOptions label={t("Catalogue lookup options")} text={t("Catalogue lookup options")}>
+            <SettingsRow
+              title={t("Use stored metadata only")}
+              description={
+                <Tooltip
+                  content={t(
+                    "This controls metadata lookups, not downloaded media files. Adding another source enables its lookups.",
+                  )}
+                >
+                  <span>{t("Match using metadata already stored by Ether.")}</span>
+                </Tooltip>
+              }
+              control={
+                <Switch
+                  aria-label={t("Use stored metadata only")}
+                  checked={lookupPolicy.storedOnly}
+                  onChange={(e) => lookupPolicy.onChange(e.currentTarget.checked)}
+                />
+              }
+            />
+          </MoreOptions>
+        </div>
+      ) : null}
       <div className="mt-2 empty:hidden">
         <SourceBody
           source={source as SourceRecord}

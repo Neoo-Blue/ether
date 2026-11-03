@@ -18,6 +18,7 @@ export type DescriptorKind =
   | "channelKind"
   | "eventKind"
   | "subtitleProvider"
+  | "metadataProvider"
   | "markerSource"
   | "sourceKind"
   | "integration"

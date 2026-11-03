@@ -13,6 +13,7 @@ import (
 
 type subtitlePick struct {
 	plugin, title, subtitle string
+	url                     string
 	expires                 time.Time
 }
 
@@ -34,35 +35,58 @@ func (m *Manager) MintSubtitlePick(plugin, title, subtitle string) (string, erro
 			delete(m.picks, k)
 		}
 	}
-	m.picks[token] = subtitlePick{plugin, title, subtitle, now.Add(time.Minute)}
+	m.picks[token] = subtitlePick{plugin: plugin, title: title, subtitle: subtitle, expires: now.Add(time.Minute)}
 	return token, nil
 }
 
+// MintSubtitleURLPick binds a user's selection to the exact URL returned by
+// a Stremio subtitle search. A foreign manifest grants no arbitrary host access.
+func (m *Manager) MintSubtitleURLPick(plugin, title, subtitle, rawURL string) (string, error) {
+	token, err := m.MintSubtitlePick(plugin, title, subtitle)
+	if err != nil {
+		return "", err
+	}
+	m.pickMu.Lock()
+	p := m.picks[token]
+	p.url = rawURL
+	m.picks[token] = p
+	m.pickMu.Unlock()
+	return token, nil
+}
 func (m *Manager) consumeSubtitlePick(token, plugin, title, subtitle string) bool {
+	_, ok := m.takeSubtitlePick(token, plugin, title, subtitle)
+	return ok
+}
+func (m *Manager) takeSubtitlePick(token, plugin, title, subtitle string) (subtitlePick, bool) {
 	m.pickMu.Lock()
 	defer m.pickMu.Unlock()
 	p, ok := m.picks[token]
-	if ok {
-		delete(m.picks, token)
-	}
-	return ok && m.now().Before(p.expires) && p.plugin == plugin && p.title == title && p.subtitle == subtitle
+	delete(m.picks, token)
+	return p, ok && m.now().Before(p.expires) && p.plugin == plugin && p.title == title && p.subtitle == subtitle
 }
 
 // FetchPickedSubtitle consumes the same one-shot authorization as a plugin
 // download call. Every redirect is checked against the declared hosts.
 func (m *Manager) FetchPickedSubtitle(ctx context.Context, plugin, title, subtitle, token, rawURL string) ([]byte, error) {
-	if !m.consumeSubtitlePick(token, plugin, title, subtitle) {
+	pick, ok := m.takeSubtitlePick(token, plugin, title, subtitle)
+	if !ok {
 		return nil, ErrPermissionDenied
 	}
 	r, g, err := (&host{m: m, plugin: plugin}).record(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if r.Manifest.Ether == nil || g.revoked("network") {
+	if g.revoked("network") || (r.Manifest.Ether == nil && (!r.Manifest.HasCapability(CapSubtitles) || pick.url == "" || pick.url != rawURL)) {
 		return nil, ErrPermissionDenied
 	}
 	allowed := func(u *url.URL) bool {
-		return (u.Scheme == "http" || u.Scheme == "https") && u.User == nil && hostAllowed(r.Manifest.Ether.Permissions.Network, u.Hostname())
+		if (u.Scheme != "http" && u.Scheme != "https") || u.User != nil {
+			return false
+		}
+		if r.Manifest.Ether == nil {
+			return true
+		} // safefetch still rejects private destinations on every redirect
+		return hostAllowed(r.Manifest.Ether.Permissions.Network, u.Hostname())
 	}
 	u, err := url.Parse(rawURL)
 	if err != nil || !allowed(u) {

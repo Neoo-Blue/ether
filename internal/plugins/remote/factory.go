@@ -63,12 +63,13 @@ func (f *Factory) RuntimeFactory() plugins.RuntimeFactory {
 			return &contractRuntime{inner: f.Tunnel.RuntimeFor(inst.ID), plugin: inst.ID}, nil
 		case endpointURL:
 			opts := URLOptions{
-				Base:   base,
-				Guard:  f.Guard,
-				Locale: f.Locale,
-				Logger: f.Logger,
+				Base:                 base,
+				AllowPublicRedirects: inst.Manifest.IsStremioOnly(),
+				Guard:                f.Guard,
+				Locale:               f.Locale,
+				Logger:               f.Logger,
 			}
-			if f.Credential != nil {
+			if f.Credential != nil && !inst.Manifest.IsStremioOnly() {
 				opts.Credential = f.Credential(inst.ID)
 			}
 			if f.TrustedLAN != nil && f.TrustedLAN(inst.ID) {

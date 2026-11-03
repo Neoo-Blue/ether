@@ -41,6 +41,7 @@ type Capability string
 const (
 	CapStreamSource  Capability = "stream_source"
 	CapListSource    Capability = "list_source"
+	CapMetadata      Capability = "metadata"
 	CapLiveTV        Capability = "livetv_channels"
 	CapSubtitles     Capability = "subtitles"
 	CapMarkers       Capability = "markers"
@@ -54,7 +55,7 @@ const (
 
 // Reserved capabilities are known names a manifest may not claim in v1.
 var ReservedCapabilities = map[Capability]bool{
-	"metadata": true, "artwork": true, "ratings": true,
+	"artwork": true, "ratings": true,
 	"stats_export": true, "sign_in": true,
 }
 
@@ -69,6 +70,7 @@ type Manifest struct {
 	Logo          string          `json:"logo,omitempty"`
 	Background    string          `json:"background,omitempty"`
 	Types         []string        `json:"types,omitempty"`
+	AddonCatalogs []StremioCat    `json:"addonCatalogs,omitempty"`
 	Catalogs      []StremioCat    `json:"catalogs,omitempty"`
 	Resources     json.RawMessage `json:"resources,omitempty"`
 	IDPrefixes    []string        `json:"idPrefixes,omitempty"`
@@ -163,6 +165,7 @@ type ViewerPerms struct {
 
 // Contributes carries per-capability metadata and UI contributions.
 type Contributes struct {
+	Metadata       *MetadataMeta       `json:"metadata,omitempty"`
 	Source         *SourceMeta         `json:"source,omitempty"`
 	Channels       *ChannelsMeta       `json:"channels,omitempty"`
 	Subtitles      *SubtitlesMeta      `json:"subtitles,omitempty"`
@@ -524,4 +527,12 @@ func (e *ValidationError) Error() string {
 		return "plugins: invalid"
 	}
 	return fmt.Sprintf("plugins: invalid: %s: %s", e.Fields[0].Field, e.Fields[0].Message)
+}
+
+// MetadataMeta declares a provider of canonical catalogue records. Resolution
+// happens during explicit materialization, never as part of ordinary browsing.
+// Ether-native providers implement POST /ether/metadata/resolve using
+// core.MetadataRequest and a {"title": core.Title} response.
+type MetadataMeta struct {
+	Types []string `json:"types"`
 }

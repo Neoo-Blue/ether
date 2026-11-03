@@ -24,9 +24,7 @@ func textOf(plugin, s string) extend.Text {
 // DescriptorsFor builds the registry descriptors a manifest contributes.
 // Exported for the kit and Studio previews.
 func DescriptorsFor(man Manifest) []extend.Descriptor {
-	if man.Ether == nil {
-		return nil
-	}
+	man.Ether = man.EffectiveEther()
 	id := man.ID
 	c := man.Ether.Contributes
 	var out []extend.Descriptor
@@ -97,6 +95,9 @@ func DescriptorsFor(man Manifest) []extend.Descriptor {
 	if man.HasCapability(CapNotify) && c.Notification != nil {
 		add(extend.KindChannelKind, "notify", textOf(id, man.Name), map[string]any{
 			"fields": notificationFields(id, c.Notification.Fields), "sendTest": c.Notification.SendTest, "selectable": true, "formats": c.Notification.Formats, "maxLength": c.Notification.MaxLength})
+	}
+	if man.HasCapability(CapMetadata) && c.Metadata != nil {
+		add(extend.KindMetadataProvider, "metadata", textOf(id, man.Name), c.Metadata)
 	}
 	if man.HasCapability(CapSubtitles) && c.Subtitles != nil {
 		add(extend.KindSubtitleProvider, "subtitles", textOf(id, man.Name), map[string]any{

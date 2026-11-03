@@ -23,6 +23,7 @@ func (m *Manager) Handler() http.Handler {
 	mux.HandleFunc("POST /install/preview", m.handlePreview)
 	mux.HandleFunc("POST /install", m.handleInstall)
 	mux.HandleFunc("GET /{id}", m.handleGet)
+	mux.HandleFunc("GET /{id}/resources/{resource}", m.handleStremioResource)
 	mux.HandleFunc("GET /{id}/settings", m.handleGetSettings)
 	mux.HandleFunc("PUT /{id}/settings", m.handlePutSettings)
 	mux.HandleFunc("GET /{id}/options/{field}", m.handleOptions)

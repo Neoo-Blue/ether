@@ -1016,3 +1016,22 @@ func TestSimklSecretRedactionBinding(t *testing.T) {
 		t.Fatal("secret followed changed client ID")
 	}
 }
+
+func TestExtensionRootKeepsConsolePrefixAndQuery(t *testing.T) {
+	store := newStore(t, seededConfig)
+	handler := admin.New(admin.Deps{Config: store, IsOwnerToken: storedOwner(store), Extensions: map[string]http.Handler{"extend/registry": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" || r.URL.Query().Get("kinds") != "page" {
+			t.Errorf("wrong resource: %s", r.URL)
+		}
+		w.WriteHeader(http.StatusOK)
+	})}})
+	for _, suffix := range []string{"", "/"} {
+		req := httptest.NewRequest(http.MethodGet, "/api/extend/registry"+suffix+"?kinds=page", nil)
+		req.Header.Set("X-Ether-Admin-Token", ownerToken)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		if w.Code != http.StatusOK || w.Header().Get("Location") != "" {
+			t.Fatalf("subtree root: %d %s", w.Code, w.Header().Get("Location"))
+		}
+	}
+}

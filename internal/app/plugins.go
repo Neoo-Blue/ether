@@ -29,12 +29,13 @@ import (
 
 // pluginRuntime is the plugin host and its adapters.
 type pluginRuntime struct {
-	mgr        *plugins.Manager
-	cat        *catalogue.Service
-	studio     *studio.Studio
-	tunnel     *remote.TunnelServer
-	pairing    *remote.Pairing
-	pluginHost http.Handler
+	mgr           *plugins.Manager
+	cat           *catalogue.Service
+	studio        *studio.Studio
+	tunnel        *remote.TunnelServer
+	pairing       *remote.Pairing
+	pluginHost    http.Handler
+	subtitleProbe *adapters.SubtitleProbe
 }
 
 func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRuntime, error) {
@@ -257,6 +258,9 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 	a.closers = append(a.closers, func() { _ = tunnel.Close() })
 	adapters.Attach(mgr, a.collections, a.personalize, a.livetv)
 	adapters.AttachSubtitles(mgr, a.subtitles)
+	adapters.AttachMetadata(mgr, a.catalog)
+	subtitleProbe := adapters.NewSubtitleProbe(mgr, a.catalog)
+	a.closers = append(a.closers, subtitleProbe.Close)
 	markerCtx, cancelMarkers := context.WithCancel(context.Background())
 	markerBridge := adapters.AttachMarkers(markerCtx, mgr, a.markers, a.catalog, func(id string) bool {
 		for _, source := range a.cfg.Get().Markers.SourceOrder {
@@ -356,7 +360,7 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 		stopNotify()
 		unsubscribe()
 	})
-	return &pluginRuntime{mgr: mgr, cat: cat, studio: studioSvc, tunnel: tunnel, pairing: pairing, pluginHost: host}, nil
+	return &pluginRuntime{subtitleProbe: subtitleProbe, mgr: mgr, cat: cat, studio: studioSvc, tunnel: tunnel, pairing: pairing, pluginHost: host}, nil
 }
 
 // pluginHandlers mounts the owner plugin API under /api/plugins (WS7, WS11).
@@ -381,6 +385,17 @@ func (a *App) pluginHandlers(m map[string]http.Handler) {
 			})
 		}
 		m["plugins"] = h
+		if a.pluginsRT.subtitleProbe != nil {
+			tests := a.pluginsRT.subtitleProbe.Handler()
+			m["plugin-tests"] = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				access, ok := admin.RequestAccess(r.Context())
+				if !ok || !access.Owner {
+					http.Error(w, "owner authentication required", http.StatusUnauthorized)
+					return
+				}
+				tests.ServeHTTP(w, r)
+			})
+		}
 	}
 }
 

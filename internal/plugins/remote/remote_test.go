@@ -1369,3 +1369,51 @@ func TestFileHandlerRejectsTraversalEvenIfTargetExistsInRoot(t *testing.T) {
 		t.Fatalf("traversal accepted: %v", err)
 	}
 }
+
+func TestPlainStremioPublicRedirectsAndEncoding(t *testing.T) {
+	var receivedPath, auth, cookie, referer, pick string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/catalog/movie/top.json":
+			http.Redirect(w, r, "http://second.example.test/catalog/movie/top/search=space%20travel.json", http.StatusTemporaryRedirect)
+		case "/private":
+			http.Redirect(w, r, "http://lan.example.test/secret", http.StatusFound)
+		default:
+			receivedPath = r.URL.EscapedPath()
+			auth = r.Header.Get("Authorization")
+			cookie = r.Header.Get("Cookie")
+			referer = r.Header.Get("Referer")
+			pick = r.Header.Get(HeaderPick)
+			_, _ = w.Write([]byte(`{"metas":[]}`))
+		}
+	}))
+	defer srv.Close()
+	c, err := NewURLClient(URLOptions{Base: "http://addon.example.test", Guard: publicGuard(t, srv), AllowPublicRedirects: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	_, err = c.Call(context.Background(), Request{Path: "/catalog/movie/top.json", Headers: map[string][]string{"Authorization": {"secret"}, "Cookie": {"secret"}, "Referer": {"secret"}, HeaderPick: {"secret"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if auth != "" || cookie != "" || referer != "" || pick != "" {
+		t.Fatalf("sensitive headers reached CDN")
+	}
+	if receivedPath != "/catalog/movie/top/search=space%20travel.json" {
+		t.Fatalf("redirect path %q", receivedPath)
+	}
+	if _, err = c.Call(context.Background(), Request{Path: "/private"}); !IsBlocked(err) {
+		t.Fatalf("private redirect allowed: %v", err)
+	}
+	_, err = c.Call(context.Background(), Request{Path: "/catalog/movie/top/search=space%20travel.json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if receivedPath != "/catalog/movie/top/search=space%20travel.json" {
+		t.Fatalf("path escaped twice: %q", receivedPath)
+	}
+	if _, err = c.Call(context.Background(), Request{Path: "/%2e%2e/secret"}); err == nil {
+		t.Fatal("encoded traversal accepted")
+	}
+}

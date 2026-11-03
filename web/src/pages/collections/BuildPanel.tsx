@@ -61,14 +61,18 @@ export function BuildPanel({
       spec.sources.length === 1 && spec.sources[0]?.kind === "catalog" && d.id !== "catalog"
         ? []
         : spec.sources;
-    update({ sources: [...keep, newSourceFromDescriptor(d, spec.mediaType, region)] });
+    update({
+      sources: [...keep, newSourceFromDescriptor(d, spec.mediaType, region)],
+      ...(d.id !== "catalog" ? { localOnly: false } : {}),
+    });
   };
   const sourceItems: ContextMenuEntry[] = descriptors
+    .filter((d) => d.id !== "stremioCatalog")
     .filter((d) => d.id !== "catalog" || !spec.sources.some((s) => s.kind === "catalog"))
     .map((d) => ({
       key: d.id,
       label: isPluginDescriptor(d)
-        ? t("{label} (from {owner})", { label: textOf(d.label), owner: d.owner })
+        ? t("{label} (from {owner})", { label: textOf(d.label), owner: d.group || d.owner })
         : textOf(d.label),
       onSelect: () => addSource(d),
     }));
@@ -141,26 +145,6 @@ export function BuildPanel({
       </section>
 
       <section aria-labelledby="sources-h">
-        <label className="mb-4 flex gap-3 rounded-lg border border-border p-4 text-sm">
-          <input
-            type="checkbox"
-            checked={Boolean(spec.localOnly)}
-            onChange={(e) =>
-              update({
-                localOnly: e.target.checked,
-                ...(e.target.checked ? { sources: [{ kind: "catalog" as const }] } : {}),
-              })
-            }
-          />
-          <span>
-            <strong>{t("Local catalogue only")}</strong>
-            <span className="mt-1 block text-fg-muted">
-              {t(
-                "Live matching without remote lookups. Ideal for genre, country and network collections.",
-              )}
-            </span>
-          </span>
-        </label>
         <SectionHeading
           id="sources-h"
           title={t("Sources")}
@@ -192,6 +176,14 @@ export function BuildPanel({
               removable={spec.sources.length > 1}
               descriptor={sourceDescriptor(descriptors, s.kind)}
               descriptors={descriptors}
+              lookupPolicy={
+                s.kind === "catalog" && spec.sources.length === 1
+                  ? {
+                      storedOnly: Boolean(spec.localOnly),
+                      onChange: (storedOnly) => update({ localOnly: storedOnly }),
+                    }
+                  : undefined
+              }
               onChange={(next) =>
                 update({ sources: spec.sources.map((x, j) => (j === i ? next : x)) }, `source-${i}`)
               }

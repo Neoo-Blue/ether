@@ -76,6 +76,7 @@ func LintCopy(s string, max int) string {
 var capabilityKinds = map[Capability]map[Kind]bool{
 	CapStreamSource:  {KindSource: true},
 	CapListSource:    {KindIntegration: true, KindExtension: true},
+	CapMetadata:      {KindIntegration: true, KindExtension: true, KindSource: true},
 	CapLiveTV:        {KindLiveTVSource: true},
 	CapSubtitles:     {KindIntegration: true, KindExtension: true},
 	CapMarkers:       {KindIntegration: true, KindExtension: true},
@@ -95,10 +96,7 @@ func (m Manifest) IsStremioOnly() bool { return m.Ether == nil }
 
 // HasCapability reports whether the manifest declares c.
 func (m Manifest) HasCapability(c Capability) bool {
-	if m.Ether == nil {
-		return false
-	}
-	for _, have := range m.Ether.Capabilities {
+	for _, have := range m.EffectiveEther().Capabilities {
 		if have == c {
 			return true
 		}
@@ -114,7 +112,7 @@ func (m Manifest) Validate() error {
 	add := func(field, msg string) { f = append(f, FieldError{field, msg}) }
 
 	switch {
-	case !idRe.MatchString(m.ID):
+	case !(idRe.MatchString(m.ID) || (m.Ether == nil && regexp.MustCompile(`^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)+$`).MatchString(m.ID))):
 		add("id", "must be a reverse-DNS id in lower case, such as community.example.plugin")
 	case len(m.ID) > 120:
 		add("id", "is longer than 120 characters")
@@ -124,10 +122,10 @@ func (m Manifest) Validate() error {
 	}
 	if strings.TrimSpace(m.Name) == "" {
 		add("name", "is required")
-	} else if utf8.RuneCountInString(m.Name) > 60 {
+	} else if m.Ether != nil && utf8.RuneCountInString(m.Name) > 60 {
 		add("name", "is longer than 60 characters")
 	}
-	if strings.TrimSpace(m.Description) != "" {
+	if m.Ether != nil && strings.TrimSpace(m.Description) != "" {
 		if msg := LintCopy(m.Description, 300); msg != "" {
 			add("description", msg)
 		}
@@ -406,6 +404,17 @@ func validateContributes(m Manifest, add func(string, string)) {
 	if m.HasCapability(CapLiveTV) {
 		if c.Channels == nil || !c.Channels.Test {
 			add("ether.contributes.channels", "is required for livetv_channels, with test set")
+		}
+	}
+	if m.HasCapability(CapMetadata) {
+		if c.Metadata == nil || len(c.Metadata.Types) == 0 {
+			add("ether.contributes.metadata.types", "is required for metadata")
+		} else {
+			for _, typ := range c.Metadata.Types {
+				if typ != "movie" && typ != "show" {
+					add("ether.contributes.metadata.types", "must contain movie or show")
+				}
+			}
 		}
 	}
 	if m.HasCapability(CapSubtitles) && c.Subtitles == nil {

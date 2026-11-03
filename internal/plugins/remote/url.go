@@ -48,6 +48,8 @@ type URLClient struct {
 
 // URLOptions configures a URLClient.
 type URLOptions struct {
+	// Plain Stremio resources may redirect to public CDNs. Credentials never follow.
+	AllowPublicRedirects bool
 	// Base is the plugin base URL, usually the manifest URL's
 	// directory (for example https://addons.example/usercfg). Request
 	// paths are appended to it. A trailing "/manifest.json" is
@@ -130,8 +132,21 @@ func NewURLClient(opts URLOptions) (*URLClient, error) {
 		// context so streamed bodies are not cut at a second,
 		// invisible limit.
 		httpClient: guard.Client(&http.Client{Transport: transport, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return fmt.Errorf("too many plugin redirects")
+			}
 			if !safefetch.SameOrigin(base.String(), req.URL.String()) {
-				return fmt.Errorf("%w: cross-origin plugin redirect", safefetch.ErrBlocked)
+				if !opts.AllowPublicRedirects || opts.Credential != "" || req.Method != http.MethodGet || (base.Scheme == "https" && req.URL.Scheme != "https") {
+					return fmt.Errorf("%w: cross-origin plugin redirect", safefetch.ErrBlocked)
+				}
+				for key := range req.Header {
+					if strings.HasPrefix(strings.ToLower(key), "x-ether-") {
+						req.Header.Del(key)
+					}
+				}
+				req.Header.Del("Authorization")
+				req.Header.Del("Cookie")
+				req.Header.Del("Referer")
 			}
 			return nil
 		}}),
@@ -174,8 +189,15 @@ func (c *URLClient) urlFor(req Request) (string, error) {
 		return "", err
 	}
 	u := *c.base
-	u.Path = c.base.Path + req.Path
-	u.RawPath = ""
+	decoded, err := url.PathUnescape(req.Path)
+	if err != nil {
+		return "", err
+	}
+	if err := validatePath(decoded); err != nil {
+		return "", err
+	}
+	u.Path = c.base.Path + decoded
+	u.RawPath = c.base.EscapedPath() + req.Path
 	if len(req.Query) > 0 {
 		u.RawQuery = cloneQuery(req.Query).Encode()
 	}

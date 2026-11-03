@@ -293,6 +293,10 @@ func (s *Service) discoverParams(ctx context.Context, kind string, params map[st
 // could not be matched, and how many were deferred to a later refresh to
 // stay polite to Letterboxd.
 func (s *Service) resolveExternal(ctx context.Context, source string, refs []extRef) ([]core.Title, int, int) {
+	titles, unresolved, pending, _ := s.resolveExternalDetailed(ctx, source, refs)
+	return titles, unresolved, pending
+}
+func (s *Service) resolveExternalDetailed(ctx context.Context, source string, refs []extRef) ([]core.Title, int, int, []string) {
 	type slot struct {
 		key core.RatingKey
 		t   *core.Title
@@ -300,6 +304,7 @@ func (s *Service) resolveExternal(ctx context.Context, source string, refs []ext
 	slots := make([]slot, len(refs))
 	var mu sync.Mutex
 	unresolved, pending := 0, 0
+	issues := map[string]int{}
 	filmPageBudget := 25
 	sem := make(chan struct{}, 4)
 	var wg sync.WaitGroup
@@ -319,6 +324,17 @@ func (s *Service) resolveExternal(ctx context.Context, source string, refs []ext
 				}
 				filmPageBudget--
 				return true
+			}, func(err error) {
+				reason := "could not be resolved by the metadata provider"
+				if errors.Is(err, core.ErrMetadataIdentity) {
+					reason = "have no supported catalogue identity"
+				}
+				if errors.Is(err, core.ErrMetadataFiltered) {
+					reason = "are hidden by catalogue visibility rules"
+				}
+				mu.Lock()
+				issues[reason]++
+				mu.Unlock()
 			})
 			mu.Lock()
 			defer mu.Unlock()
@@ -348,13 +364,35 @@ func (s *Service) resolveExternal(ctx context.Context, source string, refs []ext
 	if missing := len(keys) - len(titles); missing > 0 {
 		unresolved += missing
 	}
-	return titles, unresolved, pending
+	var warnings []string
+	for _, reason := range []string{"have no supported catalogue identity", "are hidden by catalogue visibility rules", "could not be resolved by the metadata provider"} {
+		if count := issues[reason]; count > 0 {
+			warnings = append(warnings, fmt.Sprintf("%d items %s", count, reason))
+		}
+	}
+	return titles, unresolved, pending, warnings
 }
 
 // resolveRef maps one external item to a rating key. allowPage reserves a
 // Letterboxd film-page fetch; deferred reports that one was needed but the
 // budget was spent.
-func (s *Service) resolveRef(ctx context.Context, source string, r extRef, allowPage func() bool) (core.RatingKey, bool) {
+func (s *Service) resolveRef(ctx context.Context, source string, r extRef, allowPage func() bool, report func(error)) (core.RatingKey, bool) {
+	if r.MetadataProvider != "" && r.ProviderID != "" {
+		if cat, ok := s.cat.(interface {
+			MaterializeMetadata(context.Context, string, core.MetadataRequest) (*core.Title, error)
+		}); ok {
+			title, err := cat.MaterializeMetadata(ctx, r.MetadataProvider, core.MetadataRequest{ID: r.ProviderID, Type: core.MediaType(r.Type), IDs: core.IDs{TMDB: r.TMDB, IMDB: r.IMDB, TVDB: r.TVDB}})
+			if err == nil && title != nil {
+				return title.Key, false
+			}
+			if err != nil && report != nil {
+				report(err)
+			}
+			// A revoked/mismatched provider must not silently switch to another
+			// identity source. The normal unmatched-item warning reports the gap.
+			return 0, false
+		}
+	}
 	if r.TMDB > 0 {
 		switch r.Type {
 		case "show":

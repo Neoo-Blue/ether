@@ -64,7 +64,7 @@ func TestManifestValidate(t *testing.T) {
 		{"network wildcard", func(m *Manifest) { m.Ether.Permissions.Network = []string{"*.x.tv"} }, ""},
 		{"catalog level", func(m *Manifest) { m.Ether.Permissions.Catalog = "write" }, "ether.permissions.catalog"},
 		{"watch state all", func(m *Manifest) { m.Ether.Permissions.Viewers.WriteWatchState = "all" }, "ether.permissions.viewers.write_watch_state"},
-		{"reserved cap", func(m *Manifest) { m.Ether.Capabilities = []Capability{"metadata"} }, "ether.capabilities[0]"},
+		{"reserved cap", func(m *Manifest) { m.Ether.Capabilities = []Capability{"artwork"} }, "ether.capabilities[0]"},
 		{"unknown cap", func(m *Manifest) { m.Ether.Capabilities = []Capability{"telepathy"} }, "ether.capabilities[0]"},
 		{"cap kind mismatch", func(m *Manifest) {
 			m.Ether.Capabilities = []Capability{CapStreamSource}

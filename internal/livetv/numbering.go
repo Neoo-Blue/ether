@@ -10,7 +10,7 @@ import (
 )
 
 func init() {
-	store.Register("livetv", 3, `CREATE TABLE livetv_numbers (source_id TEXT NOT NULL, channel_id TEXT NOT NULL, group_name TEXT NOT NULL, number TEXT NOT NULL, seen_ms BIGINT NOT NULL, PRIMARY KEY(source_id,channel_id));`)
+	store.Register("livetv", 4, `CREATE TABLE IF NOT EXISTS livetv_numbers (source_id TEXT NOT NULL, channel_id TEXT NOT NULL, group_name TEXT NOT NULL, number TEXT NOT NULL, seen_ms BIGINT NOT NULL, PRIMARY KEY(source_id,channel_id));`)
 }
 
 // assignImportedNumbers reserves numbers for seven days after a channel disappears.

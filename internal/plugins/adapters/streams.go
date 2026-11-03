@@ -815,10 +815,10 @@ func (s *StreamSources) enabledPlugins(ctx context.Context) []plugins.Record {
 	}
 	var out []plugins.Record
 	for _, r := range recs {
-		if !r.Enabled || r.Manifest.Ether == nil {
+		if !r.Enabled {
 			continue
 		}
-		if r.Manifest.Ether.Kind != plugins.KindSource || !r.Manifest.HasCapability(plugins.CapStreamSource) {
+		if r.Manifest.EffectiveEther().Kind != plugins.KindSource || !r.Manifest.HasCapability(plugins.CapStreamSource) {
 			continue
 		}
 		out = append(out, r)
@@ -931,6 +931,11 @@ func (s *StreamSources) searchOnePlugin(ctx context.Context, mgr *plugins.Manage
 		query["tmdbId"] = strconv.FormatInt(req.IDs.TMDB, 10)
 	}
 
+	// Ordinary manifests use only the Stremio resource identity; Ether-only
+	// query hints are for native plugins that opt into that contract.
+	if rec.Manifest.Ether == nil {
+		query = nil
+	}
 	path := "/stream/" + kind + "/" + url.PathEscape(lookupID) + ".json"
 	resp, err := mgr.Call(ctx, rec.ID, plugins.Request{
 		Method: http.MethodGet,
@@ -957,6 +962,30 @@ func pluginLookupID(man plugins.Manifest, req core.SearchRequest) (kind, id stri
 	kind = "movie"
 	if req.Type != core.TypeMovie {
 		kind = "series"
+	}
+	if man.Ether == nil {
+		candidates := []string{}
+		if req.IDs.IMDB != "" {
+			candidates = append(candidates, normalizeIMDb(req.IDs.IMDB))
+		}
+		if req.IDs.TMDB > 0 {
+			candidates = append(candidates, fmt.Sprintf("tmdb:%d", req.IDs.TMDB))
+		}
+		if req.IDs.TVDB > 0 {
+			candidates = append(candidates, fmt.Sprintf("tvdb:%d", req.IDs.TVDB))
+		}
+		for _, candidate := range candidates {
+			if kind == "series" {
+				if req.Episode <= 0 {
+					continue
+				}
+				candidate = fmt.Sprintf("%s:%d:%d", candidate, req.Season, req.Episode)
+			}
+			if man.AcceptsResource("stream", kind, candidate) {
+				return kind, candidate, true
+			}
+		}
+		return "", "", false
 	}
 	if len(man.Types) > 0 {
 		found := false
@@ -1009,9 +1038,10 @@ func pluginLookupID(man plugins.Manifest, req core.SearchRequest) (kind, id stri
 		if ep <= 0 {
 			ep = 1
 		}
-		return kind, fmt.Sprintf("%s:%d:%d", baseID, req.Season, ep), true
+		id = fmt.Sprintf("%s:%d:%d", baseID, req.Season, ep)
+		return kind, id, man.Ether != nil || man.AcceptsResource("stream", kind, id)
 	}
-	return kind, baseID, true
+	return kind, baseID, man.Ether != nil || man.AcceptsResource("stream", kind, baseID)
 }
 
 func normalizeIMDb(id string) string {

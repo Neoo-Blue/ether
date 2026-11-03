@@ -1,10 +1,12 @@
 import { Button, Input } from "@braedonsaunders/appkit-ui";
 import { useState } from "react";
+import { Link } from "react-router-dom";
+import { SubtitleCheck } from "./SubtitleCheck";
 import { Drawer } from "../../components/Drawer";
 import { Field, SecretInput } from "../../components/fields";
 import { ErrorPanel, LoadingRows } from "../../components/feedback";
 import { t } from "../../i18n";
-import { api, errorMessage, newId } from "../../lib/api";
+import { api, errorMessage } from "../../lib/api";
 import { textOf, useRegistry } from "../../lib/extend";
 import { useAsync } from "../../lib/hooks";
 import type { EtherConfig } from "../../lib/types";
@@ -14,6 +16,7 @@ type Provider = { id: string; kind: string; name?: string; url?: string; enabled
 export function SubtitleProviders() {
   const config = useAsync(() => api.getConfig(), []);
   const registry = useRegistry("subtitleProvider");
+  const [checking, setChecking] = useState<{ id: string; name: string } | null>(null);
   const [editing, setEditing] = useState<Provider | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -91,6 +94,19 @@ export function SubtitleProviders() {
               >
                 ↓
               </Button>
+              {registry.descriptors.some((d) => d.id === p.kind && d.owner !== "builtin") ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const descriptor = registry.descriptors.find((d) => d.id === p.kind)!;
+                    setChecking({ id: descriptor.owner, name: textOf(descriptor.label) });
+                  }}
+                >
+                  {t("Check")}
+                </Button>
+              ) : null}
               {p.kind === "stremio" ? (
                 <Button
                   type="button"
@@ -105,16 +121,10 @@ export function SubtitleProviders() {
           ))}
         </div>
       )}
-      <Button
-        type="button"
-        variant="outline"
-        disabled={!config.data || busy}
-        onClick={() =>
-          setEditing({ id: newId("sub"), kind: "stremio", name: "", url: "", enabled: true })
-        }
-      >
-        {t("Add Stremio subtitle add-on")}
-      </Button>
+      <Link className="text-sm text-primary underline" to="/plugins">
+        {t("Add a subtitle provider in Plugins")}
+      </Link>
+      {checking ? <SubtitleCheck provider={checking} onClose={() => setChecking(null)} /> : null}
       {error && !editing ? (
         <p role="alert" className="text-sm text-danger">
           {error}

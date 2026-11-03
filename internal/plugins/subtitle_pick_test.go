@@ -107,3 +107,38 @@ func TestDirectSubtitlePickAndDeclaredHosts(t *testing.T) {
 		t.Fatalf("unlisted host: %v", err)
 	}
 }
+
+func TestForeignSubtitleDownloadRequiresBoundSelection(t *testing.T) {
+	e := newTestEnv(t)
+	ctx := context.Background()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("1\n00:00:00,000 --> 00:00:01,000\nTest\n"))
+	}))
+	defer server.Close()
+	e.m.client = server.Client() // fixture transport; production retains safefetch
+	raw := json.RawMessage(`{"id":"org.example.subs","version":"1.0.0","name":"Subtitles","resources":["subtitles"],"types":["movie"]}`)
+	preview, err := e.m.PreviewInstall(ctx, Source{Kind: "studio", Manifest: raw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := e.m.Install(ctx, preview, InstallOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, _ := e.m.MintSubtitlePick(rec.ID, "title", "sub")
+	if _, err = e.m.FetchPickedSubtitle(ctx, rec.ID, "title", "sub", token, server.URL); !errors.Is(err, ErrPermissionDenied) {
+		t.Fatalf("unbound URL authorized: %v", err)
+	}
+	token, _ = e.m.MintSubtitleURLPick(rec.ID, "title", "sub", server.URL)
+	if _, err = e.m.FetchPickedSubtitle(ctx, rec.ID, "title", "sub", token, server.URL+"/other"); !errors.Is(err, ErrPermissionDenied) {
+		t.Fatalf("substituted URL authorized: %v", err)
+	}
+	token, _ = e.m.MintSubtitleURLPick(rec.ID, "title", "sub", server.URL)
+	data, err := e.m.FetchPickedSubtitle(ctx, rec.ID, "title", "sub", token, server.URL)
+	if err != nil || len(data) == 0 {
+		t.Fatalf("selected download: %q %v", data, err)
+	}
+	if _, err = e.m.FetchPickedSubtitle(ctx, rec.ID, "title", "sub", token, server.URL); !errors.Is(err, ErrPermissionDenied) {
+		t.Fatalf("pick reused: %v", err)
+	}
+}

@@ -88,12 +88,14 @@ const PreviewItems = 20
 
 // ExternalRef identifies one item from an external or plugin list source.
 type ExternalRef struct {
-	TMDB  int64
-	IMDB  string
-	TVDB  int64
-	Type  string // "movie" or "show"
-	Title string
-	Year  int
+	MetadataProvider string
+	ProviderID       string
+	TMDB             int64
+	IMDB             string
+	TVDB             int64
+	Type             string // "movie" or "show"
+	Title            string
+	Year             int
 }
 
 // ResolveExternal resolves external references to catalogue titles, appends
@@ -106,6 +108,7 @@ func (g *Gather) ResolveExternal(sourceLabel string, refs []ExternalRef) ([]core
 	ext := make([]extRef, len(refs))
 	for i, r := range refs {
 		ext[i] = extRef{
+			MetadataProvider: r.MetadataProvider, ProviderID: r.ProviderID,
 			TMDB:  r.TMDB,
 			IMDB:  r.IMDB,
 			TVDB:  r.TVDB,
@@ -117,9 +120,13 @@ func (g *Gather) ResolveExternal(sourceLabel string, refs []ExternalRef) ([]core
 	if sourceLabel == "" {
 		sourceLabel = sourceName(g.Src)
 	}
-	titles, unresolved, pending := g.Svc.resolveExternal(g.Ctx, g.Src.Kind, ext)
+	titles, unresolved, pending, details := g.Svc.resolveExternalDetailed(g.Ctx, g.Src.Kind, ext)
 	g.Res.titles = append(g.Res.titles, titles...)
-	if unresolved > 0 {
+	if len(details) > 0 {
+		for _, detail := range details {
+			g.Warn("%s: %s", sourceLabel, detail)
+		}
+	} else if unresolved > 0 {
 		g.Warn("%d of %d items in %s could not be matched to TMDB", unresolved, len(refs), sourceLabel)
 	}
 	if pending > 0 {

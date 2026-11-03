@@ -150,3 +150,24 @@ func TestHandlerResolvesPluginCopyInsideMeta(t *testing.T) {
 		}
 	}
 }
+
+func TestHandlerETagDistinguishesRestartedRegistryAndResolvedCopy(t *testing.T) {
+	makeRegistry := func(label string) *Registry {
+		r := New()
+		r.MustRegister(Descriptor{Kind: KindCollectionSource, ID: "catalog", Owner: Builtin, Label: T(label)})
+		return r
+	}
+	old, current := makeRegistry("Old label"), makeRegistry("New label")
+	if old.Version() != current.Version() {
+		t.Fatal("test requires identical process-local versions")
+	}
+	w := httptest.NewRecorder()
+	Handler(old, nil).ServeHTTP(w, httptest.NewRequest("GET", "/?kinds=collectionSource", nil))
+	req := httptest.NewRequest("GET", "/?kinds=collectionSource", nil)
+	req.Header.Set("If-None-Match", w.Header().Get("ETag"))
+	fresh := httptest.NewRecorder()
+	Handler(current, nil).ServeHTTP(fresh, req)
+	if fresh.Code != 200 || !strings.Contains(fresh.Body.String(), "New label") {
+		t.Fatalf("restart reused stale descriptors: %d %s", fresh.Code, fresh.Body)
+	}
+}

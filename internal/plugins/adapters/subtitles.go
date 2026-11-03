@@ -31,7 +31,7 @@ func AttachSubtitles(mgr *plugins.Manager, svc *subtitles.Service) {
 }
 func (b *subtitleBridge) sync(_ context.Context, r plugins.Record) {
 	b.svc.UnregisterPluginProvider(r.ID)
-	if r.Enabled && r.Manifest.Ether != nil && r.Manifest.HasCapability(plugins.CapSubtitles) {
+	if r.Enabled && r.Manifest.HasCapability(plugins.CapSubtitles) {
 		b.svc.RegisterPluginProvider(&subtitleProvider{b.mgr, r.ID, r.Name})
 	}
 }
@@ -65,6 +65,13 @@ func subtitleIdentity(t *core.Title) (string, string) {
 func (p *subtitleProvider) Search(ctx context.Context, t *core.Title, lang, hash string, size int64) ([]subtitles.Candidate, error) {
 	typ, id := subtitleIdentity(t)
 	if id == "" {
+		return nil, nil
+	}
+	record, err := p.mgr.Get(ctx, p.id)
+	if err != nil {
+		return nil, err
+	}
+	if record.Manifest.Ether == nil && !record.Manifest.AcceptsResource("subtitles", typ, id) {
 		return nil, nil
 	}
 	extra := url.Values{}
@@ -110,7 +117,10 @@ func (p *subtitleProvider) Search(ctx context.Context, t *core.Title, lang, hash
 		_, _ = h.Write([]byte(p.id + "\x00" + sub.ID))
 		file := path.Base(sub.Name)
 		if file == "." || file == "/" || file == "" {
-			file = "subtitle." + strings.TrimPrefix(sub.Format, ".")
+			file = "Subtitle " + sub.ID
+			if format := strings.TrimPrefix(sub.Format, "."); format != "" {
+				file += "." + format
+			}
 		}
 		out = append(out, subtitles.Candidate{FileID: int64(1)<<62 | int64(h.Sum64()&((1<<62)-1)), FileName: file, Language: l, Release: strings.TrimSuffix(file, path.Ext(file)), Provider: p.name, ProviderID: p.id, PluginID: p.id, PluginSubtitleID: sub.ID, PluginFormat: sub.Format, DownloadURL: sub.URL})
 	}
@@ -122,7 +132,7 @@ type picked struct{ token, title string }
 
 func (p *subtitleProvider) Pick(ctx context.Context, t *core.Title, c subtitles.Candidate) (context.Context, error) {
 	title := t.Key.String()
-	token, err := p.mgr.MintSubtitlePick(p.id, title, c.PluginSubtitleID)
+	token, err := p.mgr.MintSubtitleURLPick(p.id, title, c.PluginSubtitleID, c.DownloadURL)
 	if err != nil {
 		return ctx, err
 	}

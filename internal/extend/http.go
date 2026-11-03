@@ -1,6 +1,8 @@
 package extend
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -19,8 +21,8 @@ type Response struct {
 
 // Handler serves the registry to the owner console. Query parameters:
 // kinds (comma separated; all when absent) and locale (for plugin strings).
-// The ETag changes with the registry version and the locale, so the console
-// can revalidate cheaply after an extend.changed event.
+// The ETag hashes the resolved response. A process-local version alone can
+// repeat after restart and wrongly retain old plugin labels or capabilities.
 func Handler(r *Registry, resolve TextResolver) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != http.MethodGet {
@@ -42,13 +44,6 @@ func Handler(r *Registry, resolve TextResolver) http.Handler {
 		}
 		locale := strings.TrimSpace(req.URL.Query().Get("locale"))
 		version := r.Version()
-		etag := `"` + strconv.FormatUint(version, 10) + "-" + locale + "-" + req.URL.Query().Get("kinds") + `"`
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("ETag", etag)
-		if match := req.Header.Get("If-None-Match"); match != "" && match == etag {
-			w.WriteHeader(http.StatusNotModified)
-			return
-		}
 		ds := r.List(kinds...)
 		for i := range ds {
 			ds[i].Label = resolveText(ds[i].Label, locale, resolve)
@@ -57,8 +52,21 @@ func Handler(r *Registry, resolve TextResolver) http.Handler {
 				ds[i].Meta = resolveMeta(ds[i].Meta, ds[i].Owner, locale, resolve)
 			}
 		}
+		body, err := json.Marshal(Response{Version: version, Descriptors: ds})
+		if err != nil {
+			writeError(w, 500, "invalid_registry", "The registry could not be encoded.")
+			return
+		}
+		hash := sha256.Sum256(body)
+		etag := `"` + hex.EncodeToString(hash[:]) + `"`
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("ETag", etag)
+		if req.Header.Get("If-None-Match") == etag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		_ = json.NewEncoder(w).Encode(Response{Version: version, Descriptors: ds})
+		_, _ = w.Write(append(body, '\n'))
 	})
 }
 

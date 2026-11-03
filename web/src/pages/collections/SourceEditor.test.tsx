@@ -55,3 +55,39 @@ describe("plugin collection parameters", () => {
     });
   });
 });
+
+describe("catalogue lookup options", () => {
+  it("changes the lookup preference without replacing sources", () => {
+    const original = { kind: "catalog" as const };
+    function Harness() {
+      const [storedOnly, setStoredOnly] = useState(true);
+      const [source, setSource] = useState<Source>(original);
+      return (
+        <>
+          <SourceEditor
+            source={source}
+            index={0}
+            region="US"
+            removable={false}
+            onChange={setSource}
+            onRemove={() => {}}
+            descriptors={[]}
+            lookupPolicy={{ storedOnly, onChange: setStoredOnly }}
+          />
+          <output>{JSON.stringify({ source, storedOnly })}</output>
+        </>
+      );
+    }
+    render(<Harness />);
+    expect(
+      screen.queryByRole("switch", { name: "Use stored metadata only" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Catalogue lookup options" }));
+    expect(screen.getByRole("switch", { name: "Use stored metadata only" })).toBeChecked();
+    fireEvent.click(screen.getByRole("switch", { name: "Use stored metadata only" }));
+    expect(JSON.parse(screen.getByText(/"storedOnly":/).textContent!)).toEqual({
+      source: original,
+      storedOnly: false,
+    });
+  });
+});

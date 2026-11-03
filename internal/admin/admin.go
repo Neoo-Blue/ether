@@ -420,7 +420,17 @@ func (h *Handler) routes() *http.ServeMux {
 
 	for path, handler := range h.deps.Extensions {
 		prefix := "/api/" + path
-		mux.Handle(prefix+"/", h.requireAuth(http.StripPrefix(prefix, handler).ServeHTTP))
+		serve := h.requireAuth(http.StripPrefix(prefix, handler).ServeHTTP)
+		mux.Handle(prefix+"/", serve)
+		// Serve the subtree root directly. ServeMux's slash redirect otherwise
+		// loses the outer /ether prefix after the console strips it.
+		mux.Handle(prefix, h.requireAuth(func(w http.ResponseWriter, r *http.Request) {
+			next := r.Clone(r.Context())
+			u := *r.URL
+			u.Path = prefix + "/"
+			next.URL = &u
+			serve(w, next)
+		}))
 	}
 	h.personalizationRoutes(api)
 	h.collectionRoutes(mux, api)

@@ -445,7 +445,7 @@ func DeadlineFor(path string) time.Duration {
 		return 15 * time.Second
 	case strings.HasPrefix(path, "/ether/job"):
 		return 5 * time.Minute
-	case strings.HasPrefix(path, "/catalog/"), strings.HasPrefix(path, "/ether/event"), strings.HasPrefix(path, "/ether/action"), strings.HasPrefix(path, "/ether/markers"):
+	case strings.HasPrefix(path, "/meta/"), strings.HasPrefix(path, "/ether/metadata/"), strings.HasPrefix(path, "/catalog/"), strings.HasPrefix(path, "/ether/event"), strings.HasPrefix(path, "/ether/action"), strings.HasPrefix(path, "/ether/markers"):
 		return 10 * time.Second
 	case strings.HasPrefix(path, "/subtitles/"), strings.HasPrefix(path, "/ether/subtitles/"):
 		return 5 * time.Second

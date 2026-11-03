@@ -698,3 +698,82 @@ func TestManagerRejectsStreamingOnNonStreamingRuntime(t *testing.T) {
 		t.Fatalf("streaming error = %v", err)
 	}
 }
+
+// An ordinary manifest uses the same source registry and release contract as a
+// native plugin; these are offline adapter checks, not upstream/playback proof.
+func TestOrdinaryStremioStreamsUseSharedSources(t *testing.T) {
+	env := newStreamTestEnv(t)
+	ctx := context.Background()
+	id := "community.ordinary.streams"
+	calls := 0
+	env.rts[id] = &fakePluginRuntime{handler: func(_ context.Context, req plugins.Request) (plugins.Response, error) {
+		calls++
+		if req.Path != "/stream/movie/tt0017136.json" || len(req.Query) != 0 {
+			t.Errorf("ordinary request contains non-protocol hints: %+v", req)
+		}
+		return plugins.Response{Status: 200, Body: json.RawMessage(`{"streams":[{"name":"Metropolis 1080p","url":"https://example.test/metropolis.mp4"},{"name":"Metropolis 720p","infoHash":"0123456789abcdef0123456789abcdef01234567","fileIdx":2}]}`)}, nil
+	}}
+	raw := json.RawMessage(`{"id":"community.ordinary.streams","version":"1.0.0","name":"Public film sources","description":"A foreign description!","types":["movie"],"resources":[{"name":"stream","types":["movie"],"idPrefixes":["tt"]}]}`)
+	preview, err := env.mgr.PreviewInstall(ctx, plugins.Source{Kind: "studio", Manifest: raw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := env.mgr.Install(ctx, preview, plugins.InstallOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor := extend.PluginID(id, "stream")
+	if _, ok := env.reg.Get(extend.KindSourceKind, descriptor); !ok {
+		t.Fatal("missing shared source descriptor")
+	}
+	req := core.SearchRequest{Type: core.TypeMovie, Title: "Metropolis", Year: 1927, IDs: core.IDs{IMDB: "tt0017136", TMDB: 19}}
+	releases, err := env.sources.Search(ctx, req)
+	if err != nil || len(releases) != 2 {
+		t.Fatalf("mapped releases %d: %v", len(releases), err)
+	}
+	ids := map[string]bool{}
+	protocols := map[string]bool{}
+	for _, r := range releases {
+		if r.ID == "" || r.Indexer != rec.Name || r.TitleIDs.IMDB != req.IDs.IMDB {
+			t.Fatalf("invalid shared release: %+v", r)
+		}
+		ids[r.ID] = true
+		protocols[r.Protocol] = true
+	}
+	if !protocols[core.ProtocolTorrent] {
+		t.Fatal("torrent form missing")
+	}
+	if err := env.mgr.SetEnabled(ctx, id, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := env.reg.Get(extend.KindSourceKind, descriptor); ok {
+		t.Fatal("disabled contribution remains")
+	}
+	got, err := env.sources.Search(ctx, req)
+	if err != nil || len(got) != 0 || calls != 1 {
+		t.Fatalf("disabled source called: %d calls=%d err=%v", len(got), calls, err)
+	}
+	if err := env.mgr.SetEnabled(ctx, id, true); err != nil {
+		t.Fatal(err)
+	}
+	got, err = env.sources.Search(ctx, req)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("re-enabled source: %v", err)
+	}
+	for _, r := range got {
+		if !ids[r.ID] {
+			t.Fatal("release identity changed after re-enable")
+		}
+	}
+	unsupported := req
+	unsupported.IDs = core.IDs{TMDB: 19}
+	if got, err = env.sources.Search(ctx, unsupported); err != nil || len(got) != 0 || calls != 2 {
+		t.Fatalf("undeclared identity was requested: calls=%d err=%v", calls, err)
+	}
+	if err := env.mgr.Remove(ctx, id, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := env.reg.Get(extend.KindSourceKind, descriptor); ok {
+		t.Fatal("uninstalled contribution remains")
+	}
+}
