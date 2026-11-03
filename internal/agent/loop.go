@@ -13,7 +13,18 @@ import (
 
 // routeGuidance tunes the agent for console pages built around it.
 var routeGuidance = map[string]string{
-	"/plugins/studio": "This is Studio, where the owner builds plugins that extend Ether by describing them. Showcase plugins feed Ether's own surfaces with real data: the channels template adds free live channels to the Live TV guide, the video_source template adds playable sources to catalogue titles, the list template builds Home rows and collections from an external list, and subtitle or metadata providers work the same way. Choose one of those whenever the request fits; build a console page only when the owner explicitly asks for one. These templates already work against real services (channels loads Pluto TV's free lineup and guide; video_source searches the Internet Archive's public-domain films), so start with studio_project_create on the closest one and change only what the owner asked for; use web_search and web_fetch only to add a different real source. Work with studio_project_create, studio_project_read and studio_project_save; the other plugin_* and registry tools are for external AI apps and not needed here. Build a working draft straight away from the closest template instead of asking clarifying questions, keep real data sources (never typed-in sample titles or channels), check that it saves without diagnostics, preview problems or install-check errors, then summarise in two or three plain sentences what it adds and where it will appear, and offer one or two refinements. Talk to the owner in plain words: never mention plugin ids, runtimes, shadow mode, routes or tool names. Installing is the owner's choice through the install approval.",
+	"/plugins/studio": "This is Studio, where the owner builds plugins that extend Ether by describing them. Showcase plugins feed Ether's own surfaces with real data: the channels template adds free live channels to the Live TV guide, the video_source template adds playable sources to catalogue titles, the list template builds Home rows and collections from an external list, and subtitle or metadata providers work the same way. Choose one of those whenever the request fits; build a console page only when the owner explicitly asks for one. These templates already work against real services (channels loads Pluto TV's free lineup and guide; video_source searches the Internet Archive's public-domain films), so start with studio_project_create on the closest one and change only what the owner asked for; use web_search and web_fetch only to add a different real source. Build a working draft straight away from the closest template instead of asking clarifying questions, keep real data sources (never typed-in sample titles or channels), check that it saves without diagnostics, preview problems or install-check errors, then summarise in two or three plain sentences what it adds and where it will appear, and offer one or two refinements. Talk to the owner in plain words: never mention plugin ids, runtimes, shadow mode, routes or tool names. Installing is the owner's choice through the install approval.",
+}
+
+// routeTools narrows the catalogue on pages with one job. Studio builds and
+// installs drafts; the plugin_* developer tools exist for external AI apps
+// and only send a model in circles here.
+var routeTools = map[string]map[string]bool{
+	"/plugins/studio": {
+		"studio_project_create": true, "studio_project_read": true, "studio_project_save": true,
+		"plugin_install": true, "web_search": true, "web_fetch": true,
+		"catalog_search": true, "title_details": true, "livetv_channels": true, "navigate": true,
+	},
 }
 
 // loop runs the bounded tool-calling loop for one turn.
@@ -21,7 +32,11 @@ func (s *Service) loop(ctx context.Context, p tools.Principal, threadID, turnID 
 	visible := s.catalogue.Visible(ctx, p)
 	defs := make([]llm.ToolDef, 0, len(visible))
 	byName := map[string]tools.Tool{}
+	allow := routeTools[tc.Route]
 	for _, t := range visible {
+		if allow != nil && !allow[t.Name] {
+			continue
+		}
 		defs = append(defs, llm.ToolDef{Name: t.Name, Description: t.Description, InputSchema: t.InputSchema})
 		byName[t.Name] = t
 	}

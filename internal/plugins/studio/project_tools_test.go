@@ -25,7 +25,7 @@ func TestProjectToolsApplyDraftsAndRejectStaleWrites(t *testing.T) {
 	if err != nil || created.Proposal != nil || len(s.ListProjects(ctx)) != 1 {
 		t.Fatalf("create: %v proposal=%v", err, created.Proposal)
 	}
-	p := created.Data["project"].(*Project)
+	p, _ := s.GetProject(ctx, created.Data["project"].(map[string]any)["id"].(string))
 	stale := p.UpdatedAt.Format(time.RFC3339Nano)
 	saved, err := ts[2].Execute(ctx, principal, map[string]any{"id": p.ID, "updatedAt": stale, "files": map[string]any{"src/plugin.ts": "export function handle() { return {}; }"}})
 	if err != nil || saved.Proposal != nil {
@@ -59,7 +59,7 @@ func TestProjectSaveReportsRenderedProblems(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := created.Data["project"].(*Project)
+	p, _ := s.GetProject(ctx, created.Data["project"].(map[string]any)["id"].(string))
 	src := strings.Replace(p.Files["src/plugin.ts"], `label: "$t:featured_picks"`, `label: "${count} picks"`, 1)
 	if src == p.Files["src/plugin.ts"] {
 		t.Fatal("template title not found")
@@ -85,7 +85,7 @@ func TestProjectSaveReportsInstallCheck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := created.Data["project"].(*Project)
+	p, _ := s.GetProject(ctx, created.Data["project"].(map[string]any)["id"].(string))
 	src := strings.Replace(p.Files["src/plugin.ts"], `label: "$t:featured_picks"`, `label: "Featured picks"`, 1)
 	saved, err := ts[2].Execute(ctx, principal, map[string]any{"id": p.ID, "updatedAt": p.UpdatedAt.Format(time.RFC3339Nano), "files": map[string]any{"src/plugin.ts": src}})
 	if err != nil {

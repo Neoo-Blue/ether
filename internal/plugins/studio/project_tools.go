@@ -3,6 +3,7 @@ package studio
 import (
 	"context"
 	"encoding/json"
+	"sort"
 	"strings"
 
 	"github.com/braedonsaunders/ether/internal/agent/tools"
@@ -51,7 +52,7 @@ func ProjectTools(s *Studio) []tools.Tool {
 		if err != nil {
 			return tools.Result{}, err
 		}
-		return tools.Result{Data: map[string]any{"project": p}}, nil
+		return tools.Result{Data: map[string]any{"project": compactProject(p)}}, nil
 	}
 	save := tools.Tool{Name: "studio_project_save", Title: "Save Studio source", Description: "Save source files to an existing Studio draft and return real compiler diagnostics. Requires the exact updatedAt from studio_project_read; a newer human edit makes a stale save fail, so read again and retry. Applies immediately; does not install the plugin. \"$t:key\" text resolves in manifest fields and ViewSpec literals only, never in view data values. Fix every diagnostic, preview problem and installCheck error it returns before finishing; installed pages need $t: keys or { \"$\": \"field\" } data bindings for visible text, never literal strings.", Audience: tools.AudienceOwner, Owner: "builtin", InputSchema: json.RawMessage(`{"type":"object","required":["id","updatedAt","files"],"properties":{"id":{"type":"string"},"updatedAt":{"type":"string"},"files":{"type":"object","additionalProperties":{"type":"string"}}},"additionalProperties":false}`)}
 	save.Execute = func(ctx context.Context, _ tools.Principal, input map[string]any) (tools.Result, error) {
@@ -75,7 +76,7 @@ func ProjectTools(s *Studio) []tools.Tool {
 		if err != nil {
 			return tools.Result{}, err
 		}
-		data := map[string]any{"project": p, "compile": comp}
+		data := map[string]any{"project": compactProject(p), "compile": comp}
 		if comp.OK && p.DefaultPage != "" {
 			data["preview"] = renderedPreview(ctx, s, p)
 		}
@@ -125,4 +126,19 @@ func renderedPreview(ctx context.Context, s *Studio, p *Project) map[string]any 
 	}
 	out["spec"], out["data"] = spec, data
 	return out
+}
+
+// compactProject is a draft without its source, for write results: the
+// model already has the files it sent, and repeating them every step burns
+// the turn's token budget. studio_project_read returns the full source.
+func compactProject(p *Project) map[string]any {
+	files := make([]string, 0, len(p.Files))
+	for name := range p.Files {
+		files = append(files, name)
+	}
+	sort.Strings(files)
+	return map[string]any{
+		"id": p.ID, "name": p.Name, "template": p.Template, "files": files,
+		"updatedAt": p.UpdatedAt, "diagnostics": p.Diagnostics, "defaultPage": p.DefaultPage,
+	}
 }
