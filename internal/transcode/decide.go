@@ -497,8 +497,10 @@ func Decide(info core.MediaInfo, caps core.ClientCaps, opts core.DecideOptions, 
 	}
 	bitrateCap := minPositive(opts.MaxBitrateKbps, caps.MaxBitrateKbps, remoteCap)
 	heightCap := minPositive(caps.MaxHeight, opts.MaxHeight)
-	// Text subtitles always remain sidecars, including legacy burn requests.
-	burn := sub != nil && IsImageSubtitle(sub.Codec) && (opts.BurnSubtitles || !supportsSubtitle(caps, sub.Codec))
+	// Text subtitles remain sidecars, including legacy burn requests, unless
+	// the client cannot draw a soft text track here (BurnTextSubtitles).
+	burn := sub != nil && (IsImageSubtitle(sub.Codec) && (opts.BurnSubtitles || !supportsSubtitle(caps, sub.Codec)) ||
+		opts.BurnSubtitles && opts.BurnTextSubtitles && IsTextSubtitle(sub.Codec))
 	if a != nil && len(opts.AudioFilters) > 0 {
 		d.AudioFilters = append([]string(nil), opts.AudioFilters...)
 	}

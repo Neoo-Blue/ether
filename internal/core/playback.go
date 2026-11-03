@@ -122,6 +122,10 @@ type DecideOptions struct {
 	SubtitleStream int      // -1 none
 	AudioFilters   []string // trusted owner/viewer audio processing; forces audio encoding
 	BurnSubtitles  bool
+	// BurnTextSubtitles lets BurnSubtitles burn a text track too. Set for
+	// a client that draws no soft text track in this playback (Plex Web
+	// asking to burn an ASS track). Additive.
+	BurnTextSubtitles bool
 	// Protocol is the conversion protocol the client asked for (hls, dash,
 	// http). Empty keeps the HLS target. Additive.
 	Protocol string
