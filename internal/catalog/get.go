@@ -84,7 +84,7 @@ func (c *Catalog) fresh(st *storedTitle) bool {
 // Get returns a title from the mirror, fetching on demand when missing/stale.
 func (c *Catalog) Get(ctx context.Context, key core.RatingKey) (*core.Title, error) {
 	t, err := c.get(ctx, key)
-	if err == nil && (!c.visibleTitle(t) || c.searchFilter().Hidden(t)) {
+	if err == nil && !c.visibleTitle(t) {
 		return nil, core.ErrNotFound
 	}
 	// A season none of whose episodes has aired is not listed (seasonsOfShow)
@@ -112,7 +112,7 @@ func (c *Catalog) CachedGet(ctx context.Context, key core.RatingKey) (*core.Titl
 	if err != nil {
 		return nil, err
 	}
-	if !c.visibleTitle(&stored.t) || c.searchFilter().Hidden(&stored.t) {
+	if !c.visibleTitle(&stored.t) {
 		return nil, core.ErrNotFound
 	}
 	c.kickMovieYears([]core.Title{stored.t})

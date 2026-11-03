@@ -100,9 +100,8 @@ func TestVisibilityScopeDiscoveryOnlyKeepsSearchAndLookup(t *testing.T) {
 			t.Fatalf("scope %q: unmarked search = %+v, %v", tc.scope, got, err)
 		}
 
-		// Direct lookup applies everywhere rules, but skips discovery-only rules.
-		title, err := c.Get(ctx, foreign.Key)
-		if (err == nil && title != nil) != tc.searchable {
+		// Direct lookup by key (detail page, playback) is never filtered.
+		if title, err := c.Get(ctx, foreign.Key); err != nil || title == nil || title.Key != foreign.Key {
 			t.Fatalf("scope %q: Get = %v, %v", tc.scope, title, err)
 		}
 	}
