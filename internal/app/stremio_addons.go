@@ -132,6 +132,7 @@ func (a *App) migrateLegacyStremioIndexers(ctx context.Context) error {
 	}
 	var moves []move
 	var firstErr error
+	enabled := map[string]bool{}
 	for i, ix := range cfg.Indexers {
 		if ix.Kind != config.IndexerKindStremio {
 			continue
@@ -144,12 +145,22 @@ func (a *App) migrateLegacyStremioIndexers(ctx context.Context) error {
 			}
 			continue
 		}
-		if !ix.Enabled {
-			if rec, err = a.pluginManager().SetRoles(ctx, rec.ID, append(rec.RolesOff, plugins.CapStreamSource)); err != nil && firstErr == nil {
-				firstErr = err
-			}
-		}
+		enabled[rec.ID] = enabled[rec.ID] || ix.Enabled
 		moves = append(moves, move{i, rec})
+	}
+	// A turned-off row turns its add-on's streams off, unless another row
+	// of the same link was on.
+	for id, on := range enabled {
+		if on {
+			continue
+		}
+		rec, err := a.pluginManager().Get(ctx, id)
+		if err == nil {
+			_, err = a.pluginManager().SetRoles(ctx, id, append(rec.RolesOff, plugins.CapStreamSource))
+		}
+		if err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
 	if len(moves) == 0 {
 		return firstErr
