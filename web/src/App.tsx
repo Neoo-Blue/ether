@@ -78,7 +78,6 @@ import { useOwnerViewerPath } from "./components/pickers";
 import { api, getToken, setToken } from "./lib/api";
 import { BUILTIN, textOf, useRegistry, type Descriptor } from "./lib/extend";
 import {
-  pageRoute,
   pluginNavGroup,
   pluginPageRoute,
   type NavItemMeta,
@@ -196,7 +195,9 @@ export function buildNavigation(descriptors: Descriptor[]): SidebarNavGroup[] {
     }
   }
   for (const d of descriptors) {
-    if (d.kind !== "navItem") continue;
+    // Plugins do not add sidebar entries (yet); their pages open from the
+    // plugin's drawer and from the surfaces they extend.
+    if (d.kind !== "navItem" || d.owner !== BUILTIN) continue;
     const meta = d.meta as NavItemMeta | undefined;
     if (!meta?.route) continue;
     const pageId = meta.page ?? (meta.pageKey ? `plugin:${d.owner}/${meta.pageKey}` : undefined);
@@ -220,23 +221,6 @@ export function buildNavigation(descriptors: Descriptor[]): SidebarNavGroup[] {
         icon: navIcon(d.icon ?? page?.icon ?? pageMeta?.icon),
         exact: meta.exact || undefined,
         mobile: meta.mobile || undefined,
-      },
-    });
-  }
-  for (const d of descriptors) {
-    if (d.kind !== "page" || d.owner === BUILTIN || navPages.has(d.id)) continue;
-    const page = d as Descriptor<PageMeta>;
-    const meta = page.meta;
-    const group = pluginNavGroup(page) ?? "server";
-    items.push({
-      group,
-      order: d.order ?? 0,
-      builtin: false,
-      item: {
-        href: pageRoute(page),
-        label: textOf(d.label),
-        icon: navIcon(d.icon ?? meta?.icon),
-        mobile: meta?.mobile || undefined,
       },
     });
   }
