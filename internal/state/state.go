@@ -71,7 +71,9 @@ CREATE TABLE state_playlist_items (
 ALTER TABLE state_watch ADD COLUMN version INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE state_history ADD COLUMN imported INTEGER NOT NULL DEFAULT 0;
 CREATE UNIQUE INDEX state_history_imported ON state_history(user_id, rating_key, viewed_at) WHERE imported=1;`)
-	store.Register("state", 5, `CREATE INDEX state_watch_last_viewed ON state_watch(user_id, last_viewed_at DESC, rating_key) WHERE last_viewed_at>0;`)
+	// Its own component: state/5 must stay unused (prerelease builds recorded
+	// it), as state_search/1 does for the search index.
+	store.Register("state_lastviewed", 1, `CREATE INDEX state_watch_last_viewed ON state_watch(user_id, last_viewed_at DESC, rating_key) WHERE last_viewed_at>0;`)
 
 }
 
