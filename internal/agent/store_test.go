@@ -56,7 +56,14 @@ func TestStoreSQLiteMigrationsAndPaging(t *testing.T) {
 	}
 	// Audit never carries inputs: schema has no input column.
 	var cols string
-	rows, _ := db.QueryContext(ctx, `SELECT name FROM pragma_table_info('agent_audit')`)
+	query := `SELECT name FROM pragma_table_info('agent_audit')`
+	if store.DialectOf(db) == store.Postgres {
+		query = `SELECT column_name FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='agent_audit'`
+	}
+	rows, err := db.QueryContext(ctx, query)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer rows.Close()
 	for rows.Next() {
 		var c string

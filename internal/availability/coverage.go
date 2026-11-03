@@ -18,7 +18,7 @@ import (
 // coverage, otherwise it starts again now.
 func (s *Service) markCoverage(ctx context.Context, f core.ReleaseFeed, continuous bool) error {
 	now := s.now().Unix()
-	_, err := s.db.ExecContext(ctx, `UPDATE availability_feeds SET covered_since=CASE WHEN ? AND covered_since>0 THEN covered_since ELSE ? END WHERE source_id=? AND generation=?`,
+	_, err := s.db.ExecContext(ctx, `UPDATE availability_feeds SET covered_since=CASE WHEN ? <> 0 AND covered_since>0 THEN covered_since ELSE ? END WHERE source_id=? AND generation=?`,
 		boolInt(continuous), now, f.ID, f.Generation)
 	return err
 }
