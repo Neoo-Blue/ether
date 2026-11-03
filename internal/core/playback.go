@@ -130,7 +130,8 @@ type DecideOptions struct {
 
 // PlaySession binds a user, a title and a client to a resolved, open source.
 type PlaySession struct {
-	PlaybackGroup string `json:"playbackGroup,omitempty"`
+	Encoder       *EncoderStatus `json:"encoder,omitempty"`
+	PlaybackGroup string         `json:"playbackGroup,omitempty"`
 	// PreparedOnly marks a source reserved for planning but not opened by a
 	// frontend. Cluster snapshots carry it for owner Activity.
 	PreparedOnly bool `json:"preparedOnly,omitempty"`
@@ -175,6 +176,25 @@ type PlaySession struct {
 	// Node is the cluster node serving a session reported by another node
 	// (empty for this node's own sessions and on a standalone server).
 	Node string `json:"node,omitempty"`
+}
+
+// EncoderStatus describes the currently running output process, not the
+// original playback negotiation. Times are media timestamps or wall-clock
+// instants as indicated by their field names.
+type EncoderStatus struct {
+	RecoveryReason string         `json:"recoveryReason,omitempty"`
+	PlayerPosition *time.Duration `json:"playerPosition,omitempty"`
+	Runway         *time.Duration `json:"runway,omitempty"`
+	Decision       Decision       `json:"decision"`
+	Processor      string         `json:"processor"`
+	Filters        string         `json:"filters"`
+	Phase          string         `json:"phase"`
+	Reason         string         `json:"reason,omitempty"`
+	StartedAt      time.Time      `json:"startedAt"`
+	UpdatedAt      time.Time      `json:"updatedAt"`
+	Speed          float64        `json:"speed"`
+	OutputTime     time.Duration  `json:"outputTime"`
+	ReadyUntil     time.Duration  `json:"readyUntil"`
 }
 
 type Playback interface {

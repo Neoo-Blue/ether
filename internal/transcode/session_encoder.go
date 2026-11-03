@@ -313,6 +313,7 @@ func (s *Session) startRunLocked(seg int, bigProbe bool) error {
 			initPath: filepath.Join(spec.Dir, spec.InitName), startAt: spec.Start, sl: sl}
 	}
 	r := &run{
+		reason:   cause,
 		chunks:   cr,
 		seq:      s.runSeq,
 		startSeg: seg,

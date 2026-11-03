@@ -6,6 +6,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/core"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -174,6 +175,7 @@ type run struct {
 	rtxConfirmed atomic.Bool
 
 	seq        int
+	reason     string
 	startSeg   int
 	spec       runSpec
 	proc       Process
@@ -278,6 +280,46 @@ func (s *Session) Progress() Progress {
 	r.progressMu.Lock()
 	defer r.progressMu.Unlock()
 	return r.progress
+}
+
+// EncoderStatus snapshots the active run, including adaptive copy-to-encode
+// transitions that do not change the initially negotiated decision.
+func (s *Session) EncoderStatus() *core.EncoderStatus {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r := s.cur
+	if r == nil {
+		return nil
+	}
+	r.progressMu.Lock()
+	p := r.progress
+	r.progressMu.Unlock()
+	phase := "starting"
+	switch {
+	case r.finished || r.stopped:
+		phase = "finished"
+	case r.paused:
+		phase = "paused"
+	case r.produced > 0 || !p.Updated.IsZero():
+		phase = "running"
+	}
+	processor, filters := "none", "none"
+	if !r.spec.Decision.VideoCopy {
+		processor, filters = "cpu", "cpu"
+		if r.hw {
+			processor = "gpu"
+		}
+		v := r.spec.Info.Video()
+		graph := planVideo(r.spec, v).graph
+		for _, f := range []string{"tonemap_cuda", "scale_cuda", "scale_vt", "tonemap_vaapi", "scale_vaapi", "vpp_qsv"} {
+			if strings.Contains(graph, f+"=") {
+				filters = "gpu"
+				break
+			}
+		}
+	}
+	b := s.recoveryBufferLocked()
+	return &core.EncoderStatus{Decision: r.spec.Decision, Processor: processor, Filters: filters, Phase: phase, Reason: r.reason, StartedAt: r.started, UpdatedAt: p.Updated, Speed: p.Speed, OutputTime: p.OutTime, ReadyUntil: b.ReadyUntil}
 }
 
 // HWAccelerated reports whether the current run encodes on hardware.

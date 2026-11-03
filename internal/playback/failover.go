@@ -657,6 +657,7 @@ func (m *Manager) FailoverInput(ctx context.Context, sessionID, inputURL string,
 // speed-driven down-failover (down: pick a lower-bitrate candidate, never
 // mark the slow release bad).
 type failoverOpts struct {
+	encoder        bool        // encoder shortage: only accept a video-copy candidate
 	stillNeeded    func() bool // speculative recovery rechecks before publishing a swap
 	quietFailure   bool
 	preserveBuffer bool
@@ -712,13 +713,18 @@ func (m *Manager) failoverWith(ctx context.Context, s *session, observed *genera
 	log := m.log.With("session", s.id, "key", s.ident.key, "at", at)
 	log.Warn("failing over", "release", cur.res.Release.Name, "reason", fo.reason, "down", fo.down)
 	// A provider outage is not evidence that the release itself is invalid.
-	if failure := cur.sourceFailure(); permanentSourceFailure(failure) {
+	if failure := cur.sourceFailure(); !fo.encoder && permanentSourceFailure(failure) {
 		m.markBad(cur.releaseID(), fo.reason)
 	}
 
 	s.mu.Lock()
-	s.tried = append(s.tried, cur.releaseID())
 	tried := slices.Clone(s.tried)
+	if !slices.Contains(tried, cur.releaseID()) {
+		tried = append(tried, cur.releaseID())
+	}
+	if !fo.encoder {
+		s.tried = slices.Clone(tried)
+	}
 	alternates := s.alternates
 	s.mu.Unlock()
 
@@ -751,7 +757,18 @@ func (m *Manager) failoverWith(ctx context.Context, s *session, observed *genera
 			g = nil
 		}
 	}
-	prepared := cur.takeDamageResolution(tried)
+	var prepared *core.Resolution
+	if !fo.encoder {
+		prepared = cur.takeDamageResolution(tried)
+	}
+	copyCandidate := func(next *generation) bool {
+		hls, ok := m.deps.HLSLookup(s.id)
+		if !ok || hls == nil {
+			return false
+		}
+		p, ok := hls.(interface{ SwapWouldCopyVideo(core.MediaInfo) bool })
+		return ok && p.SwapWouldCopyVideo(next.infoSnapshot())
+	}
 	if g == nil && !direct && prepared == nil {
 		// Any healthy alternate continues an encoder session, so open
 		// several at once instead of stalling through each broken one.
@@ -770,6 +787,14 @@ func (m *Manager) failoverWith(ctx context.Context, s *session, observed *genera
 				bps := mediaBps(next.infoSnapshot(), next.src.Size())
 				if curBps > 0 && (bps <= 0 || bps >= curBps) {
 					return fmt.Errorf("down-failover candidate is not lower bitrate: %w", core.ErrNotAvailable)
+				}
+				return nil
+			}
+		}
+		if fo.encoder {
+			accept = func(next *generation) error {
+				if !copyCandidate(next) {
+					return fmt.Errorf("replacement needs video encoding: %w", core.ErrNotAvailable)
 				}
 				return nil
 			}
@@ -797,6 +822,10 @@ func (m *Manager) failoverWith(ctx context.Context, s *session, observed *genera
 				m.dropGeneration(g)
 				g, err = nil, perr
 			}
+		}
+		if err == nil && fo.encoder && !copyCandidate(g) {
+			m.dropGeneration(g)
+			g, err = nil, fmt.Errorf("replacement needs video encoding: %w", core.ErrNotAvailable)
 		}
 		// Byte-range clients retain the original container headers and
 		// offsets. Only an exact-size repost may replace a non-spliceable
@@ -916,6 +945,9 @@ func (m *Manager) failoverWith(ctx context.Context, s *session, observed *genera
 		s.downFailovers++
 	}
 	// Racers that failed after the winner may already have been recorded.
+	if fo.encoder {
+		tried = []string{cur.releaseID()}
+	}
 	for _, id := range tried {
 		if !slices.Contains(s.tried, id) {
 			s.tried = append(s.tried, id)

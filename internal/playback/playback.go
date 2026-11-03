@@ -1024,7 +1024,33 @@ func (m *Manager) Session(id string) (*core.PlaySession, bool) {
 	if s == nil {
 		return nil, false
 	}
-	return s.snapshot(m.now()), true
+	return m.snapshotWithEncoder(s, m.now()), true
+}
+
+func (m *Manager) snapshotWithEncoder(s *session, now time.Time) *core.PlaySession {
+	ps := s.snapshot(now)
+	if m.deps.HLSLookup == nil {
+		return ps
+	}
+	hls, ok := m.deps.HLSLookup(s.id)
+	if !ok || hls == nil {
+		return ps
+	}
+	if source, ok := hls.(interface{ EncoderStatus() *core.EncoderStatus }); ok {
+		ps.Encoder = source.EncoderStatus()
+		if e := ps.Encoder; e != nil {
+			s.mu.Lock()
+			if !s.viewerAt.IsZero() {
+				p := s.viewerPosition
+				e.PlayerPosition = &p
+			}
+			e.RecoveryReason, e.Runway = s.encoderRecoveryReason, s.encoderRunway
+			s.mu.Unlock()
+			ps.Decision, ps.DecisionVideoCopy, ps.DecisionAudioCopy = e.Decision.Kind, e.Decision.VideoCopy, e.Decision.AudioCopy
+			ps.DecisionReason = e.Decision.Reason
+		}
+	}
+	return ps
 }
 
 // SessionFor finds the live session of a client for a title.
@@ -1131,7 +1157,7 @@ func (m *Manager) Sessions() []*core.PlaySession {
 	now := m.now()
 	out := make([]*core.PlaySession, 0, len(list))
 	for _, s := range list {
-		out = append(out, s.snapshot(now))
+		out = append(out, m.snapshotWithEncoder(s, now))
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if !out[i].StartedAt.Equal(out[j].StartedAt) {
