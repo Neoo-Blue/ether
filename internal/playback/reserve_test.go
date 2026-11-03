@@ -8,7 +8,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/core"
 )
 
-func TestReserveWarmsFortySecondsWithoutDelayingPlay(t *testing.T) {
+func TestReserveWarmsNinetySecondsWithoutDelayingPlay(t *testing.T) {
 	h := newHarness(t, []*fakeRelease{mkv("A", 100_000_000, 100*time.Second)}, []string{"A"})
 	ps := h.prepare(owner, movieKey, "reserve")
 	h.m.PlaybackProgress(owner.ID, "reserve", movieKey, 10*time.Second, "playing")
@@ -18,7 +18,7 @@ func TestReserveWarmsFortySecondsWithoutDelayingPlay(t *testing.T) {
 		calls := append([]prefetchCall(nil), h.engine.prefetch...)
 		h.engine.mu.Unlock()
 		for _, c := range calls {
-			if c.Length >= 40_000_000 && c.Length <= 256<<20 {
+			if c.Length >= 90_000_000 && c.Length <= 256<<20 {
 				if h.m.lookup(ps.ID).current().releaseID() != "A" {
 					t.Fatal("prefetch changed source")
 				}
@@ -27,7 +27,7 @@ func TestReserveWarmsFortySecondsWithoutDelayingPlay(t *testing.T) {
 		}
 		time.Sleep(time.Millisecond)
 	}
-	t.Fatal("no 40-second reserve requested")
+	t.Fatal("no 90-second reserve requested")
 }
 
 func TestDetailReserveUsesMediaDuration(t *testing.T) {
@@ -49,6 +49,23 @@ func TestDetailReserveUsesMediaDuration(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 	t.Fatal("detail warming did not request 40 seconds")
+}
+
+func TestSwapLatencyWindowIsBoundedAndExpiresOldSamples(t *testing.T) {
+	var w swapLatencyWindow
+	if got := w.target(); got != 90*time.Second {
+		t.Fatalf("default target = %v", got)
+	}
+	w.observe(50 * time.Second)
+	if got := w.target(); got != 2*time.Minute {
+		t.Fatalf("slow handoff target = %v", got)
+	}
+	for range w.samples {
+		w.observe(time.Second)
+	}
+	if got := w.target(); got != 90*time.Second {
+		t.Fatalf("old sample survived bounded window: %v", got)
+	}
 }
 
 func TestPreparedSpeedAlternateReusesOpenAndProbe(t *testing.T) {

@@ -258,7 +258,9 @@ func (m *Manager) openGeneration(ctx context.Context, s *session, res *core.Reso
 	if !releaseMatchesTitle(res.Release, s.title) || !payloadMatchesTitle(res.NZB, s.title) {
 		return nil, fmt.Errorf("%w: release does not match requested episode", core.ErrNotAvailable)
 	}
+	openStarted := time.Now()
 	src, finish, err := m.openSource(ctx, s.sources, res)
+	m.log.Debug("playback candidate open", "session", s.id, "release", res.Release.ID, "duration", time.Since(openStarted), "ok", err == nil)
 	if err != nil {
 		if permanentSourceFailure(err) {
 			m.markBad(res.Release.ID, "invalid source on open")
@@ -682,6 +684,7 @@ func (m *Manager) failoverWith(ctx context.Context, s *session, observed *genera
 		return nil, err
 	}
 	defer unlock(s.failSem)
+	started := time.Now()
 
 	s.mu.Lock()
 	cur, closed, failovers, pinned := s.cur, s.closed, s.failovers, s.sourcePins > 0
@@ -927,6 +930,9 @@ func (m *Manager) failoverWith(ctx context.Context, s *session, observed *genera
 				readyCtx, cancelReady := context.WithTimeout(swapCtx, 30*time.Second)
 				err = ready.WaitForReplacementOutput(readyCtx, m.urlFor(g))
 				if err == nil {
+					elapsed := time.Since(started)
+					m.swapLatency.observe(elapsed)
+					log.Info("replacement output contiguous", "release", g.releaseID(), "elapsed", elapsed, "sourceReserveTarget", m.swapLatency.target())
 					// One old source stays available briefly after the first
 					// contiguous replacement output, without a second encoder.
 					timer := time.NewTimer(time.Second)

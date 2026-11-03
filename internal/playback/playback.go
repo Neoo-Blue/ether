@@ -21,6 +21,7 @@ import (
 	"os"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/braedonsaunders/ether/internal/clusterbus"
@@ -227,8 +228,10 @@ type Manager struct {
 	resumeSaveCond      *sync.Cond
 	reg                 *registry // nil on a standalone server
 	// titleInval broadcasts title invalidations (nil standalone).
-	titleInval *clusterbus.Invalidator
-	bufs       sync.Pool
+	titleInval           *clusterbus.Invalidator
+	bufs                 sync.Pool
+	swapLatency          swapLatencyWindow
+	reserveConfigVersion atomic.Uint64
 
 	cfgMu sync.RWMutex
 	cfg   config.Config
@@ -583,11 +586,24 @@ var errDraining = fmt.Errorf("%w: this server is restarting for an update; try a
 // SetConfig applies a new config snapshot (stream limits).
 func (m *Manager) SetConfig(cfg config.Config) {
 	m.cfgMu.Lock()
+	previousReadAhead := m.cfg.Cache.PlaybackReadAhead()
+	previousDebridReadAhead := m.cfg.Debrid.ReadAheadChunks
+	previousDebridChunk := m.cfg.Debrid.ChunkBytes
 	m.cfg = cfg
+	m.reserveConfigVersion.Add(1)
 	m.cfgMu.Unlock()
 	m.mu.Lock()
 	m.warm = map[identity]*warmEntry{}
+	var sessions []*session
+	if cfg.Cache.Mode == "off" || cfg.Cache.PlaybackReadAhead() < previousReadAhead || cfg.Debrid.ReadAheadChunks != previousDebridReadAhead || cfg.Debrid.ChunkBytes != previousDebridChunk {
+		for _, s := range m.sessions {
+			sessions = append(sessions, s)
+		}
+	}
 	m.mu.Unlock()
+	for _, s := range sessions {
+		s.reserve.stop()
+	}
 }
 
 func (m *Manager) config() config.Config {
