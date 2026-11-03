@@ -109,3 +109,16 @@ it("configures TheIntroDB without enabling playback lookup", async () => {
   await waitFor(() => expect(fake.state.config.markers?.accountEnabled).toBe(true));
   expect(fake.state.config.markers?.theIntroDb).toBe(false);
 });
+
+it("keeps configured TMDB required and opens Manage in the shared drawer", async () => {
+  const { fake } = renderApp("/services/overview", {}, (f) => {
+    f.state.config.catalog.tmdbKey = "[configured]";
+  });
+  const manage = await screen.findByRole("button", { name: "Manage TMDB" });
+  expect(screen.queryByRole("switch", { name: "TMDB enabled" })).toBeNull();
+  fireEvent.click(manage);
+  const drawer = await screen.findByRole("dialog");
+  expect(within(drawer).getByLabelText("TMDB API key")).toHaveValue("[configured]");
+  expect(within(drawer).getByRole("button", { name: "Test TMDB key" })).toBeInTheDocument();
+  expect(fake.state.config.catalog.tmdbKey).toBe("[configured]");
+});

@@ -42,7 +42,7 @@ export function IntegrationTab({
             {!enabled ? t("Off") : ready ? t("Connected") : t("Needs a key")}
           </Badge>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full items-center justify-end gap-3 sm:w-auto">
           {test}
           {onToggle && (
             <Switch
