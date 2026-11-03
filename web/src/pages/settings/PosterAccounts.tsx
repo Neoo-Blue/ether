@@ -82,7 +82,7 @@ export function PosterAccountForm({
 }) {
   const service = POSTER_SERVICES.find((s) => s.id === value.source)!;
   return (
-    <SettingsSection title={service.name}>
+    <SettingsSection title={undefined}>
       <div className="space-y-4 p-5">
         {["postersplus", "xrdb"].includes(value.source) && (
           <Field label={t("Server URL")} htmlFor="poster-url">

@@ -84,6 +84,7 @@ it.each([
       }),
     ).toHaveAttribute("aria-selected", "true"),
   );
+  await waitFor(() => expect(screen.getAllByRole("heading", { name })).toHaveLength(1));
   if (name === "TMDB")
     expect(screen.queryByRole("switch", { name: "TMDB account enabled" })).toBeNull();
   else

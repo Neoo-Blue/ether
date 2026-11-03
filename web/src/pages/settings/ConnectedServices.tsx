@@ -730,7 +730,7 @@ export function ConnectedServices({
   );
   const tmdbForm = (
     <SettingsSection
-      title="TMDB"
+      title={undefined}
       description={t("Ether uses this key to name titles, fetch artwork and fill the catalogue.")}
     >
       <p className="px-5 py-4 text-sm text-fg-muted">
@@ -1002,7 +1002,7 @@ function SchemaGroups({
     return (
       <SettingsSection
         key={`${service.configKey}-${g.title ?? i}`}
-        title={g.title ?? service.label}
+        title={g.title && g.title !== service.label ? g.title : undefined}
         description={g.description}
         footer={last ? footer : undefined}
       >

@@ -217,7 +217,7 @@ export function RatingSources({
     return (
       <>
         <SettingsSection
-          title={t("OMDb and MDBList")}
+          title={undefined}
           footer={
             <Link to="/metadata/ratings" className="text-sm text-primary underline">
               {t("Choose which scores apps show")}
