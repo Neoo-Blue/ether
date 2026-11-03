@@ -130,8 +130,11 @@ func (s *Server) decorateDiscoveryMetadata(ctx context.Context, pr *Request, t *
 			if cfg.Audience == "none" || (cfg.Audience != "" && cfg.Missing == "none") {
 				m.AudienceRating, m.AudienceRatingImage = 0, ""
 			}
-			if cfg.Critic != "" && cfg.Critic != "none" && cfg.Missing == "tmdb" && t.VoteCount > 0 && t.Rating > 0 && t.Rating <= 10 {
-				m.Rating, m.RatingImage = math.Round(t.Rating*10)/10, "themoviedb://image.rating"
+			if cfg.Critic != "" && cfg.Critic != "none" && cfg.Missing == "tmdb" {
+				m.Rating, m.RatingImage = 0, ""
+				if t.VoteCount > 0 && t.Rating > 0 && t.Rating <= 10 {
+					m.Rating, m.RatingImage = math.Round(t.Rating*10)/10, "themoviedb://image.rating"
+				}
 			}
 			if cfg.Critic == "none" || (cfg.Critic != "" && cfg.Missing == "none") {
 				m.Rating, m.RatingImage = 0, ""
