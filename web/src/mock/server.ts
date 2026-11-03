@@ -1794,7 +1794,7 @@ export function createFakeServer(opts: FakeOptions = {}) {
           homeReleasePending: 248,
           browsableShows: 24298,
           lastSync: new Date(Date.now() - 5 * 3600_000).toISOString(),
-          sync: { running: false, titlesSeen: 63500 },
+          sync: { running: false, titlesSeen: 63500, titlesAdded: 284 },
           trending: ["movie", "show"].flatMap((mediaType) =>
             ["day", "week"].map((window) => ({
               mediaType,

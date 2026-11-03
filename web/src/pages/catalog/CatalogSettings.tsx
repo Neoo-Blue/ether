@@ -3,19 +3,19 @@ import { SettingsSection, Spinner, SubtabNav, toast } from "@braedonsaunders/app
 import { Segmented } from "../../components/fields";
 import { MoreOptions } from "../../components/ConfigSection";
 import { useNavigate, useParams } from "react-router-dom";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useApp } from "../../app-context";
 import { SaveBar, useDraft } from "../../components/SaveBar";
 import { ErrorPanel } from "../../components/feedback";
 import { t, tn } from "../../i18n";
 import { relativeTime } from "../../lib/format";
-import { api, ApiError, errorMessage } from "../../lib/api";
-import { useAsync } from "../../lib/hooks";
+import { api, apiFetch, ApiError, errorMessage } from "../../lib/api";
+import { useAsync, useDebouncedValue } from "../../lib/hooks";
 import { isRuleComplete } from "../../lib/rules";
 import { asObj, SchemaField, type FieldGroup } from "../settings/SchemaForm";
 import { CatalogPickers, isCatalogPicker } from "./CatalogPickers";
 import { CATALOG } from "../settings/schema";
-import { HomeReleaseStatus, UpcomingEpisodeSettings } from "./HomeReleaseSettings";
+import { CatalogActivity, UpcomingEpisodeSettings } from "./HomeReleaseSettings";
 import { WatchlistAlerts } from "../viewers/sections/WatchlistDefaults";
 import { NewReleasesSettings, useAvailabilityDraft } from "./NewReleasesSettings";
 import { RulesPanel, type VisibilityRule } from "./LibraryVisibility";
@@ -94,6 +94,26 @@ export function CatalogSettings() {
   const rules = (Array.isArray(draft?.exclusions) ? draft.exclusions : []) as VisibilityRule[];
   const fallback = draft?.visibilityDefault === "hide" ? "hide" : "show";
   const rulesReady = rules.every((g) => g.rules.length > 0 && g.rules.every(isRuleComplete));
+  const visibilitySpec = useMemo(
+    () => ({ exclusions: rules, visibilityDefault: fallback }),
+    [draft],
+  );
+  const visibilityDraft = useDebouncedValue(visibilitySpec, 400);
+  const visibility = useAsync(
+    async (signal) => {
+      if (section !== "library" || !rulesReady) return null;
+      return apiFetch<{ total: number; visible: number; hidden: number }>(
+        "/catalog/visibility/preview",
+        {
+          method: "POST",
+          body: JSON.stringify(visibilityDraft),
+          signal,
+        },
+      );
+    },
+    [visibilityDraft, section, rulesReady],
+  );
+
   const save = useCallback(async () => {
     if (!draft) return;
     setSaving(true);
@@ -207,8 +227,18 @@ export function CatalogSettings() {
                     )}
                     <h3 className="text-lg font-semibold">{t("Your catalog")}</h3>
                   </div>
-                  <p className="text-3xl font-semibold tabular-nums">
-                    {tn(titleCount, "{count} title", "{count} titles")}
+                  <p className="text-xs text-fg-muted">{t("Catalog size before rules")}</p>
+                  <p className="mt-1 text-3xl font-semibold tabular-nums">
+                    {tn(visibility.data?.total ?? titleCount, "{count} title", "{count} titles")}
+                  </p>
+                  <p className="mt-2 text-sm">
+                    {visibility.data
+                      ? tn(
+                          visibility.data.visible ?? visibility.data.total - visibility.data.hidden,
+                          "{count} shown after your rules",
+                          "{count} shown after your rules",
+                        )
+                      : t("Checking your rules…")}
                   </p>
                   <p className="mt-2 text-sm text-fg-muted">
                     {catalogStatus.lastSync
@@ -220,7 +250,7 @@ export function CatalogSettings() {
                   </div>
                 </section>
               ) : null}
-              <HomeReleaseStatus />
+              <CatalogActivity />
               <TrendingStatus />
             </aside>
           </div>

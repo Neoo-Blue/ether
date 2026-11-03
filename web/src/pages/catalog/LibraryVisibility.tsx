@@ -170,7 +170,7 @@ export function RulesPanel({
   const visible =
     preview.data?.visible ?? Math.max(0, (preview.data?.total ?? 0) - (preview.data?.hidden ?? 0));
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
       <div className="space-y-4">
         <div className="flex items-center gap-3 rounded-xl border border-border bg-surface p-5 text-lg font-semibold">
           <Library className="shrink-0 text-primary" size={24} aria-hidden />
@@ -323,7 +323,10 @@ export function RulesPanel({
           })}
         </div>
       </div>
-      <aside className="space-y-3 lg:sticky lg:top-0 lg:self-start" aria-label={t("Preview")}>
+      <aside
+        className="min-w-0 space-y-3 lg:sticky lg:top-0 lg:self-start"
+        aria-label={t("Preview")}
+      >
         <section className="min-h-fit rounded-xl border border-border bg-surface p-5 pb-6">
           <CheckCircle2 className="mb-4 text-success" size={32} aria-hidden />
           {!complete ? (
@@ -506,17 +509,22 @@ function PosterRow({
   items: { key: string; title: string; poster?: string; posterPath?: string }[];
 }) {
   return (
-    <div>
-      <h3 className="mb-2 text-sm font-medium">
-        {t("{title} · {count}", { title, count: formatNumber(count) })}
-      </h3>
+    <section className="min-w-0 rounded-xl border border-border bg-surface p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h3 className="text-sm font-medium">
+          {t("{title} · {count}", { title, count: formatNumber(count) })}
+        </h3>
+        <Button variant="ghost" size="sm" onClick={onBrowse} disabled={count === 0}>
+          {t("Browse")}
+        </Button>
+      </div>
       {count === 0 ? (
         <div className="flex items-center gap-2 rounded-lg border border-dashed border-border p-4 text-sm text-fg-muted">
           <EyeOff size={18} aria-hidden />
           {empty}
         </div>
       ) : null}
-      <div className="grid max-h-64 overflow-y-auto grid-cols-4 gap-2">
+      <div className="flex gap-2 overflow-x-auto pb-1">
         {items.slice(0, 24).map((item) => (
           <Artwork
             key={item.key}
@@ -525,13 +533,10 @@ function PosterRow({
               (item.posterPath ? `https://image.tmdb.org/t/p/w185${item.posterPath}` : undefined)
             }
             alt={item.title}
-            className="aspect-[2/3] rounded-md"
+            className="aspect-[2/3] w-14 shrink-0 rounded-md"
           />
         ))}
       </div>
-      <Button variant="outline" className="mt-3 w-full" onClick={onBrowse} disabled={count === 0}>
-        {t("Browse")}
-      </Button>
-    </div>
+    </section>
   );
 }

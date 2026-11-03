@@ -13,6 +13,18 @@ const title = {
 };
 
 describe("Catalog workspace", () => {
+  it("distinguishes catalog size from the rules result", async () => {
+    const { fake } = renderAppWith("/catalog/settings", (_method, path) => {
+      if (path === "/catalog/visibility/preview") return { total: 1000, visible: 700, hidden: 300 };
+    });
+    expect(await screen.findByText("700 shown after your rules")).toBeInTheDocument();
+    expect(screen.getByText("Catalog size before rules")).toBeInTheDocument();
+    expect(screen.getByText("1,000 titles")).toBeInTheDocument();
+    expect(calls(fake, "POST", "/catalog/visibility/preview").at(-1)?.body).toMatchObject({
+      visibilityDefault: "show",
+    });
+  });
+
   it("browses pages, filters, views and title details", async () => {
     const { fake } = renderAppWith("/catalog", (_method, path, _body, query) => {
       if (path === "/catalog/browse") return { items: [title], total: query.get("q") ? 1 : 107 };

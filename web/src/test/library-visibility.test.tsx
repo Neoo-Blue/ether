@@ -16,7 +16,21 @@ describe("Library visibility", () => {
     async (visibility) => {
       const { fake } = renderAppWith("/catalog/rules", (_method, path) => {
         if (path === "/catalog/visibility/preview")
-          return { total: 20, hidden: 10, visible: 10, movies: 5, shows: 5, items: [], shown: [] };
+          return {
+            total: 1000,
+            hidden: 400,
+            visible: 600,
+            movies: 200,
+            shows: 200,
+            items: Array.from({ length: 24 }, (_, i) => ({
+              key: `hidden-${i}`,
+              title: `Hidden ${i}`,
+            })),
+            shown: Array.from({ length: 24 }, (_, i) => ({
+              key: `shown-${i}`,
+              title: `Shown ${i}`,
+            })),
+          };
       });
       await settleUi(() =>
         expect(screen.getAllByRole("button", { name: "Browse" })).toHaveLength(2),
