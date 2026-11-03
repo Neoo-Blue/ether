@@ -12,6 +12,24 @@ import (
 	"github.com/braedonsaunders/ether/internal/diagnostics"
 )
 
+func supportDocumentPath(path string) bool {
+	p := strings.ToLower(path)
+	if strings.Contains(p, "/transcode/universal/decision") {
+		return true
+	}
+	for _, segment := range []string{"/thumb", "/art", "/banner", "/theme", "/logo", "/image", "/posters", "/backgrounds"} {
+		if strings.Contains(p, segment) {
+			return false
+		}
+	}
+	for _, prefix := range []string{"/hubs", "/library/sections", "/library/metadata", "/library/ondeck", "/playlists", "/search", "/media/providers"} {
+		if strings.HasPrefix(p, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 type journalItem struct {
 	Title string `json:"title" xml:"title,attr"`
 }
@@ -84,7 +102,7 @@ func summarizePlexResponse(raw []byte, truncated bool, encoding string) *diagnos
 	}
 	c.Metadata = append(c.Metadata, c.Videos...)
 	c.Metadata = append(c.Metadata, c.Tracks...)
-	out := &diagnostics.ResponseSummary{Size: c.Size, TotalSize: c.TotalSize, Items: journalTitles(c.Metadata, c.Directory)}
+	out := &diagnostics.ResponseSummary{Size: c.Size, TotalSize: c.TotalSize, ItemCount: len(c.Metadata) + len(c.Directory), Items: journalTitles(c.Metadata, c.Directory)}
 	if c.GeneralDecisionCode != nil {
 		code := *c.GeneralDecisionCode
 		switch {

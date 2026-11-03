@@ -8,6 +8,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -90,6 +92,7 @@ func (r *Recorder) Finish(token, id string, in FinishIn) (CaptureView, error) {
 	}
 	r.mu.Unlock()
 
+	sort.SliceStable(snap.events, func(i, j int) bool { return snap.events[i].Time.Before(snap.events[j].Time) })
 	uses := r.secretUses()
 	extra, gaps := r.collect(snap, uses)
 	blob, names, ident, built := buildZip(snap, extra, append(snap.view.Coverage, gaps...), uses)
@@ -168,7 +171,10 @@ func buildZip(snap finishSnap, extra []archived, coverage []Gap, uses []secretUs
 		files = append(files, archived{name: name, body: body})
 	}
 	add("README.md", readme)
-	eventsBody, skipped := eventsJSONL(snap.events, snap.flags, snap.id, uses)
+	eventsBody, skipped, truncated := eventsJSONL(snap.events, snap.flags, snap.id, uses)
+	if truncated > 0 {
+		pre = append(pre, Gap{Collector: "events.jsonl", Status: "truncated", Detail: fmt.Sprintf("Omitted %d events to stay within the journal byte budget; newest events are preferred.", truncated)})
+	}
 	if skipped > 0 {
 		pre = append(pre, Gap{Collector: "events.jsonl", Status: "omitted", Detail: "Some events were omitted because the redaction check did not accept them."})
 	}
@@ -304,7 +310,7 @@ func retainedIdentity(files []archived, flags [3]bool) IdentityPreview {
 		for _, line := range strings.Split(string(b), "\n") {
 			if strings.HasPrefix(line, "  - item: ") {
 				if title, err := strconv.Unquote(strings.TrimPrefix(line, "  - item: ")); err == nil {
-					p.Titles = mergeStrings(p.Titles, []string{title})
+					p.Titles = append(p.Titles, title)
 				}
 			}
 		}
@@ -321,7 +327,7 @@ func retainedIdentity(files []archived, flags [3]bool) IdentityPreview {
 			if json.Unmarshal(b, &settings) == nil {
 				for _, rule := range settings.CatalogRules {
 					for _, condition := range rule.Conditions {
-						p.Titles = mergeStrings(p.Titles, []string{condition.Value})
+						p.Titles = append(p.Titles, condition.Value)
 					}
 				}
 			}
@@ -333,14 +339,17 @@ func retainedIdentity(files []archived, flags [3]bool) IdentityPreview {
 			var v ViewerFacts
 			if json.Unmarshal(b, &v) == nil {
 				for _, x := range v.Sections {
-					p.Titles = mergeStrings(p.Titles, []string{x.Title})
+					p.Titles = append(p.Titles, x.Title)
 				}
 				for _, x := range v.Candidates {
-					p.Titles = mergeStrings(p.Titles, []string{x.Title})
+					p.Titles = append(p.Titles, x.Title)
 				}
 			}
 		}
 	}
+	p.Usernames = mergeStrings(p.Usernames)
+	p.Addresses = mergeStrings(p.Addresses)
+	p.Titles = mergeStrings(p.Titles)
 	return p
 }
 
@@ -361,17 +370,18 @@ func collectJSONLIdentity(b []byte, flags [3]bool, p *IdentityPreview) {
 			continue
 		}
 		if flags[1] && row.Username != "" {
-			p.Usernames = mergeStrings(p.Usernames, []string{row.Username})
+			p.Usernames = append(p.Usernames, row.Username)
 		}
 		if flags[2] && row.Peer != "" {
-			p.Addresses = mergeStrings(p.Addresses, []string{row.Peer})
+			p.Addresses = append(p.Addresses, row.Peer)
 		}
 		if flags[0] {
-			p.Titles = mergeStrings(p.Titles, []string{row.Title, row.SourceName})
+			p.Titles = append(p.Titles, row.Title, row.SourceName)
 			if row.Response != nil {
-				p.Titles = mergeStrings(p.Titles, row.Response.Items)
+				p.Titles = append(p.Titles, row.Response.Items...)
 				for _, h := range row.Response.Hubs {
-					p.Titles = mergeStrings(p.Titles, append([]string{h.Title}, h.Items...))
+					p.Titles = append(p.Titles, h.Title)
+					p.Titles = append(p.Titles, h.Items...)
 				}
 			}
 		}
@@ -389,7 +399,7 @@ func collectSessionTitles(b []byte, p *IdentityPreview) {
 	}
 	for _, row := range doc.Sessions {
 		if row.Title != "" {
-			p.Titles = mergeStrings(p.Titles, []string{row.Title})
+			p.Titles = append(p.Titles, row.Title)
 		}
 	}
 }
@@ -589,9 +599,10 @@ type exportEvent struct {
 	Playback      *PlaybackDecision `json:"playback,omitempty"`
 }
 
-func eventsJSONL(events []Event, flags [3]bool, captureID string, uses []secretUse) (string, int) {
-	var b strings.Builder
-	skipped := 0
+func eventsJSONL(events []Event, flags [3]bool, captureID string, uses []secretUse) (string, int, int) {
+	const journalLimit = 768 << 10
+	var lines [][]byte
+	start, size, skipped, truncated := 0, 0, 0, 0
 	for _, e := range events {
 		row := exportEvent{
 			At: e.Time, Until: e.Until, Kind: e.Kind, Status: e.Status, Bytes: e.Bytes, Repeat: e.Repeat,
@@ -658,10 +669,27 @@ func eventsJSONL(events []Event, flags [3]bool, captureID string, uses []secretU
 			skipped++
 			continue
 		}
-		b.Write(bytes.TrimSpace(line))
+		line = bytes.TrimSpace(line)
+		if len(line)+1 > journalLimit {
+			truncated++
+			continue
+		}
+		for size+len(line)+1 > journalLimit && start < len(lines) {
+			size -= len(lines[start]) + 1
+			lines[start] = nil
+			start++
+			truncated++
+		}
+		lines = append(lines, line)
+		size += len(line) + 1
+	}
+	var b strings.Builder
+	b.Grow(size)
+	for _, line := range lines[start:] {
+		b.Write(line)
 		b.WriteByte('\n')
 	}
-	return b.String(), skipped
+	return b.String(), skipped, truncated
 }
 
 // marshalChecked encodes a value whose string fields were already redacted.

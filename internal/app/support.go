@@ -147,11 +147,23 @@ func (a *App) supportStorage() (diagnostics.StorageFact, error) {
 	cfg := a.cfg.Get()
 	fact := diagnostics.StorageFact{CacheBudgetBytes: cfg.Cache.BudgetBytes}
 	fact.Filesystem = supportFilesystem(a.opts.DataDir)
+	if a.cache != nil {
+		dir := a.cache.Directory()
+		fact.CacheFilesystem = supportFilesystem(dir)
+		if free, err := admin.DiskFree(dir); err == nil {
+			fact.CacheFreeBytes = free
+			fact.CacheFreeKnown = true
+		}
+	}
 	if info, err := os.Stat(filepath.Join(a.opts.DataDir, "ether.db")); err == nil {
 		fact.DatabaseBytes = info.Size()
+		fact.DatabaseKnown = true
 	}
 	if info, err := os.Stat(filepath.Join(a.opts.DataDir, "ether.db-wal")); err == nil {
 		fact.WALBytes = info.Size()
+		fact.WALKnown = true
+	} else if fact.DatabaseKnown && errors.Is(err, os.ErrNotExist) {
+		fact.WALKnown = true
 	}
 	if free, err := admin.DiskFree(a.opts.DataDir); err == nil {
 		fact.DiskFreeBytes = free
@@ -297,6 +309,7 @@ func (a *App) supportViewer(userID int64) (diagnostics.ViewerFacts, error) {
 			for _, p := range pages {
 				for _, row := range p.Rows {
 					if len(v.Layout) >= 256 {
+						v.LayoutTruncated = true
 						return
 					}
 					v.Layout = append(v.Layout, diagnostics.ViewerLayoutRow{Layer: layer, Section: p.Section, Row: row.Row, Status: row.Status, Slot: row.Slot})

@@ -36,7 +36,7 @@ func (r *Recorder) collect(snap finishSnap, uses []secretUse) ([]archived, []Gap
 			if !snap.flags[0] {
 				v.Sections[i].Title = ""
 			} else {
-				v.Sections[i].Title = clipFree(redactNetworkText(v.Sections[i].Title), maxString, uses)
+				v.Sections[i].Title = clipNetwork(v.Sections[i].Title, maxString, uses)
 			}
 			v.Sections[i].Type = clipFree(v.Sections[i].Type, 40, uses)
 		}
@@ -44,14 +44,14 @@ func (r *Recorder) collect(snap finishSnap, uses []secretUse) ([]archived, []Gap
 			if !snap.flags[0] {
 				v.Candidates[i].Title = ""
 			} else {
-				v.Candidates[i].Title = clipFree(redactNetworkText(v.Candidates[i].Title), maxString, uses)
+				v.Candidates[i].Title = clipNetwork(v.Candidates[i].Title, maxString, uses)
 			}
 			v.Candidates[i].Reason = clipFree(v.Candidates[i].Reason, maxString, uses)
 		}
 		for i := range v.Layout {
 			v.Layout[i].Layer = clipFree(v.Layout[i].Layer, 40, uses)
 			v.Layout[i].Section = clipFree(v.Layout[i].Section, 40, uses)
-			v.Layout[i].Row = clipFree(redactNetworkText(v.Layout[i].Row), maxString, uses)
+			v.Layout[i].Row = clipNetwork(v.Layout[i].Row, maxString, uses)
 			v.Layout[i].Status = clipFree(v.Layout[i].Status, 40, uses)
 		}
 		put("viewer.json", v)
@@ -85,6 +85,7 @@ func (r *Recorder) collect(snap finishSnap, uses []secretUse) ([]archived, []Gap
 		gaps = append(gaps, Gap{Collector: "storage", Status: "failed", Detail: "Storage could not be collected."})
 	} else {
 		s.Filesystem = clipFree(s.Filesystem, 40, uses)
+		s.CacheFilesystem = clipFree(s.CacheFilesystem, 40, uses)
 		put("storage.json", s)
 	}
 	if r.deps.Connectivity == nil {
@@ -120,26 +121,29 @@ func (r *Recorder) collect(snap finishSnap, uses []secretUse) ([]archived, []Gap
 
 func redactSettings(s Settings, titles bool, uses []secretUse) Settings {
 	s.LogLevel = redactString(s.LogLevel, uses)
-	s.FriendlyName = redactString(s.FriendlyName, uses)
+	s.FriendlyName = clipNetwork(s.FriendlyName, maxString, uses)
 	s.QualityDefault = redactString(s.QualityDefault, uses)
 	s.QualityRemote = redactString(s.QualityRemote, uses)
-	s.ProfileName = redactString(s.ProfileName, uses)
+	s.ProfileName = clipNetwork(s.ProfileName, maxString, uses)
 	s.HWAccel = redactString(s.HWAccel, uses)
 	s.SecureConnections = redactString(s.SecureConnections, uses)
 	s.ReleaseMode = clipFree(s.ReleaseMode, 40, uses)
 	s.VisibilityDefault = clipFree(s.VisibilityDefault, 40, uses)
 	for i := range s.CatalogRules {
 		r := &s.CatalogRules[i]
-		r.Action = clipFree(redactNetworkText(r.Action), 40, uses)
-		r.MediaType = clipFree(redactNetworkText(r.MediaType), 40, uses)
-		r.Match = clipFree(redactNetworkText(r.Match), 40, uses)
-		r.Scope = clipFree(redactNetworkText(r.Scope), 40, uses)
+		r.Action = clipNetwork(r.Action, 40, uses)
+		r.MediaType = clipNetwork(r.MediaType, 40, uses)
+		r.Match = clipNetwork(r.Match, 40, uses)
+		r.Scope = clipNetwork(r.Scope, 40, uses)
 		for j := range r.Conditions {
 			c := &r.Conditions[j]
-			c.Field = clipFree(redactNetworkText(c.Field), 80, uses)
-			c.Op = clipFree(redactNetworkText(c.Op), 40, uses)
+			c.Field = clipNetwork(c.Field, 80, uses)
+			c.Op = clipNetwork(c.Op, 40, uses)
 			if titles {
-				c.Value = clipFree(redactNetworkText(c.Value), maxString, uses)
+				if len(c.Value) > maxString {
+					s.CatalogRulesTruncated = true
+				}
+				c.Value = clipNetwork(c.Value, maxString, uses)
 			} else {
 				c.Value = ""
 			}
@@ -166,7 +170,7 @@ func sessionDoc(rows []SessionFact, omitted int, titles bool, uses []secretUse) 
 			Bytes:    row.Bytes,
 		}
 		if titles {
-			item.Title = redactString(row.Title, uses)
+			item.Title = clipNetwork(row.Title, maxString, uses)
 		}
 		out = append(out, item)
 	}

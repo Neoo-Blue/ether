@@ -51,7 +51,7 @@ func analyzeJournal(body string) ([]reportRow, []Finding) {
 	}
 	for _, row := range rows {
 		e := row.event
-		if e.Kind == KindSourceRejected || e.Kind == KindEncoderFailed || (e.Kind == KindRequest && strings.Contains(e.Route, "/decision") && e.Status >= 400) {
+		if e.Kind == KindRequest && e.Status >= 400 && (strings.Contains(strings.ToLower(e.Route), "/decision") || strings.Contains(strings.ToLower(e.Route), "playback")) {
 			addFailure(row.line)
 		}
 		if e.Kind != KindRequest {
@@ -81,8 +81,9 @@ func analyzeJournal(body string) ([]reportRow, []Finding) {
 			if strings.EqualFold(h.Style, "hero") && !strings.Contains(id, "continue") {
 				hero = append(hero, row.line)
 			}
-			if e.Route == "/hubs/promoted" && q.Get("contentDirectoryID") != "" && h.Identifier != "" {
-				seen[h.Identifier] = append(seen[h.Identifier], occurrence{q.Get("contentDirectoryID"), row.line})
+			directory := q.Get("contentDirectoryID")
+			if e.Route == "/hubs/promoted" && directory != "" && directory != "[redacted]" && !strings.Contains(directory, ",") && h.Identifier != "" {
+				seen[h.Identifier] = append(seen[h.Identifier], occurrence{directory, row.line})
 			}
 		}
 	}
@@ -120,7 +121,7 @@ func analyzeJournal(body string) ([]reportRow, []Finding) {
 	add("http_error", "A request returned an HTTP error.", errors)
 	add("cancelled_request", "A request context was cancelled when the handler returned.", cancelled)
 	if len(playbackFailures) >= 2 {
-		add("repeated_playback_failures", "Multiple playback decision or encoder failures were observed.", playbackFailures)
+		add("repeated_playback_failures", "Multiple playback decision requests failed.", playbackFailures)
 	}
 	if len(findings) > 128 {
 		findings = append(findings[:128], Finding{Code: "findings_truncated", Text: "Additional findings were omitted to keep the report bounded.", Truncated: true})
@@ -165,7 +166,8 @@ func reportMarkdown(rows []reportRow, findings []Finding, extra []archived) []by
 		case "storage.json":
 			var storage StorageFact
 			if json.Unmarshal(file.body, &storage) == nil {
-				fmt.Fprintf(&b, "\n## Storage\n\nDatabase %d bytes; WAL %d bytes; filesystem %s; free space %d bytes (known: %t).\n", storage.DatabaseBytes, storage.WALBytes, strconv.Quote(storage.Filesystem), storage.DiskFreeBytes, storage.DiskFreeKnown)
+				fmt.Fprintf(&b, "\n## Storage\n\nDatabase %d bytes (known: %t); WAL %d bytes (known: %t); filesystem %s; free space %d bytes (known: %t).\n", storage.DatabaseBytes, storage.DatabaseKnown, storage.WALBytes, storage.WALKnown, strconv.Quote(storage.Filesystem), storage.DiskFreeBytes, storage.DiskFreeKnown)
+				fmt.Fprintf(&b, "Cache filesystem %s; free space %d bytes (known: %t); configured cache budget %d bytes.\n", strconv.Quote(storage.CacheFilesystem), storage.CacheFreeBytes, storage.CacheFreeKnown, storage.CacheBudgetBytes)
 			}
 		}
 	}
@@ -216,6 +218,9 @@ func reportMarkdown(rows []reportRow, findings []Finding, extra []archived) []by
 			fmt.Fprintf(&b, "  - Error: %s.\n", strconv.Quote(e.Response.Error))
 		}
 		fmt.Fprintf(&b, "  - Container size %d", e.Response.Size)
+		if e.Response.ItemCount > 0 || len(e.Response.Hubs) == 0 {
+			fmt.Fprintf(&b, ", %d direct items", e.Response.ItemCount)
+		}
 		if e.Response.TotalSize != nil {
 			fmt.Fprintf(&b, ", total %d", *e.Response.TotalSize)
 		}

@@ -159,7 +159,7 @@ func (s *Server) requestLog(next http.Handler) http.Handler {
 	failures := faillog.New(log.With("frontend", "plex"), "authentication")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		samplePath := strings.HasPrefix(r.URL.Path, "/hubs/") || strings.Contains(r.URL.Path, "/transcode/universal/decision")
+		samplePath := supportDocumentPath(r.URL.Path)
 		sample := s.d.Support != nil && samplePath && s.d.Support.BeginSample(FromContext(r.Context()).ClientID)
 		if sample {
 			defer s.d.Support.EndSample()

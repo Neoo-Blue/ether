@@ -34,17 +34,24 @@ var supportFieldNames = map[string]bool{
 
 func SafeQuery(q url.Values) string {
 	out := url.Values{}
+	unknown, truncated := false, false
+	count := 0
 	for key, values := range q {
 		// Keys are untrusted too; do not reflect arbitrary text into the ZIP.
 		if !supportQueryValue.MatchString(key) || len(key) > 80 {
+			unknown = true
 			continue
 		}
 		safe := supportQueryKeys[strings.ToLower(key)]
 		if !safe {
-			out.Add("[redacted-key]", "[redacted]")
+			unknown = true
 			continue
 		}
 		for _, v := range values {
+			if count >= 32 {
+				truncated = true
+				break
+			}
 			name := strings.ToLower(key)
 			valid := supportNumericValue.MatchString(v)
 			switch name {
@@ -69,7 +76,24 @@ func SafeQuery(q url.Values) string {
 				v = "[redacted]"
 			}
 			out.Add(key, v)
+			if len(out.Encode()) > 3800 {
+				items := out[key]
+				if len(items) == 1 {
+					delete(out, key)
+				} else {
+					out[key] = items[:len(items)-1]
+				}
+				truncated = true
+				break
+			}
+			count++
 		}
+	}
+	if unknown {
+		out.Add("[redacted-key]", "[redacted]")
+	}
+	if truncated {
+		out.Set("[truncated]", "1")
 	}
 	return out.Encode()
 }

@@ -13,6 +13,10 @@ import (
 func (s *Server) SupportViewer(ctx context.Context, user *core.User) (diagnostics.ViewerFacts, error) {
 	var out diagnostics.ViewerFacts
 	for _, sec := range s.userSections(user) {
+		if len(out.Sections) >= 128 {
+			out.SectionsTruncated = true
+			break
+		}
 		out.Sections = append(out.Sections, diagnostics.ViewerSection{ID: sec.ID, Type: string(sec.Type), Title: sec.Title})
 	}
 	if user == nil || s.d.State == nil || s.d.Catalog == nil {
@@ -49,7 +53,7 @@ func (s *Server) SupportViewer(ctx context.Context, user *core.User) (diagnostic
 		c := diagnostics.ViewerCandidate{Key: int64(st.Key), OffsetMS: st.ViewOffset.Milliseconds()}
 		switch {
 		case !ok:
-			c.Reason = "catalogue item unavailable"
+			c.Reason = "not returned by the catalogue: missing or filtered by catalogue or release rules"
 		case selectedSet[st.Key]:
 			c.Title = ti.Title
 			c.Included = true

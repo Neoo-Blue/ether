@@ -56,9 +56,9 @@ func boundEvent(e Event, uses []secretUse) Event {
 			more := *v.More
 			v.More = &more
 		}
-		v.Decision = clipFree(redactNetworkText(v.Decision), 80, uses)
-		v.ErrorCode = clipFree(redactNetworkText(v.ErrorCode), 80, uses)
-		v.Error = clipFree(redactNetworkText(v.Error), maxExcerpt, uses)
+		v.Decision = clipNetwork(v.Decision, 80, uses)
+		v.ErrorCode = clipNetwork(v.ErrorCode, 80, uses)
+		v.Error = clipNetwork(v.Error, maxExcerpt, uses)
 		remaining := 64
 		v.Items = boundTitles(v.Items, uses, &remaining, &v.Truncated)
 		if len(v.Hubs) > 64 {
@@ -68,10 +68,10 @@ func boundEvent(e Event, uses []secretUse) Event {
 		v.Hubs = append([]HubSummary(nil), v.Hubs...)
 		for i := range v.Hubs {
 			h := &v.Hubs[i]
-			h.Identifier = clipFree(redactHubID(h.Identifier), maxString, uses)
-			h.Title = clipFree(redactNetworkText(h.Title), maxString, uses)
-			h.Style = clipFree(redactNetworkText(h.Style), 80, uses)
-			h.Type = clipFree(redactNetworkText(h.Type), 80, uses)
+			h.Identifier = clipFree(redactHubID(networkInput(h.Identifier)), maxString, uses)
+			h.Title = clipNetwork(h.Title, maxString, uses)
+			h.Style = clipNetwork(h.Style, 80, uses)
+			h.Type = clipNetwork(h.Type, 80, uses)
 			h.Items = boundTitles(h.Items, uses, &remaining, &v.Truncated)
 		}
 		e.Response = &v
@@ -96,13 +96,13 @@ func boundEvent(e Event, uses []secretUse) Event {
 	e.QualitySelected = clipFree(e.QualitySelected, 40, uses)
 	e.Profile = clipFree(e.Profile, 80, uses)
 	e.Decision = clipFree(e.Decision, 40, uses)
-	e.Reason = clipFree(e.Reason, maxExcerpt, uses)
-	e.Rejection = clipFree(e.Rejection, maxExcerpt, uses)
-	e.ErrorExcerpt = clipFree(e.ErrorExcerpt, maxExcerpt, uses)
-	e.FFmpegExcerpt = clipFree(e.FFmpegExcerpt, maxExcerpt, uses)
-	e.Title = clipFree(redactNetworkText(e.Title), maxString, uses)
-	e.SourceName = clipFree(redactNetworkText(e.SourceName), maxString, uses)
-	e.Username = clipFree(e.Username, 80, uses)
+	e.Reason = clipNetwork(e.Reason, maxExcerpt, uses)
+	e.Rejection = clipNetwork(e.Rejection, maxExcerpt, uses)
+	e.ErrorExcerpt = clipNetwork(e.ErrorExcerpt, maxExcerpt, uses)
+	e.FFmpegExcerpt = clipNetwork(e.FFmpegExcerpt, maxExcerpt, uses)
+	e.Title = clipNetwork(e.Title, maxString, uses)
+	e.SourceName = clipNetwork(e.SourceName, maxString, uses)
+	e.Username = clipNetwork(e.Username, 80, uses)
 	e.Peer = clipFree(e.Peer, 80, uses)
 	if e.Media != nil {
 		m := *e.Media
@@ -122,8 +122,8 @@ func boundEvent(e Event, uses []secretUse) Event {
 		c.Protocol = clipFree(c.Protocol, 32, uses)
 		c.VideoCodec = clipFree(c.VideoCodec, 40, uses)
 		c.AudioCodec = clipFree(c.AudioCodec, 40, uses)
-		c.Reason = clipFree(c.Reason, maxString, uses)
-		c.Name = clipFree(c.Name, maxString, uses)
+		c.Reason = clipNetwork(c.Reason, maxString, uses)
+		c.Name = clipNetwork(c.Name, maxString, uses)
 	}
 	e.Playback = boundPlayback(e.Playback, uses)
 	if e.Bytes < 0 {
@@ -143,7 +143,7 @@ func boundTitles(in []string, uses []secretUse, remaining *int, truncated *bool)
 	*remaining -= len(in)
 	out := make([]string, 0, len(in))
 	for _, s := range in {
-		out = append(out, clipFree(redactNetworkText(s), maxString, uses))
+		out = append(out, clipNetwork(s, maxString, uses))
 	}
 	return out
 }

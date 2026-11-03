@@ -14,10 +14,22 @@ import (
 	"github.com/braedonsaunders/ether/internal/logredact"
 )
 
-var supportNetworkText = regexp.MustCompile(`(?i)https?://[^\s]+|\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b|\b(?:[a-z0-9-]+\.)+(?:com|net|org|local|localdomain|internal|lan|home|io|dev|test|example|direct)\b|\[[0-9a-f:]+\]|(?:[0-9a-f]{0,4}:){2,}[0-9a-f]{0,4}`)
+var supportNetworkText = regexp.MustCompile(`(?i)https?://[^\s]+|[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}|\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b|\b(?:[a-z0-9-]+\.)+(?:com|net|org|local|localdomain|internal|lan|home|io|dev|test|example|direct)\b|\[[0-9a-f:]+\]|(?:[0-9a-f]{0,4}:){2,}[0-9a-f]{0,4}`)
 var supportIPText = regexp.MustCompile(`(?i)https?://[^\s]+|\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b|\[[0-9a-f:]+\]|(?:[0-9a-f]{0,4}:){2,}[0-9a-f]{0,4}`)
+var supportDomainText = regexp.MustCompile(`(?i)\b(?:[a-z0-9-]+\.)+[a-z]{2,}\b`)
 
 func redactNetworkText(s string) string { return supportNetworkText.ReplaceAllString(s, redactMask) }
+
+func networkInput(s string) string {
+	if len(s) > maxFieldScan {
+		return s[:maxFieldScan]
+	}
+	return s
+}
+
+func clipNetwork(s string, max int, uses []secretUse) string {
+	return clipFree(redactNetworkText(networkInput(s)), max, uses)
+}
 
 func redactHubID(s string) string {
 	for _, prefix := range []string{"home.", "movie.", "tv.", "collection.", "discovery."} {
@@ -487,7 +499,7 @@ func stripQuery(s string) string {
 }
 
 func boundNote(s string, uses []secretUse) string {
-	s = clipFree(s, maxNoteRunes*4, uses)
+	s = clipFree(supportDomainText.ReplaceAllString(redactNetworkText(networkInput(s)), redactMask), maxNoteRunes*4, uses)
 	r := []rune(s)
 	if len(r) <= maxNoteRunes {
 		return s

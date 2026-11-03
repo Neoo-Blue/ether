@@ -280,7 +280,12 @@ type StorageFact struct {
 	DiskFreeKnown    bool   `json:"diskFreeKnown"`
 	DatabaseBytes    int64  `json:"databaseBytes,omitempty"`
 	WALBytes         int64  `json:"walBytes,omitempty"`
+	DatabaseKnown    bool   `json:"databaseKnown"`
+	WALKnown         bool   `json:"walKnown"`
 	Filesystem       string `json:"filesystem,omitempty"`
+	CacheFreeBytes   int64  `json:"cacheFreeBytes,omitempty"`
+	CacheFreeKnown   bool   `json:"cacheFreeKnown"`
+	CacheFilesystem  string `json:"cacheFilesystem,omitempty"`
 }
 
 // ConnectivityFact has no public host, custom URL, or certificate path.
@@ -319,6 +324,8 @@ type ViewerFacts struct {
 	Watched              int               `json:"watched"`
 	WatchSampleTruncated bool              `json:"watchSampleTruncated"`
 	CandidatesTruncated  bool              `json:"candidatesTruncated"`
+	SectionsTruncated    bool              `json:"sectionsTruncated"`
+	LayoutTruncated      bool              `json:"layoutTruncated"`
 	Notes                []string          `json:"notes,omitempty"`
 }
 

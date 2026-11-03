@@ -3,7 +3,6 @@ package diagnostics
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"regexp"
 	"strings"
 	"time"
 )
@@ -255,10 +254,12 @@ func projectLogs(records []LogRecord, q LogQuery, flags [3]bool, uses []secretUs
 		}
 		row.Status = boundToken(attrFold(rec.Attrs, "status"))
 		row.Kind = boundToken(attrFold(rec.Attrs, "kind"))
-		row.Msg = plainMessage(redactNetworkText(redactString(rec.Message, uses)))
+		if len(rec.Message) <= 120 {
+			row.Msg = plainMessage(clipNetwork(rec.Message, 120, uses))
+		}
 		if flags[0] {
 			if e := firstPresent(rec.Attrs, "err", "error", "reason"); e != "" {
-				row.Err = boundText(redactNetworkText(stripURLQueries(redactString(e, uses))), 400)
+				row.Err = clipNetwork(e, 400, uses)
 			}
 		}
 		if rec.Message == "request" || rec.Message == "hls request" {
@@ -270,7 +271,7 @@ func projectLogs(records []LogRecord, q LogQuery, flags [3]bool, uses []secretUs
 		}
 		if flags[1] {
 			if u := firstPresent(rec.Attrs, "user", "username"); u != "" {
-				u = redactString(u, uses)
+				u = clipNetwork(u, 80, uses)
 				row.Username = u
 				ident.users = append(ident.users, u)
 			}
@@ -284,7 +285,7 @@ func projectLogs(records []LogRecord, q LogQuery, flags [3]bool, uses []secretUs
 		}
 		if flags[0] {
 			if title := firstPresent(rec.Attrs, "title", "release", "source"); title != "" {
-				title = redactNetworkText(redactString(title, uses))
+				title = clipNetwork(title, maxString, uses)
 				row.Title = title
 				ident.titles = append(ident.titles, title)
 			}
@@ -315,19 +316,6 @@ func plainMessage(m string) string {
 		return ""
 	}
 	return m
-}
-
-var urlQuery = regexp.MustCompile(`(https?://[^\s"'?#]+)[?#][^\s"']*`)
-
-// stripURLQueries drops query strings and fragments from URLs, where
-// addon and debrid links carry their keys.
-func stripURLQueries(s string) string { return urlQuery.ReplaceAllString(s, "$1") }
-
-func boundText(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "…"
 }
 
 // requestRoute keeps the shape of an HTTP request path, such as

@@ -156,6 +156,10 @@ func summarize(raw []byte, truncated bool, encoding string) *diagnostics.Respons
 	}
 	var doc map[string]json.RawMessage
 	if json.Unmarshal(raw, &doc) != nil {
+		switch strings.TrimSpace(string(raw)) {
+		case "Playback unavailable", "Selected track unavailable", "Track source unavailable":
+			return &diagnostics.ResponseSummary{Decision: "failed", ErrorCode: strings.TrimSpace(string(raw))}
+		}
 		var list []json.RawMessage
 		if json.Unmarshal(raw, &list) != nil {
 			return nil
