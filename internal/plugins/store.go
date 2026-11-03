@@ -539,12 +539,10 @@ func unixOr0(t time.Time) int64 {
 // --- Journal, calls, logs, outbox ---
 
 func (s *storage) journal(ctx context.Context, e JournalEntry) (int64, error) {
-	res, err := s.db.ExecContext(ctx, `INSERT INTO plugins_journal(plugin,op,detail,inverse,shadow,created) VALUES(?,?,?,?,?,?)`,
-		e.Plugin, e.Op, e.Detail, string(orEmptyJSON(e.Inverse)), bi(e.Shadow), s.now().Unix())
-	if err != nil {
-		return 0, err
-	}
-	return res.LastInsertId()
+	var id int64
+	err := s.db.QueryRowContext(ctx, `INSERT INTO plugins_journal(plugin,op,detail,inverse,shadow,created) VALUES(?,?,?,?,?,?) RETURNING id`,
+		e.Plugin, e.Op, e.Detail, string(orEmptyJSON(e.Inverse)), bi(e.Shadow), s.now().Unix()).Scan(&id)
+	return id, err
 }
 
 func orEmptyJSON(b json.RawMessage) json.RawMessage {

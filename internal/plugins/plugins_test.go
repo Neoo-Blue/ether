@@ -664,7 +664,11 @@ func TestSealedSecretsArePerPlugin(t *testing.T) {
 func TestMigrationsApply(t *testing.T) {
 	db := store.OpenTest(t)
 	var n int
-	err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name LIKE 'plugins_%'`).Scan(&n)
+	query := `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name LIKE 'plugins_%'`
+	if store.DialectOf(db) == store.Postgres {
+		query = `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name LIKE 'plugins_%'`
+	}
+	err := db.QueryRow(query).Scan(&n)
 	if err != nil {
 		t.Fatal(err)
 	}
