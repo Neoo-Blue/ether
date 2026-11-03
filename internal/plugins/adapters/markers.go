@@ -125,8 +125,8 @@ func (b *MarkerBridge) refresh(ctx context.Context, j markerJob) {
 	if err != nil || title == nil {
 		return
 	}
-	typ, id := subtitleIdentity(title)
-	if id == "" {
+	typ, id, imdb, ok := contentID(title)
+	if !ok || !imdb {
 		return
 	}
 	b.mu.Lock()
