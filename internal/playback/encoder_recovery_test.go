@@ -106,6 +106,22 @@ func TestEncoderRunwayAndFreshSamples(t *testing.T) {
 	if count != 0 {
 		t.Fatalf("speed recovery did not reset hysteresis: %d", count)
 	}
+	f.update(now.Add(3*time.Second), 0.85)
+	h.m.checkEncoderSpeed(s, g, f, now.Add(3*time.Second))
+	f.mu.Lock()
+	f.buffer.SeekAt = now.Add(4 * time.Second)
+	f.mu.Unlock()
+	s.mu.Lock()
+	s.viewerAt = now.Add(5 * time.Second)
+	s.mu.Unlock()
+	f.update(now.Add(5*time.Second), 0.85)
+	h.m.checkEncoderSpeed(s, g, f, now.Add(5*time.Second))
+	s.speedMu.Lock()
+	count = s.encoderSlowChecks
+	s.speedMu.Unlock()
+	if count != 1 {
+		t.Fatalf("seek carried old samples into a new position: %d", count)
+	}
 }
 
 func TestEncoderRecoveryKeepsCurrentWhenOnlyConversionExists(t *testing.T) {
