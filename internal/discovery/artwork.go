@@ -22,12 +22,12 @@ func (d *Features) SelectArtwork(ctx context.Context, viewer *core.User, t *core
 	}
 	cfg, _ := d.Overlays.Settings(ctx)
 	out.Enabled = cfg.Enabled
-	if cfg.Enabled && cfg.Localize && d.Localize != nil && lang != "" {
+	if cfg.Enabled && (t.Type != core.TypeEpisode || cfg.BadgesOnEpisodes()) && cfg.Localize && d.Localize != nil && lang != "" {
 		if localized := d.CachedLocalized(t, lang); localized != nil {
 			out.Title = localized
 		}
 	}
-	if (cfg.Enabled && out.Title.PosterPath != "") || (d.Overlays.CustomPostersEnabled() && (out.Title.Type == core.TypeMovie || out.Title.Type == core.TypeShow)) {
+	if (cfg.Enabled && (out.Title.Type != core.TypeEpisode || cfg.BadgesOnEpisodes()) && (out.Title.PosterPath != "" || (out.Title.Type == core.TypeEpisode && out.Title.StillPath != ""))) || (d.Overlays.CustomPostersEnabled() && (out.Title.Type == core.TypeMovie || out.Title.Type == core.TypeShow)) {
 		out.PosterVersion = d.Overlays.Version(ctx, viewer, out.Title, lang)
 	}
 	if cfg.Enabled {
@@ -49,7 +49,7 @@ func (d *Features) PrepareArtwork(ctx context.Context, viewer *core.User, t *cor
 		return nil, "", core.ErrNotFound
 	}
 	cfg, _ := d.Overlays.Settings(ctx)
-	if cfg.Enabled && cfg.Localize && d.Localize != nil {
+	if cfg.Enabled && (t.Type != core.TypeEpisode || cfg.BadgesOnEpisodes()) && cfg.Localize && d.Localize != nil {
 		bounded, cancel := context.WithTimeout(ctx, 2*time.Second)
 		v, err := d.Localize(bounded, t, lang)
 		cancel()
