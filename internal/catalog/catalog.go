@@ -283,6 +283,9 @@ type Catalog struct {
 	personHydrated map[int64]time.Time
 
 	saferRating SaferRatingSQL
+
+	// spell is the search spelling lexicon (search_spell.go).
+	spell searchSpell
 }
 
 // SaferRatingSQL is the optional Plex overlay predicate for viewer limits.

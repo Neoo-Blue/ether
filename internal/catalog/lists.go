@@ -119,6 +119,8 @@ func (c *Catalog) searchTitles(ctx context.Context, query string, types []core.M
 }
 
 func (c *Catalog) searchTitlesOpts(ctx context.Context, query string, types []core.MediaType, limit, year int, unfiltered bool) ([]core.Title, error) {
+	// spelled holds the titles only a spelling rewrite found (search_spell.go).
+	var spelled map[core.RatingKey]spellMatch
 	finish := func(items []core.Title) []core.Title {
 		if !unfiltered {
 			items = c.FilterVisibility(ctx, items)
@@ -134,7 +136,7 @@ func (c *Catalog) searchTitlesOpts(ctx context.Context, query string, types []co
 				items = matching
 			}
 		}
-		sortTitlesForSearch(items, query)
+		sortTitlesForSearchSpelled(items, query, spelled)
 		return limitTitles(items, limit)
 	}
 	wantMovie, wantTV, wantSeason, wantEpisode := true, true, false, false
@@ -189,14 +191,38 @@ func (c *Catalog) searchTitlesOpts(ctx context.Context, query string, types []co
 	default:
 		local, localErr = c.queryTitles(ctx, localSQL, localArgs...)
 	}
-	if localErr == nil {
+	wanted := func(ts []core.Title) []core.Title {
 		var filtered []core.Title
-		for _, t := range local {
+		for _, t := range ts {
 			if (t.Type == core.TypeMovie && wantMovie) || (t.Type == core.TypeShow && wantTV) || (t.Type == core.TypeSeason && wantSeason) || (t.Type == core.TypeEpisode && wantEpisode) {
 				filtered = append(filtered, t)
 			}
 		}
-		add(filtered)
+		return filtered
+	}
+	if localErr == nil {
+		add(wanted(local))
+	}
+	// A query the titles do not literally hold (a misspelling, a missing
+	// accent or hyphen, words out of order) is retried with spelling
+	// rewrites. A dense term matched plenty literally and is never retried.
+	if localErr == nil && !walked {
+		literal := len(out)
+		found, matches := c.searchSpelling(ctx, query, literal > 0, limit*2, func(match string, args []any) ([]core.Title, error) {
+			q := `SELECT ` + titleCols + ` FROM catalog_titles WHERE type IN ('movie','show','season','episode') AND ` + match + ` ORDER BY CASE WHEN ?>0 AND year=? THEN 0 ELSE 1 END, popularity DESC LIMIT ?`
+			args = append(args, year, year, limit*2)
+			if unfiltered {
+				return c.queryTitlesUnfiltered(ctx, strings.Replace(q, "WHERE type", "WHERE adult=0 AND type", 1), args...)
+			}
+			return c.queryTitles(ctx, q, args...)
+		})
+		add(wanted(found))
+		if len(out) > literal {
+			spelled = make(map[core.RatingKey]spellMatch, len(out)-literal)
+			for _, t := range out[literal:] {
+				spelled[t.Key] = matches[t.Key]
+			}
+		}
 	}
 	// A missing or failing metadata service must not fail the request.
 	// Context cancellation still aborts. A local query error is returned
@@ -317,6 +343,14 @@ func (c *Catalog) queryTitlesUnfiltered(ctx context.Context, q string, args ...a
 }
 
 func sortTitlesForSearch(items []core.Title, q string) {
+	sortTitlesForSearchSpelled(items, q, nil)
+}
+
+// sortTitlesForSearchSpelled orders search results: titles matching the
+// query literally (exactly, as a prefix, then anywhere), then titles only a
+// spelling rewrite found (cheapest rewrite, then closest match), then the
+// rest, each group most popular first.
+func sortTitlesForSearchSpelled(items []core.Title, q string, spelled map[core.RatingKey]spellMatch) {
 	lq := searchFold(q)
 	score := func(t core.Title) int {
 		lt := searchFold(t.Title)
@@ -327,17 +361,29 @@ func sortTitlesForSearch(items []core.Title, q string) {
 			return 1
 		case strings.Contains(lt, lq):
 			return 2
-		default:
-			return 3
 		}
+		if m, ok := spelled[t.Key]; ok {
+			return 3 + m.cost*4 + spellCloseness(t.Title, m.words)
+		}
+		return 1 << 20
 	}
-	sort.SliceStable(items, func(i, j int) bool {
-		si, sj := score(items[i]), score(items[j])
-		if si != sj {
-			return si < sj
+	type scored struct {
+		t core.Title
+		s int
+	}
+	ranked := make([]scored, len(items))
+	for i, t := range items {
+		ranked[i] = scored{t, score(t)}
+	}
+	sort.SliceStable(ranked, func(i, j int) bool {
+		if ranked[i].s != ranked[j].s {
+			return ranked[i].s < ranked[j].s
 		}
-		return items[i].Popularity > items[j].Popularity
+		return ranked[i].t.Popularity > ranked[j].t.Popularity
 	})
+	for i := range ranked {
+		items[i] = ranked[i].t
+	}
 }
 
 // Fold accents for relevance ranking without changing the title sent to TMDB.
