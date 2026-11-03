@@ -2050,7 +2050,6 @@
   "m_0a047d973d6e39": "Direção",
   "m_0a0569b726b225": "Salva",
   "m_0a05e691579a3a": "desconhecido",
-  "m_0a06766cb7d6e1": "A nota é salva como dado, não como instrução. Caminhos e links são permitidos.",
   "m_0a07688f0a525a": "Navegar entre os dias do mês",
   "m_0a08abbde4f56f": "Versão {version} — {state}",
   "m_0a08fc6ffce6da": "Copiar caminho da pasta",
@@ -3165,6 +3164,7 @@
   "m_0f83721a7f9721": "Calendário de lançamentos",
   "m_0f877c91f90f67": "Uso observado hoje e resultados de pesquisa deste mês. Os limites de serviço são tratados automaticamente.",
   "m_0f8867481ce04f": "Nome mostrado no Plex. Renomear dentro do Plex não permanece.",
+  "m_0f8ba0bc05e6ee": "A nota é salva como dados, não como instruções. Links e endereços são ocultados.",
   "m_0f8edfd5434ec0": "Não foi possível carregar as opções: {error}",
   "m_0f920e347229a1": "Títulos acompanhados para este espectador. Cada um aparece no Início quando puder ser reproduzido.",
   "m_0f94dc84dff3aa": {

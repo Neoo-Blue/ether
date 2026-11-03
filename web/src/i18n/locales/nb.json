@@ -2003,7 +2003,6 @@
   "m_0a047d973d6e39": "Regissert av",
   "m_0a0569b726b225": "Lagret",
   "m_0a05e691579a3a": "ukjent",
-  "m_0a06766cb7d6e1": "Notatet lagres som data, ikke som en instruksjon. Stier og lenker er tillatt.",
   "m_0a07688f0a525a": "Flytt mellom dager i måneden",
   "m_0a08abbde4f56f": "Versjon {version} — {state}",
   "m_0a08fc6ffce6da": "Kopier mappebane",
@@ -3094,6 +3093,7 @@
   "m_0f83721a7f9721": "Utgivelseskalender",
   "m_0f877c91f90f67": "Observert bruk i dag og søkeresultater denne måneden. Tjenestegrenser håndteres automatisk.",
   "m_0f8867481ce04f": "Navn som vises i Plex. Et nytt navn inne i Plex blir ikke stående.",
+  "m_0f8ba0bc05e6ee": "Notatet lagres som data, ikke som instruksjoner. Lenker og adresser skjules.",
   "m_0f8edfd5434ec0": "Kunne ikke laste inn valgene: {error}",
   "m_0f920e347229a1": "Titler som overvåkes for denne seeren. Hver vises på Hjem når den kan streames.",
   "m_0f94dc84dff3aa": {

@@ -2003,7 +2003,6 @@
   "m_0a047d973d6e39": "Ohjaaja",
   "m_0a0569b726b225": "Tallennettu",
   "m_0a05e691579a3a": "tuntematon",
-  "m_0a06766cb7d6e1": "Muistiinpano tallennetaan datana, ei ohjeena. Polut ja linkit ovat sallittuja.",
   "m_0a07688f0a525a": "Siirry kuukauden päivien välillä",
   "m_0a08abbde4f56f": "Versio {version} — {state}",
   "m_0a08fc6ffce6da": "Kopioi kansion polku",
@@ -3094,6 +3093,7 @@
   "m_0f83721a7f9721": "Julkaisukalenteri",
   "m_0f877c91f90f67": "Havaittu käyttö tänään ja hakutulokset tässä kuussa. Palvelurajat hoidetaan automaattisesti.",
   "m_0f8867481ce04f": "Nimi Plexissä. Uudelleennimeäminen Plexissä ei jää voimaan.",
+  "m_0f8ba0bc05e6ee": "Muistiinpano tallennetaan tietona, ei ohjeena. Linkit ja osoitteet peitetään.",
   "m_0f8edfd5434ec0": "Valintoja ei voitu ladata: {error}",
   "m_0f920e347229a1": "Tälle katsojalle seurattavat teokset. Kukin näkyy etusivulla, kun sen voi toistaa.",
   "m_0f94dc84dff3aa": {

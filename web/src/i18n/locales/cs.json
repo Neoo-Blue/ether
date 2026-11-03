@@ -2097,7 +2097,6 @@
   "m_0a047d973d6e39": "Režie",
   "m_0a0569b726b225": "Uloženo",
   "m_0a05e691579a3a": "neznámé",
-  "m_0a06766cb7d6e1": "Poznámka se uloží jako data, ne jako pokyn. Cesty a odkazy jsou povolené.",
   "m_0a07688f0a525a": "Pohyb mezi dny v měsíci",
   "m_0a08abbde4f56f": "Verze {version} — {state}",
   "m_0a08fc6ffce6da": "Kopírovat cestu ke složce",
@@ -3236,6 +3235,7 @@
   "m_0f83721a7f9721": "Kalendář premiér",
   "m_0f877c91f90f67": "Zaznamenané využití dnes a výsledky hledání tento měsíc. Limity služeb se řeší automaticky.",
   "m_0f8867481ce04f": "Název v Plexu. Přejmenování uvnitř Plexu nezůstane.",
+  "m_0f8ba0bc05e6ee": "Poznámka se ukládá jako data, nikoli jako pokyny. Odkazy a adresy se začerní.",
   "m_0f8edfd5434ec0": "Možnosti se nepodařilo načíst: {error}",
   "m_0f920e347229a1": "Tituly hlídané pro tohoto diváka. Každý se ukáže na Domů, jakmile jde přehrát.",
   "m_0f94dc84dff3aa": {
