@@ -69,6 +69,45 @@ func TestStatementCacheBoundAndHotSurvivesOneOffQueries(t *testing.T) {
 	}
 }
 
+func TestStatementCacheReservationsAreProcessBounded(t *testing.T) {
+	probe, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer probe.Close()
+	var conns []*stmtConn
+	t.Cleanup(func() {
+		for _, c := range conns {
+			_ = c.Close()
+		}
+	})
+	stmtReservations.Lock()
+	baseline := stmtReservations.count
+	stmtReservations.Unlock()
+	for i := 0; i < stmtCacheConnections+1; i++ {
+		inner, err := probe.Driver().Open(":memory:")
+		if err != nil {
+			t.Fatal(err)
+		}
+		c := &stmtConn{inner: inner, free: map[string][]driver.Stmt{}}
+		conns = append(conns, c)
+		s, err := c.prepare("SELECT 1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = s.Close()
+	}
+	stmtReservations.Lock()
+	got := stmtReservations.count
+	stmtReservations.Unlock()
+	if got > stmtCacheConnections {
+		t.Fatalf("reservations %d exceed %d", got, stmtCacheConnections)
+	}
+	if baseline == 0 && len(conns[len(conns)-1].free) != 0 {
+		t.Fatal("connection beyond budget cached a statement")
+	}
+}
+
 func TestCachedSQLiteStatementsReuse(t *testing.T) {
 	db, err := sql.Open("sqlite-cached", "file::memory:?_pragma=foreign_keys(1)")
 	if err != nil {

@@ -781,12 +781,19 @@ const memoMaxBytes = 32 << 20
 
 func (e *Engine) pruneMemos(now time.Time) {
 	e.memoMu.Lock()
-	defer e.memoMu.Unlock()
 	for k, ent := range e.memo {
 		if now.Sub(ent.at) >= memoTTL {
 			delete(e.memo, k)
 		}
 	}
+	e.memoMu.Unlock()
+	e.presentationMu.Lock()
+	for k, p := range e.presentations {
+		if now.Sub(p.at) >= presentationTTL {
+			delete(e.presentations, k)
+		}
+	}
+	e.presentationMu.Unlock()
 }
 
 func (e *Engine) expireMemos(ctx context.Context) {

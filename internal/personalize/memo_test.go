@@ -65,9 +65,13 @@ func TestHomeMemoExpiresAndEvictsWithoutTruncatingRows(t *testing.T) {
 		t.Fatal("oversized memo retained")
 	}
 	clock.Set(clock.Now().Add(memoTTL))
+	e.presentations = map[memoKey]presentation{{user: 1}: {at: clock.Now().Add(-presentationTTL)}}
 	e.pruneMemos(clock.Now())
 	if len(e.memo) != 0 {
 		t.Fatalf("expired entries retained: %d", len(e.memo))
+	}
+	if len(e.presentations) != 0 {
+		t.Fatal("expired presentation retained")
 	}
 }
 

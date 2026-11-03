@@ -54,12 +54,14 @@ type stmtRank struct {
 }
 
 type stmtConn struct {
-	inner    driver.Conn
-	mu       sync.Mutex
-	free     map[string][]driver.Stmt
-	rank     map[string]stmtRank
-	clock    uint64
-	reserved bool
+	inner        driver.Conn
+	mu           sync.Mutex
+	free         map[string][]driver.Stmt
+	rank         map[string]stmtRank
+	clock        uint64
+	reserved     bool
+	freeEntries  int
+	freeOverhead int
 	// gate admits one writer at a time among this process's connections to
 	// the database; inTx is set while this connection's write transaction
 	// holds it. database/sql uses a connection from one goroutine at a time.
@@ -99,6 +101,8 @@ func (c *stmtConn) prepare(query string) (driver.Stmt, error) {
 	if n := len(c.free[query]); n > 0 {
 		stmt := c.free[query][n-1]
 		c.free[query] = c.free[query][:n-1]
+		c.freeEntries--
+		c.freeOverhead -= 2*len(query) + 512
 		c.clock++
 		r := c.rank[query]
 		if r.hits < 255 {
@@ -150,18 +154,24 @@ func (c *stmtConn) release(query string, stmt driver.Stmt) {
 		return
 	}
 	c.free[query] = append(c.free[query], stmt)
+	c.freeEntries++
+	c.freeOverhead += 2*len(query) + 512
 	c.clock++
+	// Age old popularity so formerly hot shapes do not permanently crowd out
+	// a new working set. Repeatedly used statements remain protected from a
+	// stream of single-use IN-list shapes.
+	if c.clock%1024 == 0 {
+		for q, rank := range c.rank {
+			rank.hits /= 2
+			c.rank[q] = rank
+		}
+	}
 	r := c.rank[query]
 	r.used = c.clock
 	c.rank[query] = r
 	for {
-		entries, overhead := 0, 0
-		for q, list := range c.free {
-			entries += len(list)
-			overhead += len(list) * (2*len(q) + 512)
-		}
 		bytes, _, err := status.Status(sqlite.DBStatusStmtUsed, false)
-		if err == nil && entries <= stmtCacheEntries && bytes+overhead <= stmtCacheBytes {
+		if err == nil && c.freeEntries <= stmtCacheEntries && bytes+c.freeOverhead <= stmtCacheBytes {
 			break
 		}
 		var victim string
@@ -181,6 +191,8 @@ func (c *stmtConn) release(query string, stmt driver.Stmt) {
 		}
 		list := c.free[victim]
 		_ = list[len(list)-1].Close()
+		c.freeEntries--
+		c.freeOverhead -= 2*len(victim) + 512
 		if len(list) == 1 {
 			delete(c.free, victim)
 			delete(c.rank, victim)
@@ -190,14 +202,7 @@ func (c *stmtConn) release(query string, stmt driver.Stmt) {
 	}
 	// A connection with no reusable statement must not hold a process-wide
 	// reservation and starve connections which could use one.
-	any := false
-	for _, list := range c.free {
-		if len(list) != 0 {
-			any = true
-			break
-		}
-	}
-	if !any {
+	if c.freeEntries == 0 {
 		clear(c.free)
 		clear(c.rank)
 		stmtReservations.Lock()
@@ -271,6 +276,8 @@ func (c *stmtConn) Close() error {
 	}
 	c.free = map[string][]driver.Stmt{}
 	c.rank = nil
+	c.freeEntries = 0
+	c.freeOverhead = 0
 	if c.reserved {
 		stmtReservations.Lock()
 		stmtReservations.count--
