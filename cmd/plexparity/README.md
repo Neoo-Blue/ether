@@ -57,6 +57,16 @@ per half.
   Since #191 only Plex Web gets that sidecar: every other client keeps
   `location="direct"` with no key, the PMS shape, and reads the track from
   the file it plays (extracting it first meant reading the whole release).
+  The second #191 pass follows PMS 1.42 per `subtitles=` mode (rex
+  `decision_streams_selected.json`, `subtitles_s1422.json`): the selected
+  track stays selected under `none` with `decision="ignore"` and no
+  location (Plex for Android and Android TV send it), `sidecar` is
+  `location="sidecar-subs"` with no key (Plex Web, which reads the cues
+  from `/subtitles/:/transcode/universal/start` as ASS), a Plex Web
+  conversion names the track `codec/container/format="ass"`,
+  `decision="transcode"`, `location="segments-subs"`, a burned text track
+  is `decision="burn"`, `burn="1"`, `location="segments-av"`, and a copied
+  Matroska track keeps `format`.
   Segmented Matroska text is different (`f8f762a7b`): the decision is
   `copy` with `location="segments-av"` and no sidecar key, because Plex
   tvOS reads that track from the segments. MPEG-TS stays a sidecar.

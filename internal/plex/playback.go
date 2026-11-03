@@ -146,15 +146,23 @@ type playRequest struct {
 	// it is response shaping, not a playback setting (an asymmetric compare
 	// would re-prepare and restart the encoder on every start).
 	listAllTracks bool
-	// sidecarText: the client cannot read a text subtitle out of the file
-	// it plays, so a direct-play decision hands the picked embedded track
-	// over as a separate file. Response shaping, zeroed by sameSettings.
-	sidecarText bool
 	// variantRelease is the release a Play Version pick resolved to ("" =
 	// Auto) and mediaID the Media id the session was admitted on; both are
 	// set by prepare and zeroed by sameSettings.
 	variantRelease string
 	mediaID        int64
+	// subtitles is the client's subtitles= delivery mode (auto, burn,
+	// none, sidecar, embedded, segmented). It never changes which track
+	// is selected: PMS keeps the part's selected subtitle under every mode
+	// and only marks how it is delivered (none: decision="ignore", the
+	// player draws the track itself; sidecar: location="sidecar-subs").
+	subtitles string
+	// softText: the client is Plex's HTML player (Plex Web and the apps
+	// built on it), which draws a text subtitle only from the ASS stream
+	// it reads at /subtitles/:/transcode/universal/start (direct play) or
+	// /video/:/transcode/universal/subtitles (conversion). Response
+	// shaping, zeroed by sameSettings.
+	softText bool
 }
 
 // androidFamilyClient reports whether the decision lists every probed track.
@@ -168,10 +176,10 @@ func androidFamilyClient(pr *Request) bool {
 	return transcode.HasQuirk(pr.Product, pr.Platform, pr.Device, pr.Model, pr.Version, "plex-list-all-tracks")
 }
 
-// browserClient reports Plex Web. A browser's video element cannot draw a
-// text track it finds inside a Matroska file, so it needs the subtitle as
-// a separate file. Plex for Android and the TV apps read the embedded
-// track themselves, as they do from a real PMS.
+// browserClient reports Plex Web. Its HTML player never reads a text track
+// out of the file or the segments: it renders soft subtitles with libjass
+// from a separate ASS stream, and asks for an ASS track to be burned
+// (subtitles=burn) under its default "Automatic" burn setting.
 func browserClient(pr *Request) bool {
 	return pr != nil && strings.Contains(strings.ToLower(pr.Product), "plex web")
 }
@@ -184,9 +192,14 @@ func (p playRequest) sameSettings(other playRequest) bool {
 	p.offset, other.offset = 0, 0
 	p.caps, other.caps = core.ClientCaps{}, core.ClientCaps{}
 	p.listAllTracks, other.listAllTracks = false, false
-	p.sidecarText, other.sidecarText = false, false
 	p.variantRelease, other.variantRelease = "", ""
 	p.mediaID, other.mediaID = 0, 0
+	p.softText, other.softText = false, false
+	// Only subtitles=none changes what the encoder delivers; the other
+	// modes shape the response.
+	if (p.subtitles == "none") == (other.subtitles == "none") {
+		p.subtitles, other.subtitles = "", ""
+	}
 	return reflect.DeepEqual(p, other)
 }
 
@@ -264,11 +277,9 @@ func (s *Server) parsePlayRequest(r *http.Request) (playRequest, error) {
 	if vb, err := strconv.Atoi(q.Get("videoBitrate")); err == nil && vb > 0 && (p.opts.MaxBitrateKbps == 0 || vb < p.opts.MaxBitrateKbps) {
 		p.opts.MaxBitrateKbps = vb
 	}
-	switch q.Get("subtitles") {
-	case "burn":
+	p.subtitles = strings.ToLower(q.Get("subtitles"))
+	if p.subtitles == "burn" {
 		p.opts.BurnSubtitles = true
-	case "none":
-		p.subSet = true
 	}
 	// Explicit stream ids in the request win over stored selections.
 	var userID int64
@@ -440,6 +451,16 @@ func (s *Server) prepare(ctx context.Context, pr *Request, p *playRequest) (*cor
 		resolvePlaySelection(p, ps.Info)
 		s.applyStreamPreferences(ctx, pr, p, t, ps.Info)
 		applySelections(p, ps.Info, s.audioLanguages(pr.User))
+		switch {
+		case p.subtitles == "none":
+			// The track stays selected; nothing delivers it.
+			p.opts.SubtitleStream = -1
+		case p.opts.BurnSubtitles && browserClient(pr):
+			// Plex Web asks for a burn when it will not read a soft
+			// subtitle (an ASS track under its default setting): without
+			// one it shows nothing.
+			p.opts.BurnTextSubtitles = true
+		}
 		p.caps.TranscodeAudioCodecs = streamingAudioTarget(pr.ProfileExtra, p.protocol)
 		if len(p.caps.AudioCodecs) > 0 && len(p.caps.TranscodeAudioCodecs) > 0 {
 			var kept []string
@@ -673,9 +694,8 @@ func (s *Server) decisionContainer(ctx context.Context, pr *Request, t *core.Tit
 		shown = core.Decision{Kind: core.DecisionDirectPlay, VideoCopy: true, AudioCopy: true, Container: ps.Info.Container}
 	}
 	p.listAllTracks = androidFamilyClient(pr)
-	p.sidecarText = browserClient(pr)
+	p.softText = browserClient(pr)
 	md.Media = []model.Media{s.decisionMedia(t, ps, shown, p, pr.User)}
-	s.prewarmSidecarSubtitle(pr.User, ps, md.Media[0])
 	s.addProbedStreamFeatures(ctx, t.Key, ps.Info, &md)
 	if md.Media[0].Duration > 0 {
 		md.Duration = md.Media[0].Duration
@@ -771,7 +791,7 @@ func (s *Server) decisionMedia(t *core.Title, ps *core.PlaySession, dec core.Dec
 
 	selectedOnly := info.Estimated || !p.listAllTracks
 	if dec.Kind == core.DecisionDirectPlay {
-		return directPlayMedia(m, streams, selectedOnly, p.sidecarText)
+		return directPlayMedia(m, streams, selectedOnly, p.subtitles)
 	}
 	applyTranscodeMedia(&m, dec, p.protocol)
 	var kept []model.Stream
@@ -780,7 +800,7 @@ func (s *Server) decisionMedia(t *core.Title, ps *core.PlaySession, dec core.Dec
 		if rerr != nil && !streamMiss(rerr) {
 			continue
 		}
-		if shaped, keep := applyStreamDecision(st, binding.Info, dec, selectedOnly); keep {
+		if shaped, keep := applyStreamDecision(st, binding.Info, dec, selectedOnly, p.subtitles, p.softText); keep {
 			kept = append(kept, shaped)
 		}
 	}
@@ -805,14 +825,15 @@ func (s *Server) decisionMedia(t *core.Title, ps *core.PlaySession, dec core.Dec
 // clients keep the recorded PMS shape (video + selected tracks), which
 // TestDecisionConformsToPMS and the goldens pin.
 //
-// A selected embedded text subtitle stays location=direct, as PMS answers:
-// Plex for Android and the TV apps read it from the file they are already
-// playing, at no cost. Plex Web (sidecarText) cannot draw a track inside
-// the file, so for it the track is a sidecar whose URL serves the
-// extracted text. An image subtitle only reaches direct play when the
-// client can draw it; otherwise Decide burns it and this function is not
-// used.
-func directPlayMedia(m model.Media, streams []model.Stream, selectedOnly, sidecarText bool) model.Media {
+// The selected subtitle stays selected whatever subtitles= says, and its
+// row names the delivery as PMS 1.42 does for a direct play: subtitles=none
+// is decision="ignore" with no location (the player draws the track from
+// the file itself; Plex for Android and Android TV send it), sidecar is
+// location="sidecar-subs" (Plex Web, which then reads the cues from
+// /subtitles/:/transcode/universal/start). An image subtitle only reaches
+// direct play when the client can draw it; otherwise Decide burns it and
+// this function is not used.
+func directPlayMedia(m model.Media, streams []model.Stream, selectedOnly bool, subtitles string) model.Media {
 	part := &m.Part[0]
 	part.Decision = "directplay"
 	var kept []model.Stream
@@ -821,13 +842,12 @@ func directPlayMedia(m model.Media, streams []model.Stream, selectedOnly, sideca
 			continue
 		}
 		st.Location = "direct"
-		if sidecarText && embeddedTextSubtitle(st) && st.Selected != nil && *st.Selected {
-			st.Location = "sidecar"
-			if st.Key == "" {
-				st.Key = "/library/streams/" + strconv.FormatInt(st.ID, 10)
-			}
-			if st.Format == "" {
-				st.Format = "srt"
+		if st.StreamType == 3 && st.Selected != nil && *st.Selected {
+			switch subtitles {
+			case "none":
+				st.Decision, st.Location = "ignore", ""
+			case "sidecar":
+				st.Location = "sidecar-subs"
 			}
 		}
 		kept = append(kept, st)
@@ -917,7 +937,15 @@ func applyTranscodeMedia(m *model.Media, dec core.Decision, protocol string) {
 // location, the same shape its streams carry in library metadata. That is
 // the shape under review against a real PMS Android capture; the selected
 // stream's shape never changes.
-func applyStreamDecision(st model.Stream, src core.StreamInfo, dec core.Decision, selectedOnly bool) (model.Stream, bool) {
+//
+// The selected subtitle row follows PMS 1.42 (rex subtitles_s1422 capture):
+// subtitles=none is decision="ignore" with nothing delivered; a burned text
+// track is decision="burn" burn="1" location="segments-av"; Plex Web's text
+// track is converted to ASS (codec/container/format "ass",
+// decision="transcode", location="segments-subs") and read from
+// /video/:/transcode/universal/subtitles; a text track copied into
+// Matroska segments keeps its format.
+func applyStreamDecision(st model.Stream, src core.StreamInfo, dec core.Decision, selectedOnly bool, subtitles string, softText bool) (model.Stream, bool) {
 	idx := st.Index
 	st.Index = nil // segments carry their own stream layout
 	switch st.StreamType {
@@ -983,10 +1011,26 @@ func applyStreamDecision(st model.Stream, src core.StreamInfo, dec core.Decision
 			st.Index = idx
 			return st, true
 		}
+		text := textSidecarCodec(st.Codec)
 		switch {
+		case subtitles == "none":
+			st.Decision, st.Location = "ignore", ""
+			return st, true
+		case dec.BurnSubtitles && text:
+			st.Decision = "burn"
+			st.Location = "segments-av"
+			st.Format = ""
+			st.Extra = append(st.Extra, model.A("burn", "1"))
+			return st, true
 		case dec.BurnSubtitles:
 			st.Decision = "burn"
 			st.Location = "segments-video"
+		case softText && text && dec.Container != transcode.ContainerMatroska:
+			st.Codec, st.Format = "ass", "ass"
+			st.Decision = "transcode"
+			st.Location = "segments-subs"
+			st.Extra = append(st.Extra, model.A("container", "ass"))
+			return st, true
 		case src.External:
 			st.Decision = "copy"
 			st.Location = "sidecar"
@@ -1008,7 +1052,7 @@ func applyStreamDecision(st model.Stream, src core.StreamInfo, dec core.Decision
 			st.Decision = "copy"
 			st.Location = "segments-av"
 			st.Key = ""
-			st.Format = ""
+			st.Format = st.Codec
 		}
 	}
 	return st, true

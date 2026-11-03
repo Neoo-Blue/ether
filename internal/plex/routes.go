@@ -155,6 +155,7 @@ func (s *Server) routes() chi.Router {
 	any("/video/:/transcode/universal/ping", s.handleTranscodePing)
 	any("/video/:/transcode/universal/stop", s.handleTranscodeStop)
 	get("/video/:/transcode/universal/subtitles", s.handleTranscodeSubtitles)
+	get("/subtitles/:/transcode/universal/start", s.handleTranscodeSubtitles)
 	get("/transcode/sessions", s.handleTranscodeSessions)
 	get("/library/parts/{part}/indexes/{index}/{offset}", s.handleIndexFrame)
 	get("/library/parts/{part}/indexes/{index}", s.handleIndexBIF)

@@ -78,17 +78,18 @@ func TestEmbeddedSubtitleServedFromSession(t *testing.T) {
 	}
 }
 
-// TestDirectPlayEmbeddedTextIsSidecar is Plex Web and Plex for Android
-// selecting an embedded SRT or ASS during direct play. Plex Web cannot draw
-// a track inside the file, so its decision names a sidecar URL that returns
-// the cues. Plex for Android reads the track from the file it plays, so the
-// track stays location=direct, as PMS answers, and nothing is extracted
-// (#191: extracting first meant reading the whole release). Bitmap PGS is
+// TestDirectPlayEmbeddedTextFollowsPMS is an embedded SRT or ASS selected
+// for a direct play (#191). The track stays selected under every
+// subtitles= mode and its row names the delivery the way PMS 1.42 does:
+// Plex for Android and Android TV send subtitles=none and draw the track
+// from the file (decision="ignore", no location); Plex Web sends
+// subtitles=sidecar (location="sidecar-subs") and reads the cues as an ASS
+// script from /subtitles/:/transcode/universal/start. A bitmap PGS is
 // burned into the picture instead.
-func TestDirectPlayEmbeddedTextIsSidecar(t *testing.T) {
+func TestDirectPlayEmbeddedTextFollowsPMS(t *testing.T) {
 	f, _ := newSubtitleFixture(t)
-	const vtt = sampleVTT
-	f.srv.d.Transcoder = &extractTranscoder{fakeTranscoder: f.trans, out: vtt}
+	streamer := &assStreamer{fakeTranscoder: f.trans, release: closedChan()}
+	f.srv.d.Transcoder = streamer
 	f.trans.decision = core.Decision{Kind: core.DecisionDirectPlay, VideoCopy: true, AudioCopy: true, Container: "mkv"}
 	f.playback.info = core.MediaInfo{
 		Container: "mkv", Duration: 14 * time.Minute, BitrateKbps: 4000,
@@ -114,50 +115,51 @@ func TestDirectPlayEmbeddedTextIsSidecar(t *testing.T) {
 	if srtID == "" || assID == "" || pgsID == "" {
 		t.Fatalf("metadata subtitle ids srt=%q ass=%q pgs=%q tags=%q", srtID, assID, pgsID, tags)
 	}
-
+	web := []string{"X-Plex-Product", "Plex Web", "X-Plex-Platform", "Chrome", "X-Plex-Client-Identifier", "web-subs"}
+	shield := []string{"X-Plex-Product", "Plex for Android (TV)", "X-Plex-Platform", "Android", "X-Plex-Client-Identifier", "shield-subs"}
 	clients := []struct {
-		name, protocol string
-		hdr            []string
+		name, protocol, subtitles string
+		hdr                       []string
+		want                      string
 	}{
-		{"web", "dash", []string{"X-Plex-Product", "Plex Web", "X-Plex-Platform", "Chrome", "X-Plex-Client-Identifier", "web-subs"}},
-		{"android", "hls", []string{"X-Plex-Product", "Plex for Android (Mobile)", "X-Plex-Platform", "Android", "X-Plex-Client-Identifier", "android-subs"}},
+		{"web", "dash", "sidecar", web, `location="sidecar-subs"`},
+		{"shield", "hls", "none", shield, `decision="ignore"`},
+		{"shield-auto", "hls", "auto", shield, `location="direct"`},
 	}
 	for _, c := range clients {
 		for _, id := range []string{srtID, assID} {
-			rec := f.get(t, fmt.Sprintf("/video/:/transcode/universal/decision?path=/library/metadata/%s&protocol=%s&directPlay=1&directStream=1&session=%s-%s&subtitleStreamID=%s", key, c.protocol, c.name, id, id), c.hdr...)
+			putSubtitle(t, f, key.String(), id)
+			session := c.name + "-" + id
+			rec := f.get(t, fmt.Sprintf("/video/:/transcode/universal/decision?path=/library/metadata/%s&protocol=%s&directPlay=1&directStream=1&hasMDE=1&session=%s&subtitles=%s", key, c.protocol, session, c.subtitles), c.hdr...)
 			if rec.Code != 200 {
 				t.Fatalf("%s decision %d: %s", c.name, rec.Code, rec.Body.String())
 			}
 			selected := selectedTag(subtitleTags(rec.Body.String()))
-			if c.name == "android" {
-				if !strings.Contains(selected, `location="direct"`) || strings.Contains(selected, `key="`) {
-					t.Fatalf("android embedded text decision must stay in the file: %s", selected)
-				}
+			if !strings.Contains(selected, `id="`+id+`"`) || !strings.Contains(selected, c.want) || strings.Contains(selected, `key="`) {
+				t.Fatalf("%s subtitles=%s row: %s", c.name, c.subtitles, selected)
+			}
+			if c.subtitles == "none" && strings.Contains(selected, `location=`) {
+				t.Fatalf("ignored track names a location: %s", selected)
+			}
+			if c.name != "web" {
 				continue
 			}
-			if !strings.Contains(selected, `location="sidecar"`) || !strings.Contains(selected, `key="/library/streams/`) || strings.Contains(selected, `location="direct"`) {
-				t.Fatalf("%s embedded text decision: %s", c.name, selected)
+			got := f.get(t, fmt.Sprintf("/subtitles/:/transcode/universal/start?path=/library/metadata/%s&session=%s&directPlay=1&subtitles=sidecar&offset=125", key, session), c.hdr...)
+			if got.Code != 200 || !strings.HasPrefix(got.Body.String(), "[Script Info]") || !strings.Contains(got.Body.String(), "Dialogue: 0,0:02:16.00") {
+				t.Fatalf("web soft subtitle: %d %q", got.Code, got.Body.String())
 			}
-			streamKey := streamAttr(selected, "key")
-			got := f.get(t, streamKey, c.hdr...)
-			if got.Code != 200 || !contains(got.Body.String(), "Hello world") {
-				t.Fatalf("%s GET %s: %d %q", c.name, streamKey, got.Code, got.Body.String())
+			if from := streamer.lastFrom(); from != 115*time.Second {
+				t.Fatalf("soft subtitle read from %v, want the player position less the lead", from)
 			}
 		}
 	}
 
 	f.trans.decision = core.Decision{Kind: core.DecisionTranscode, VideoCodec: "h264", AudioCodec: "aac", Container: "mpegts", BurnSubtitles: true}
-	rec := f.get(t, fmt.Sprintf("/video/:/transcode/universal/decision?path=/library/metadata/%s&protocol=dash&directPlay=0&directStream=1&session=web-pgs&subtitleStreamID=%s", key, pgsID),
-		"X-Plex-Product", "Plex Web", "X-Plex-Platform", "Chrome", "X-Plex-Client-Identifier", "web-subs")
+	putSubtitle(t, f, key.String(), pgsID)
+	rec := f.get(t, fmt.Sprintf("/video/:/transcode/universal/decision?path=/library/metadata/%s&protocol=dash&directPlay=0&directStream=1&session=web-pgs", key), web...)
 	selected := selectedTag(subtitleTags(rec.Body.String()))
 	if !strings.Contains(selected, `decision="burn"`) || !strings.Contains(selected, `location="segments-video"`) {
 		t.Fatalf("web PGS burn decision: %s\n%s", selected, rec.Body.String())
-	}
-	rec = f.get(t, fmt.Sprintf("/video/:/transcode/universal/decision?path=/library/metadata/%s&protocol=hls&directPlay=0&directStream=1&session=and-pgs&subtitleStreamID=%s", key, pgsID),
-		"X-Plex-Product", "Plex for Android (Mobile)", "X-Plex-Platform", "Android", "X-Plex-Client-Identifier", "android-subs")
-	selected = selectedTag(subtitleTags(rec.Body.String()))
-	if !strings.Contains(selected, `decision="burn"`) || !strings.Contains(selected, `location="segments-video"`) {
-		t.Fatalf("android PGS burn decision: %s\n%s", selected, rec.Body.String())
 	}
 }
 
@@ -170,42 +172,21 @@ func contains(s, sub string) bool {
 	return false
 }
 
-// slowExtractor holds an extraction until release is closed, like ffmpeg
-// reading a multi-GB remote release.
-type slowExtractor struct {
-	*fakeTranscoder
-	release chan struct{}
-	started chan struct{}
-}
-
-func (e *slowExtractor) ExtractSubtitle(ctx context.Context, _ string, _ int, _ string, w io.Writer) error {
-	select {
-	case e.started <- struct{}{}:
-	default:
-	}
-	select {
-	case <-e.release:
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-	_, err := io.WriteString(w, sampleVTT)
-	return err
-}
-
-// A sidecar whose track is still being extracted answers at once and stays
-// alive with blank lines, instead of going silent until the whole release
-// has been read: players drop a silent subtitle download after a few
-// seconds (#191). The decision already started the extraction.
-func TestSlowEmbeddedSidecarAnswersImmediately(t *testing.T) {
+// A subtitle whose cues are not read yet answers at once and stays alive
+// with blank lines, instead of going silent until the source has been read:
+// players drop a silent subtitle download after a few seconds (#191).
+// /library/streams serves a whole extracted track (SRT, WebVTT); Plex Web's
+// ASS stream sends its cues as they are read.
+func TestSlowEmbeddedSubtitleAnswersImmediately(t *testing.T) {
 	quiet, alive := subtitleQuietWait, subtitleKeepAlive
 	subtitleQuietWait, subtitleKeepAlive = 20*time.Millisecond, 20*time.Millisecond
 	t.Cleanup(func() { subtitleQuietWait, subtitleKeepAlive = quiet, alive })
-	for _, format := range []string{"srt", "vtt"} {
+	for _, format := range []string{"srt", "vtt", "ass"} {
 		t.Run(format, func(t *testing.T) {
 			f, _ := newSubtitleFixture(t)
-			slow := &slowExtractor{fakeTranscoder: f.trans, release: make(chan struct{}), started: make(chan struct{}, 1)}
+			slow := &assStreamer{fakeTranscoder: f.trans, release: make(chan struct{})}
 			f.srv.d.Transcoder = slow
-			f.trans.decision = core.Decision{Kind: core.DecisionDirectPlay, VideoCopy: true, AudioCopy: true, Container: "mkv"}
+			f.trans.decision = core.Decision{Kind: core.DecisionRemux, VideoCopy: true, AudioCopy: true, Container: "mpegts"}
 			f.playback.info = core.MediaInfo{
 				Container: "mkv", Duration: 14 * time.Minute, BitrateKbps: 4000,
 				Streams: []core.StreamInfo{
@@ -215,31 +196,29 @@ func TestSlowEmbeddedSidecarAnswersImmediately(t *testing.T) {
 				},
 			}
 			key := fightClub.Key
-			web := []string{"X-Plex-Product", "Plex Web", "X-Plex-Platform", "Chrome", "X-Plex-Client-Identifier", "web-slow"}
+			client := []string{"X-Plex-Product", "Plex for Android (TV)", "X-Plex-Platform", "Android", "X-Plex-Client-Identifier", "slow-subs"}
 			srtID := subtitleChoice(subtitleTags(f.get(t, "/library/metadata/"+key.String()).Body.String()), "eng", false)
-			rec := f.get(t, fmt.Sprintf("/video/:/transcode/universal/decision?path=/library/metadata/%s&protocol=dash&directPlay=1&directStream=1&session=web-slow&subtitleStreamID=%s", key, srtID), web...)
-			streamKey := streamAttr(selectedTag(subtitleTags(rec.Body.String())), "key")
-			if streamKey == "" {
+			putSubtitle(t, f, key.String(), srtID)
+			rec := f.get(t, fmt.Sprintf("/video/:/transcode/universal/decision?path=/library/metadata/%s&protocol=hls&directPlay=0&directStream=1&session=slow-subs", key), client...)
+			target := streamAttr(selectedTag(subtitleTags(rec.Body.String())), "key") + "?format=" + format
+			if format == "ass" {
+				target = fmt.Sprintf("/video/:/transcode/universal/subtitles?path=/library/metadata/%s&session=slow-subs&format=ass", key)
+			} else if strings.HasPrefix(target, "?") {
 				t.Fatalf("no sidecar key: %s", rec.Body.String())
 			}
-			select {
-			case <-slow.started:
-			case <-time.After(5 * time.Second):
-				t.Fatal("the decision did not start extracting the picked track")
-			}
 			out := &flushSignal{ResponseRecorder: httptest.NewRecorder(), flushed: make(chan struct{})}
-			req := httptest.NewRequest(http.MethodGet, streamKey+"?format="+format, nil)
+			req := httptest.NewRequest(http.MethodGet, target, nil)
 			req.RemoteAddr = "192.168.1.50:51000"
 			req.Header.Set("X-Plex-Token", ownerToken)
-			for i := 0; i+1 < len(web); i += 2 {
-				req.Header.Set(web[i], web[i+1])
+			for i := 0; i+1 < len(client); i += 2 {
+				req.Header.Set(client[i], client[i+1])
 			}
 			served := make(chan struct{})
 			go func() { f.srv.ServeHTTP(out, req); close(served) }()
 			select {
 			case <-out.flushed: // answered while the track is still being read
 			case <-time.After(5 * time.Second):
-				t.Fatal("no response while the track is extracted")
+				t.Fatal("no response while the track is read")
 			}
 			close(slow.release)
 			<-served
@@ -250,9 +229,70 @@ func TestSlowEmbeddedSidecarAnswersImmediately(t *testing.T) {
 			if format == "vtt" && (!strings.HasPrefix(body, "WEBVTT") || strings.Count(body, "WEBVTT") != 1) {
 				t.Fatalf("vtt body must carry one header: %q", body)
 			}
+			if format == "ass" && (strings.TrimLeft(body, "\n") != assScript || out.Header().Get("Content-Type") != "text/x-ssa") {
+				t.Fatalf("ass stream: %q %q", out.Header().Get("Content-Type"), body)
+			}
 		})
 	}
 }
+
+// assScript is what the fake streamer writes: a header, then a cue.
+const assScript = "[Script Info]\nScriptType: v4.00+\nPlayResX: 384\nPlayResY: 288\n\n[V4+ Styles]\n" +
+	"Format: Name, Fontname, Fontsize\nStyle: Default,Arial,16\n\n[Events]\n" +
+	"Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n" +
+	"Dialogue: 0,0:02:16.00,0:02:20.00,Default,,0,0,0,,Hello world\n"
+
+// assStreamer holds every read until release is closed, like FFmpeg
+// reading a remote release, then answers sampleVTT (whole-track
+// extraction) or assScript (StreamSubtitle).
+type assStreamer struct {
+	*fakeTranscoder
+	release chan struct{}
+	mu      sync.Mutex
+	from    time.Duration
+}
+
+func closedChan() chan struct{} {
+	c := make(chan struct{})
+	close(c)
+	return c
+}
+
+func (e *assStreamer) lastFrom() time.Duration {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.from
+}
+
+func (e *assStreamer) wait(ctx context.Context) error {
+	select {
+	case <-e.release:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (e *assStreamer) ExtractSubtitle(ctx context.Context, _ string, _ int, _ string, w io.Writer) error {
+	if err := e.wait(ctx); err != nil {
+		return err
+	}
+	_, err := io.WriteString(w, sampleVTT)
+	return err
+}
+
+func (e *assStreamer) StreamSubtitle(ctx context.Context, _ string, _ int, _ string, from time.Duration, w io.Writer) error {
+	e.mu.Lock()
+	e.from = from
+	e.mu.Unlock()
+	if err := e.wait(ctx); err != nil {
+		return err
+	}
+	_, err := io.WriteString(w, assScript)
+	return err
+}
+
+func (e *assStreamer) CachedSubtitle(context.Context, int, string) ([]byte, bool) { return nil, false }
 
 // flushSignal reports the first Flush, the moment a client sees bytes.
 type flushSignal struct {

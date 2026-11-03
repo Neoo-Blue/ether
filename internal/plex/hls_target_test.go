@@ -46,12 +46,13 @@ func TestMatroskaTextSubtitleIsInBand(t *testing.T) {
 	st := model.Stream{StreamType: 3, Codec: "srt", Selected: model.Ptr(true), ID: 42, Key: "/library/streams/42", Format: "srt"}
 	src := core.StreamInfo{Type: "subtitle", Codec: "subrip"}
 	mkv := core.Decision{Kind: core.DecisionTranscode, Container: transcode.ContainerMatroska}
-	got, keep := applyStreamDecision(st, src, mkv, true)
-	if !keep || got.Location != "segments-av" || got.Key != "" || got.Format != "" || got.Decision != "copy" {
+	got, keep := applyStreamDecision(st, src, mkv, true, "auto", false)
+	// PMS 1.42 names the copied track's format (rex subtitles_s1422).
+	if !keep || got.Location != "segments-av" || got.Key != "" || got.Format != "srt" || got.Decision != "copy" {
 		t.Fatalf("matroska text track: %+v", got)
 	}
 	ts := core.Decision{Kind: core.DecisionTranscode, Container: transcode.ContainerMPEGTS}
-	got, _ = applyStreamDecision(st, src, ts, true)
+	got, _ = applyStreamDecision(st, src, ts, true, "auto", false)
 	if got.Location != "sidecar" || got.Key != "/library/streams/42" || got.Format != "srt" {
 		t.Fatalf("mpegts sidecar changed: %+v", got)
 	}
