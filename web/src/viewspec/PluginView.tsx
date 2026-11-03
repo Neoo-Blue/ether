@@ -9,7 +9,7 @@
 import { Badge, Button, toast } from "@braedonsaunders/appkit-ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { t } from "../i18n";
+import { getLocale, t } from "../i18n";
 import { apiFetch, errorMessage } from "../lib/api";
 import { Drawer } from "../components/Drawer";
 import { ErrorPanel, LoadingRows } from "../components/feedback";
@@ -54,7 +54,8 @@ export function pluginViewPath(
   page: string,
   params: Record<string, string>,
 ): string {
-  const q = new URLSearchParams(params);
+  // The server resolves the plugin's "$t:" text in the console's language.
+  const q = new URLSearchParams({ ...params, locale: getLocale() });
   const base = `/plugins/${encodeURIComponent(plugin)}/views/${encodeURIComponent(page)}`;
   return q.toString() ? `${base}?${q}` : base;
 }

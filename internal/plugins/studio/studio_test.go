@@ -384,6 +384,12 @@ func TestInstalledDraftRunsItsHandler(t *testing.T) {
 	if err != nil || resp.Status != http.StatusOK {
 		t.Fatalf("installed draft did not answer: %v %+v", err, resp)
 	}
+	// Its page text arrives resolved, not as "$t:" keys.
+	w := httptest.NewRecorder()
+	mgr.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/"+rec.ID+"/views/overview?locale=en", nil))
+	if w.Code != http.StatusOK || strings.Contains(w.Body.String(), "$t:") || !strings.Contains(w.Body.String(), "Featured picks") {
+		t.Fatalf("installed view: %d %s", w.Code, w.Body.String())
+	}
 }
 
 // A remix's add-on link can hold a debrid key: it must not land in the
