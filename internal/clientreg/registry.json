@@ -511,6 +511,23 @@
       }
     },
     {
+      "id": "plex-ios-hdr10-base",
+      "role": "quirk",
+      "quirks": ["plex-ios-hdr10-base"],
+      "match": {
+        "all": [
+          {"field": "product", "op": "contains", "value": "plex"},
+          {
+            "any": [
+              {"field": "product", "op": "contains", "value": "for ios"},
+              {"field": "platform", "op": "equals", "value": "ios"},
+              {"field": "platform", "op": "equals", "value": "ipados"}
+            ]
+          }
+        ]
+      }
+    },
+    {
       "id": "plex-list-all-tracks",
       "role": "quirk",
       "quirks": ["plex-list-all-tracks"],

@@ -225,6 +225,12 @@ type ClientCaps struct {
 	// Sync) rather than live playback: the resolver prefers compact,
 	// mobile-native releases and the whole file is remuxed (additive).
 	Download bool `json:"download,omitempty"`
+
+	// DolbyVisionBaseOnly delivers a Dolby Vision 7.6/8.1 source as its
+	// compatible HDR10 base layer: an owner override turned Dolby Vision off
+	// for the client, or a Dolby Vision start stalled on this client
+	// (additive).
+	DolbyVisionBaseOnly bool `json:"dolbyVisionBaseOnly,omitempty"`
 }
 
 // AudioLimit applies to one audio codec, or all codecs when Codec is "*".

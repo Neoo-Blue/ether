@@ -56,13 +56,13 @@ func TestNativePlexAppleTVProfile7RemovesEnhancementLayer(t *testing.T) {
 	}
 	// Do not mistake an unsupported or absent base for HDR10.
 	info.Video().DolbyVisionCompatibilityID = 0
-	if appleTVHDR10Base(info.Video(), appleTV) {
+	if hdr10BaseReason(info.Video(), appleTV, allow()) != "" {
 		t.Fatal("unknown profile 7 base accepted")
 	}
 	info.Video().DolbyVisionCompatibilityID = 6
 	absent := false
 	info.Video().DolbyVisionBLPresent = &absent
-	if appleTVHDR10Base(info.Video(), appleTV) {
+	if hdr10BaseReason(info.Video(), appleTV, allow()) != "" {
 		t.Fatal("missing profile 7 base accepted")
 	}
 }

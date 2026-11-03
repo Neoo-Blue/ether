@@ -32,6 +32,9 @@ type PlaybackDefaults struct {
 	Video, Audio, Containers         []string
 	MaxHeight                        int
 	HDR10, DolbyVision, HeightLocked bool
+	// DolbyVisionOff: an owner override turned Dolby Vision off, so a
+	// profile 7/8 copy carries only its compatible base layer.
+	DolbyVisionOff bool
 }
 
 // PlaybackDefaultsFor evaluates the registry, including owner overrides.
@@ -41,6 +44,7 @@ func PlaybackDefaultsFor(product, platform, device, model, version string, overr
 	return PlaybackDefaults{
 		ID: got.ID, Video: got.Video, Audio: got.Audio, Containers: got.Containers,
 		MaxHeight: got.MaxHeight, HDR10: got.HDR10, DolbyVision: got.DolbyVision, HeightLocked: got.HeightLocked,
+		DolbyVisionOff: got.DolbyVisionOff,
 	}
 }
 

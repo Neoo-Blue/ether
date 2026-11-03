@@ -43,6 +43,8 @@ type Result struct {
 	DolbyVision         bool
 	// HeightLocked is set when an owner override chose the height.
 	HeightLocked bool
+	// DolbyVisionOff is set when an owner override turned Dolby Vision off.
+	DolbyVisionOff bool
 }
 
 type document struct {
@@ -398,6 +400,7 @@ func applyOverrides(base Result, playbackID, policyID string, id Identity, overr
 		}
 		if o.DolbyVision != nil {
 			base.DolbyVision = *o.DolbyVision
+			base.DolbyVisionOff = !*o.DolbyVision
 		}
 		if o.Notes != "" {
 			base.Notes = o.Notes

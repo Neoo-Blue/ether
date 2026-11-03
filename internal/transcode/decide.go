@@ -510,11 +510,14 @@ func Decide(info core.MediaInfo, caps core.ClientCaps, opts core.DecideOptions, 
 	containerOK := len(caps.Containers) == 0 || caps.SupportsContainer(info.Container)
 	name := clientName(caps)
 
-	// Plex's native tvOS player can accept profile 8.1 in its decision and
-	// fail to open it. Profile 7 additionally carries Blu-ray enhancement
-	// data this client cannot use. Explicitly deliver the compatible HDR10
-	// base at its original resolution through a copy-only mux.
-	hdr10Base := appleTVHDR10Base(v, caps)
+	// Plex's native tvOS player, and its iOS player on Matroska output,
+	// can accept profile 8.1 in a decision and fail to open it. Profile 7
+	// additionally carries Blu-ray enhancement data these players cannot use.
+	// An owner override or a stalled start can also ask for the base only.
+	// Explicitly deliver the compatible HDR10 base at its original
+	// resolution through a copy-only mux.
+	hdr10BaseWhy := hdr10BaseReason(v, caps, opts)
+	hdr10Base := hdr10BaseWhy != ""
 
 	// 1. Direct play.
 	if opts.DirectPlay && !hdr10Base && containerOK && len(videoIssues) == 0 && len(audioIssues) == 0 && len(otherIssues) == 0 {
@@ -553,7 +556,7 @@ func Decide(info core.MediaInfo, caps core.ClientCaps, opts core.DecideOptions, 
 
 	var why []string
 	if hdr10Base {
-		why = append(why, fmt.Sprintf("native Plex Apple TV compatibility: Dolby Vision profile %d uses its HDR10 base layer", v.DolbyVisionProfile))
+		why = append(why, hdr10BaseWhy)
 	}
 	if !opts.DirectPlay {
 		why = append(why, "direct play not allowed by client")
@@ -781,11 +784,35 @@ func describeSource(info core.MediaInfo, v, a *core.StreamInfo) string {
 	return strings.Join(parts, "/")
 }
 
-// appleTVHDR10Base is a player quirk, not a hardware certification or a
-// blanket HEVC/HDR limit. Profile 5 has no HDR10 base and must not be stripped.
-// The client match is the registry quirk plex-appletv-hdr10-base: native Plex
-// on tvOS accepts the decision and then fails to open profiles 7 and 8.1.
-func appleTVHDR10Base(v *core.StreamInfo, caps core.ClientCaps) bool {
+// hdr10BaseReason explains why a Dolby Vision copy carries only its HDR10
+// base layer, or returns "" to keep the stream as it is. The player quirks
+// are not hardware certifications or blanket HEVC/HDR limits; the client
+// matches are the registry quirks plex-appletv-hdr10-base (native Plex on
+// tvOS, any output) and plex-ios-hdr10-base (native Plex on iOS/iPadOS,
+// Matroska output: the player that also takes Matroska HLS segments).
+// Both accept a profile 7 or 8.1 decision and then never render it. Plex
+// for iOS on fMP4 HLS keeps Dolby Vision with dvh1 signalling.
+// caps.DolbyVisionBaseOnly is an owner override or a stalled-start fallback.
+func hdr10BaseReason(v *core.StreamInfo, caps core.ClientCaps, opts core.DecideOptions) string {
+	if !hasHDR10Base(v, caps) {
+		return ""
+	}
+	id := clientreg.Identity{Product: caps.Product, Platform: caps.Platform, Device: caps.Device, Version: caps.Version}
+	switch {
+	case clientreg.HasQuirk(id, "plex-appletv-hdr10-base"):
+		return fmt.Sprintf("native Plex Apple TV compatibility: Dolby Vision profile %d uses its HDR10 base layer", v.DolbyVisionProfile)
+	case clientreg.HasQuirk(id, "plex-ios-hdr10-base") && outputContainer(caps, opts, v.Codec, "") == ContainerMatroska:
+		return fmt.Sprintf("native Plex iOS compatibility: Dolby Vision profile %d in Matroska uses its HDR10 base layer", v.DolbyVisionProfile)
+	case caps.DolbyVisionBaseOnly:
+		return fmt.Sprintf("Dolby Vision off for this client: profile %d uses its HDR10 base layer", v.DolbyVisionProfile)
+	}
+	return ""
+}
+
+// hasHDR10Base reports a Dolby Vision HEVC stream whose compatible HDR10
+// base layer an HDR10 client can show unchanged. Profile 5 has no HDR10 base
+// and must not be stripped.
+func hasHDR10Base(v *core.StreamInfo, caps core.ClientCaps) bool {
 	if v == nil || v.Codec != "hevc" || !v.DolbyVision || v.ColorTransfer != "smpte2084" || !caps.HDR10 {
 		return false
 	}
@@ -795,8 +822,8 @@ func appleTVHDR10Base(v *core.StreamInfo, caps core.ClientCaps) bool {
 		!(v.DolbyVisionProfile == 8 && v.DolbyVisionCompatibilityID == 1) {
 		return false
 	}
-	if v.DolbyVisionBLPresent != nil && !*v.DolbyVisionBLPresent {
-		return false
-	}
-	return clientreg.HasQuirk(clientreg.Identity{Product: caps.Product, Platform: caps.Platform, Device: caps.Device, Version: caps.Version}, "plex-appletv-hdr10-base")
+	return v.DolbyVisionBLPresent == nil || *v.DolbyVisionBLPresent
 }
+
+// HasHDR10Base is hasHDR10Base for callers outside the package.
+func HasHDR10Base(v *core.StreamInfo, caps core.ClientCaps) bool { return hasHDR10Base(v, caps) }
