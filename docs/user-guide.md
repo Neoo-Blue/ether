@@ -743,6 +743,28 @@ Plex viewers access shared libraries through their own Plex accounts. Refreshing
 Plex sharing removes revoked viewers' access. Stream links stop working when
 the viewer is inactive or the session ends.
 
+## Plex account watch state
+
+In **Viewers**, open a viewer's **Limits & preferences** and connect that
+viewer's Plex account under **Plex account watch state**. Approve the sign-in
+with that same account and enable **Sync My Watch State and Ratings** in Plex.
+Choose **Off**, **Ether → Plex**, **Plex → Ether**, or **Both**. Existing
+connections that already sent changes keep **Ether → Plex** after upgrade;
+connections that were off stay off.
+
+Inbound sync checks for changes every 10 minutes by default; choose 5, 10, 30,
+or 60 minutes. **Import now** uses the same incremental cursor and retry limits.
+Ether backs off when Plex asks it to wait or reports a temporary error. Newer
+watch and rating changes win independently, and imported changes are not sent
+back as new changes. Uploading existing Ether state remains a separate explicit
+**Export current state** action; enabling outbound sync sends future changes.
+
+The section shows the last successful import and send, the next scheduled import,
+any current problem, and unmatched Plex title identifiers for review. Plex account
+sync covers watched or unwatched state and ratings, not resume positions. If the
+account cannot read watch state, the connected credential may lack permission;
+reconnecting or changing consent is not guaranteed to grant that permission.
+
 ## Source interruptions
 
 Usenet providers are tried in priority order. When every connection of a
