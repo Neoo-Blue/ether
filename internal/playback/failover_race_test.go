@@ -108,28 +108,38 @@ func (h *copyPreferenceHLS) SwapWouldCopyVideo(info core.MediaInfo) bool {
 }
 
 func TestFailoverPrefersProbedCopyOverEarlierConversion(t *testing.T) {
-	b := mkv("B", 100_000, time.Minute)
-	b.HDR = true
-	h := newHarness(t, []*fakeRelease{mkv("A", 100_000, time.Minute), b, mkv("C", 100_000, time.Minute)}, []string{"A", "B", "C"})
-	ps := h.prepare(owner, movieKey, "preferred-copy")
-	hls := &copyPreferenceHLS{fakeHLS: h.tr.addHLS(ps.ID), nonCopy: make(chan struct{})}
-	h.m.deps.HLSLookup = func(string) (core.HLSSession, bool) { return hls, true }
-	h.m.deps.FetchNZB = func(ctx context.Context, r core.Release) ([]byte, error) {
-		if r.ID == "C" {
-			select {
-			case <-hls.nonCopy:
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			}
+	for _, raced := range []bool{false, true} {
+		name := "serial"
+		if raced {
+			name = "raced"
 		}
-		return []byte("nzb-" + r.ID), nil
-	}
-	h.m.SetDecision(ps.ID, core.Decision{Kind: core.DecisionRemux, VideoCopy: true, AudioCopy: true})
-	got, err := h.m.Failover(t.Context(), ps.ID, 10*time.Second)
-	if err != nil || got.Resolution.Release.ID != "C" {
-		t.Fatalf("preferred failover = %+v, %v", got, err)
-	}
-	if h.resolver.isBad("B") {
-		t.Fatal("valid converting release marked bad")
+		t.Run(name, func(t *testing.T) {
+			b := mkv("B", 100_000, time.Minute)
+			b.HDR = true
+			h := newHarness(t, []*fakeRelease{mkv("A", 100_000, time.Minute), b, mkv("C", 100_000, time.Minute)}, []string{"A", "B", "C"})
+			ps := h.prepare(owner, movieKey, "preferred-copy")
+			hls := &copyPreferenceHLS{fakeHLS: h.tr.addHLS(ps.ID), nonCopy: make(chan struct{})}
+			h.m.deps.HLSLookup = func(string) (core.HLSSession, bool) { return hls, true }
+			if raced {
+				h.m.deps.FetchNZB = func(ctx context.Context, r core.Release) ([]byte, error) {
+					if r.ID == "C" {
+						select {
+						case <-hls.nonCopy:
+						case <-ctx.Done():
+							return nil, ctx.Err()
+						}
+					}
+					return []byte("nzb-" + r.ID), nil
+				}
+			}
+			h.m.SetDecision(ps.ID, core.Decision{Kind: core.DecisionRemux, VideoCopy: true, AudioCopy: true})
+			got, err := h.m.Failover(t.Context(), ps.ID, 10*time.Second)
+			if err != nil || got.Resolution.Release.ID != "C" {
+				t.Fatalf("preferred failover = %+v, %v", got, err)
+			}
+			if h.resolver.isBad("B") {
+				t.Fatal("valid converting release marked bad")
+			}
+		})
 	}
 }

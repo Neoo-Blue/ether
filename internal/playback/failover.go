@@ -769,18 +769,20 @@ func (m *Manager) failoverWith(ctx context.Context, s *session, observed *genera
 		p, ok := hls.(interface{ SwapWouldCopyVideo(core.MediaInfo) bool })
 		return ok && p.SwapWouldCopyVideo(next.infoSnapshot())
 	}
+	var preferCopy func(*generation) bool
+	if !direct && !fo.encoder {
+		if hls, ok := m.deps.HLSLookup(s.id); ok && hls != nil {
+			if p, ok := hls.(interface{ SwapWouldCopyVideo(core.MediaInfo) bool }); ok {
+				preferCopy = func(next *generation) bool { return p.SwapWouldCopyVideo(next.infoSnapshot()) }
+			}
+		}
+	}
 	if g == nil && !direct && prepared == nil {
 		// Any healthy alternate continues an encoder session, so open
 		// several at once instead of stalling through each broken one.
 		var failed []string
 		width := failoverRaceWidth
 		var accept func(*generation) error
-		var prefer func(*generation) bool
-		if hls, ok := m.deps.HLSLookup(s.id); ok && hls != nil {
-			if p, ok := hls.(interface{ SwapWouldCopyVideo(core.MediaInfo) bool }); ok {
-				prefer = func(next *generation) bool { return p.SwapWouldCopyVideo(next.infoSnapshot()) }
-			}
-		}
 		if fo.down {
 			width = 2
 			accept = func(next *generation) error {
@@ -799,26 +801,37 @@ func (m *Manager) failoverWith(ctx context.Context, s *session, observed *genera
 				return nil
 			}
 		}
-		g, failed, lastErr = m.raceAlternates(ctx, s, tried, alternates, fallback, width, accept, prefer)
+		g, failed, lastErr = m.raceAlternates(ctx, s, tried, alternates, fallback, width, accept, preferCopy)
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
 		tried = append(tried, failed...)
 	}
+	var copySearchCtx context.Context
+	var cancelCopySearch context.CancelFunc
+	defer func() {
+		if cancelCopySearch != nil {
+			cancelCopySearch()
+		}
+	}()
 	for attempt := 0; g == nil && attempt < m.opts.MaxAttempts; attempt++ {
+		attemptCtx := ctx
+		if copySearchCtx != nil {
+			attemptCtx = copySearchCtx
+		}
 		res := prepared
 		prepared = nil
 		var err error
 		if res == nil {
-			res, err = m.nextResolution(ctx, s, tried, alternates)
+			res, err = m.nextResolution(attemptCtx, s, tried, alternates)
 		}
 		if err != nil {
 			lastErr = err
 			break
 		}
-		g, err = m.openGeneration(ctx, s, res, fallback)
+		g, err = m.openGeneration(attemptCtx, s, res, fallback)
 		if err == nil {
-			if perr := m.preflightSwap(ctx, s, g); perr != nil {
+			if perr := m.preflightSwap(attemptCtx, s, g); perr != nil {
 				m.dropGeneration(g)
 				g, err = nil, perr
 			}
@@ -861,6 +874,20 @@ func (m *Manager) failoverWith(ctx context.Context, s *session, observed *genera
 				err = fmt.Errorf("down-failover candidate is not lower bitrate: %w", core.ErrNotAvailable)
 			}
 		}
+		if err == nil && preferCopy != nil && !preferCopy(g) {
+			if fallbackGen == nil {
+				fallbackGen = g
+				copySearchCtx, cancelCopySearch = context.WithTimeout(ctx, 500*time.Millisecond)
+			} else {
+				m.dropGeneration(g)
+			}
+			g = nil
+			tried = append(tried, res.Release.ID)
+			if len(res.Alternates) > 0 {
+				alternates = res.Alternates
+			}
+			continue
+		}
 		if err == nil {
 			break
 		}
@@ -892,8 +919,11 @@ func (m *Manager) failoverWith(ctx context.Context, s *session, observed *genera
 	if g == nil && fallbackGen != nil {
 		// No exact-size repost: do not splice. Swap anyway and restart
 		// the client as a zero-encode remux at the mapped time.
-		g, fallbackGen, remuxSwitch = fallbackGen, nil, true
-		log.Warn("no exact-size direct-play replacement; switching to remux", "release", g.res.Release.Name)
+		g, fallbackGen = fallbackGen, nil
+		if direct {
+			remuxSwitch = true
+			log.Warn("no exact-size direct-play replacement; switching to remux", "release", g.res.Release.Name)
+		}
 	}
 	if fallbackGen != nil {
 		m.dropGeneration(fallbackGen)
