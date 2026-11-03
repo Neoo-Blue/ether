@@ -24,24 +24,33 @@ func (c *Catalog) refreshShowAdded(ctx context.Context) error {
 	if store.DialectOf(c.db) == store.SQLite {
 		indexHint = " INDEXED BY catalog_titles_episode_recent"
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT released_ts,key,show_key FROM catalog_titles`+indexHint+` WHERE type='episode' AND release_known=1 AND released_ts<=? AND released_ts>=? AND (released_ts>? OR key<?) ORDER BY released_ts ASC,key DESC LIMIT 256`, now, ts, ts, key)
-	if err != nil {
-		return err
-	}
 	type episode struct{ ts, key, show int64 }
 	var batch []episode
-	for rows.Next() {
-		var e episode
-		if err = rows.Scan(&e.ts, &e.key, &e.show); err != nil {
-			rows.Close()
+	read := func(predicate string, args ...any) error {
+		args = append(args, 256-len(batch))
+		rows, err := tx.QueryContext(ctx, `SELECT released_ts,key,show_key FROM catalog_titles`+indexHint+` WHERE type='episode' AND release_known=1 AND `+predicate+` ORDER BY released_ts ASC,key DESC LIMIT ?`, args...)
+		if err != nil {
 			return err
 		}
-		batch = append(batch, e)
+		defer rows.Close()
+		for rows.Next() {
+			var e episode
+			if err := rows.Scan(&e.ts, &e.key, &e.show); err != nil {
+				return err
+			}
+			batch = append(batch, e)
+		}
+		return rows.Err()
 	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return err
+	if ts <= now {
+		if err = read(`released_ts=? AND key<?`, ts, key); err != nil {
+			return err
+		}
+		if len(batch) < 256 {
+			if err = read(`released_ts>? AND released_ts<=?`, ts, now); err != nil {
+				return err
+			}
+		}
 	}
 	for _, e := range batch {
 		// A recomputation handles a premiere later than an earlier aired episode.
