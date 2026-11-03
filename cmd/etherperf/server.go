@@ -54,7 +54,7 @@ func startServer(ctx context.Context, bin, dataDir string, port int, trace, logP
 		}
 	}
 	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Env = append(os.Environ(), "ETHER_PORT="+strconv.Itoa(port), "ETHER_PERF_TRACE="+trace, "ETHER_DATA_DIR="+dataDir, "ETHER_PPROF_ADDR=127.0.0.1:"+strconv.Itoa(port+9))
+	cmd.Env = append(os.Environ(), "ETHER_PORT="+strconv.Itoa(port), "ETHER_PERF_TRACE="+trace, "ETHER_PERF_ALLOC=1", "ETHER_DATA_DIR="+dataDir, "ETHER_PPROF_ADDR=127.0.0.1:"+strconv.Itoa(port+9))
 	cmd.Stdout, cmd.Stderr = logFile, logFile
 	setProcessGroup(cmd)
 	s := &server{cmd: cmd, port: port, started: time.Now(), exited: make(chan struct{})}

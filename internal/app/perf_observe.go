@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,6 +22,11 @@ import (
 // (surface, path, status, duration and its database work). cmd/etherperf
 // sets it; production leaves it unset.
 const PerfTraceEnv = "ETHER_PERF_TRACE"
+
+// PerfAllocEnv enables process-wide allocation sampling for tagged traces.
+// ReadMemStats stops the runtime briefly, so ordinary traces and the scale
+// gate leave it off; etherperf enables it for its isolated measurements.
+const PerfAllocEnv = "ETHER_PERF_ALLOC"
 
 // PerfTraceDepthEnv sets how many callers each traced statement's site
 // records (default 1).
@@ -50,10 +56,11 @@ type perfObserver struct {
 	lastWarn map[string]time.Time
 	trace    *os.File
 	encoder  *json.Encoder
+	alloc    bool
 }
 
 func newPerfObserver(log *slog.Logger) *perfObserver {
-	p := &perfObserver{log: log, lastWarn: make(map[string]time.Time)}
+	p := &perfObserver{log: log, lastWarn: make(map[string]time.Time), alloc: os.Getenv(PerfAllocEnv) == "1"}
 	if path := strings.TrimSpace(os.Getenv(PerfTraceEnv)); path != "" {
 		f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 		if err != nil {
@@ -95,6 +102,8 @@ type PerfTraceRecord struct {
 	Rows       int64                 `json:"rows"`
 	DBTime     time.Duration         `json:"dbTime"`
 	LockWait   time.Duration         `json:"lockWait"`
+	AllocBytes uint64                `json:"allocBytes,omitempty"`
+	Allocs     uint64                `json:"allocs,omitempty"`
 	Statements []store.StatementStat `json:"statements,omitempty"`
 }
 
@@ -119,13 +128,22 @@ func (p *perfObserver) wrap(surface string, next http.Handler) http.Handler {
 			recorder = middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			w = recorder
 		}
+		var before runtime.MemStats
+		if tracing && p.alloc && r.Header.Get(PerfTagHeader) != "" {
+			runtime.ReadMemStats(&before)
+		}
 		next.ServeHTTP(w, r.WithContext(ctx))
 		elapsed := time.Since(start)
 		if tracing {
+			var after runtime.MemStats
+			if p.alloc && r.Header.Get(PerfTagHeader) != "" {
+				runtime.ReadMemStats(&after)
+			}
 			p.writeTrace(PerfTraceRecord{
 				Tag: r.Header.Get(PerfTagHeader), Surface: surface, Method: r.Method, Path: r.URL.Path, Status: recorder.Status(), Bytes: recorder.BytesWritten(),
 				Start: start, Duration: elapsed, Queries: stats.Queries(), Writes: stats.Writes(), Rows: stats.Rows(), DBTime: stats.DBTime(), LockWait: stats.LockWait(),
 				Statements: stats.Statements(),
+				AllocBytes: after.TotalAlloc - before.TotalAlloc, Allocs: after.Mallocs - before.Mallocs,
 			})
 		}
 		p.budget(surface, r, w.Header().Get("Content-Type"), elapsed, stats)

@@ -143,6 +143,10 @@ func sanitizeConfig(path string, port int) error {
 	server["port"] = port
 	server["bindAddress"] = "127.0.0.1"
 	server["webFrameOrigins"] = []any{}
+	// A production snapshot may contain absolute paths on another host. Keep
+	// all cache and transcode writes inside the disposable data directory.
+	section("cache")["dir"] = filepath.Join(filepath.Dir(path), "perf-cache")
+	section("transcode")["tempDir"] = filepath.Join(filepath.Dir(path), "perf-transcode")
 	c["frontendPorts"] = map[string]any{"jellyfin": port + 1, "emby": port + 2, "silo": port + 3}
 	plex := section("plex")
 	plex["remoteAccess"] = false

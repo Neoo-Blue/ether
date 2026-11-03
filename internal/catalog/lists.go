@@ -13,6 +13,7 @@ import (
 	"golang.org/x/text/unicode/norm"
 
 	"github.com/braedonsaunders/ether/internal/core"
+	"github.com/braedonsaunders/ether/internal/reqmemo"
 	"github.com/braedonsaunders/ether/internal/tmdb"
 )
 
@@ -55,6 +56,67 @@ func limitTitles(items []core.Title, limit int) []core.Title {
 		return []core.Title{}
 	}
 	return items
+}
+
+// reloadSummaries retains the source order and fallback used by the old
+// per-title reads, while hydrating all saved summaries in bounded batches.
+// It deliberately does not apply browse visibility: Collection may include
+// future members, and its caller applies its own policy.
+func (c *Catalog) reloadSummaries(ctx context.Context, titles []core.Title) []core.Title {
+	if len(titles) == 0 {
+		return titles
+	}
+	byKey := make(map[core.RatingKey]core.Title, len(titles))
+	const batch = 200
+	for start := 0; start < len(titles); start += batch {
+		part := titles[start:min(start+batch, len(titles))]
+		args := make([]any, len(part))
+		for i := range part {
+			args[i] = int64(part[i].Key)
+		}
+		rows, err := c.db.QueryContext(ctx, `SELECT `+titleCols+` FROM catalog_titles WHERE key IN (`+placeholders(len(args))+`)`, args...)
+		if err != nil {
+			return c.reloadSummariesIndividually(ctx, titles)
+		}
+		var found []core.Title
+		for rows.Next() {
+			st, err := scanTitle(rows)
+			if err != nil {
+				rows.Close()
+				return c.reloadSummariesIndividually(ctx, titles)
+			}
+			found = append(found, st.t)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil || c.hydrateSlice(ctx, found) != nil {
+			return c.reloadSummariesIndividually(ctx, titles)
+		}
+		for _, t := range found {
+			byKey[t.Key] = t
+		}
+	}
+	out := make([]core.Title, 0, len(titles))
+	for _, t := range titles {
+		if found, ok := byKey[t.Key]; ok {
+			out = append(out, found)
+		} else {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+func (c *Catalog) reloadSummariesIndividually(ctx context.Context, titles []core.Title) []core.Title {
+	out := make([]core.Title, 0, len(titles))
+	for _, t := range titles {
+		if st, err := c.loadByKey(ctx, t.Key); err == nil {
+			out = append(out, st.t)
+		} else {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // A search waits at most searchRemoteWait for TMDB when the mirror has too
@@ -549,6 +611,35 @@ func (c *Catalog) Similar(ctx context.Context, key core.RatingKey, limit int) ([
 	if limit <= 0 {
 		limit = 20
 	}
+	items, err := reqmemo.Do(ctx, fmt.Sprintf("catalog:similar:%p:%d:%d", c, key, limit), func() ([]core.Title, error) {
+		return c.similar(ctx, key, limit)
+	})
+	return copySummaryTitles(items), err
+}
+
+func copySummaryTitles(items []core.Title) []core.Title {
+	if items == nil {
+		return nil
+	}
+	out := make([]core.Title, len(items))
+	for i := range items {
+		t := items[i]
+		t.Genres = slices.Clone(t.Genres)
+		t.Keywords = slices.Clone(t.Keywords)
+		t.AlternativeTitles = slices.Clone(t.AlternativeTitles)
+		t.ShowAlternativeTitles = slices.Clone(t.ShowAlternativeTitles)
+		t.Studios = slices.Clone(t.Studios)
+		t.Countries = slices.Clone(t.Countries)
+		t.Cast = slices.Clone(t.Cast)
+		t.Directors = slices.Clone(t.Directors)
+		t.Writers = slices.Clone(t.Writers)
+		t.Crew = slices.Clone(t.Crew)
+		out[i] = t
+	}
+	return out
+}
+
+func (c *Catalog) similar(ctx context.Context, key core.RatingKey, limit int) ([]core.Title, error) {
 	// Resolve seasons/episodes to their show.
 	kind := key.Kind()
 	id := key.TMDB()
@@ -613,19 +704,24 @@ func (c *Catalog) Similar(ctx context.Context, key core.RatingKey, limit int) ([
 	if err := c.upsertSummaries(ctx, out, false); err != nil {
 		return nil, err
 	}
-	reloaded := make([]core.Title, 0, len(out))
-	for _, it := range out {
-		if st, err := c.loadByKey(ctx, it.Key); err == nil {
-			reloaded = append(reloaded, st.t)
-		} else {
-			reloaded = append(reloaded, it)
-		}
-	}
+	reloaded := c.reloadSummaries(ctx, out)
 	return c.releasedTitles(reloaded), nil
 }
 
 // Collection returns a TMDB franchise and its parts sorted by release date.
 func (c *Catalog) Collection(ctx context.Context, tmdbCollection int64) (string, []core.Title, error) {
+	type collectionResult struct {
+		name  string
+		items []core.Title
+	}
+	r, err := reqmemo.Do(ctx, fmt.Sprintf("catalog:collection:%p:%d", c, tmdbCollection), func() (collectionResult, error) {
+		name, items, err := c.collection(ctx, tmdbCollection)
+		return collectionResult{name, items}, err
+	})
+	return r.name, copySummaryTitles(r.items), err
+}
+
+func (c *Catalog) collection(ctx context.Context, tmdbCollection int64) (string, []core.Title, error) {
 	if tmdbCollection <= 0 {
 		return "", nil, core.ErrNotFound
 	}
@@ -646,14 +742,7 @@ func (c *Catalog) Collection(ctx context.Context, tmdbCollection int64) (string,
 			if err := c.upsertSummaries(ctx, items, false); err != nil {
 				return d.Name, nil, err
 			}
-			out := make([]core.Title, 0, len(items))
-			for _, it := range items {
-				if st, err := c.loadByKey(ctx, it.Key); err == nil {
-					out = append(out, st.t)
-				} else {
-					out = append(out, it)
-				}
-			}
+			out := c.reloadSummaries(ctx, items)
 			return d.Name, c.releasedTitles(out), nil
 		} else if isNotFound(err) {
 			return "", nil, err

@@ -6,6 +6,8 @@ import (
 	"database/sql/driver"
 	"sync"
 	"time"
+
+	"modernc.org/sqlite"
 )
 
 func init() {
@@ -33,10 +35,33 @@ func (d *stmtDriver) Open(name string) (driver.Conn, error) {
 
 const stmtPoolCap = 4
 
+// A reservation bounds the entire connection's SQLite statement memory,
+// including in-use statements, plus the cache's SQL keys and bookkeeping.
+// Fixed reservations avoid closing statements on another connection while it
+// is in use and impose a process-wide bound without serializing readers.
+const stmtCacheConnections = 16
+const stmtCacheBytes = 2 << 20
+const stmtCacheEntries = 128
+
+var stmtReservations struct {
+	sync.Mutex
+	count int
+}
+
+type stmtRank struct {
+	hits uint32
+	used uint64
+}
+
 type stmtConn struct {
-	inner driver.Conn
-	mu    sync.Mutex
-	free  map[string][]driver.Stmt
+	inner        driver.Conn
+	mu           sync.Mutex
+	free         map[string][]driver.Stmt
+	rank         map[string]stmtRank
+	clock        uint64
+	reserved     bool
+	freeEntries  int
+	freeOverhead int
 	// gate admits one writer at a time among this process's connections to
 	// the database; inTx is set while this connection's write transaction
 	// holds it. database/sql uses a connection from one goroutine at a time.
@@ -76,6 +101,15 @@ func (c *stmtConn) prepare(query string) (driver.Stmt, error) {
 	if n := len(c.free[query]); n > 0 {
 		stmt := c.free[query][n-1]
 		c.free[query] = c.free[query][:n-1]
+		c.freeEntries--
+		c.freeOverhead -= 2*len(query) + 512
+		c.clock++
+		r := c.rank[query]
+		if r.hits < 255 {
+			r.hits++
+		}
+		r.used = c.clock
+		c.rank[query] = r
 		c.mu.Unlock()
 		return stmtHold{owner: c, query: query, inner: stmt}, nil
 	}
@@ -92,14 +126,90 @@ func (c *stmtConn) prepare(query string) (driver.Stmt, error) {
 func (c *stmtConn) release(query string, stmt driver.Stmt) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	status, ok := c.inner.(sqlite.DBStatus)
+	if !ok {
+		_ = stmt.Close()
+		return
+	}
+	if !c.reserved {
+		stmtReservations.Lock()
+		if stmtReservations.count < stmtCacheConnections {
+			stmtReservations.count++
+			c.reserved = true
+		}
+		stmtReservations.Unlock()
+		if !c.reserved {
+			_ = stmt.Close()
+			return
+		}
+	}
 	if c.free == nil {
 		c.free = map[string][]driver.Stmt{}
+	}
+	if c.rank == nil {
+		c.rank = map[string]stmtRank{}
 	}
 	if len(c.free[query]) >= stmtPoolCap {
 		_ = stmt.Close()
 		return
 	}
 	c.free[query] = append(c.free[query], stmt)
+	c.freeEntries++
+	c.freeOverhead += 2*len(query) + 512
+	c.clock++
+	// Age old popularity so formerly hot shapes do not permanently crowd out
+	// a new working set. Repeatedly used statements remain protected from a
+	// stream of single-use IN-list shapes.
+	if c.clock%1024 == 0 {
+		for q, rank := range c.rank {
+			rank.hits /= 2
+			c.rank[q] = rank
+		}
+	}
+	r := c.rank[query]
+	r.used = c.clock
+	c.rank[query] = r
+	for {
+		bytes, _, err := status.Status(sqlite.DBStatusStmtUsed, false)
+		if err == nil && c.freeEntries <= stmtCacheEntries && bytes+c.freeOverhead <= stmtCacheBytes {
+			break
+		}
+		var victim string
+		var vr stmtRank
+		found := false
+		for q, list := range c.free {
+			if len(list) == 0 {
+				continue
+			}
+			r := c.rank[q]
+			if !found || r.hits < vr.hits || (r.hits == vr.hits && r.used < vr.used) {
+				victim, vr, found = q, r, true
+			}
+		}
+		if !found {
+			break
+		}
+		list := c.free[victim]
+		_ = list[len(list)-1].Close()
+		c.freeEntries--
+		c.freeOverhead -= 2*len(victim) + 512
+		if len(list) == 1 {
+			delete(c.free, victim)
+			delete(c.rank, victim)
+		} else {
+			c.free[victim] = list[:len(list)-1]
+		}
+	}
+	// A connection with no reusable statement must not hold a process-wide
+	// reservation and starve connections which could use one.
+	if c.freeEntries == 0 {
+		clear(c.free)
+		clear(c.rank)
+		stmtReservations.Lock()
+		stmtReservations.count--
+		stmtReservations.Unlock()
+		c.reserved = false
+	}
 }
 
 func (c *stmtConn) Begin() (driver.Tx, error) {
@@ -165,6 +275,15 @@ func (c *stmtConn) Close() error {
 		}
 	}
 	c.free = map[string][]driver.Stmt{}
+	c.rank = nil
+	c.freeEntries = 0
+	c.freeOverhead = 0
+	if c.reserved {
+		stmtReservations.Lock()
+		stmtReservations.count--
+		stmtReservations.Unlock()
+		c.reserved = false
+	}
 	c.mu.Unlock()
 	return c.inner.Close()
 }

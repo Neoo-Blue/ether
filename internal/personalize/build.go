@@ -12,6 +12,7 @@ import (
 
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/recommend"
+	"github.com/braedonsaunders/ether/internal/reqmemo"
 	"github.com/braedonsaunders/ether/internal/schedule"
 )
 
@@ -399,11 +400,20 @@ func (e *Engine) runGenerator(g generator, b *builder) (rows []*candRow) {
 
 // buildTaste builds only the taste model (owner views, PersonalScorer).
 func (e *Engine) buildTaste(ctx context.Context, user core.User) (*Taste, map[core.RatingKey]int, error) {
-	in, _, err := e.gatherTaste(ctx, user)
-	if err != nil {
-		return nil, nil, err
+	type result struct {
+		taste *Taste
+		shown map[core.RatingKey]int
 	}
-	return buildTaste(in), in.shownDays, nil
+	// The same detail request scores several related hubs. Reuse its evidence
+	// only within that request and viewer, never across requests or engines.
+	r, err := reqmemo.Do(ctx, fmt.Sprintf("personalize:taste:%p:%#v", e, user), func() (result, error) {
+		in, _, err := e.gatherTaste(ctx, user)
+		if err != nil {
+			return result{}, err
+		}
+		return result{taste: buildTaste(in), shown: in.shownDays}, nil
+	})
+	return r.taste, r.shown, err
 }
 
 // gatherTaste collects a viewer's evidence: history, statuses, plays,
