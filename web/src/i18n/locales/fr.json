@@ -3386,6 +3386,7 @@
   "m_111888699d018d": "Profils Dolby Vision",
   "m_11189afad1df74": "Nom de l'en-tête",
   "m_1119e8ddc53c66": "Effacer les journaux ?",
+  "m_1119ed48e63baf": "Masquer correspond uniquement si tous les pays de production sont indiqués. Afficher correspond si au moins un pays est indiqué.",
   "m_111a1cf913db9f": "Toutes les versions ont été écartées. Raison la plus fréquente : {reason}",
   "m_111afbd36f9f48": "Supprimer l’exclusion {n}",
   "m_111cf4da83ecbb": "Classification maximale de la télévision en direct",

@@ -320,7 +320,17 @@ func (c *Catalog) putSnapshotLocked(key core.RatingKey, gen uint64, minute int64
 }
 
 func (c *Catalog) CachedGetMany(ctx context.Context, keys []core.RatingKey) (map[core.RatingKey]core.Title, error) {
-	return c.cachedGetMany(ctx, keys, true)
+	out, err := c.cachedGetMany(ctx, keys, true)
+	if err != nil {
+		return nil, err
+	}
+	filter := c.searchFilter()
+	for key, title := range out {
+		if filter.Hidden(&title) {
+			delete(out, key)
+		}
+	}
+	return out, nil
 }
 
 // cachedGetMany reads local titles. reuse serves the minute snapshot, which a

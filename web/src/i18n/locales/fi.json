@@ -3303,6 +3303,7 @@
   "m_111888699d018d": "Dolby Vision -profiilit",
   "m_11189afad1df74": "Otsakkeen nimi",
   "m_1119e8ddc53c66": "Tyhjennetäänkö lokit?",
+  "m_1119ed48e63baf": "Piilotus täsmää vain, kun kaikki tuotantomaat on lueteltu. Näyttö täsmää, kun jokin maa on lueteltu.",
   "m_111a1cf913db9f": "Kaikki julkaisut suljettiin pois. Yleisin syy: {reason}",
   "m_111afbd36f9f48": "Poista poissulkeminen {n}",
   "m_111cf4da83ecbb": "Live-TV:n enimmäisikäraja",

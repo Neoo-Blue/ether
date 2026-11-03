@@ -3303,6 +3303,7 @@
   "m_111888699d018d": "Dolby Vision-profiler",
   "m_11189afad1df74": "Rubriknamn",
   "m_1119e8ddc53c66": "Rensa loggarna?",
+  "m_1119ed48e63baf": "Dölj matchar bara när alla produktionsländer är angivna. Visa matchar när något av länderna är angivet.",
   "m_111a1cf913db9f": "Alla utgåvor uteslöts. Vanligaste orsaken: {reason}",
   "m_111afbd36f9f48": "Ta bort undantag {n}",
   "m_111cf4da83ecbb": "Högsta åldersgräns för Live-TV",

@@ -458,6 +458,9 @@ export function RulesPanel({
                 </p>
               </div>
             ) : null}
+            {editing.rules.some((rule) => rule.field === "country" && (rule.op === "in" || rule.op === "is")) && (
+              <p className="text-xs text-fg-muted">{t("Hide matches only when every production country is listed. Show matches when any country is listed.")}</p>
+            )}
             {editing.rules.map((rule, j) => (
               <RuleRow
                 key={j}

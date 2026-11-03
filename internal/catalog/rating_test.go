@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -111,7 +112,7 @@ func TestCertificationSelectionAndLibraryAllowlist(t *testing.T) {
 		if _, err := c.StoredTitle(ctx, tc.key); err == nil {
 			t.Fatalf("%v already stored", tc.key)
 		}
-		if _, err := c.Get(ctx, tc.key); err != nil {
+		if _, err := c.Get(ctx, tc.key); (tc.key == core.MovieKey(702) && !errors.Is(err, core.ErrNotFound)) || (tc.key != core.MovieKey(702) && err != nil) {
 			t.Fatalf("Get %v: %v", tc.key, err)
 		}
 		value, rank, source := stored(t, db, tc.key)

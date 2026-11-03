@@ -3303,6 +3303,7 @@
   "m_111888699d018d": "Dolby Vision-profiler",
   "m_11189afad1df74": "Headernavn",
   "m_1119e8ddc53c66": "Tømme loggene?",
+  "m_1119ed48e63baf": "Skjul samsvarer bare når alle produksjonsland er oppført. Vis samsvarer når minst ett land er oppført.",
   "m_111a1cf913db9f": "Alle utgivelser ble utelukket. Vanligste årsak: {reason}",
   "m_111afbd36f9f48": "Fjern utelukkelse {n}",
   "m_111cf4da83ecbb": "Maksimal aldersgrense for Direkte-TV",
