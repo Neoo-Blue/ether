@@ -80,6 +80,7 @@ type chunkRun struct {
 	prerollOK  bool
 	prerollSeg int
 	failed     bool // output that cannot be published: see failChunkRun
+	tsBoundary *tsDiscontinuity
 }
 
 // chunkStart is the media time a chunk starts at (its first video
@@ -664,6 +665,21 @@ func (s *Session) collectChunks(r *run, exited bool) {
 		if err := assembleChunks(file, s.container, o.chunks, s.removals.remove); err != nil {
 			s.log.Warn("assemble HLS segment", "run", r.seq, "segment", o.n, "err", err)
 			continue
+		}
+		if cr.tsBoundary != nil {
+			s.mu.Lock()
+			track := r.track
+			if track < 0 || track >= len(s.done) {
+				track = 0
+			}
+			publish := !s.closed && (!r.stopped || s.cur == r) && o.n >= r.startSeg && (r.planEnd <= 0 || o.n < r.planEnd) && !s.done[track][o.n]
+			s.mu.Unlock()
+			if publish {
+				if err := cr.tsBoundary.mark(file); err != nil {
+					s.failChunkRun(r, cr, file, fmt.Errorf("transcode: mark TS handoff: %w", err))
+					return
+				}
+			}
 		}
 		segs = append(segs, chunkSeg{n: o.n, file: file, alias: -1})
 	}
