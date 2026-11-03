@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/braedonsaunders/ether/internal/plugins/kit"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -26,6 +27,8 @@ func newTestStudio(t *testing.T) (*Studio, *plugins.Manager, *[]string) {
 		DB:       db,
 		Registry: reg,
 		Tools:    cat,
+		// The production install check, so installs are tested as shipped.
+		CheckPackage: kit.CheckInstall,
 	})
 	if err != nil {
 		t.Fatalf("new manager: %v", err)
@@ -353,5 +356,32 @@ func TestMountedStudioRoute(t *testing.T) {
 	s.WrapPluginHandler(nil).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/studio/projects", nil))
 	if w.Code != 200 {
 		t.Fatalf("mounted route returned %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// A Studio draft installs as a working plugin: the installed runtime loads
+// the bundle Studio built instead of bundling it a second time.
+func TestInstalledDraftRunsItsHandler(t *testing.T) {
+	s, mgr, _ := newTestStudio(t)
+	ctx := context.Background()
+	p, err := s.CreateProject(ctx, CreateProjectOptions{Template: "page", Name: "Install check"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := s.InstallProject(ctx, p.ID, plugins.InstallOptions{})
+	if err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	src, err := s.buildInstallSource(ctx, p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	man, _ := plugins.ParseManifest(src.Manifest)
+	if man.Ether.Runtime.Entry != installBundlePath || len(src.Files[installBundlePath]) == 0 {
+		t.Fatalf("install entry %q, bundle %d bytes", man.Ether.Runtime.Entry, len(src.Files[installBundlePath]))
+	}
+	resp, err := mgr.Call(ctx, rec.ID, plugins.Request{Method: http.MethodGet, Path: "/ether/health"})
+	if err != nil || resp.Status != http.StatusOK {
+		t.Fatalf("installed draft did not answer: %v %+v", err, resp)
 	}
 }

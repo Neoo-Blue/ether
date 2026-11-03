@@ -1,7 +1,7 @@
 import { AgentPanel, type AgentMessage } from "@braedonsaunders/appkit-ai/react";
-import { Badge, Button, SearchSelect, Textarea } from "@braedonsaunders/appkit-ui";
+import { Badge, Button, Dialog, SearchSelect, Textarea, toast } from "@braedonsaunders/appkit-ui";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Workspace } from "../../components/workspace";
 import {
   decideAgentApproval,
@@ -11,6 +11,10 @@ import {
 import { approvalRequestLabels } from "../../components/agent/approvalLabels";
 import { apiFetch, apiStream, errorMessage } from "../../lib/api";
 import { PluginView } from "../../viewspec/PluginView";
+import { formatDateTime } from "../../lib/format";
+import { invalidateRegistry } from "../../lib/extend";
+import { PermissionSheet } from "./PermissionSheet";
+import type { InstallPreview } from "./types";
 import { t } from "../../i18n";
 import { searchSelectLabels } from "../../i18n/appkit-labels";
 import type { StudioProject, StudioProjectSummary, StudioCompileResult } from "./develop/types";
@@ -116,6 +120,52 @@ export default function LiveStudio() {
       { status: response.status, headers: response.headers },
     );
   };
+  const navigate = useNavigate();
+  const [installing, setInstalling] = useState<InstallPreview | null>(null);
+  const [grantViewers, setGrantViewers] = useState<number[]>([]);
+  const [grantFolders, setGrantFolders] = useState<string[]>([]);
+  const [installBusy, setInstallBusy] = useState(false);
+  const [installError, setInstallError] = useState("");
+  const openInstall = async () => {
+    if (!project) return;
+    setInstallError("");
+    setGrantViewers([]);
+    setGrantFolders([]);
+    try {
+      const r = await apiFetch<{ preview: InstallPreview }>(
+        `/plugins/studio/projects/${encodeURIComponent(project.id)}/install/preview`,
+        { method: "POST", body: "{}" },
+      );
+      setInstalling(r.preview);
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  };
+  const install = async () => {
+    if (!project || !installing) return;
+    setInstallBusy(true);
+    setInstallError("");
+    try {
+      const r = await apiFetch<{ plugin: { id: string; name: string } }>(
+        `/plugins/studio/projects/${encodeURIComponent(project.id)}/install`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            grants: { viewers: grantViewers, folders: grantFolders },
+            acceptAddedPermissions: true,
+          }),
+        },
+      );
+      setInstalling(null);
+      invalidateRegistry();
+      toast.success(t("{name} is installed", { name: r.plugin.name }));
+      navigate("/plugins/installed");
+    } catch (e) {
+      setInstallError(errorMessage(e));
+    } finally {
+      setInstallBusy(false);
+    }
+  };
   const save = async () => {
     if (!project) return;
     setSaving(true);
@@ -204,12 +254,22 @@ export default function LiveStudio() {
             >
               {t("Code")}
             </Button>
+            {project ? (
+              <Button
+                className="ml-auto"
+                disabled={dirty || (project.diagnostics || []).length > 0}
+                onClick={() => void openInstall()}
+              >
+                {t("Install")}
+              </Button>
+            ) : null}
           </div>
           {project ? (
             <>
               <h2 className="text-lg font-semibold">{project.name}</h2>
               <p className="mb-4 text-xs text-fg-muted">
-                {dirty ? t("Unsaved draft") : t("Saved on server")} · {project.updatedAt}
+                {dirty ? t("Unsaved draft") : t("Saved on server")} ·{" "}
+                {formatDateTime(project.updatedAt)}
               </p>
               {(project.diagnostics || []).map((d, i) => (
                 <p key={i} className="mb-2 text-sm text-danger">
@@ -271,6 +331,53 @@ export default function LiveStudio() {
           )}
         </section>
       </div>
+      {installing ? (
+        <Dialog
+          open
+          onClose={() => setInstalling(null)}
+          title={t("Install {name}", { name: installing.manifest.name })}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setInstalling(null)}>
+                {t("Cancel")}
+              </Button>
+              <Button disabled={installBusy} onClick={() => void install()}>
+                {installBusy
+                  ? t("Installing…")
+                  : installing.alreadyInstalled
+                    ? t("Update")
+                    : t("Install")}
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-fg-muted">
+              {installing.alreadyInstalled
+                ? t("This replaces version {version} with the saved draft.", {
+                    version: installing.installedVersion ?? "",
+                  })
+                : t("The saved draft becomes a real plugin on this server.")}
+            </p>
+            <PermissionSheet
+              permissions={installing.permissions}
+              verified={installing.verified}
+              needsViewers={installing.needsViewers}
+              needsFolders={installing.needsFolders}
+              viewers={grantViewers}
+              onChangeViewers={setGrantViewers}
+              folders={grantFolders}
+              onChangeFolders={setGrantFolders}
+              addedPermissions={installing.addedPermissions}
+            />
+            {installError ? (
+              <p role="alert" className="text-sm text-danger">
+                {installError}
+              </p>
+            ) : null}
+          </div>
+        </Dialog>
+      ) : null}
     </Workspace>
   );
 }

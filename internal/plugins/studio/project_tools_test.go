@@ -73,3 +73,25 @@ func TestProjectSaveReportsRenderedProblems(t *testing.T) {
 		t.Fatalf("rendered problem not reported: %v", saved.Data["preview"])
 	}
 }
+
+// The agent learns why a draft that previews fine cannot be installed yet,
+// instead of the owner finding out at the Install button.
+func TestProjectSaveReportsInstallCheck(t *testing.T) {
+	s, _, _ := newTestStudio(t)
+	ctx := context.Background()
+	ts := ProjectTools(s)
+	principal := tools.Principal{IsOwner: true, Surface: "console"}
+	created, err := ts[1].Execute(ctx, principal, map[string]any{"template": "page", "name": "Install feedback"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := created.Data["project"].(*Project)
+	src := strings.Replace(p.Files["src/plugin.ts"], `label: "$t:featured_picks"`, `label: "Featured picks"`, 1)
+	saved, err := ts[2].Execute(ctx, principal, map[string]any{"id": p.ID, "updatedAt": p.UpdatedAt.Format(time.RFC3339Nano), "files": map[string]any{"src/plugin.ts": src}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if msg, _ := saved.Data["installCheck"].(string); !strings.Contains(msg, "$t:key") {
+		t.Fatalf("install check not reported: %v", saved.Data["installCheck"])
+	}
+}

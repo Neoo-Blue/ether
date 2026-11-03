@@ -875,6 +875,9 @@ func (s *Studio) InstallProject(ctx context.Context, id string, opts plugins.Ins
 	return s.mgr.Install(ctx, preview, opts)
 }
 
+// installBundlePath is where an installed Studio plugin's compiled bundle lives.
+const installBundlePath = "dist/plugin.js"
+
 func (s *Studio) buildInstallSource(ctx context.Context, id string) (plugins.Source, error) {
 	p, err := s.GetProject(ctx, id)
 	if err != nil {
@@ -892,15 +895,34 @@ func (s *Studio) buildInstallSource(ctx context.Context, id string) (plugins.Sou
 	if err != nil {
 		return plugins.Source{}, err
 	}
+	manifest := json.RawMessage(p.Files["manifest.json"])
 	if man.Ether != nil && man.Ether.Runtime.Entry != "" && len(comp.compiledJS) > 0 {
-		byteFiles[man.Ether.Runtime.Entry] = comp.compiledJS
+		// Install the bundle Studio already built, under a .js entry. Left at
+		// the .ts path, the host would bundle the bundle again and its
+		// exports would vanish inside the second wrapper.
+		entry := installBundlePath
+		byteFiles[entry] = comp.compiledJS
 		if len(comp.sourcemap) > 0 {
-			byteFiles[man.Ether.Runtime.Entry+".map"] = comp.sourcemap
+			byteFiles[entry+".map"] = comp.sourcemap
 		}
+		var doc map[string]any
+		if err := json.Unmarshal(manifest, &doc); err != nil {
+			return plugins.Source{}, err
+		}
+		ether, _ := doc["ether"].(map[string]any)
+		runtime, _ := ether["runtime"].(map[string]any)
+		if runtime == nil {
+			return plugins.Source{}, fmt.Errorf("studio: manifest runtime is missing")
+		}
+		runtime["entry"] = entry
+		if manifest, err = json.Marshal(doc); err != nil {
+			return plugins.Source{}, err
+		}
+		byteFiles["manifest.json"] = manifest
 	}
 	return plugins.Source{
 		Kind:     "studio",
-		Manifest: json.RawMessage(p.Files["manifest.json"]),
+		Manifest: manifest,
 		Files:    byteFiles,
 	}, nil
 }
