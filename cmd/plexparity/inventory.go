@@ -68,6 +68,7 @@ var unprobedRoutes = map[string]string{
 	"/statistics/resources":                  "live host CPU and memory samples differ between any two processes",
 	"/video/:/transcode/universal/start":     "Plex for Mac's protocol=http conversion streams from a live FFmpeg the offline world does not run",
 	"/video/:/transcode/universal/start.mkv": "PM4K's Matroska stream comes from a live FFmpeg the offline world does not run",
+	"/subtitles/:/transcode/universal/start": "Plex Web's direct-play subtitle stream is extracted by a live FFmpeg the offline world does not run",
 	// New in v0.3 (32e51bfaf): pre-32e51bfaf baselines such as v0.2.58 and main
 	// answer 404, and the harness requires every browse fixture to answer 2xx on
 	// both sides.
