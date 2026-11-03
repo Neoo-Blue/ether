@@ -83,13 +83,17 @@ func (s *Service) probeDue(ctx context.Context) error {
 			digital = homes[t.Key]
 		}
 		dueNow := state == "" || !s.now().Before(next)
-		if since, ok := unavailable[t.Key]; ok && state == "found" && since.After(check.checked) {
-			dueNow = true
-		}
 		// A digital or physical date that has arrived is due immediately,
 		// even when an earlier check is still inside its cadence.
 		if !digital.IsZero() && !digital.After(s.now()) && (state == "" || next.Before(digital)) {
 			dueNow = true
+		}
+		if state == "found" {
+			// A found title is available like any other; playback searches
+			// for itself. It is looked for again only if its release turned
+			// out unplayable, which hides it until another is found.
+			since, ok := unavailable[t.Key]
+			dueNow = ok && since.After(check.checked)
 		}
 		if !dueNow {
 			continue
@@ -140,10 +144,6 @@ func (s *Service) probeDue(ctx context.Context) error {
 // every few minutes; a probe only catches what a feed missed, so it runs on
 // hours, never on the one-minute monitor cycle.
 const (
-	// Evidence is kept for a year and playback searches for itself, so a
-	// found title is not searched again for a month, unless its release
-	// turns out unplayable (probeDue).
-	probeFound = 30 * 24 * time.Hour
 	// probeFullEvery is the longest a waiting title goes without a search
 	// of every indexer, feed coverage aside: a release a feed listed under
 	// a name the catalogue could not match is still found.
@@ -162,7 +162,7 @@ const (
 func (s *Service) probeWhen(t core.Title, digital time.Time, known, found bool) time.Time {
 	next := s.probeCadence(t, digital, known, found)
 	wait := next.Sub(s.now())
-	if wait <= 0 {
+	if next.IsZero() || wait <= 0 {
 		return next
 	}
 	return next.Add(time.Duration(uint64(t.Key)*2654435761%1000) * wait / 10000)
@@ -171,7 +171,7 @@ func (s *Service) probeWhen(t core.Title, digital time.Time, known, found bool) 
 func (s *Service) probeCadence(t core.Title, digital time.Time, known, found bool) time.Time {
 	now := s.now()
 	if found {
-		return now.Add(probeFound)
+		return time.Time{} // never: see probeDue
 	}
 	if known && !digital.IsZero() && !digital.After(now) {
 		// Releases usually land around the digital date; look a few times
@@ -330,7 +330,10 @@ func (s *Service) titleCheck(ctx context.Context, key core.RatingKey) (titleChec
 	if err != nil {
 		return titleCheck{}, err
 	}
-	c.checked, c.next = time.Unix(checked, 0), time.Unix(next, 0)
+	c.checked = time.Unix(checked, 0)
+	if next > 0 {
+		c.next = time.Unix(next, 0)
+	}
 	if full > 0 {
 		c.full = time.Unix(full, 0)
 	}
@@ -348,9 +351,13 @@ func (s *Service) saveTitleCheckFull(ctx context.Context, key core.RatingKey, st
 	if !full.IsZero() {
 		fullAt = full.Unix()
 	}
+	nextAt := int64(0) // zero: no scheduled look (a found title)
+	if !next.IsZero() {
+		nextAt = next.Unix()
+	}
 	_, err := s.db.ExecContext(ctx, `INSERT INTO availability_title_checks(rating_key,checked_at,next_check,state,reason,full_at) VALUES(?,?,?,?,?,?)
  ON CONFLICT(rating_key) DO UPDATE SET checked_at=excluded.checked_at,next_check=excluded.next_check,state=excluded.state,reason=excluded.reason,full_at=excluded.full_at`,
-		int64(key), s.now().Unix(), next.Unix(), state, reason, fullAt)
+		int64(key), s.now().Unix(), nextAt, state, reason, fullAt)
 	return err
 }
 
