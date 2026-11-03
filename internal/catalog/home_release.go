@@ -26,18 +26,23 @@ func homeReleaseCutoff(now time.Time) int64 {
 	return cutoff.Unix()
 }
 
-// homeReleaseVisible accepts a passed home date or the cinema-age admission.
+// homeReleaseVisible accepts a passed home date. Only when no home date is
+// known does the cinema-age admission stand in for one: a known future
+// digital date is never overridden.
 func homeReleaseVisible(t *core.Title, now time.Time) bool {
 	if t.Type != core.TypeMovie {
 		return true
 	}
-	return HomeReleaseAgeAdmitted(t, now) || (t.HomeReleaseChecked && !t.HomeReleased.IsZero() && !t.HomeReleased.After(now))
+	if t.HomeReleaseChecked && !t.HomeReleased.IsZero() {
+		return !t.HomeReleased.After(now)
+	}
+	return HomeReleaseAgeAdmitted(t, now)
 }
 
 func (c *Catalog) homeVisible(t *core.Title) bool { return homeReleaseVisible(t, c.now()) }
 
 func homeReleaseSQL(alias string) string {
-	return "(" + alias + ".type<>'movie' OR (" + alias + ".release_known=1 AND " + alias + ".released_ts<?) OR EXISTS (SELECT 1 FROM catalog_home_release hr WHERE hr.key=" + alias + ".key AND hr.checked=1 AND hr.earliest_ts<>0 AND hr.earliest_ts<=?))"
+	return "(" + alias + ".type<>'movie' OR (" + alias + ".release_known=1 AND " + alias + ".released_ts<? AND NOT EXISTS (SELECT 1 FROM catalog_home_release hk WHERE hk.key=" + alias + ".key AND hk.checked=1 AND hk.earliest_ts<>0)) OR EXISTS (SELECT 1 FROM catalog_home_release hr WHERE hr.key=" + alias + ".key AND hr.checked=1 AND hr.earliest_ts<>0 AND hr.earliest_ts<=?))"
 }
 
 func (c *Catalog) hydrateHomeRelease(ctx context.Context, items []core.Title) error {
