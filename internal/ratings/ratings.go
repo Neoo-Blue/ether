@@ -214,6 +214,10 @@ func (s *Service) MigrateSecrets(ctx context.Context) (int, error) {
 		return 0, nil
 	}
 	v.APIKey = plain
+	v.BackupAPIKey, _, e = config.OpenWith(s.o.Sealer, v.BackupAPIKey, backupKeyContext(v.BackupProvider)...)
+	if e != nil {
+		return 0, fmt.Errorf("ratings: stored backup API key left unchanged: %w", e)
+	}
 	next, e := s.encodeSettings(v)
 	if e != nil || next == raw {
 		return 0, e

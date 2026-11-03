@@ -128,7 +128,7 @@ func (a *App) handleQualityExplain(w http.ResponseWriter, r *http.Request) {
 		builtin = playbackFloor(neutral, nil)
 		declared = playbackFloor(neutral, cfg.Clients.Overrides)
 	} else if client.Product == "" {
-		declared, builtin = core.ClientCaps{Remote: in.Remote}, core.ClientCaps{Remote: in.Remote}
+		declared, builtin = core.ClientCaps{Remote: in.Remote, HDR10: true, DolbyVision: true}, core.ClientCaps{Remote: in.Remote, HDR10: true, DolbyVision: true}
 	}
 
 	q := resolver.QualityQuestion{Quality: cfg.Quality, Caps: declared, Builtin: &builtin, User: u, RemoteMaxBitrateKbps: cfg.Transcode.RemoteMaxBitrateKbps}
