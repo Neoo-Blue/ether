@@ -62,17 +62,26 @@ func rewriteHLS(body []byte, base *url.URL, rewrite func(string) string) ([]byte
 	return []byte(strings.Join(lines, "\n")), nil
 }
 func (s *Service) upstream(ctx context.Context, raw string, r *http.Request) (*http.Response, error) {
-	return s.upstreamWithHeaders(ctx, raw, r, nil)
+	return s.upstreamWithHeaders(ctx, raw, r, nil, raw)
 }
 
-func (s *Service) upstreamWithHeaders(ctx context.Context, raw string, r *http.Request, headers http.Header) (*http.Response, error) {
+func (s *Service) upstreamWithHeaders(ctx context.Context, raw string, r *http.Request, headers http.Header, source string) (*http.Response, error) {
+	originURL, err := url.Parse(source)
+	if err != nil {
+		return nil, err
+	}
+	origin := relayOrigin(originURL)
+	client := *s.o.HTTPClient
+	scopeInputRedirects(&client, origin, headers, r.Header.Get("User-Agent"))
 	var last error
 	for attempt := 0; attempt < 3; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, raw, nil)
 		if err != nil {
 			return nil, err
 		}
-		req.Header = headers.Clone()
+		if relayOrigin(req.URL) == origin {
+			req.Header = headers.Clone()
+		}
 		if req.Header == nil {
 			req.Header = make(http.Header)
 		}
@@ -81,7 +90,7 @@ func (s *Service) upstreamWithHeaders(ctx context.Context, raw string, r *http.R
 				req.Header.Set(name, v)
 			}
 		}
-		res, err := s.o.HTTPClient.Do(req)
+		res, err := client.Do(req)
 		if err == nil && res.StatusCode < 500 && res.StatusCode != 429 {
 			return res, nil
 		}
@@ -122,7 +131,7 @@ func (s *Service) ServeResource(w http.ResponseWriter, r *http.Request, id, key 
 	// Buffer one bounded HLS object before publishing headers. A dropped
 	// connection can then be retried without corrupting the client response.
 	for attempt := 0; attempt < 3; attempt++ {
-		res, err = s.upstreamWithHeaders(r.Context(), raw, r, ss.inputHeaders)
+		res, err = s.upstreamWithHeaders(r.Context(), raw, r, ss.inputHeaders, ss.inputURL)
 		if err != nil {
 			s.recordStreamFailure(ss, r.Context(), err)
 			writeStreamError(w, err)
