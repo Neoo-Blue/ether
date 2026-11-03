@@ -7,7 +7,7 @@ import (
 )
 
 func (c *Catalog) compileBrowseGroup(g *core.FilterGroup, alias string, kind core.KeyKind) (string, []any, error) {
-	if g.Unwatched != nil || g.InProgress != nil {
+	if g.Unwatched != nil || g.InProgress != nil || g.LastViewedAfter > 0 || g.LastViewedBefore > 0 {
 		var parts []string
 		var args []any
 		state := func(column string, want bool) {
@@ -31,6 +31,23 @@ func (c *Catalog) compileBrowseGroup(g *core.FilterGroup, alias string, kind cor
 		}
 		if g.InProgress != nil {
 			state("view_offset_ns", *g.InProgress)
+		}
+		if g.LastViewedAfter > 0 || g.LastViewedBefore > 0 {
+			if g.UserID == 0 {
+				parts = append(parts, "1=0")
+			} else {
+				p := "EXISTS (SELECT 1 FROM state_watch w WHERE w.user_id=? AND w.rating_key=" + alias + ".key AND w.last_viewed_at>0"
+				args = append(args, g.UserID)
+				if g.LastViewedAfter > 0 {
+					p += " AND w.last_viewed_at>=?"
+					args = append(args, g.LastViewedAfter)
+				}
+				if g.LastViewedBefore > 0 {
+					p += " AND w.last_viewed_at<=?"
+					args = append(args, g.LastViewedBefore)
+				}
+				parts = append(parts, p+")")
+			}
 		}
 		return strings.Join(parts, " AND "), args, nil
 	}

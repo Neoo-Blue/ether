@@ -575,12 +575,12 @@ func (s *Server) parseBrowse(ctx context.Context, sec Section, t core.MediaType,
 			}
 			key := rule.Field + strings.TrimSuffix(rule.Operator, "=")
 			parsed := s.parseBrowse(ctx, sec, t, nil, url.Values{key: []string{*rule.Value}})
-			if parsed.unwatched != nil || parsed.inProgress != nil {
+			if parsed.unwatched != nil || parsed.inProgress != nil || parsed.lastViewedAfter > 0 || parsed.lastViewedBefore > 0 {
 				var id int64
 				if u != nil && s.d.State != nil {
 					id = u.ID
 				}
-				return &core.FilterGroup{Unwatched: parsed.unwatched, InProgress: parsed.inProgress, UserID: id}
+				return &core.FilterGroup{Unwatched: parsed.unwatched, InProgress: parsed.inProgress, LastViewedAfter: parsed.lastViewedAfter, LastViewedBefore: parsed.lastViewedBefore, UserID: id}
 			}
 			return &core.FilterGroup{Filter: &parsed.q.Filter}
 		}
@@ -1066,6 +1066,21 @@ func (s *Server) browse(ctx context.Context, pr *Request, br browseRequest) ([]c
 	}
 	if br.none {
 		return nil, 0, offset, nil
+	}
+	// Apply watch predicates before catalogue pagination and counting.
+	if br.unwatched != nil || br.inProgress != nil || br.lastViewedAfter > 0 || br.lastViewedBefore > 0 {
+		var id int64
+		if pr.User != nil && s.d.State != nil {
+			id = pr.User.ID
+		}
+		state := core.FilterGroup{UserID: id, Unwatched: br.unwatched, InProgress: br.inProgress, LastViewedAfter: br.lastViewedAfter, LastViewedBefore: br.lastViewedBefore}
+		if br.q.Filter.Group == nil {
+			br.q.Filter.Group = &state
+		} else {
+			br.q.Filter.Group = &core.FilterGroup{Operator: "and", Children: []core.FilterGroup{*br.q.Filter.Group, state}}
+		}
+		br.unwatched, br.inProgress = nil, nil
+		br.lastViewedAfter, br.lastViewedBefore = 0, 0
 	}
 	_, hasBrowseBlocks := s.d.AccessPolicy.(interface {
 		BrowseBlocks(*core.User) ([]string, []string)
