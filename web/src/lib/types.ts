@@ -238,6 +238,7 @@ export interface EtherConfig {
   posters?: PosterProviderConfig;
   availability?: AvailabilityConfig;
   server: {
+    startupAnimation?: boolean;
     port: number;
     bindAddress: string;
     friendlyName: string;

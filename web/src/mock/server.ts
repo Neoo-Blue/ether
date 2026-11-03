@@ -152,6 +152,7 @@ function defaultConfig(): EtherConfig {
       reservePercent: 80,
     },
     server: {
+      startupAnimation: true,
       port: 32400,
       bindAddress: "0.0.0.0",
       friendlyName: "Living Room Ether",
