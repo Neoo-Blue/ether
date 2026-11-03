@@ -292,6 +292,10 @@ func compareCandidates(a, b candidate, profile core.QualityProfile) bool {
 				return a.quality.hdr > b.quality.hdr
 			}
 		case step == core.RankVerified:
+			// Evidence breaks score ties; it must not hide the owner's preferred release.
+			if a.rel.Score != b.rel.Score {
+				return a.rel.Score > b.rel.Score
+			}
 			if a.verified != b.verified {
 				return a.verified
 			}

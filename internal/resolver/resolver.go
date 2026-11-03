@@ -643,41 +643,7 @@ func (s *Service) resolve(ctx context.Context, req core.ResolveRequest, profile 
 			trace.Discovery = append(trace.Discovery, DiscoveryTrace{Path: "feed", Count: len(discovered)})
 		}
 		early.arrived(discovered)
-		// A locally verified feed answer can avoid a search. A slow feed
-		// gets only 100ms head start, then keeps checking alongside search.
-		if len(discovered) > 0 && !early.disabled {
-			deadline := time.NewTimer(100 * time.Millisecond)
-			tick := time.NewTicker(5 * time.Millisecond)
-		feedWait:
-			for {
-				if ready := early.readyResultsAfter(0); len(ready) > 0 {
-					candidates, _, rankErr := s.rankCandidates(ctx, req, sreq, profile, ready, &trace, "")
-					if rankErr == nil && len(candidates) > 0 {
-						early.attach(candidates)
-						idx, payload, checkErr := s.validateCandidates(ctx, candidates, &trace, 0)
-						if checkErr == nil && idx >= 0 {
-							deadline.Stop()
-							tick.Stop()
-							trace.Winner = candidates[idx].rel.ID
-							s.setAvailability(ctx, int64(t.Key), true, s.searchTTL())
-							return s.resolution(t.Key, candidates, idx, payload, &trace), nil
-						}
-					}
-					break feedWait
-				}
-				select {
-				case <-deadline.C:
-					break feedWait
-				case <-ctx.Done():
-					deadline.Stop()
-					tick.Stop()
-					return nil, ctx.Err()
-				case <-tick.C:
-				}
-			}
-			deadline.Stop()
-			tick.Stop()
-		}
+
 	}
 
 	// Nothing to search at all (no enabled indexer, or debrid as the only
