@@ -327,7 +327,7 @@ func (m *Manager) Prewarm(_ context.Context, user *core.User, key core.RatingKey
 		if automaticReserve {
 			info := generation.infoSnapshot()
 			if info.Duration > 0 {
-				prefetchBytes = min(int64(256<<20), max(int64(8<<20), int64(float64(src.Size())*playableReserve.Seconds()/info.Duration.Seconds())))
+				prefetchBytes = min(int64(256<<20), max(int64(8<<20), int64(float64(src.Size())*(40*time.Second).Seconds()/info.Duration.Seconds())))
 			}
 		}
 		// Publish before prefetch so a play request need not wait for

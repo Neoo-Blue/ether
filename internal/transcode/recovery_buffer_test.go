@@ -48,6 +48,38 @@ func TestBufferDistinguishesPublishedFromDelivered(t *testing.T) {
 	}
 }
 
+func TestReplacementOutputWaitsForContiguousPublishedMedia(t *testing.T) {
+	s := &Session{segDur: 2 * time.Second, total: 20, proto: core.ProtocolHLS}
+	s.input = "replacement"
+	s.swapBoundary = 3
+	s.done = []map[int]bool{{0: true, 1: true, 3: true}}
+	s.changed = make(chan struct{})
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := s.WaitForReplacementOutput(ctx, "replacement"); err != context.Canceled {
+		t.Fatalf("hole did not prevent readiness: %v", err)
+	}
+	s.mu.Lock()
+	s.done[0][2] = true
+	s.broadcastLocked()
+	s.mu.Unlock()
+	if err := s.WaitForReplacementOutput(t.Context(), "replacement"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReplacementOutputWaitRejectsAnAbandonedSeek(t *testing.T) {
+	s := &Session{segDur: 2 * time.Second, total: 20, proto: core.ProtocolHLS}
+	s.input = "replacement"
+	s.swapBoundary = 3
+	s.done = []map[int]bool{{0: true, 1: true, 2: true, 3: true}}
+	s.changed = make(chan struct{})
+	s.recoverySeekAt = time.Unix(1, 0)
+	if err := s.WaitForReplacementOutput(t.Context(), "replacement"); err != core.ErrReplacementSuperseded {
+		t.Fatalf("seek returned %v", err)
+	}
+}
+
 func TestBufferedSwapPreservesPublishedMediaAndViewerPosition(t *testing.T) {
 	fr := newFakeRunner()
 	fr.segDelay = 20 * time.Millisecond
@@ -104,6 +136,9 @@ func TestIntegrationBufferedRepairHandoff(t *testing.T) {
 	first := fetch(t, hs, 0)
 	waitFor(t, "real prepared buffer", func() bool { return s.RecoveryBuffer().ReadyUntil >= 6*time.Second })
 	if err := s.SwapInputBuffered(t.Context(), e.url("buffer-a.mkv")+"?replacement=1", *info, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.WaitForReplacementOutput(t.Context(), e.url("buffer-a.mkv")+"?replacement=1"); err != nil {
 		t.Fatal(err)
 	}
 	s.mu.Lock()

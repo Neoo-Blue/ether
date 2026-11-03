@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -47,6 +48,21 @@ type RecoveryBufferSource interface{ RecoveryBuffer() RecoveryBuffer }
 type BufferedInputSwapper interface {
 	SwapInputBuffered(context.Context, string, MediaInfo, time.Duration) error
 }
+
+// ReplacementOutputWaiter waits for the replacement to extend the contiguous
+// published output. A successful return does not claim client delivery or decode.
+type ReplacementOutputWaiter interface {
+	WaitForReplacementOutput(context.Context, string) error
+}
+
+// InputSwapState identifies the input currently held by an encoder session.
+type InputSwapState interface {
+	CurrentSwapInput() string
+}
+
+// ErrReplacementSuperseded means a seek or another input change abandoned
+// the original handoff; its old source must not be used for rollback.
+var ErrReplacementSuperseded = errors.New("replacement output superseded")
 
 // PlaybackTimeline carries actual client position without changing history.
 type PlaybackTimeline interface {

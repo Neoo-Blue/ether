@@ -104,8 +104,45 @@ func (s *Session) PrepareSwap(ctx context.Context, input string, info core.Media
 	_, err := s.swapPictureCrop(ctx, input, info, at)
 	if err == nil {
 		s.prepareAudioMatch(ctx, input, info, at)
+		s.measureReplacementDecode(ctx, input, info, at)
 	}
 	return err
+}
+
+// measureReplacementDecode measures an actual decoded frame rather than
+// treating a probe or HTTP response as playback evidence. The sample is
+// opportunistic, limited to one per manager, one thread and three seconds.
+// It does not reject a candidate or start a second full encoder stream.
+func (s *Session) measureReplacementDecode(ctx context.Context, input string, info core.MediaInfo, at time.Duration) (time.Duration, bool) {
+	video := info.Video()
+	buffer := s.RecoveryBuffer()
+	if video == nil || buffer.ReadyUntil-buffer.Position < 6*time.Second || !s.m.decodeSampleBusy.CompareAndSwap(false, true) {
+		return 0, false
+	}
+	defer s.m.decodeSampleBusy.Store(false)
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	sampleInput := input
+	if u, err := url.Parse(input); err == nil && u.Hostname() == "127.0.0.1" && strings.HasPrefix(u.Path, "/src/") {
+		q := u.Query()
+		q.Set("background", "1")
+		u.RawQuery = q.Encode()
+		sampleInput = u.String()
+	}
+	args := []string{"-hide_banner", "-v", "error", "-nostdin", "-threads", "1", "-filter_threads", "1"}
+	args = append(args, inputSafetyArgs(sampleInput, false)...)
+	args = append(args, httpInputArgs(sampleInput, false)...)
+	args = append(args, "-ss", secs(max(0, at)), "-i", sampleInput, "-map", fmt.Sprintf("0:%d", video.Index), "-an", "-sn", "-vf", "scale=32:32,format=gray", "-frames:v", "1", "-threads", "1", "-f", "rawvideo", "-")
+	args, err := s.encoderSampleArgs(sampleInput, args)
+	if err != nil {
+		return 0, false
+	}
+	out := &pictureSample{limit: 32 * 32}
+	started := time.Now()
+	err = s.encoderRun(ctx, Command{Path: s.m.ffmpeg, Args: args, Stdout: out, Stderr: io.Discard})
+	elapsed, decoded := time.Since(started), err == nil && out.Len() == 32*32
+	s.log.Debug("replacement decode sample", "at", at, "duration", elapsed, "decoded", decoded)
+	return elapsed, decoded
 }
 
 type pictureSample struct {

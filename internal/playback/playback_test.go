@@ -793,6 +793,11 @@ func TestLoopbackReadFailureTriggersHLSFailover(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("no background failover")
 	}
+	s := h.m.lookup(ps.ID)
+	if err := lock(t.Context(), s.failSem); err != nil {
+		t.Fatal(err)
+	}
+	unlock(s.failSem)
 	st, _ := h.m.Session(ps.ID)
 	if st.Resolution.Release.ID != "B" {
 		t.Fatalf("release = %s", st.Resolution.Release.ID)

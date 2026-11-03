@@ -9,7 +9,37 @@ import (
 	"github.com/braedonsaunders/ether/internal/core"
 )
 
-const playableReserve = 40 * time.Second
+const playableReserve = 90 * time.Second
+
+// swapLatencyWindow keeps only a bounded recent history. The target is a
+// source-cache hint, never a statement about decoded or delivered media.
+type swapLatencyWindow struct {
+	mu      sync.Mutex
+	samples [32]time.Duration
+	next    int
+}
+
+func (w *swapLatencyWindow) observe(d time.Duration) {
+	if d <= 0 {
+		return
+	}
+	w.mu.Lock()
+	w.samples[w.next] = d
+	w.next = (w.next + 1) % len(w.samples)
+	w.mu.Unlock()
+}
+
+func (w *swapLatencyWindow) target() time.Duration {
+	w.mu.Lock()
+	var slowest time.Duration
+	for _, d := range w.samples {
+		slowest = max(slowest, d)
+	}
+	w.mu.Unlock()
+	// Two observed handoff durations plus 20s of jitter, bounded to the
+	// same two-minute lead allowed by the default encoder policy.
+	return min(2*time.Minute, max(playableReserve, 2*slowest+20*time.Second))
+}
 
 type reserveState struct {
 	mu         sync.Mutex
@@ -18,6 +48,19 @@ type reserveState struct {
 	running    bool
 	cancel     context.CancelFunc
 }
+
+func (r *reserveState) stop() {
+	r.mu.Lock()
+	if r.cancel != nil {
+		r.cancel()
+	}
+	r.cancel = nil
+	r.generation = nil
+	r.running = false
+	r.until = 0
+	r.mu.Unlock()
+}
+
 type standbyState struct {
 	mu       sync.Mutex
 	started  bool
@@ -28,19 +71,39 @@ type standbyState struct {
 }
 
 // Source-cache reserve, independent of the player's own buffering policy. All
-// reads use Engine.Prefetch's background priority and are bounded on disk; no
-// 40-second video-sized allocation is held in RAM. No startup waits on this.
+// reads use Engine.Prefetch's background priority and are capped at 256 MiB;
+// the media-sized window is not held in RAM. No startup waits on this.
 func (m *Manager) maintainReserve(s *session, position time.Duration, state string) {
 	if state != "playing" {
+		if state == "paused" || state == "stopped" {
+			s.reserve.stop()
+		}
 		return
 	}
-	cfg := m.config().Cache
-	if cfg.Mode == "off" {
+	version := m.reserveConfigVersion.Load()
+	config := m.config()
+	cfg := config.Cache
+	if m.deps.Cache == nil || cfg.Mode == "off" || cfg.PlaybackReadAhead() == 0 {
 		return
 	}
 	g := s.current()
 	if g == nil {
 		return
+	}
+	maxBytes := int64(256 << 20)
+	if g.res != nil && (g.res.Release.Protocol == core.ProtocolTorrent || g.res.Release.Protocol == core.ProtocolHTTP) {
+		if config.Debrid.ReadAheadChunks < 0 {
+			return
+		}
+		if config.Debrid.ReadAheadChunks > 0 {
+			chunk := config.Debrid.ChunkBytes
+			if chunk <= 0 {
+				chunk = 8 << 20
+			}
+			if chunk < maxBytes {
+				maxBytes = min(maxBytes, chunk*min(int64(config.Debrid.ReadAheadChunks), maxBytes/chunk))
+			}
+		}
 	}
 	info := g.infoSnapshot()
 	if info.Duration <= 0 {
@@ -52,13 +115,37 @@ func (m *Manager) maintainReserve(s *session, position time.Duration, state stri
 	if known && rate < mediaBps(info, g.src.Size())*1.25 {
 		return
 	}
+	reserve := min(m.swapLatency.target(), cfg.PlaybackReadAhead())
+	tm := g.timeMapSnapshot()
+	lo := tm.KeyframeOffsetAt(position)
+	if len(tm.Points) == 0 {
+		lo = tm.OffsetAt(max(0, position-6*time.Second))
+	}
+	// A byte cap can cover much less media time at high bitrates. Never
+	// record the full requested horizon when the admitted bytes cannot reach
+	// it, and do not spend the entire cap behind the current playhead.
+	currentOffset := tm.OffsetAt(position)
+	if currentOffset-lo >= maxBytes {
+		lo = currentOffset
+	}
+	wantedUntil := min(info.Duration, position+reserve)
+	hi := tm.OffsetAt(min(info.Duration, wantedUntil+4*time.Second))
+	n := min(max(0, hi-lo), maxBytes)
+	until := min(wantedUntil, tm.TimeAt(lo+n))
+	if n <= 0 || until <= position {
+		return
+	}
 	r := &s.reserve
 	r.mu.Lock()
-	if r.generation == g && position >= r.until-playableReserve && position+30*time.Second <= r.until {
+	if version != m.reserveConfigVersion.Load() {
 		r.mu.Unlock()
 		return
 	}
-	if r.running && r.generation == g && position >= r.until-playableReserve && position < r.until {
+	if r.generation == g && position >= r.until-reserve && position+30*time.Second <= r.until {
+		r.mu.Unlock()
+		return
+	}
+	if r.running && r.generation == g && position >= r.until-reserve && position < r.until {
 		r.mu.Unlock()
 		return
 	}
@@ -67,10 +154,9 @@ func (m *Manager) maintainReserve(s *session, position time.Duration, state stri
 	}
 	ctx, cancel := context.WithTimeout(g.ctx, 45*time.Second)
 	r.generation = g
-	r.until = position + playableReserve
+	r.until = until
 	r.running = true
 	r.cancel = cancel
-	until := r.until
 	r.mu.Unlock()
 	if !g.acquire() {
 		cancel()
@@ -103,15 +189,8 @@ func (m *Manager) maintainReserve(s *session, position time.Duration, state stri
 		defer func() { m.mu.Lock(); m.reserveActive--; m.mu.Unlock() }()
 		defer cancel()
 		defer g.release()
-		tm := g.timeMapSnapshot()
-		lo := tm.KeyframeOffsetAt(position)
-		hi := tm.OffsetAt(min(info.Duration, until+4*time.Second))
-		// Without an index these are conservative byte hints, not claims that
-		// every decoded segment is ready. RecoveryBuffer supplies that evidence.
-		if len(tm.Points) == 0 {
-			lo = tm.OffsetAt(max(0, position-6*time.Second))
-		}
-		n := min(max(0, hi-lo), int64(256<<20))
+		// These are source-byte hints, not proof that output has been decoded
+		// or received. RecoveryBuffer reports contiguous published segments.
 		err := m.deps.Engine.Prefetch(ctx, g.releaseID(), g.res.NZB, lo, n)
 		r.mu.Lock()
 		if r.generation == g && r.until == until {

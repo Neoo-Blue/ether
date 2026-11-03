@@ -438,6 +438,10 @@ func TestDownFailoverTriggersOnSlowSource(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("down-failover did not swap the HLS input")
 	}
+	if err := lock(t.Context(), s.failSem); err != nil {
+		t.Fatal(err)
+	}
+	unlock(s.failSem)
 	st, _ := h.m.Session(ps.ID)
 	if st.Resolution.Release.ID != "B" || st.DownFailovers != 1 || st.Failovers != 1 {
 		t.Fatalf("down-failover state: %+v", st)
@@ -538,6 +542,13 @@ func TestDownFailoverFromThrottledReads(t *testing.T) {
 		st, _ := h.m.Session(ps.ID)
 		t.Fatalf("throttled source did not down-fail over: %+v", st)
 	}
+	// The fake's notification is emitted inside SwapInput. The replacement
+	// becomes current after that call completes, while failSem remains held.
+	s := h.m.lookup(ps.ID)
+	if err := lock(t.Context(), s.failSem); err != nil {
+		t.Fatal(err)
+	}
+	unlock(s.failSem)
 	if st, _ := h.m.Session(ps.ID); st.Resolution.Release.ID != "B" {
 		t.Fatalf("wrong release after throttled down-failover: %+v", st)
 	}

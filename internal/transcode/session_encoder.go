@@ -298,6 +298,9 @@ func (s *Session) startRunLocked(seg int, bigProbe bool) error {
 		sl.index = func(t time.Duration) int { return plan.IndexAt(t - base) }
 		cr = &chunkRun{dir: spec.ChunkDir, container: s.container,
 			initPath: filepath.Join(spec.Dir, spec.InitName), startAt: spec.Start, sl: sl}
+		if s.container == ContainerMPEGTS && spec.Start > 0 {
+			cr.tsBoundary = &tsDiscontinuity{needVideo: s.info.Video() != nil, needAudio: findStream(s.info, spec.Decision.AudioStream, "audio") != nil}
+		}
 	}
 	r := &run{
 		chunks:   cr,

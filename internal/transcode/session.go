@@ -76,6 +76,8 @@ type sessionInput struct {
 	inputCrop      *pictureCrop
 	pictureSamples map[string]*pictureCrop
 	audioMatch     audioMatchState
+	swapBoundary   int
+	swapSeekAt     time.Time
 }
 
 // sessionEncoding owns one aspect of the session. Fields are guarded by Session.mu.

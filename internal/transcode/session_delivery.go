@@ -295,6 +295,9 @@ func (s *Session) notePlayheadLocked(t, n int) {
 	if s.lastReq > prev+3 || s.lastReq < prev-3 {
 		s.recoverySeekAt = time.Now()
 		s.completedDeliveries = nil
+		if s.changed != nil {
+			s.broadcastLocked()
+		}
 	}
 }
 

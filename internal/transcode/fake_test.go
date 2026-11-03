@@ -583,7 +583,7 @@ func (p *fakeProc) simulateChunks(cmd Command, delay, gop, end, audioEnd time.Du
 		case strings.HasSuffix(name, ".m4s"):
 			b = testChunk(uint32(n+1), int64(t*90000/time.Second), 3750, int(d*24/time.Second), []byte(marker))
 		default:
-			b = testTSChunk(t, marker)
+			b = testTSChunkAdapted(t, marker)
 		}
 		if !p.publish(name, b) {
 			return
@@ -625,6 +625,16 @@ func testTSChunk(t time.Duration, marker string) []byte {
 	return pkt
 }
 
+func testTSChunkAdapted(t time.Duration, marker string) []byte {
+	old := testTSChunk(t, marker)
+	pkt := make([]byte, 188)
+	copy(pkt[:4], old[:4])
+	pkt[3] = 0x30
+	pkt[4] = 1
+	copy(pkt[6:], old[4:])
+	return pkt
+}
+
 // segText is a fake segment's text: its chunks' markers joined by "|"
 // (chunked runs), or the legacy whole-segment payload.
 func segText(b []byte) string {
@@ -638,7 +648,11 @@ func segText(b []byte) string {
 func tsChunkMarkers(b []byte) []string {
 	var out []string
 	for off := 0; off+188 <= len(b); off += 188 {
-		m := string(bytes.TrimRight(b[off+18:off+188], "\x00"))
+		start := off + 18
+		if b[off+3]&0x20 != 0 {
+			start += 1 + int(b[off+4])
+		}
+		m := string(bytes.TrimRight(b[start:off+188], "\x00"))
 		out = append(out, m)
 	}
 	return out

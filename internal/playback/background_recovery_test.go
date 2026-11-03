@@ -83,20 +83,30 @@ func TestStopCancelsRecoveryProviderWorkImmediately(t *testing.T) {
 
 type recoveryContextHLS struct {
 	*fakeHLS
-	contextErr chan error
+	contextErr   chan error
+	continueSwap chan struct{}
 }
 
 func (h *recoveryContextHLS) SwapInput(ctx context.Context, url string, info core.MediaInfo, at time.Duration) error {
 	h.contextErr <- ctx.Err()
+	select {
+	case <-h.continueSwap:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 	return h.fakeHLS.SwapInput(ctx, url, info, at)
 }
 
-func TestBackgroundRecoveryKeepsSwapContextAliveAfterRetiringOldInput(t *testing.T) {
-	h := newHarness(t, []*fakeRelease{mkv("A", 100_000, time.Minute), mkv("B", 100_000, time.Minute)}, []string{"A", "B"})
+func TestBackgroundRecoveryKeepsOldInputUntilSwapCompletes(t *testing.T) {
+	var lookup *synchronizedHLSLookup
+	h := newHarness(t, []*fakeRelease{mkv("A", 100_000, time.Minute), mkv("B", 100_000, time.Minute)}, []string{"A", "B"}, func(h *harness, _ *Options) {
+		lookup = &synchronizedHLSLookup{Transcoder: h.tr}
+		h.testTranscode = lookup
+	})
 	ps := h.prepare(owner, movieKey, "recovery-swap")
 	actual := h.tr.addHLS(ps.ID)
-	wrapped := &recoveryContextHLS{fakeHLS: actual, contextErr: make(chan error, 1)}
-	h.m.deps.HLSLookup = func(string) (core.HLSSession, bool) { return wrapped, true }
+	wrapped := &recoveryContextHLS{fakeHLS: actual, contextErr: make(chan error, 1), continueSwap: make(chan struct{})}
+	lookup.set(wrapped)
 	s := h.m.lookup(ps.ID)
 	old := s.current()
 	h.m.backgroundFailover(s, old, 10*time.Second)
@@ -108,8 +118,16 @@ func TestBackgroundRecoveryKeepsSwapContextAliveAfterRetiringOldInput(t *testing
 	case <-time.After(5 * time.Second):
 		t.Fatal("input replacement did not run")
 	}
-	if old.ctx.Err() == nil {
-		t.Fatal("old source was not retired before swapping the encoder")
+	if old.ctx.Err() != nil || s.current() != old {
+		t.Fatal("old source retired before the encoder swap completed")
+	}
+	close(wrapped.continueSwap)
+	if err := lock(t.Context(), s.failSem); err != nil {
+		t.Fatal(err)
+	}
+	unlock(s.failSem)
+	if old.ctx.Err() == nil || s.current() == old {
+		t.Fatal("old source was not retired after the replacement committed")
 	}
 }
 
