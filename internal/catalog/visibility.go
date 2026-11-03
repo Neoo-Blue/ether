@@ -145,11 +145,19 @@ func (c *Catalog) PreviewVisibilityPolicy(ctx context.Context, specs []core.Libr
 	}
 	where, args := f.SQLHidden()
 	p := VisibilityPreview{Items: []core.Title{}, Shown: []core.Title{}, Rules: []VisibilityRulePreview{}}
-	err = c.db.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(CASE WHEN NOT EXISTS(SELECT 1 FROM catalog_countries co WHERE co.key=t.key) THEN 1 ELSE 0 END),0) FROM catalog_titles t WHERE `+mirrorBrowsableWhere).Scan(&p.Total, &p.UnknownCountry)
+	// The catalogue rules act on: browsable titles, behind the release gate
+	// when "On digital release" is on, the same set browsing and queryTitles see.
+	scope, scopeArgs := mirrorBrowsableWhere, []any(nil)
+	if c.config().ReleaseMode == config.ModeDigital {
+		scope += " AND " + homeReleaseSQL("t")
+		scopeArgs = []any{c.now().Unix()}
+	}
+	err = c.db.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(CASE WHEN NOT EXISTS(SELECT 1 FROM catalog_countries co WHERE co.key=t.key) THEN 1 ELSE 0 END),0) FROM catalog_titles t WHERE `+scope, scopeArgs...).Scan(&p.Total, &p.UnknownCountry)
 	if err != nil {
 		return nil, err
 	}
-	base := mirrorBrowsableWhere + " AND (" + where + ")"
+	base := scope + " AND (" + where + ")"
+	args = append(append([]any(nil), scopeArgs...), args...)
 	err = c.db.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(CASE WHEN t.type='movie' THEN 1 ELSE 0 END),0),COALESCE(SUM(CASE WHEN t.type='show' THEN 1 ELSE 0 END),0) FROM catalog_titles t WHERE `+base, args...).Scan(&p.Hidden, &p.Movies, &p.Shows)
 	if err != nil {
 		return nil, err
@@ -166,7 +174,8 @@ func (c *Catalog) PreviewVisibilityPolicy(ctx context.Context, specs []core.Libr
 		p.Items = []core.Title{}
 	}
 	shownWhere, shownArgs := f.SQLHidden()
-	p.Shown, err = c.queryTitles(ctx, `SELECT `+prefixedCols("t")+` FROM catalog_titles t WHERE `+mirrorBrowsableWhere+` AND NOT (`+shownWhere+`) ORDER BY t.popularity DESC,t.key LIMIT 24`, shownArgs...)
+	shownArgs = append(append([]any(nil), scopeArgs...), shownArgs...)
+	p.Shown, err = c.queryTitles(ctx, `SELECT `+prefixedCols("t")+` FROM catalog_titles t WHERE `+scope+` AND NOT (`+shownWhere+`) ORDER BY t.popularity DESC,t.key LIMIT 24`, shownArgs...)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +184,7 @@ func (c *Catalog) PreviewVisibilityPolicy(ctx context.Context, specs []core.Libr
 	}
 	sel, catchArgs := f.CatchCountsSQL()
 	if sel != "" {
-		row := c.db.QueryRowContext(ctx, `SELECT `+sel+` FROM catalog_titles t WHERE `+mirrorBrowsableWhere, catchArgs...)
+		row := c.db.QueryRowContext(ctx, `SELECT `+sel+` FROM catalog_titles t WHERE `+scope, append(append([]any(nil), catchArgs...), scopeArgs...)...)
 		nums := make([]int, len(specs)*2)
 		dest := make([]any, len(nums))
 		for i := range nums {

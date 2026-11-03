@@ -57,3 +57,22 @@ it("sets up RPDB and Custom from a fresh config before choosing either in Artwor
   }
   expect(screen.queryByLabelText("API key")).not.toBeInTheDocument();
 });
+
+it("opens the setup drawer from a disabled provider's Set up button", async () => {
+  vi.mocked(api.getConfig).mockResolvedValue(
+    {} as unknown as Awaited<ReturnType<typeof api.getConfig>>,
+  );
+  render(
+    <MemoryRouter>
+      <PosterAccounts locked={false}>{(cards) => <>{cards}</>}</PosterAccounts>
+    </MemoryRouter>,
+  );
+  const setUp = await screen.findByRole("button", { name: /Set up RPDB/ });
+  await waitFor(() => expect(setUp).toBeEnabled());
+  // No dead link to a tab that doesn't exist yet.
+  expect(screen.queryByRole("link", { name: /Set up RPDB/ })).not.toBeInTheDocument();
+  fireEvent.click(setUp);
+  expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  expect(screen.getByLabelText("API key")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Save and enable" })).toBeInTheDocument();
+});
