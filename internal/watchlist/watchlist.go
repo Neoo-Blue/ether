@@ -499,7 +499,7 @@ func (s *Service) Check(ctx context.Context, u *core.User) error {
 // Resolution, with a nil error, when nothing playable was found.
 func (s *Service) resolve(ctx context.Context, u *core.User, title *core.Title) (*core.Resolution, error) {
 	caps := core.ClientCaps{MaxHeight: 1080, VideoCodecs: []string{"h264", "hevc"}, AudioCodecs: []string{"aac", "ac3", "eac3"}, Containers: []string{"mkv", "mp4"}}
-	job, cancel := context.WithTimeout(ctx, 45*time.Second)
+	job, cancel := context.WithTimeout(core.WithIndexerPurpose(ctx, core.IndexerPurposeWarmup), 45*time.Second)
 	defer cancel()
 	// Nobody waits on a watchlist check: fallback queries go one at a time.
 	res, err := s.o.Resolver.Resolve(core.WithUnattendedSearch(job), core.ResolveRequest{Title: title, User: u, Client: caps})

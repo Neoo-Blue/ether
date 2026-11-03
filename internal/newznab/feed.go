@@ -48,7 +48,7 @@ func (m *Manager) Recent(ctx context.Context, id string, offset, limit int) ([]c
 		if !cfg.Enabled || cfg.UsesBackend() {
 			return nil, fmt.Errorf("recent-release feed is not enabled")
 		}
-		return c.recent(ctx, offset, limit)
+		return c.recent(core.WithIndexerPurpose(ctx, core.IndexerPurposeFeed), offset, limit)
 	}
 	return nil, fmt.Errorf("release-feed source no longer configured")
 }

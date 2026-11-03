@@ -94,6 +94,9 @@ func (a *App) buildAdmin() http.Handler {
 				}
 				return nil
 			}
+			if a.indexers != nil {
+				return a.indexers.TestIndexer(ctx, ix, a.cfg.Get().ClientIdentity)
+			}
 			return newznab.Test(ctx, ix, a.cfg.Get().ClientIdentity)
 		},
 		TestDebrid: func(ctx context.Context, p config.DebridProvider) error {

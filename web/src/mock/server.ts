@@ -2562,6 +2562,48 @@ export function createFakeServer(opts: FakeOptions = {}) {
         return json(state.boot);
       case "GET /dashboard":
         return json(dashboard());
+      case "GET /indexer-usage": {
+        const day = (offset: number) =>
+          new Date(Date.now() - offset * 86_400_000).toISOString().slice(0, 10);
+        const days = Array.from({ length: 14 }, (_, i) => ({
+          day: day(13 - i),
+          hits: 40 + ((i * 37) % 55),
+          grabs: i % 4,
+        }));
+        const purposes = (scale: number) => [
+          { purpose: "feed", hits: 30 * scale, grabs: 0 },
+          { purpose: "availability", hits: 18 * scale, grabs: 1 * scale },
+          { purpose: "playback", hits: 9 * scale, grabs: 3 * scale },
+          { purpose: "warmup", hits: 6 * scale, grabs: 1 * scale },
+          { purpose: "rescue", hits: 3 * scale, grabs: 0 },
+          { purpose: "caps", hits: scale, grabs: 0 },
+          { purpose: "test", hits: 2, grabs: 0 },
+        ];
+        const total = (ps: { hits: number; grabs: number }[]) => ({
+          hits: ps.reduce((n, p) => n + p.hits, 0),
+          grabs: ps.reduce((n, p) => n + p.grabs, 0),
+          purposes: ps,
+        });
+        return json({
+          today: day(0),
+          weekStart: day(6),
+          monthStart: day(0).slice(0, 8) + "01",
+          indexers: [
+            {
+              id: "idx-1",
+              name: "Indexer One",
+              enabled: true,
+              torrent: false,
+              dailyLimit: 100,
+              dailyGrabs: 20,
+              today: total(purposes(1)),
+              week: total(purposes(7)),
+              month: total([...purposes(20), { purpose: "unattributed", hits: 240, grabs: 9 }]),
+              days,
+            },
+          ],
+        });
+      }
       case "GET /stats/infrastructure":
         return json({
           month: "2026-10",
@@ -3034,7 +3076,8 @@ export function createFakeServer(opts: FakeOptions = {}) {
           id: `c${seq++}`,
           updatedAt: new Date().toISOString(),
           lastBuiltAt: new Date().toISOString(),
-          itemCount: spec.limit > 0 ? Math.min(evaluate(spec).total, spec.limit) : evaluate(spec).total,
+          itemCount:
+            spec.limit > 0 ? Math.min(evaluate(spec).total, spec.limit) : evaluate(spec).total,
         };
         state.collections.push(saved);
         return json(saved);

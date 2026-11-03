@@ -138,6 +138,7 @@ func (c *Client) reserve(ctx context.Context, kind string) error {
 		} else {
 			c.mem.grabs++
 		}
+		c.recordUsage(ctx, kind)
 		return nil
 	}
 	col := "hits"
@@ -168,6 +169,7 @@ func (c *Client) reserve(ctx context.Context, kind string) error {
 	if n == 0 {
 		return fmt.Errorf("indexer %q %s budget: %w", c.Name(), kind, core.ErrBudgetExhausted)
 	}
+	c.recordUsage(ctx, kind)
 	return nil
 }
 

@@ -99,6 +99,8 @@ func (s *Service) spend(ctx context.Context, kind string, n, limit int64) error 
 }
 func (s *Service) budgetContext(ctx context.Context, feed bool) context.Context {
 	cfg := s.cfg().Availability
+	// Feed polls are re-tagged as feed by the indexer manager.
+	ctx = core.WithIndexerPurpose(ctx, core.IndexerPurposeAvailability)
 	ctx = core.WithForegroundReserve(ctx, cfg.ReservePercent)
 	return core.WithBackgroundBudget(ctx, func(ctx context.Context, kind, source string, n int64) error {
 		live := s.cfg().Availability

@@ -460,7 +460,7 @@ func (p *Prefetcher) nextEpisode(ctx context.Context, user *core.User, key core.
 	}
 
 	// Nobody waits on a prefetch: fallback queries go one at a time.
-	res, err := p.deps.Resolver.Resolve(core.WithUnattendedSearch(ctx), core.ResolveRequest{Title: next, Client: caps, User: user})
+	res, err := p.deps.Resolver.Resolve(core.WithIndexerPurpose(core.WithUnattendedSearch(ctx), core.IndexerPurposeWarmup), core.ResolveRequest{Title: next, Client: caps, User: user})
 	if errors.Is(err, core.ErrNotAvailable) {
 		log.Debug("next episode not available")
 		return nil

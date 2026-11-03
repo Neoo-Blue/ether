@@ -93,7 +93,10 @@ func (s *Service) ConsoleHandler(deps ConsoleDeps) http.Handler {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		consoleError(w, http.StatusNotFound, "not_found", "no such release console endpoint")
 	})
-	return mux
+	// Indexer requests the owner starts here are console searches.
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mux.ServeHTTP(w, r.WithContext(core.WithIndexerPurpose(r.Context(), core.IndexerPurposeConsole)))
+	})
 }
 
 type consoleAPI struct {

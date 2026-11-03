@@ -1,15 +1,20 @@
 import { getLocale, t, tn } from "../../i18n";
 import { Badge, Input, toast } from "@braedonsaunders/appkit-ui";
 import { useMemo, useState, type ReactNode } from "react";
-import { Meter } from "../../components/charts";
 import { ErrorPanel, LoadingRows } from "../../components/feedback";
-import { NumberInput } from "../../components/fields";
+import { NumberInput, Segmented } from "../../components/fields";
 import { Section } from "../../components/layout";
 import { SaveBar, useDraft } from "../../components/SaveBar";
 import { apiFetch } from "../../lib/api";
 import { fixed, formatNumber, formatPercent } from "../../lib/format";
 import { useAsync } from "../../lib/hooks";
 import { PluginSourceUsage } from "./cards";
+import {
+  IndexerUsageDetails,
+  USAGE_PERIODS,
+  type UsagePeriod,
+  type UsageReport,
+} from "./IndexerUsage";
 
 type Provider = {
   id: string;
@@ -95,16 +100,24 @@ const GB = 1073741824;
 const priceKey = (kind: Kind, id: string) => `${kind}:${id}`;
 const pct = (n: number, d: number) => (d ? formatPercent(n / d, 0) : "—");
 
-function DayBars({ days }: { days: { day: string; value: number }[] }) {
+function DayBars({
+  days,
+  label,
+  valueLabel,
+}: {
+  days: { day: string; value: number }[];
+  label?: string;
+  valueLabel?: (value: number) => string;
+}) {
   const recent = days.slice(-14);
   const max = Math.max(1, ...recent.map((d) => d.value));
   if (!recent.length) return null;
   return (
-    <div className="flex h-8 items-end gap-0.5" aria-label={t("Downloaded each day")}>
+    <div className="flex h-8 items-end gap-0.5" aria-label={label ?? t("Downloaded each day")}>
       {recent.map((d) => (
         <div
           key={d.day}
-          title={d.day}
+          title={valueLabel ? `${d.day} · ${valueLabel(d.value)}` : d.day}
           className="w-1.5 rounded-sm bg-primary/70"
           style={{ height: `${Math.max(12, (d.value / max) * 100)}%` }}
         />
@@ -159,52 +172,16 @@ function PriceEditor({
   );
 }
 
-function Remaining({
-  used,
-  remaining,
-  kind,
-}: {
-  used: number;
-  remaining: number;
-  kind: "hits" | "grabs";
-}) {
-  if (remaining < 0)
-    return (
-      <p className="text-xs text-fg-muted">
-        {kind === "hits"
-          ? tn(
-              used,
-              "{count} API hit today · automatic limits",
-              "{count} API hits today · automatic limits",
-            )
-          : tn(
-              used,
-              "{count} grab today · automatic limits",
-              "{count} grabs today · automatic limits",
-            )}
-      </p>
-    );
-  const limit = used + remaining;
-  return (
-    <Meter
-      value={limit ? used / limit : 0}
-      tone={limit && used / limit > 0.9 ? "warning" : "primary"}
-      label={kind === "hits" ? t("API hits today") : t("Grabs today")}
-      valueLabel={t("{used} of {limit}", {
-        used: formatNumber(used, 0),
-        limit: formatNumber(limit, 0),
-      })}
-    />
-  );
-}
-
 /**
  * What Usenet providers and indexers did this month, today's indexer budgets,
  * and the plan prices that turn usage into cost estimates.
  */
 export function SourceUsage() {
   const infra = useAsync(() => apiFetch<Infrastructure>("/stats/infrastructure"), []);
+  const usageReport = useAsync(() => apiFetch<UsageReport>("/indexer-usage"), []);
+  const [period, setPeriod] = useState<UsagePeriod>("today");
   const data = infra.data;
+  const usageIndexers = usageReport.data?.indexers ?? null;
 
   const saved = useMemo<Prices | null>(() => {
     if (!data) return null;
@@ -213,11 +190,13 @@ export function SourceUsage() {
       out[priceKey("provider", p.id || p.host)] = { monthly: 0, currency: "USD" };
     for (const ix of data.snapshots.indexers?.data ?? [])
       out[priceKey("indexer", ix.indexer)] = { monthly: 0, currency: "USD" };
+    for (const ix of usageIndexers ?? [])
+      out[priceKey("indexer", ix.name)] = { monthly: 0, currency: "USD" };
     for (const c of data.costs ?? [])
       if (c.kind === "provider" || c.kind === "indexer")
         out[priceKey(c.kind, c.id)] = { monthly: c.monthly, currency: c.currency };
     return out;
-  }, [data]);
+  }, [data, usageIndexers]);
   const { draft, setDraft, dirty, reset } = useDraft(saved);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -255,7 +234,11 @@ export function SourceUsage() {
   };
 
   const providers = data.snapshots.providers?.data ?? [];
-  const indexers = data.snapshots.indexers?.data ?? [];
+  // Configured indexers come from the usage report; the dashboard sample
+  // only fills in while it loads or if it fails.
+  const indexers =
+    usageIndexers?.map((u) => ({ name: u.name, usage: u })) ??
+    (data.snapshots.indexers?.data ?? []).map((ix) => ({ name: ix.indexer, usage: undefined }));
   const savedOnly = (kind: Kind, live: string[]) =>
     (data.costs ?? []).filter((c) => c.kind === kind && !live.includes(c.id)).map((c) => c.id);
   const orphanProviders = savedOnly(
@@ -264,7 +247,7 @@ export function SourceUsage() {
   );
   const orphanIndexers = savedOnly(
     "indexer",
-    indexers.map((ix) => ix.indexer),
+    indexers.map((ix) => ix.name),
   );
 
   const totals = new Map<string, number>();
@@ -438,34 +421,59 @@ export function SourceUsage() {
       <Section
         title={t("Indexers")}
         description={t(
-          "Observed usage today and search results this month. Service limits are handled automatically.",
+          "Every API request and download Ether sent each indexer, counted the way the indexer counts them. Days follow UTC, like most indexers.",
         )}
+        actions={
+          <Segmented
+            ariaLabel={t("Usage period")}
+            size="sm"
+            value={period}
+            onChange={setPeriod}
+            options={USAGE_PERIODS.map((p) => ({ value: p.value, label: p.label }))}
+          />
+        }
         bodyClassName="divide-y divide-border"
       >
-        {indexers.map((ix) => {
-          const v = (data.indexerMonth ?? []).find((u) => u.indexer === ix.indexer);
+        {usageReport.error && !usageReport.data ? (
+          <div className="px-5 py-4">
+            <ErrorPanel error={usageReport.error} onRetry={() => void usageReport.reload()} />
+          </div>
+        ) : null}
+        {indexers.map(({ name, usage }) => {
+          const v = (data.indexerMonth ?? []).find((u) => u.indexer === name);
           return (
-            <div
-              key={ix.indexer}
-              className="flex flex-wrap items-start justify-between gap-4 px-5 py-4"
-            >
-              <div className="min-w-0 flex-1 space-y-2">
-                <p className="font-medium text-fg">{ix.indexer}</p>
-                {ix.retryAt && ix.retryAt > Date.now() / 1000 ? (
+            <div key={name} className="flex flex-wrap items-start justify-between gap-4 px-5 py-4">
+              <div className="min-w-0 flex-1 space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-medium text-fg">{name}</p>
+                  {usage && !usage.enabled ? (
+                    <Badge variant="secondary">{t("Turned off")}</Badge>
+                  ) : null}
+                </div>
+                {usage?.retryAt && usage.retryAt > Date.now() / 1000 ? (
                   <p className="text-xs text-fg-muted">
                     {t("Service limit reached · retries automatically after {time}", {
-                      time: new Date(ix.retryAt * 1000).toLocaleTimeString(getLocale()),
+                      time: new Date(usage.retryAt * 1000).toLocaleTimeString(getLocale()),
                     })}
                   </p>
                 ) : null}
-                <div className="grid max-w-xl gap-3 sm:grid-cols-2">
-                  <Remaining used={ix.hitsUsed} remaining={ix.hitsRemaining} kind="hits" />
-                  <Remaining used={ix.grabsUsed} remaining={ix.grabsRemaining} kind="grabs" />
-                </div>
+                {usage ? (
+                  <>
+                    <IndexerUsageDetails usage={usage} period={period} />
+                    <DayBars
+                      label={t("API hits each day")}
+                      valueLabel={(n) => tn(n, "{count} API hit", "{count} API hits")}
+                      days={(usage.days ?? []).map((d) => ({ day: d.day, value: d.hits }))}
+                    />
+                  </>
+                ) : !usageReport.error ? (
+                  <LoadingRows rows={1} />
+                ) : null}
                 {v ? (
                   <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs sm:grid-cols-4">
-                    <Stat label={t("Searches this month")}>{formatNumber(v.searches, 0)}</Stat>
-                    <Stat label={t("Search success")}>{pct(v.successes, v.searches)}</Stat>
+                    <Stat label={t("Search success this month")}>
+                      {pct(v.successes, v.searches)}
+                    </Stat>
                     <Stat label={t("Grab success")}>
                       {t("{percent} of {total}", {
                         percent: pct(v.grabSuccess, v.grabs),
@@ -481,14 +489,12 @@ export function SourceUsage() {
                         : "—"}
                     </Stat>
                   </dl>
-                ) : (
-                  <p className="text-xs text-fg-muted">{t("No searches recorded this month.")}</p>
-                )}
+                ) : null}
               </div>
               <PriceEditor
-                label={ix.indexer}
-                value={price("indexer", ix.indexer)}
-                onChange={(p) => setPrice("indexer", ix.indexer, p)}
+                label={name}
+                value={price("indexer", name)}
+                onChange={(p) => setPrice("indexer", name, p)}
               />
             </div>
           );

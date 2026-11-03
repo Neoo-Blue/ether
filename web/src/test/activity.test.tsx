@@ -67,6 +67,37 @@ function backend() {
             },
           ],
         };
+      else if (url.endsWith("/indexer-usage"))
+        v = {
+          today: "2026-11-03",
+          weekStart: "2026-10-28",
+          monthStart: "2026-11-01",
+          indexers: [
+            {
+              id: "ix1",
+              name: "My indexer",
+              enabled: true,
+              torrent: false,
+              dailyLimit: 100,
+              dailyGrabs: 0,
+              today: {
+                hits: 7,
+                grabs: 1,
+                purposes: [
+                  { purpose: "feed", hits: 4, grabs: 0 },
+                  { purpose: "playback", hits: 3, grabs: 1 },
+                ],
+              },
+              week: { hits: 30, grabs: 2, purposes: [{ purpose: "feed", hits: 30, grabs: 2 }] },
+              month: {
+                hits: 50,
+                grabs: 2,
+                purposes: [{ purpose: "unattributed", hits: 50, grabs: 2 }],
+              },
+              days: [],
+            },
+          ],
+        };
       else if (url.endsWith("/stats/infrastructure"))
         v = {
           snapshots: {
@@ -291,6 +322,16 @@ describe("Source usage", () => {
     fireEvent.change(screen.getByLabelText("Currency for My indexer"), {
       target: { value: "eur" },
     });
+    // Real API hits by purpose, matching the indexer's own counter.
+    expect(screen.getByText("7 of 100")).toBeInTheDocument();
+    const byPurpose = screen.getByRole("list", { name: "API hits by purpose" });
+    expect(byPurpose).toHaveTextContent("Release-feed polls");
+    expect(byPurpose).toHaveTextContent("Playback searches");
+    expect(screen.queryByText("Searches this month")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "This month" }));
+    expect(screen.getByRole("list", { name: "API hits by purpose" })).toHaveTextContent(
+      "Before this breakdown",
+    );
     fireEvent.click(screen.getByRole("button", { name: "Save prices" }));
     await waitFor(() =>
       expect(
