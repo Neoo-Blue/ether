@@ -83,7 +83,10 @@ before a viewer is known. `ResolvePlexStream` reads it back. `OpenPlexSidecar`
 returns an external sidecar reader only when the request acceptance, the
 fenced viewer policy, the title lookup, and the stream binding agree. A
 missing id is not found. A viewer who may not play is unauthorized. Subtitle
-search offer ids are not bindings. `ConfirmPlexAdmission` is the fenced check
+search offer ids are not bindings. A Plex client keeps the ids it was issued
+for a playback session: when a probe or failover moves an issued id onto
+another track, only that viewer and client's mapping changes, the title-wide
+binding is not rewritten, and the broker still authorizes the id first. `ConfirmPlexAdmission` is the fenced check
 a Plex plan uses in place of the cached allow.
 
 Broker playback calls `safety.ConfirmPlayback` through `BrokerDeps.FreshPlay`
