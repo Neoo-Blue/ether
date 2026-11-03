@@ -1,3 +1,4 @@
+import LivePlugins from "./LivePlugins";
 import { Badge, Button, Sparkline, buttonVariants, cn, toast } from "@braedonsaunders/appkit-ui";
 import { ArrowRight, Eye, GitFork, Sparkles, Store } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -6,15 +7,22 @@ import { DomainPage } from "../../components/layout";
 import { LevelBadge } from "../../components/status";
 import { t } from "../../i18n";
 import { Marketplace } from "./Marketplace";
+import { PluginDrawer } from "./PluginDrawer";
 import { PluginMark } from "./marks";
 import { installedPlugins, type Installed, type Listing } from "./proto";
 
 /** Installed plugins, their real effect, and the two ways to get more. */
 export default function Plugins() {
+  return import.meta.env.MODE === "mock" ? <PrototypePlugins /> : <LivePlugins />;
+}
+
+function PrototypePlugins() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [installed, setInstalled] = useState(installedPlugins);
   const [fresh, setFresh] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  const opened = installed.find((p) => p.id === open);
   const marketOpen = params.get("marketplace") !== null;
   const setMarket = (open: boolean) => {
     const next = new URLSearchParams(params);
@@ -81,12 +89,24 @@ export default function Plugins() {
           <li key={p.id}>
             <PluginCard
               plugin={p}
+              onOpen={() => setOpen(p.id)}
               onRemix={() => navigate(`/plugins/studio?remix=${encodeURIComponent(p.id)}`)}
             />
           </li>
         ))}
       </ul>
 
+      {opened ? (
+        <PluginDrawer
+          plugin={opened}
+          onClose={() => setOpen(null)}
+          onToggle={(on) =>
+            setInstalled((list) =>
+              list.map((p) => (p.id === opened.id ? { ...p, state: on ? "on" : "off" } : p)),
+            )
+          }
+        />
+      ) : null}
       {marketOpen ? (
         <Marketplace
           open
@@ -108,14 +128,26 @@ function Tile({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function PluginCard({ plugin, onRemix }: { plugin: Installed; onRemix: () => void }) {
+function PluginCard({
+  plugin,
+  onRemix,
+  onOpen,
+}: {
+  plugin: Installed;
+  onRemix: () => void;
+  onOpen: () => void;
+}) {
   return (
     <article
       id={`plugin-${plugin.id}`}
       aria-label={plugin.name}
       className="flex h-full flex-col rounded-xl border border-border bg-surface p-5"
     >
-      <div className="flex items-start gap-3">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex items-start gap-3 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      >
         <PluginMark category={plugin.category} />
         <div className="min-w-0 flex-1 space-y-1">
           <h3 className="truncate font-semibold text-fg">{plugin.name}</h3>
@@ -125,11 +157,13 @@ function PluginCard({ plugin, onRemix }: { plugin: Installed; onRemix: () => voi
             </Badge>
           ) : plugin.state === "attention" ? (
             <LevelBadge level="warn" />
+          ) : plugin.state === "off" ? (
+            <Badge variant="secondary">{t("Off")}</Badge>
           ) : (
             <Badge variant="success">{t("On")}</Badge>
           )}
         </div>
-      </div>
+      </button>
       <p className="mt-3 line-clamp-2 min-h-10 text-sm text-fg-muted">{plugin.summary}</p>
       <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-border-subtle bg-bg-subtle px-3 py-2.5">
         <p className="text-sm font-medium text-fg">{plugin.impact}</p>

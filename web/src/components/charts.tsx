@@ -252,7 +252,7 @@ export function Columns({
         return (
           <div
             key={d.key}
-            className="flex min-w-0 flex-1 flex-col items-center gap-1"
+            className="flex h-full min-w-0 flex-1 flex-col items-center gap-1"
             onMouseEnter={() => setHover(d.key)}
             onMouseLeave={() => setHover(null)}
             title={d.hint}

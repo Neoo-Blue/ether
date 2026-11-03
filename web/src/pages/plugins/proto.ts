@@ -36,7 +36,7 @@ export interface Installed {
   name: string;
   summary: string;
   category: Category;
-  state: "on" | "shadow" | "attention";
+  state: "on" | "shadow" | "attention" | "off";
   /** The plugin's real effect this week, one short line. */
   impact: string;
   /** Daily counts for the last 14 days, for the impact sparkline. */
