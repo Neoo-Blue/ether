@@ -1502,6 +1502,7 @@
   "m_06ff14eca66f32": "Færdiggør valget af apps og konfigurationen af din server.",
   "m_06ffdee51d311b": "Tegnefilm",
   "m_07003d242ff88a": "Stil spørgsmål om serveren, eller bed Ether om at foretage en ændring. Ændringer kræver altid din godkendelse.",
+  "m_07020c1dead5c0": "Nogle huskelister kunne ikke opdateres. Prøv igen.",
   "m_07042bc29e739d": "Læser visningshistorik",
   "m_0705742b5134b1": "Diskbudget",
   "m_0707834f2a5850": "Beskriv",
@@ -1567,6 +1568,7 @@
   "m_074b41df7941fa": "Bekræft og installer",
   "m_074ba2f160c506": "Type",
   "m_074d26e8c6e228": "Bland rækkefølgen",
+  "m_075101ab9abaeb": "Huskelistens seere",
   "m_0751e96e72eb49": "Standard ude",
   "m_07534a0138200d": "Browserabonnement",
   "m_075406e2262ba9": "/mnt/media/movies",
@@ -2193,6 +2195,7 @@
   "m_0a6122b7b998b2": "Serveren skal understøtte TLS.",
   "m_0a613b05c38a34": "Mindste MB pr. minut",
   "m_0a6172a52e10d4": "Hele kanaludvalget, live",
+  "m_0a6245265a6bcc": "Ændret i Ether, men Trakt kunne ikke opdateres. Opdater Trakt separat.",
   "m_0a626cea89697e": "Installerede {name}",
   "m_0a64c5b05d139f": "Filtrer logs",
   "m_0a65097103ae1b": "Offentliggjort",
@@ -2241,6 +2244,7 @@
   "m_0a8137cbeb090d": "Cachede film og episoder vises her, efterhånden som seerne ser dem.",
   "m_0a82020af2583a": "Gå til",
   "m_0a84681546a84d": "Fra {start} til {end}",
+  "m_0a848c1a79c063": "Fjern fra huskeliste",
   "m_0a8d77f5f81ae9": {
     "one": "{name} følger alles Hjem på {section}. ({count} tilsidesættelse på andre sider.)",
     "other": "{name} følger alles Hjem på {section}. ({count} tilsidesættelser på andre sider.)"
@@ -3499,6 +3503,7 @@
     "other": "{count} har tilsidesættelser"
   },
   "m_1096905564c975": "Databasetrafik og legitimationsoplysninger sendes uden kryptering.",
+  "m_10972ef4040b5a": "Huskelistens status kunne ikke indlæses.",
   "m_1098e735d8e106": "Rediger kanal",
   "m_1098eadd4f14cb": "Serverpolitik",
   "m_1099c1fe8b6614": "Rolle",
@@ -3848,6 +3853,7 @@
   "m_12110787e9a411": "m3u xmltv afspilningsliste",
   "m_121122566aaabc": "Enhver opløsning",
   "m_1211c370104b5b": "Indtast et TMDB-liste-ID eller et link til en offentlig TMDB-liste.",
+  "m_1212f660fb5847": "Ændringer til Plex-huskelisten bliver i Ether. Plex-synkronisering kan gendanne fjernede titler.",
   "m_1215e611ce1e22": "Forbindelsestjek",
   "m_121693081a5e6c": "{seconds} s",
   "m_12182edc8b42c8": "Én gang om dagen",
@@ -4374,6 +4380,7 @@
   "m_14acf641714987": "Længde: {length}",
   "m_14b0bb2fac148e": "Bruger Ethers port {port}",
   "m_14b0f5386a218f": "{year}erne",
+  "m_14b0f89ac9fde3": "Føj til huskeliste",
   "m_14b17774e714fc": "Kilder forudindlæst",
   "m_14b22935bfc88b": "Personer og epoker",
   "m_14b2dc4be95ce8": "ffmpeg hardware gpu streams samtidig grænse rtx streams at once limit",
@@ -6729,12 +6736,5 @@
   "m_1ffb9d60560b3f": "Fra en cluster",
   "m_1ffceea1081742": "dvd absolut sendt rækkefølge",
   "m_1ffe73d99814f5": "Hub-id’er, typer eller globs",
-  "m_1ffeee0f0cedfc": "Tilsidesæt database-URL (valgfrit)",
-  "m_07020c1dead5c0": "Nogle huskelister kunne ikke opdateres. Prøv igen.",
-  "m_075101ab9abaeb": "Huskelistens seere",
-  "m_0a6245265a6bcc": "Ændret i Ether, men Trakt kunne ikke opdateres. Opdater Trakt separat.",
-  "m_0a848c1a79c063": "Fjern fra huskeliste",
-  "m_10972ef4040b5a": "Huskelistens status kunne ikke indlæses.",
-  "m_1212f660fb5847": "Ændringer til Plex-huskelisten bliver i Ether. Plex-synkronisering kan gendanne fjernede titler.",
-  "m_14b0f89ac9fde3": "Føj til huskeliste"
+  "m_1ffeee0f0cedfc": "Tilsidesæt database-URL (valgfrit)"
 }

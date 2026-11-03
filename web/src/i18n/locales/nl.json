@@ -1502,6 +1502,7 @@
   "m_06ff14eca66f32": "Rond het kiezen van apps en het configureren van uw server af.",
   "m_06ffdee51d311b": "Tekenfilms",
   "m_07003d242ff88a": "Stel een vraag over deze server of vraag Ether om iets te wijzigen. Wijzigingen wachten altijd op je goedkeuring.",
+  "m_07020c1dead5c0": "Sommige kijklijsten konden niet worden bijgewerkt. Probeer opnieuw.",
   "m_07042bc29e739d": "Leest kijkgeschiedenis",
   "m_0705742b5134b1": "Schijfbudget",
   "m_0707834f2a5850": "Beschrijven",
@@ -1567,6 +1568,7 @@
   "m_074b41df7941fa": "Bevestigen en installeren",
   "m_074ba2f160c506": "Type",
   "m_074d26e8c6e228": "Willekeurige volgorde",
+  "m_075101ab9abaeb": "Kijklijstprofielen",
   "m_0751e96e72eb49": "Standaard buitenshuis",
   "m_07534a0138200d": "Browserabonnement",
   "m_075406e2262ba9": "/mnt/media/movies",
@@ -2193,6 +2195,7 @@
   "m_0a6122b7b998b2": "De server moet TLS ondersteunen.",
   "m_0a613b05c38a34": "Minimum MB per minuut",
   "m_0a6172a52e10d4": "Het hele zenderaanbod, live",
+  "m_0a6245265a6bcc": "Gewijzigd in Ether, maar Trakt kon niet worden bijgewerkt. Werk Trakt apart bij.",
   "m_0a626cea89697e": "{name} geïnstalleerd",
   "m_0a64c5b05d139f": "Logboeken filteren",
   "m_0a65097103ae1b": "Gepubliceerd",
@@ -2241,6 +2244,7 @@
   "m_0a8137cbeb090d": "Gecachete films en afleveringen verschijnen hier terwijl kijkers kijken.",
   "m_0a82020af2583a": "Ga naar",
   "m_0a84681546a84d": "Van {start} tot {end}",
+  "m_0a848c1a79c063": "Van kijklijst verwijderen",
   "m_0a8d77f5f81ae9": {
     "one": "{name} volgt de Home van iedereen op {section}. ({count} overschrijving op andere pagina's.)",
     "other": "{name} volgt de Home van iedereen op {section}. ({count} overschrijvingen op andere pagina's.)"
@@ -3499,6 +3503,7 @@
     "other": "{count} hebben overschrijvingen"
   },
   "m_1096905564c975": "Databaseverkeer en inloggegevens worden zonder versleuteling verzonden.",
+  "m_10972ef4040b5a": "De kijklijststatus kon niet worden geladen.",
   "m_1098e735d8e106": "Kanaal bewerken",
   "m_1098eadd4f14cb": "Serverbeleid",
   "m_1099c1fe8b6614": "Rol",
@@ -3848,6 +3853,7 @@
   "m_12110787e9a411": "m3u xmltv afspeellijst",
   "m_121122566aaabc": "Elke resolutie",
   "m_1211c370104b5b": "Voer een TMDB-lijst-ID of een link naar een openbare TMDB-lijst in.",
+  "m_1212f660fb5847": "Wijzigingen aan de Plex-kijklijst blijven in Ether. Plex-synchronisatie kan verwijderde titels herstellen.",
   "m_1215e611ce1e22": "Verbindingscontroles",
   "m_121693081a5e6c": "{seconds} s",
   "m_12182edc8b42c8": "Eén keer per dag",
@@ -4374,6 +4380,7 @@
   "m_14acf641714987": "Duur: {length}",
   "m_14b0bb2fac148e": "Gebruikt de poort van Ether ({port})",
   "m_14b0f5386a218f": "Jaren {year}",
+  "m_14b0f89ac9fde3": "Aan kijklijst toevoegen",
   "m_14b17774e714fc": "Bronnen vooraf geladen",
   "m_14b22935bfc88b": "Personen en tijdperken",
   "m_14b2dc4be95ce8": "ffmpeg hardware gpu streams tegelijk limiet rtx",
@@ -6729,12 +6736,5 @@
   "m_1ffb9d60560b3f": "Uit een cluster",
   "m_1ffceea1081742": "dvd absoluut uitgezonden volgorde",
   "m_1ffe73d99814f5": "Hub-ID's, soorten of globs",
-  "m_1ffeee0f0cedfc": "Database-URL overschrijven (optioneel)",
-  "m_07020c1dead5c0": "Sommige kijklijsten konden niet worden bijgewerkt. Probeer opnieuw.",
-  "m_075101ab9abaeb": "Kijklijstprofielen",
-  "m_0a6245265a6bcc": "Gewijzigd in Ether, maar Trakt kon niet worden bijgewerkt. Werk Trakt apart bij.",
-  "m_0a848c1a79c063": "Van kijklijst verwijderen",
-  "m_10972ef4040b5a": "De kijklijststatus kon niet worden geladen.",
-  "m_1212f660fb5847": "Wijzigingen aan de Plex-kijklijst blijven in Ether. Plex-synchronisatie kan verwijderde titels herstellen.",
-  "m_14b0f89ac9fde3": "Aan kijklijst toevoegen"
+  "m_1ffeee0f0cedfc": "Database-URL overschrijven (optioneel)"
 }

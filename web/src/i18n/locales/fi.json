@@ -1502,6 +1502,7 @@
   "m_06ff14eca66f32": "Viimeistele sovellusten valinta ja palvelimen määritys.",
   "m_06ffdee51d311b": "Piirretyt",
   "m_07003d242ff88a": "Kysy tästä palvelimesta tai pyydä Etheriä tekemään muutos. Muutokset vaativat aina hyväksyntäsi.",
+  "m_07020c1dead5c0": "Joitakin katselulistoja ei voitu päivittää. Yritä uudelleen.",
   "m_07042bc29e739d": "Lukee katseluhistoriaa",
   "m_0705742b5134b1": "Levybudjetti",
   "m_0707834f2a5850": "Kuvaile",
@@ -1567,6 +1568,7 @@
   "m_074b41df7941fa": "Vahvista ja asenna",
   "m_074ba2f160c506": "Tyyppi",
   "m_074d26e8c6e228": "Sekoita järjestys",
+  "m_075101ab9abaeb": "Katselulistan käyttäjät",
   "m_0751e96e72eb49": "Oletus kodin ulkopuolella",
   "m_07534a0138200d": "Selaimen tilaus",
   "m_075406e2262ba9": "/mnt/media/movies",
@@ -2193,6 +2195,7 @@
   "m_0a6122b7b998b2": "Palvelimen on tuettava TLS:ää.",
   "m_0a613b05c38a34": "Vähimmäiskoko (MB/min)",
   "m_0a6172a52e10d4": "Koko kanavalista livenä",
+  "m_0a6245265a6bcc": "Muutos tehtiin Etherissä, mutta Traktia ei voitu päivittää. Päivitä Trakt erikseen.",
   "m_0a626cea89697e": "Asennettu: {name}",
   "m_0a64c5b05d139f": "Suodata lokeja",
   "m_0a65097103ae1b": "Julkaistu",
@@ -2241,6 +2244,7 @@
   "m_0a8137cbeb090d": "Välimuistissa olevat elokuvat ja jaksot näkyvät täällä, kun katselijat katsovat.",
   "m_0a82020af2583a": "Siirry kohtaan",
   "m_0a84681546a84d": "Alkaa {start}, päättyy {end}",
+  "m_0a848c1a79c063": "Poista katselulistalta",
   "m_0a8d77f5f81ae9": {
     "one": "{name} seuraa kaikkien etusivua kohdassa {section}. ({count} ohitus muilla sivuilla.)",
     "other": "{name} seuraa kaikkien etusivua kohdassa {section}. ({count} ohitusta muilla sivuilla.)"
@@ -3499,6 +3503,7 @@
     "other": "{count} katselijalla on ohituksia"
   },
   "m_1096905564c975": "Tietokantaliikenne ja tunnistetiedot lähetetään ilman salausta.",
+  "m_10972ef4040b5a": "Katselulistan tilaa ei voitu ladata.",
   "m_1098e735d8e106": "Muokkaa kanavaa",
   "m_1098eadd4f14cb": "Palvelimen käytäntö",
   "m_1099c1fe8b6614": "Rooli",
@@ -3848,6 +3853,7 @@
   "m_12110787e9a411": "m3u xmltv soittolista",
   "m_121122566aaabc": "Mikä tahansa resoluutio",
   "m_1211c370104b5b": "Anna TMDB-listan tunnus tai linkki julkiseen TMDB-listaan.",
+  "m_1212f660fb5847": "Plex-katselulistan muutokset jäävät Etheriin. Plex-synkronointi voi palauttaa poistetut nimikkeet.",
   "m_1215e611ce1e22": "Yhteystarkistukset",
   "m_121693081a5e6c": "{seconds} s",
   "m_12182edc8b42c8": "Kerran päivässä",
@@ -4374,6 +4380,7 @@
   "m_14acf641714987": "Kesto: {length}",
   "m_14b0bb2fac148e": "Käyttää Etherin porttia {port}",
   "m_14b0f5386a218f": "{year}-luku",
+  "m_14b0f89ac9fde3": "Lisää katselulistalle",
   "m_14b17774e714fc": "Esiladatut lähteet",
   "m_14b22935bfc88b": "Henkilöt ja aikakaudet",
   "m_14b2dc4be95ce8": "ffmpeg laitteisto gpu samanaikaiset toistot raja rtx hardware streams at once limit",
@@ -6729,12 +6736,5 @@
   "m_1ffb9d60560b3f": "Klusterista",
   "m_1ffceea1081742": "dvd absoluuttinen esitys järjestys",
   "m_1ffe73d99814f5": "Hub-tunnukset, lajit tai glob-mallit",
-  "m_1ffeee0f0cedfc": "Tietokannan URL-osoitteen ohitus (valinnainen)",
-  "m_07020c1dead5c0": "Joitakin katselulistoja ei voitu päivittää. Yritä uudelleen.",
-  "m_075101ab9abaeb": "Katselulistan käyttäjät",
-  "m_0a6245265a6bcc": "Muutos tehtiin Etherissä, mutta Traktia ei voitu päivittää. Päivitä Trakt erikseen.",
-  "m_0a848c1a79c063": "Poista katselulistalta",
-  "m_10972ef4040b5a": "Katselulistan tilaa ei voitu ladata.",
-  "m_1212f660fb5847": "Plex-katselulistan muutokset jäävät Etheriin. Plex-synkronointi voi palauttaa poistetut nimikkeet.",
-  "m_14b0f89ac9fde3": "Lisää katselulistalle"
+  "m_1ffeee0f0cedfc": "Tietokannan URL-osoitteen ohitus (valinnainen)"
 }

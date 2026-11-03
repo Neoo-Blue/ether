@@ -1505,6 +1505,7 @@
   "m_06ff14eca66f32": "Finish choosing apps and configuring your server.",
   "m_06ffdee51d311b": "Cartoons",
   "m_07003d242ff88a": "Ask about this server, or ask Ether to make a change. Changes always wait for your approval.",
+  "m_07020c1dead5c0": "Some watchlists could not be updated. Try again.",
   "m_07042bc29e739d": "Reads watch history",
   "m_0705742b5134b1": "Disk budget",
   "m_0707834f2a5850": "Describe",
@@ -1570,6 +1571,7 @@
   "m_074b41df7941fa": "Confirm and install",
   "m_074ba2f160c506": "Type",
   "m_074d26e8c6e228": "Shuffle order",
+  "m_075101ab9abaeb": "Watchlist viewers",
   "m_0751e96e72eb49": "Default away",
   "m_07534a0138200d": "Browser subscription",
   "m_075406e2262ba9": "/mnt/media/movies",
@@ -2196,6 +2198,7 @@
   "m_0a6122b7b998b2": "The server must support TLS.",
   "m_0a613b05c38a34": "Minimum MB per minute",
   "m_0a6172a52e10d4": "The whole lineup, live",
+  "m_0a6245265a6bcc": "Changed in Ether, but Trakt could not be updated. Update Trakt separately.",
   "m_0a626cea89697e": "Installed {name}",
   "m_0a64c5b05d139f": "Filter logs",
   "m_0a65097103ae1b": "Published",
@@ -2244,6 +2247,7 @@
   "m_0a8137cbeb090d": "Cached movies and episodes appear here as viewers watch.",
   "m_0a82020af2583a": "Go to",
   "m_0a84681546a84d": "From {start} to {end}",
+  "m_0a848c1a79c063": "Remove from Watchlist",
   "m_0a8d77f5f81ae9": {
     "one": "{name} follows everyone's Home on {section}. ({count} override on other pages.)",
     "other": "{name} follows everyone's Home on {section}. ({count} overrides on other pages.)"
@@ -3508,6 +3512,7 @@
     "other": "{count} have overrides"
   },
   "m_1096905564c975": "Database traffic and credentials will be sent without encryption.",
+  "m_10972ef4040b5a": "Watchlist status could not be loaded.",
   "m_1098e735d8e106": "Edit channel",
   "m_1098eadd4f14cb": "Server policy",
   "m_1099c1fe8b6614": "Role",
@@ -3857,6 +3862,7 @@
   "m_12110787e9a411": "m3u xmltv playlist",
   "m_121122566aaabc": "Any resolution",
   "m_1211c370104b5b": "Enter a TMDB list ID or a link to a public TMDB list.",
+  "m_1212f660fb5847": "Plex watchlist changes stay in Ether. Plex sync may restore removed titles.",
   "m_1215e611ce1e22": "Connection checks",
   "m_121693081a5e6c": "{seconds} s",
   "m_12182edc8b42c8": "Once a day",
@@ -4383,6 +4389,7 @@
   "m_14acf641714987": "Length: {length}",
   "m_14b0bb2fac148e": "Uses Ether’s port {port}",
   "m_14b0f5386a218f": "{year}s",
+  "m_14b0f89ac9fde3": "Add to Watchlist",
   "m_14b17774e714fc": "Sources preloaded",
   "m_14b22935bfc88b": "People & eras",
   "m_14b2dc4be95ce8": "ffmpeg hardware gpu streams at once limit rtx",
@@ -6747,12 +6754,5 @@
   "m_1ffb9d60560b3f": "From a cluster",
   "m_1ffceea1081742": "dvd absolute aired ordering",
   "m_1ffe73d99814f5": "Hub ids, kinds or globs",
-  "m_1ffeee0f0cedfc": "Database URL override (optional)",
-  "m_07020c1dead5c0": "Some watchlists could not be updated. Try again.",
-  "m_075101ab9abaeb": "Watchlist viewers",
-  "m_0a6245265a6bcc": "Changed in Ether, but Trakt could not be updated. Update Trakt separately.",
-  "m_0a848c1a79c063": "Remove from Watchlist",
-  "m_10972ef4040b5a": "Watchlist status could not be loaded.",
-  "m_1212f660fb5847": "Plex watchlist changes stay in Ether. Plex sync may restore removed titles.",
-  "m_14b0f89ac9fde3": "Add to Watchlist"
+  "m_1ffeee0f0cedfc": "Database URL override (optional)"
 }

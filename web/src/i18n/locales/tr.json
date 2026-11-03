@@ -1502,6 +1502,7 @@
   "m_06ff14eca66f32": "Uygulama seçimini ve sunucu yapılandırmasını tamamlayın.",
   "m_06ffdee51d311b": "Çizgi filmler",
   "m_07003d242ff88a": "Bu sunucu hakkında soru sorun veya Ether’den değişiklik yapmasını isteyin. Değişiklikler her zaman onayınızı bekler.",
+  "m_07020c1dead5c0": "Bazı izleme listeleri güncellenemedi. Tekrar deneyin.",
   "m_07042bc29e739d": "İzleme geçmişini okur",
   "m_0705742b5134b1": "Disk bütçesi",
   "m_0707834f2a5850": "Anlat",
@@ -1567,6 +1568,7 @@
   "m_074b41df7941fa": "Onayla ve yükle",
   "m_074ba2f160c506": "Tür",
   "m_074d26e8c6e228": "Sırayı karıştır",
+  "m_075101ab9abaeb": "İzleme listesi izleyicileri",
   "m_0751e96e72eb49": "Ev dışında varsayılan",
   "m_07534a0138200d": "Tarayıcı aboneliği",
   "m_075406e2262ba9": "/mnt/media/movies",
@@ -2193,6 +2195,7 @@
   "m_0a6122b7b998b2": "Sunucu TLS'yi desteklemelidir.",
   "m_0a613b05c38a34": "Dakika başına minimum MB",
   "m_0a6172a52e10d4": "Tüm kanal listesi, canlı",
+  "m_0a6245265a6bcc": "Ether’da değiştirildi ancak Trakt güncellenemedi. Trakt’ı ayrıca güncelleyin.",
   "m_0a626cea89697e": "{name} yüklendi",
   "m_0a64c5b05d139f": "Günlükleri filtrele",
   "m_0a65097103ae1b": "Yayımlandı",
@@ -2241,6 +2244,7 @@
   "m_0a8137cbeb090d": "Önbellekteki filmler ve bölümler, izleyiciler izledikçe burada görünür.",
   "m_0a82020af2583a": "Git",
   "m_0a84681546a84d": "{start} ile {end} arası",
+  "m_0a848c1a79c063": "İzleme listesinden çıkar",
   "m_0a8d77f5f81ae9": {
     "one": "{name}, {section} sayfasında herkesin Ana Sayfası'nı izliyor. (Diğer sayfalarda {count} geçersiz kılma.)",
     "other": "{name}, {section} sayfasında herkesin Ana Sayfası'nı izliyor. (Diğer sayfalarda {count} geçersiz kılma.)"
@@ -3499,6 +3503,7 @@
     "other": "{count} kişinin geçersiz kılması var"
   },
   "m_1096905564c975": "Veritabanı trafiği ve kimlik bilgileri şifrelenmeden gönderilecek.",
+  "m_10972ef4040b5a": "İzleme listesi durumu yüklenemedi.",
   "m_1098e735d8e106": "Kanalı düzenle",
   "m_1098eadd4f14cb": "Sunucu ilkesi",
   "m_1099c1fe8b6614": "Rol",
@@ -3848,6 +3853,7 @@
   "m_12110787e9a411": "m3u xmltv oynatma listesi",
   "m_121122566aaabc": "Herhangi bir çözünürlük",
   "m_1211c370104b5b": "Bir TMDB liste kimliği veya herkese açık bir TMDB listesi bağlantısı girin.",
+  "m_1212f660fb5847": "Plex izleme listesi değişiklikleri Ether’da kalır. Plex eşitlemesi kaldırılan içerikleri geri getirebilir.",
   "m_1215e611ce1e22": "Bağlantı denetimleri",
   "m_121693081a5e6c": "{seconds} sn",
   "m_12182edc8b42c8": "Günde bir kez",
@@ -4374,6 +4380,7 @@
   "m_14acf641714987": "Süre: {length}",
   "m_14b0bb2fac148e": "Ether'in {port} bağlantı noktasını kullanır",
   "m_14b0f5386a218f": "{year}'ler",
+  "m_14b0f89ac9fde3": "İzleme listesine ekle",
   "m_14b17774e714fc": "Önyüklenen kaynaklar",
   "m_14b22935bfc88b": "Kişiler ve dönemler",
   "m_14b2dc4be95ce8": "ffmpeg donanım gpu eşzamanlı akışlar sınır rtx",
@@ -6729,12 +6736,5 @@
   "m_1ffb9d60560b3f": "Bir kümeden",
   "m_1ffceea1081742": "dvd mutlak yayın sıralama",
   "m_1ffe73d99814f5": "Hub kimlikleri, türleri veya glob desenleri",
-  "m_1ffeee0f0cedfc": "Veritabanı URL'si geçersiz kılma (isteğe bağlı)",
-  "m_07020c1dead5c0": "Bazı izleme listeleri güncellenemedi. Tekrar deneyin.",
-  "m_075101ab9abaeb": "İzleme listesi izleyicileri",
-  "m_0a6245265a6bcc": "Ether’da değiştirildi ancak Trakt güncellenemedi. Trakt’ı ayrıca güncelleyin.",
-  "m_0a848c1a79c063": "İzleme listesinden çıkar",
-  "m_10972ef4040b5a": "İzleme listesi durumu yüklenemedi.",
-  "m_1212f660fb5847": "Plex izleme listesi değişiklikleri Ether’da kalır. Plex eşitlemesi kaldırılan içerikleri geri getirebilir.",
-  "m_14b0f89ac9fde3": "İzleme listesine ekle"
+  "m_1ffeee0f0cedfc": "Veritabanı URL'si geçersiz kılma (isteğe bağlı)"
 }

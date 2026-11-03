@@ -1502,6 +1502,7 @@
   "m_06ff14eca66f32": "Schließe die Auswahl der Apps und die Konfiguration deines Servers ab.",
   "m_06ffdee51d311b": "Zeichentrick",
   "m_07003d242ff88a": "Stelle Fragen zu diesem Server oder bitte Ether um eine Änderung. Änderungen benötigen immer deine Zustimmung.",
+  "m_07020c1dead5c0": "Einige Merklisten konnten nicht aktualisiert werden. Erneut versuchen.",
   "m_07042bc29e739d": "Liest den Wiedergabeverlauf",
   "m_0705742b5134b1": "Speicherbudget",
   "m_0707834f2a5850": "Beschreiben",
@@ -1567,6 +1568,7 @@
   "m_074b41df7941fa": "Bestätigen und installieren",
   "m_074ba2f160c506": "Typ",
   "m_074d26e8c6e228": "Reihenfolge mischen",
+  "m_075101ab9abaeb": "Merklisten-Profile",
   "m_0751e96e72eb49": "Standard unterwegs",
   "m_07534a0138200d": "Browser-Abonnement",
   "m_075406e2262ba9": "/mnt/media/movies",
@@ -2193,6 +2195,7 @@
   "m_0a6122b7b998b2": "Der Server muss TLS unterstützen.",
   "m_0a613b05c38a34": "Minimum MB pro Minute",
   "m_0a6172a52e10d4": "Die gesamte Senderliste, live",
+  "m_0a6245265a6bcc": "In Ether geändert, aber Trakt konnte nicht aktualisiert werden. Trakt separat aktualisieren.",
   "m_0a626cea89697e": "{name} installiert",
   "m_0a64c5b05d139f": "Protokolle filtern",
   "m_0a65097103ae1b": "Veröffentlicht",
@@ -2241,6 +2244,7 @@
   "m_0a8137cbeb090d": "Zwischengespeicherte Filme und Episoden erscheinen hier, sobald Zuschauer etwas ansehen.",
   "m_0a82020af2583a": "Gehe zu",
   "m_0a84681546a84d": "Vom {start} bis {end}",
+  "m_0a848c1a79c063": "Von der Merkliste entfernen",
   "m_0a8d77f5f81ae9": {
     "one": "{name} folgt der Startseite für alle bei {section}. ({count} Überschreibung auf anderen Seiten.)",
     "other": "{name} folgt der Startseite für alle bei {section}. ({count} Überschreibungen auf anderen Seiten.)"
@@ -3499,6 +3503,7 @@
     "other": "{count} haben Überschreibungen"
   },
   "m_1096905564c975": "Datenbankverkehr und Zugangsdaten werden ohne Verschlüsselung gesendet.",
+  "m_10972ef4040b5a": "Der Merklistenstatus konnte nicht geladen werden.",
   "m_1098e735d8e106": "Sender bearbeiten",
   "m_1098eadd4f14cb": "Server-Richtlinie",
   "m_1099c1fe8b6614": "Rolle",
@@ -3848,6 +3853,7 @@
   "m_12110787e9a411": "m3u xmltv Playlist",
   "m_121122566aaabc": "Beliebige Auflösung",
   "m_1211c370104b5b": "Gib eine TMDB-Listen-ID oder einen Link zu einer öffentlichen TMDB-Liste ein.",
+  "m_1212f660fb5847": "Änderungen an der Plex-Merkliste bleiben in Ether. Die Plex-Synchronisierung kann entfernte Titel wiederherstellen.",
   "m_1215e611ce1e22": "Verbindungsprüfungen",
   "m_121693081a5e6c": "{seconds} s",
   "m_12182edc8b42c8": "Einmal am Tag",
@@ -4374,6 +4380,7 @@
   "m_14acf641714987": "Länge: {length}",
   "m_14b0bb2fac148e": "Verwendet den Ether-Port {port}",
   "m_14b0f5386a218f": "{year}er",
+  "m_14b0f89ac9fde3": "Zur Merkliste hinzufügen",
   "m_14b17774e714fc": "Vorgeladene Quellen",
   "m_14b22935bfc88b": "Personen und Epochen",
   "m_14b2dc4be95ce8": "ffmpeg Hardware gpu gleichzeitige Streams Limit rtx streams at once limit",
@@ -6729,12 +6736,5 @@
   "m_1ffb9d60560b3f": "Aus einem Cluster",
   "m_1ffceea1081742": "dvd absolut ausgestrahlt Reihenfolge",
   "m_1ffe73d99814f5": "Hub-IDs, Arten oder Globs",
-  "m_1ffeee0f0cedfc": "Datenbank-URL überschreiben (optional)",
-  "m_07020c1dead5c0": "Einige Merklisten konnten nicht aktualisiert werden. Erneut versuchen.",
-  "m_075101ab9abaeb": "Merklisten-Profile",
-  "m_0a6245265a6bcc": "In Ether geändert, aber Trakt konnte nicht aktualisiert werden. Trakt separat aktualisieren.",
-  "m_0a848c1a79c063": "Von der Merkliste entfernen",
-  "m_10972ef4040b5a": "Der Merklistenstatus konnte nicht geladen werden.",
-  "m_1212f660fb5847": "Änderungen an der Plex-Merkliste bleiben in Ether. Die Plex-Synchronisierung kann entfernte Titel wiederherstellen.",
-  "m_14b0f89ac9fde3": "Zur Merkliste hinzufügen"
+  "m_1ffeee0f0cedfc": "Datenbank-URL überschreiben (optional)"
 }
