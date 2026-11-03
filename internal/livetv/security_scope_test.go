@@ -11,8 +11,8 @@ import (
 
 func TestResourceCredentialOriginAndRedirect(t *testing.T) {
 	foreign := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "" || r.Header.Get("X-Provider-Secret") != "" {
-			t.Error("source headers leaked to foreign origin")
+		if r.Header.Get("Authorization") != "" || r.Header.Get("X-Provider-Secret") != "" || r.Header.Get("Referer") != "" {
+			t.Error("source headers or referring URL leaked to foreign origin")
 		}
 		_, _ = w.Write([]byte("public CDN segment"))
 	}))
@@ -30,7 +30,7 @@ func TestResourceCredentialOriginAndRedirect(t *testing.T) {
 	defer origin.Close()
 	s := testService(t, Options{HTTPClient: origin.Client()})
 	headers := http.Header{"Authorization": {"Bearer secret"}, "X-Provider-Secret": {"secret"}}
-	for _, target := range []string{origin.URL, origin.URL + "/redirect", foreign.URL} {
+	for _, target := range []string{origin.URL, origin.URL + "/redirect?token=secret", foreign.URL} {
 		res, err := s.upstreamWithHeaders(context.Background(), target, httptest.NewRequest("GET", "/", nil), headers, origin.URL)
 		if err != nil {
 			t.Fatal(err)

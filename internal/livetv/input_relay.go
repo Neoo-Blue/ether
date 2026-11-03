@@ -435,6 +435,9 @@ func scopeInputRedirects(client *http.Client, origin string, headers http.Header
 			return errRelayDowngrade
 		}
 		if relayOrigin(req.URL) != origin {
+			// Go synthesizes Referer from the previous URL, which can carry
+			// source query credentials even without a configured header.
+			req.Header.Del("Referer")
 			for name := range headers {
 				req.Header.Del(name)
 			}
