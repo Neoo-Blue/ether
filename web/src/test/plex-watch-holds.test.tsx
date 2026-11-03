@@ -27,12 +27,21 @@ describe("Plex watch state actions", () => {
     const calls: string[] = [];
     mockFetch((path, init) => {
       calls.push(`${init?.method ?? "GET"} ${path}`);
-      return { connected: true, enabled: true, held: 2, eligibility: "allowed" };
+      return {
+        connected: true,
+        direction: 1,
+        importInterval: 10,
+        skipped: 0,
+        held: 2,
+        eligibility: "allowed",
+      };
     });
     render(<PlexWatchSync viewerId={7} plexId={77} />);
-    const importButton = await screen.findByRole("button", { name: "Import from Plex" });
+    const importButton = await screen.findByRole("button", { name: "Import now" });
     await userEvent.hover(screen.getByRole("button", { name: "About Plex watch state" }));
-    expect(await screen.findByRole("tooltip")).toHaveTextContent("Playback progress stays here.");
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Uploading existing Ether state is a separate action.",
+    );
     expect(screen.queryByText("Plex eligibility")).not.toBeInTheDocument();
     expect(document.querySelector("details")).toBeNull();
     await userEvent.click(importButton);
@@ -42,7 +51,15 @@ describe("Plex watch state actions", () => {
   });
   it("offers Resolve and Retry only while sends are held or failed", async () => {
     const calls: string[] = [];
-    let status = { connected: true, enabled: true, held: 2, heldLegacy: 2, dead: 1 };
+    let status = {
+      connected: true,
+      direction: 1,
+      importInterval: 10,
+      skipped: 0,
+      held: 2,
+      heldLegacy: 2,
+      dead: 1,
+    };
     mockFetch((path, init) => {
       calls.push(`${init?.method ?? "GET"} ${path}`);
       if (path.endsWith("/resolve")) status = { ...status, held: 0, heldLegacy: 0 };
@@ -65,11 +82,11 @@ describe("Plex watch state actions", () => {
     );
   });
   it("requires connection before importing or exporting", async () => {
-    mockFetch(() => ({ connected: false, enabled: false }));
+    mockFetch(() => ({ connected: false, direction: 0, importInterval: 10, skipped: 0 }));
     render(<PlexWatchSync viewerId={7} plexId={77} />);
-    expect(await screen.findByRole("button", { name: "Import from Plex" })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: "Import now" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Export current state" })).toBeDisabled();
-    await userEvent.hover(screen.getByRole("button", { name: "Import from Plex" }).parentElement!);
+    await userEvent.hover(screen.getByRole("button", { name: "Import now" }).parentElement!);
     expect(await screen.findByRole("tooltip")).toHaveTextContent("Connect the Plex account first");
     expect(
       screen.getByRole("button", { name: "Connect this viewer's Plex account" }),

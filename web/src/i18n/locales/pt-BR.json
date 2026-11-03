@@ -162,7 +162,6 @@
   "m_00c52a072d4020": "Um membro do cluster. O trabalho agendado é executado no líder.",
   "m_00cb62f64cdc80": "Qualidade › O que mais importa",
   "m_00ccdcf5f815e1": "Precisa de reconhecimento de fala → Configurar",
-  "m_00ce5469cbd959": "Conecte a conta Plex deste espectador para importar marcações de assistido e avaliações ou exportar o estado atual. Enviar mudanças futuras ativa as exportações e as atualizações contínuas; não envia o histórico existente. O progresso de reprodução fica aqui.",
   "m_00cea3b0577733": "Título original",
   "m_00d096d7bb47d5": "Não foi possível reproduzir este canal.",
   "m_00d0aa27e2e90f": "Histórico importado",
@@ -1398,7 +1397,6 @@
   "m_069d55dae8ccc6": "{error}. As gravações no cache ficam suspensas até que a montagem e o banco de dados estejam disponíveis.",
   "m_069ffcbd19c818": "Uso da GPU nos últimos 5 minutos, agora {percent}",
   "m_06a2bf58787896": "Título da lista para assistir disponível",
-  "m_06a50fb4ebc1d4": "Ative primeiro Enviar mudanças futuras",
   "m_06a80584132dbf": "Lançamentos",
   "m_06a86204189f0f": "Deve estar ativado ou desativado.",
   "m_06a94085b5295a": "Indexadores",
@@ -5314,7 +5312,6 @@
     "one": "Conclua ou remova a fonte incompleta.",
     "other": "Conclua ou remova {count} fontes incompletas."
   },
-  "m_1983c93a765183": "Enviar mudanças futuras",
   "m_1983d32ec04b78": "Adicione um abaixo ou use um gênero.",
   "m_19862da7cdac1d": "Normal",
   "m_19879f3cbd57c8": "obtido em {duration}",
@@ -6652,5 +6649,28 @@
   "m_1ffb9d60560b3f": "De um cluster",
   "m_1ffceea1081742": "dvd absoluta exibição ordenação",
   "m_1ffe73d99814f5": "IDs de hub, tipos ou globs",
-  "m_1ffeee0f0cedfc": "URL alternativa do banco de dados (opcional)"
+  "m_1ffeee0f0cedfc": "URL alternativa do banco de dados (opcional)",
+  "m_004804edf569b6": "Reconecte sua conta Plex",
+  "m_034006518c903c": "Último envio bem-sucedido",
+  "m_03a4af1de2ae17": "Carregar mais",
+  "m_04d02888613f33": "Plex sincroniza se filmes e episódios foram assistidos e suas classificações; ele não sincroniza as posições de retomada da reprodução.",
+  "m_0673fd5eeb4a43": "Última importação bem-sucedida",
+  "m_06b62f86d761a5": {
+    "one": "Não foi possível corresponder títulos {count}",
+    "many": "Não foi possível corresponder títulos {count}",
+    "other": "Não foi possível corresponder títulos {count}"
+  },
+  "m_08b54d2a231cdb": "Ether → Plex",
+  "m_0cd3fe0e5616ea": "Mostrar títulos que não puderam ser correspondidos",
+  "m_0d1e47b8d9df10": "Plex → Ether",
+  "m_0f9d9c67f1d1d2": "Importar agora",
+  "m_149ad0735dfcc6": "A visualização do histórico no Plex não pôde ser sincronizada.",
+  "m_15834328e5fde7": "Intervalo de importação",
+  "m_17f6802b7f90ad": "Próxima importação agendada",
+  "m_189fe8386bde22": "Conecte a conta Plex deste visualizador para sincronizar o status e as classificações de exibição de filmes e episódios. O upload de dados existentes do Ether requer uma ação separada.",
+  "m_18a69bda35224c": "No Plex, ative “Sync My Watch State and Ratings”.",
+  "m_19201b1cd9fee7": "Problema atual",
+  "m_1b9ffc61db13a1": "Primeiro selecione um modo que envie alterações para Plex.",
+  "m_1f6d3109c6fe4f": "Esta conta não pode acessar o histórico de visualizações no Plex.",
+  "m_1fb84f1286f91e": "Direção de sincronização"
 }

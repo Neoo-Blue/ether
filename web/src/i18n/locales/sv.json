@@ -159,7 +159,6 @@
   "m_00c52a072d4020": "En klustermedlem. Schemalagt arbete körs på ledaren.",
   "m_00cb62f64cdc80": "Kvalitet › Vad som är viktigast",
   "m_00ccdcf5f815e1": "Behöver taligenkänning → Ställ in",
-  "m_00ce5469cbd959": "Anslut den här tittarens Plex-konto för att importera tittarmarkeringar och betyg eller exportera aktuellt tillstånd. Skicka framtida ändringar aktiverar exporter och löpande uppdateringar; det laddar inte upp befintlig historik. Uppspelningsförlopp stannar här.",
   "m_00cea3b0577733": "Originaltitel",
   "m_00d096d7bb47d5": "Det gick inte att spela upp den här kanalen.",
   "m_00d0aa27e2e90f": "Importerad historik",
@@ -1362,7 +1361,6 @@
   "m_069d55dae8ccc6": "{error}. Cacheskrivningar är pausade tills monteringen och databasen är tillgängliga.",
   "m_069ffcbd19c818": "GPU-användning de senaste 5 minuterna, nu {percent}",
   "m_06a2bf58787896": "Titel på bevakningslistan tillgänglig",
-  "m_06a50fb4ebc1d4": "Aktivera Skicka framtida ändringar först",
   "m_06a80584132dbf": "Nya utgåvor",
   "m_06a86204189f0f": "Måste vara på eller av.",
   "m_06a94085b5295a": "Indexerare",
@@ -5180,7 +5178,6 @@
     "one": "Slutför eller ta bort den ofullständiga källan.",
     "other": "Slutför eller ta bort {count} ofullständiga källor."
   },
-  "m_1983c93a765183": "Skicka framtida ändringar",
   "m_1983d32ec04b78": "Lägg till en nedan, eller använd en genre.",
   "m_19862da7cdac1d": "Normal",
   "m_19879f3cbd57c8": "hämtad på {duration}",
@@ -6489,5 +6486,27 @@
   "m_1ffb9d60560b3f": "Från ett kluster",
   "m_1ffceea1081742": "dvd absolut sänd ordning",
   "m_1ffe73d99814f5": "Hub-ID:n, typer eller globmönster",
-  "m_1ffeee0f0cedfc": "Åsidosätt databas-URL (valfritt)"
+  "m_1ffeee0f0cedfc": "Åsidosätt databas-URL (valfritt)",
+  "m_004804edf569b6": "Återanslut ditt Plex-konto",
+  "m_034006518c903c": "Senaste lyckade sändningen",
+  "m_03a4af1de2ae17": "Ladda mer",
+  "m_04d02888613f33": "Plex synkroniserar om filmer och avsnitt har setts och deras betyg; den synkroniserar inte positionerna för återuppta uppspelning.",
+  "m_0673fd5eeb4a43": "Senaste lyckade import",
+  "m_06b62f86d761a5": {
+    "one": "{count}-titlar kunde inte matchas",
+    "other": "{count}-titlar kunde inte matchas"
+  },
+  "m_08b54d2a231cdb": "Ether → Plex",
+  "m_0cd3fe0e5616ea": "Visa titlar som inte kunde matchas",
+  "m_0d1e47b8d9df10": "Plex → Ether",
+  "m_0f9d9c67f1d1d2": "Importera nu",
+  "m_149ad0735dfcc6": "Visningshistoriken på Plex kunde inte synkroniseras.",
+  "m_15834328e5fde7": "Importintervall",
+  "m_17f6802b7f90ad": "Nästa schemalagda import",
+  "m_189fe8386bde22": "Anslut den här tittarens Plex-konto för att synkronisera film- och avsnittsvisningsstatus och betyg. Att ladda upp befintliga data från Ether kräver en separat åtgärd.",
+  "m_18a69bda35224c": "I Plex, slå på “Sync My Watch State and Ratings”.",
+  "m_19201b1cd9fee7": "Aktuellt problem",
+  "m_1b9ffc61db13a1": "Välj först ett läge som skickar ändringar till Plex.",
+  "m_1f6d3109c6fe4f": "Det här kontot kan inte komma åt visningshistoriken på Plex.",
+  "m_1fb84f1286f91e": "Synkroniseringsriktning"
 }

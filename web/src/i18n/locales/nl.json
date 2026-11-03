@@ -159,7 +159,6 @@
   "m_00c52a072d4020": "Een clusterlid. Geplande taken draaien op de leider.",
   "m_00cb62f64cdc80": "Kwaliteit › Wat het belangrijkst is",
   "m_00ccdcf5f815e1": "Heeft spraakherkenning nodig → Instellen",
-  "m_00ce5469cbd959": "Verbind het Plex-account van deze kijker om gezien-markeringen en beoordelingen te importeren of de huidige status te exporteren. Toekomstige wijzigingen sturen schakelt exports en lopende updates in; het uploadt geen bestaande geschiedenis. De afspeelvoortgang blijft hier.",
   "m_00cea3b0577733": "Originele titel",
   "m_00d096d7bb47d5": "Dit kanaal kan niet worden afgespeeld.",
   "m_00d0aa27e2e90f": "Geïmporteerde geschiedenis",
@@ -1362,7 +1361,6 @@
   "m_069d55dae8ccc6": "{error}. Schrijven naar de cache is onderbroken totdat de mount en database beschikbaar zijn.",
   "m_069ffcbd19c818": "GPU-gebruik over de afgelopen 5 minuten, nu {percent}",
   "m_06a2bf58787896": "Titel op watchlist beschikbaar",
-  "m_06a50fb4ebc1d4": "Zet eerst Toekomstige wijzigingen sturen aan",
   "m_06a80584132dbf": "Nieuwe uitgaven",
   "m_06a86204189f0f": "Moet aan of uit zijn.",
   "m_06a94085b5295a": "Indexers",
@@ -5180,7 +5178,6 @@
     "one": "Voltooi of verwijder de onvolledige bron.",
     "other": "Voltooi of verwijder {count} onvolledige bronnen."
   },
-  "m_1983c93a765183": "Toekomstige wijzigingen sturen",
   "m_1983d32ec04b78": "Voeg er hieronder een toe, of gebruik een genre.",
   "m_19862da7cdac1d": "Normaal",
   "m_19879f3cbd57c8": "opgehaald in {duration}",
@@ -6489,5 +6486,27 @@
   "m_1ffb9d60560b3f": "Uit een cluster",
   "m_1ffceea1081742": "dvd absoluut uitgezonden volgorde",
   "m_1ffe73d99814f5": "Hub-ID's, soorten of globs",
-  "m_1ffeee0f0cedfc": "Database-URL overschrijven (optioneel)"
+  "m_1ffeee0f0cedfc": "Database-URL overschrijven (optioneel)",
+  "m_004804edf569b6": "Maak opnieuw verbinding met uw Plex-account",
+  "m_034006518c903c": "Laatste succesvolle verzending",
+  "m_03a4af1de2ae17": "Laad meer",
+  "m_04d02888613f33": "Plex synchroniseert of films en afleveringen zijn bekeken, en hun beoordelingen; het synchroniseert de hervattingsposities voor afspelen niet.",
+  "m_0673fd5eeb4a43": "Laatste succesvolle import",
+  "m_06b62f86d761a5": {
+    "one": "{count}-titels konden niet worden gematcht",
+    "other": "{count}-titels konden niet worden gematcht"
+  },
+  "m_08b54d2a231cdb": "Ether → Plex",
+  "m_0cd3fe0e5616ea": "Toon titels die niet konden worden gematcht",
+  "m_0d1e47b8d9df10": "Plex → Ether",
+  "m_0f9d9c67f1d1d2": "Importeer nu",
+  "m_149ad0735dfcc6": "Het bekijken van de geschiedenis op Plex kan niet worden gesynchroniseerd.",
+  "m_15834328e5fde7": "Importinterval",
+  "m_17f6802b7f90ad": "Volgende geplande import",
+  "m_189fe8386bde22": "Verbind het Plex-account van deze kijker om de kijkstatus en beoordelingen van films en afleveringen te synchroniseren. Het uploaden van bestaande gegevens uit Ether vereist een afzonderlijke actie.",
+  "m_18a69bda35224c": "Schakel in Plex “Sync My Watch State and Ratings” in.",
+  "m_19201b1cd9fee7": "Huidig ​​probleem",
+  "m_1b9ffc61db13a1": "Selecteer eerst een modus die wijzigingen naar Plex verzendt.",
+  "m_1f6d3109c6fe4f": "Dit account heeft geen toegang tot de kijkgeschiedenis op Plex.",
+  "m_1fb84f1286f91e": "Synchronisatierichting"
 }

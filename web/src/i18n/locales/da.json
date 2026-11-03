@@ -159,7 +159,6 @@
   "m_00c52a072d4020": "Et clustermedlem. Planlagt arbejde kører på lederen.",
   "m_00cb62f64cdc80": "Kvalitet › Hvad der betyder mest",
   "m_00ccdcf5f815e1": "Kræver talegenkendelse → Opsæt",
-  "m_00ce5469cbd959": "Tilslut denne seers Plex-konto for at importere sete-markeringer og vurderinger eller eksportere den aktuelle status. Send fremtidige ændringer slår eksport og løbende opdateringer til; det uploader ikke eksisterende historik. Afspilningsfremdriften bliver her.",
   "m_00cea3b0577733": "Originaltitel",
   "m_00d096d7bb47d5": "Kunne ikke afspille denne kanal.",
   "m_00d0aa27e2e90f": "Importeret historik",
@@ -1362,7 +1361,6 @@
   "m_069d55dae8ccc6": "{error}. Skrivning til cachen er sat på pause, indtil mount og database er tilgængelige.",
   "m_069ffcbd19c818": "GPU-forbrug de seneste 5 minutter, nu {percent}",
   "m_06a2bf58787896": "Titel fra overvågningslisten tilgængelig",
-  "m_06a50fb4ebc1d4": "Slå først Send fremtidige ændringer til",
   "m_06a80584132dbf": "Nye udgivelser",
   "m_06a86204189f0f": "Skal være slået til eller fra.",
   "m_06a94085b5295a": "Indexere",
@@ -5180,7 +5178,6 @@
     "one": "Gør den ufuldstændige kilde færdig, eller fjern den.",
     "other": "Gør {count} ufuldstændige kilder færdige, eller fjern dem."
   },
-  "m_1983c93a765183": "Send fremtidige ændringer",
   "m_1983d32ec04b78": "Tilføj en nedenfor, eller brug et genremærke.",
   "m_19862da7cdac1d": "Normal",
   "m_19879f3cbd57c8": "hentet på {duration}",
@@ -6489,5 +6486,27 @@
   "m_1ffb9d60560b3f": "Fra en cluster",
   "m_1ffceea1081742": "dvd absolut sendt rækkefølge",
   "m_1ffe73d99814f5": "Hub-id’er, typer eller globs",
-  "m_1ffeee0f0cedfc": "Tilsidesæt database-URL (valgfrit)"
+  "m_1ffeee0f0cedfc": "Tilsidesæt database-URL (valgfrit)",
+  "m_004804edf569b6": "Tilslut din Plex-konto igen",
+  "m_034006518c903c": "Sidste vellykkede afsendelse",
+  "m_03a4af1de2ae17": "Indlæs mere",
+  "m_04d02888613f33": "Plex synkroniserer, om film og episoder er blevet set, og deres vurderinger; den synkroniserer ikke positioner for genoptagelse af afspilning.",
+  "m_0673fd5eeb4a43": "Sidste vellykkede import",
+  "m_06b62f86d761a5": {
+    "one": "{count} titler kunne ikke matches",
+    "other": "{count} titler kunne ikke matches"
+  },
+  "m_08b54d2a231cdb": "Ether → Plex",
+  "m_0cd3fe0e5616ea": "Vis titler, der ikke kunne matches",
+  "m_0d1e47b8d9df10": "Plex → Ether",
+  "m_0f9d9c67f1d1d2": "Importer nu",
+  "m_149ad0735dfcc6": "Visningshistorik på Plex kunne ikke synkroniseres.",
+  "m_15834328e5fde7": "Importinterval",
+  "m_17f6802b7f90ad": "Næste planlagte import",
+  "m_189fe8386bde22": "Tilslut denne seers Plex-konto for at synkronisere film- og episodevisningsstatus og vurderinger. Upload af eksisterende data fra Ether kræver en separat handling.",
+  "m_18a69bda35224c": "I Plex skal du tænde for “Sync My Watch State and Ratings”.",
+  "m_19201b1cd9fee7": "Aktuelt problem",
+  "m_1b9ffc61db13a1": "Vælg først en tilstand, der sender ændringer til Plex.",
+  "m_1f6d3109c6fe4f": "Denne konto kan ikke få adgang til visningshistorik på Plex.",
+  "m_1fb84f1286f91e": "Synkroniseringsretning"
 }

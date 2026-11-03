@@ -159,7 +159,6 @@
   "m_00c52a072d4020": "Klusterin jäsen. Ajastetut työt suoritetaan johtajalla.",
   "m_00cb62f64cdc80": "Laatu › Mikä on tärkeintä",
   "m_00ccdcf5f815e1": "Tarvitsee puheentunnistuksen → Ota käyttöön",
-  "m_00ce5469cbd959": "Yhdistä tämän katselijan Plex-tili, jos haluat tuoda katsotut-merkinnät ja arvostelut tai viedä nykyisen tilan. Lähetä tulevat muutokset ottaa käyttöön viennin ja jatkuvat päivitykset; se ei lähetä olemassa olevaa historiaa. Toiston eteneminen säilyy täällä.",
   "m_00cea3b0577733": "Alkuperäinen nimi",
   "m_00d096d7bb47d5": "Tämän kanavan toisto epäonnistui.",
   "m_00d0aa27e2e90f": "Tuotu historia",
@@ -1362,7 +1361,6 @@
   "m_069d55dae8ccc6": "{error}. Välimuistiin kirjoitus on keskeytetty, kunnes liitos ja tietokanta ovat käytettävissä.",
   "m_069ffcbd19c818": "Grafiikkasuorittimen käyttö viimeisten 5 minuutin ajalta, nyt {percent}",
   "m_06a2bf58787896": "Seurantalistan nimike saatavilla",
-  "m_06a50fb4ebc1d4": "Ota ensin käyttöön Lähetä tulevat muutokset",
   "m_06a80584132dbf": "Uutuudet",
   "m_06a86204189f0f": "Arvon on oltava käytössä tai pois käytöstä.",
   "m_06a94085b5295a": "Indeksoijat",
@@ -5180,7 +5178,6 @@
     "one": "Viimeistele tai poista keskeneräinen lähde.",
     "other": "Viimeistele tai poista {count} keskeneräistä lähdettä."
   },
-  "m_1983c93a765183": "Lähetä tulevat muutokset",
   "m_1983d32ec04b78": "Lisää yksi alle tai käytä genre-tunnistetta.",
   "m_19862da7cdac1d": "Normaali",
   "m_19879f3cbd57c8": "haettu ajassa {duration}",
@@ -6489,5 +6486,27 @@
   "m_1ffb9d60560b3f": "Klusterista",
   "m_1ffceea1081742": "dvd absoluuttinen esitys järjestys",
   "m_1ffe73d99814f5": "Hub-tunnukset, lajit tai glob-mallit",
-  "m_1ffeee0f0cedfc": "Tietokannan URL-osoitteen ohitus (valinnainen)"
+  "m_1ffeee0f0cedfc": "Tietokannan URL-osoitteen ohitus (valinnainen)",
+  "m_004804edf569b6": "Yhdistä Plex-tilisi uudelleen",
+  "m_034006518c903c": "Viimeisin onnistunut lähetys",
+  "m_03a4af1de2ae17": "Lataa lisää",
+  "m_04d02888613f33": "Plex synkronoi, onko elokuvia ja jaksoja katsottu, ja niiden luokitukset; se ei synkronoi toiston jatkamiskohtia.",
+  "m_0673fd5eeb4a43": "Viimeinen onnistunut tuonti",
+  "m_06b62f86d761a5": {
+    "one": "{count} otsikkoa ei voitu yhdistää",
+    "other": "{count} otsikkoa ei voitu yhdistää"
+  },
+  "m_08b54d2a231cdb": "Ether → Plex",
+  "m_0cd3fe0e5616ea": "Näytä otsikot, joita ei voitu yhdistää",
+  "m_0d1e47b8d9df10": "Plex → Ether",
+  "m_0f9d9c67f1d1d2": "Tuo nyt",
+  "m_149ad0735dfcc6": "Katseluhistoriaa Plex:ssä ei voitu synkronoida.",
+  "m_15834328e5fde7": "Tuontiväli",
+  "m_17f6802b7f90ad": "Seuraava ajoitettu tuonti",
+  "m_189fe8386bde22": "Yhdistä tämän katsojan Plex-tili synkronoidaksesi elokuvien ja jaksojen katselutilan ja luokitukset. Olemassa olevien tietojen lataaminen Ether:stä vaatii erillisen toimenpiteen.",
+  "m_18a69bda35224c": "Ota Plex:ssä käyttöön “Sync My Watch State and Ratings”.",
+  "m_19201b1cd9fee7": "Nykyinen ongelma",
+  "m_1b9ffc61db13a1": "Valitse ensin tila, joka lähettää muutokset Plex:ään.",
+  "m_1f6d3109c6fe4f": "Tämä tili ei voi käyttää katseluhistoriaa Plex:ssä.",
+  "m_1fb84f1286f91e": "Synkronoi suunta"
 }

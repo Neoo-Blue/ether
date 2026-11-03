@@ -159,7 +159,6 @@
   "m_00c52a072d4020": "Ein Cluster-Mitglied. Geplante Aufgaben laufen auf dem Leader.",
   "m_00cb62f64cdc80": "Qualität › Was am wichtigsten ist",
   "m_00ccdcf5f815e1": "Braucht Spracherkennung → Einrichten",
-  "m_00ce5469cbd959": "Verbinde das Plex-Konto dieses Zuschauers, um Gesehen-Markierungen und Bewertungen zu importieren oder den aktuellen Stand zu exportieren. „Künftige Änderungen senden“ aktiviert Exporte und laufende Updates; bestehender Verlauf wird nicht hochgeladen. Der Wiedergabefortschritt bleibt hier.",
   "m_00cea3b0577733": "Originaltitel",
   "m_00d096d7bb47d5": "Dieser Kanal konnte nicht abgespielt werden.",
   "m_00d0aa27e2e90f": "Importierter Verlauf",
@@ -1362,7 +1361,6 @@
   "m_069d55dae8ccc6": "{error}. Cache-Schreibvorgänge sind ausgesetzt, bis das Mount und die Datenbank verfügbar sind.",
   "m_069ffcbd19c818": "GPU-Auslastung der letzten 5 Minuten, aktuell {percent}",
   "m_06a2bf58787896": "Merklisten-Titel verfügbar",
-  "m_06a50fb4ebc1d4": "Aktiviere zuerst „Künftige Änderungen senden“",
   "m_06a80584132dbf": "Neuerscheinungen",
   "m_06a86204189f0f": "Muss ein- oder ausgeschaltet sein.",
   "m_06a94085b5295a": "Indexer",
@@ -5180,7 +5178,6 @@
     "one": "Vervollständige oder entferne die unvollständige Quelle.",
     "other": "Vervollständige oder entferne {count} unvollständige Quellen."
   },
-  "m_1983c93a765183": "Künftige Änderungen senden",
   "m_1983d32ec04b78": "Füg unten einen hinzu, oder nutz ein Genre.",
   "m_19862da7cdac1d": "Normal",
   "m_19879f3cbd57c8": "abgerufen in {duration}",
@@ -6489,5 +6486,27 @@
   "m_1ffb9d60560b3f": "Aus einem Cluster",
   "m_1ffceea1081742": "dvd absolut ausgestrahlt Reihenfolge",
   "m_1ffe73d99814f5": "Hub-IDs, Arten oder Globs",
-  "m_1ffeee0f0cedfc": "Datenbank-URL überschreiben (optional)"
+  "m_1ffeee0f0cedfc": "Datenbank-URL überschreiben (optional)",
+  "m_004804edf569b6": "Verbinden Sie Ihr Plex-Konto erneut",
+  "m_034006518c903c": "Letzter erfolgreicher Versand",
+  "m_03a4af1de2ae17": "Mehr laden",
+  "m_04d02888613f33": "Plex synchronisiert, ob Filme und Episoden angesehen wurden und welche Bewertungen sie erhalten. Die Wiederaufnahmepositionen werden nicht synchronisiert.",
+  "m_0673fd5eeb4a43": "Letzter erfolgreicher Import",
+  "m_06b62f86d761a5": {
+    "one": "{count}-Titel konnten nicht abgeglichen werden",
+    "other": "{count}-Titel konnten nicht abgeglichen werden"
+  },
+  "m_08b54d2a231cdb": "Ether → Plex",
+  "m_0cd3fe0e5616ea": "Titel anzeigen, die nicht zugeordnet werden konnten",
+  "m_0d1e47b8d9df10": "Plex → Ether",
+  "m_0f9d9c67f1d1d2": "Jetzt importieren",
+  "m_149ad0735dfcc6": "Der Anzeigeverlauf auf Plex konnte nicht synchronisiert werden.",
+  "m_15834328e5fde7": "Importintervall",
+  "m_17f6802b7f90ad": "Nächster geplanter Import",
+  "m_189fe8386bde22": "Verbinden Sie das Plex-Konto dieses Zuschauers, um den Anzeigestatus und die Bewertungen von Filmen und Episoden zu synchronisieren. Das Hochladen vorhandener Daten von Ether erfordert eine separate Aktion.",
+  "m_18a69bda35224c": "Aktivieren Sie in Plex “Sync My Watch State and Ratings”.",
+  "m_19201b1cd9fee7": "Aktuelles Problem",
+  "m_1b9ffc61db13a1": "Wählen Sie zunächst einen Modus aus, der Änderungen an Plex sendet.",
+  "m_1f6d3109c6fe4f": "Dieses Konto kann nicht auf den Anzeigeverlauf auf Plex zugreifen.",
+  "m_1fb84f1286f91e": "Synchronisierungsrichtung"
 }

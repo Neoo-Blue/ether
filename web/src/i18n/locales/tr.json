@@ -159,7 +159,6 @@
   "m_00c52a072d4020": "Bir küme üyesi. Zamanlanmış işler lider üzerinde çalışır.",
   "m_00cb62f64cdc80": "Kalite › En çok önem verilenler",
   "m_00ccdcf5f815e1": "Konuşmayı metne gerekir → Kur",
-  "m_00ce5469cbd959": "İzlendi işaretlerini ve puanları içe aktarmak veya mevcut durumu dışa aktarmak için bu izleyicinin Plex hesabını bağlayın. Gelecekteki değişiklikleri gönder, dışa aktarmayı ve süregelen güncellemeleri açar; mevcut geçmişi yüklemez. Oynatma ilerlemesi burada kalır.",
   "m_00cea3b0577733": "Orijinal başlık",
   "m_00d096d7bb47d5": "Bu kanal oynatılamadı.",
   "m_00d0aa27e2e90f": "İçe aktarılan geçmiş",
@@ -1362,7 +1361,6 @@
   "m_069d55dae8ccc6": "{error}. Bağlama noktası ve veritabanı kullanılabilir olana kadar önbellek yazmaları askıya alındı.",
   "m_069ffcbd19c818": "Son 5 dakikadaki GPU kullanımı, şu an {percent}",
   "m_06a2bf58787896": "İzleme Listesi başlığı mevcut",
-  "m_06a50fb4ebc1d4": "Önce Gelecekteki değişiklikleri gönder seçeneğini açın",
   "m_06a80584132dbf": "Yeni çıkanlar",
   "m_06a86204189f0f": "Açık veya kapalı olmalıdır.",
   "m_06a94085b5295a": "Dizinleyiciler",
@@ -5180,7 +5178,6 @@
     "one": "Tamamlanmamış kaynağı bitirin veya kaldırın.",
     "other": "Tamamlanmamış {count} kaynağı bitirin veya kaldırın."
   },
-  "m_1983c93a765183": "Gelecekteki değişiklikleri gönder",
   "m_1983d32ec04b78": "Aşağıya bir tane ekleyin veya bir tür etiketini kullanın.",
   "m_19862da7cdac1d": "Normal",
   "m_19879f3cbd57c8": "{duration} içinde getirildi",
@@ -6489,5 +6486,27 @@
   "m_1ffb9d60560b3f": "Bir kümeden",
   "m_1ffceea1081742": "dvd mutlak yayın sıralama",
   "m_1ffe73d99814f5": "Hub kimlikleri, türleri veya glob desenleri",
-  "m_1ffeee0f0cedfc": "Veritabanı URL'si geçersiz kılma (isteğe bağlı)"
+  "m_1ffeee0f0cedfc": "Veritabanı URL'si geçersiz kılma (isteğe bağlı)",
+  "m_004804edf569b6": "Plex hesabınızı yeniden bağlayın",
+  "m_034006518c903c": "Son başarılı gönderim",
+  "m_03a4af1de2ae17": "Daha fazlasını yükle",
+  "m_04d02888613f33": "Plex, filmlerin ve bölümlerin izlenip izlenmediğini ve derecelendirmelerini senkronize eder; oynatmaya devam etme konumlarını senkronize etmez.",
+  "m_0673fd5eeb4a43": "Son başarılı içe aktarma",
+  "m_06b62f86d761a5": {
+    "one": "{count} başlıkları eşleştirilemedi",
+    "other": "{count} başlıkları eşleştirilemedi"
+  },
+  "m_08b54d2a231cdb": "Ether → Plex",
+  "m_0cd3fe0e5616ea": "Eşleşemeyen başlıkları göster",
+  "m_0d1e47b8d9df10": "Plex → Ether",
+  "m_0f9d9c67f1d1d2": "Şimdi içe aktar",
+  "m_149ad0735dfcc6": "Plex'te görüntüleme geçmişi senkronize edilemedi.",
+  "m_15834328e5fde7": "İçe aktarma aralığı",
+  "m_17f6802b7f90ad": "Sonraki planlanmış içe aktarma",
+  "m_189fe8386bde22": "Film ve bölüm izleme durumunu ve derecelendirmelerini senkronize etmek için bu izleyicinin Plex hesabını bağlayın. Mevcut verileri Ether'ten yüklemek ayrı bir işlem gerektirir.",
+  "m_18a69bda35224c": "Plex'te “Sync My Watch State and Ratings”'i açın.",
+  "m_19201b1cd9fee7": "Mevcut sorun",
+  "m_1b9ffc61db13a1": "Öncelikle değişiklikleri Plex'e gönderen modu seçin.",
+  "m_1f6d3109c6fe4f": "Bu hesap Plex'teki görüntüleme geçmişine erişemez.",
+  "m_1fb84f1286f91e": "Senkronizasyon yönü"
 }

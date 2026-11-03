@@ -159,7 +159,6 @@
   "m_00c52a072d4020": "A cluster member. Scheduled work runs on the leader.",
   "m_00cb62f64cdc80": "Quality › What matters most",
   "m_00ccdcf5f815e1": "Needs speech-to-text → Set up",
-  "m_00ce5469cbd959": "Connect this viewer's Plex account to import watched marks and ratings or export current state. Send future changes enables exports and ongoing updates; it does not upload existing history. Playback progress stays here.",
   "m_00cea3b0577733": "Original title",
   "m_00d096d7bb47d5": "Couldn't play this channel.",
   "m_00d0aa27e2e90f": "Imported history",
@@ -1365,7 +1364,6 @@
   "m_069d55dae8ccc6": "{error}. Cache writes are suspended until the mount and database are available.",
   "m_069ffcbd19c818": "GPU use over the last 5 minutes, now {percent}",
   "m_06a2bf58787896": "Watchlist title available",
-  "m_06a50fb4ebc1d4": "Turn on Send future changes first",
   "m_06a80584132dbf": "New releases",
   "m_06a86204189f0f": "Must be on or off.",
   "m_06a94085b5295a": "Indexers",
@@ -5192,7 +5190,6 @@
     "one": "Finish or remove the incomplete source.",
     "other": "Finish or remove {count} incomplete sources."
   },
-  "m_1983c93a765183": "Send future changes",
   "m_1983d32ec04b78": "Add one below, or use a genre tag.",
   "m_19862da7cdac1d": "Normal",
   "m_19879f3cbd57c8": "fetched in {duration}",
@@ -6507,5 +6504,27 @@
   "m_1ffb9d60560b3f": "From a cluster",
   "m_1ffceea1081742": "dvd absolute aired ordering",
   "m_1ffe73d99814f5": "Hub ids, kinds or globs",
-  "m_1ffeee0f0cedfc": "Database URL override (optional)"
+  "m_1ffeee0f0cedfc": "Database URL override (optional)",
+  "m_004804edf569b6": "Reconnect your Plex account",
+  "m_034006518c903c": "Last successful send",
+  "m_03a4af1de2ae17": "Load more",
+  "m_04d02888613f33": "Plex syncs watched and unwatched state and ratings, but not resume positions.",
+  "m_0673fd5eeb4a43": "Last successful import",
+  "m_06b62f86d761a5": {
+    "one": "{count} unmatched title",
+    "other": "{count} unmatched titles"
+  },
+  "m_08b54d2a231cdb": "Ether → Plex",
+  "m_0cd3fe0e5616ea": "View unmatched titles",
+  "m_0d1e47b8d9df10": "Plex → Ether",
+  "m_0f9d9c67f1d1d2": "Import now",
+  "m_149ad0735dfcc6": "Plex watch state could not be synchronized",
+  "m_15834328e5fde7": "Import interval",
+  "m_17f6802b7f90ad": "Next scheduled import",
+  "m_189fe8386bde22": "Connect this viewer's Plex account to sync watched marks and ratings. Uploading existing Ether state is a separate action.",
+  "m_18a69bda35224c": "Turn on Sync My Watch State and Ratings in Plex",
+  "m_19201b1cd9fee7": "Current problem",
+  "m_1b9ffc61db13a1": "Choose a direction that sends to Plex first",
+  "m_1f6d3109c6fe4f": "This credential cannot read Plex watch state",
+  "m_1fb84f1286f91e": "Sync direction"
 }

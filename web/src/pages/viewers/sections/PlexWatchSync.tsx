@@ -2,7 +2,7 @@ import {
   Button,
   SettingsSection,
   Spinner,
-  Switch,
+  Select,
   Tooltip,
   toast,
 } from "@braedonsaunders/appkit-ui";
@@ -10,14 +10,19 @@ import { useState } from "react";
 import { ErrorPanel } from "../../../components/feedback";
 import { SettingsRow } from "../../../components/SettingsRow";
 import { t, tn } from "../../../i18n";
-import { apiFetch, errorMessage } from "../../../lib/api";
+import { apiFetch } from "../../../lib/api";
 import { useAsync } from "../../../lib/hooks";
 
 type PlexWatchStatus = {
   connected: boolean;
   plexId?: number;
   username?: string;
-  enabled: boolean;
+  direction: number;
+  importInterval: number;
+  lastImport: number;
+  lastSend: number;
+  nextImport: number;
+  problem: string;
   eligibility: string;
   revoked: boolean;
   pending: number;
@@ -40,6 +45,22 @@ export function PlexWatchSync({ viewerId, plexId }: { viewerId: number; plexId: 
     [viewerId],
   );
   const [busy, setBusy] = useState(false);
+  const [unmatched, setUnmatched] = useState<string[] | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const loadUnmatched = async (after = "") => {
+    setBusy(true);
+    try {
+      const items = await apiFetch<string[]>(
+        `/viewers/${viewerId}/plex-watch/unmatched?after=${encodeURIComponent(after)}`,
+      );
+      setUnmatched((old) => (after ? [...(old ?? []), ...items] : items));
+      setHasMore(items.length === 100);
+    } catch {
+      toast.error(t("Plex watch state was not updated"));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const run = async (path: string, method: string, body?: unknown) => {
     setBusy(true);
@@ -49,15 +70,22 @@ export function PlexWatchSync({ viewerId, plexId }: { viewerId: number; plexId: 
         body: body === undefined ? undefined : JSON.stringify(body),
       });
       status.setData(next);
-    } catch (e) {
-      toast.error(t("Plex watch state was not updated"), { description: errorMessage(e) });
+    } catch {
+      toast.error(t("Plex watch state was not updated"));
+      void status.reload();
     } finally {
       setBusy(false);
     }
   };
 
   if (plexId <= 0) return null;
-  if (status.error) return <ErrorPanel error={status.error} onRetry={() => void status.reload()} />;
+  if (status.error)
+    return (
+      <ErrorPanel
+        error={new Error(t("Plex watch state was not updated"))}
+        onRetry={() => void status.reload()}
+      />
+    );
   if (!status.data) {
     return (
       <div className="py-6 text-center">
@@ -67,13 +95,25 @@ export function PlexWatchSync({ viewerId, plexId }: { viewerId: number; plexId: 
   }
 
   const st = status.data;
+  const date = (seconds: number) =>
+    seconds ? new Date(seconds * 1000).toLocaleString() : t("Never");
+  const problem =
+    st.problem === "consent"
+      ? t("Turn on Sync My Watch State and Ratings in Plex")
+      : st.problem === "token"
+        ? t("Reconnect your Plex account")
+        : st.problem === "credential"
+          ? t("This credential cannot read Plex watch state")
+          : st.problem
+            ? t("Plex watch state could not be synchronized")
+            : "";
   return (
     <SettingsSection>
       <h2 className="flex items-center gap-2 px-5 py-4 text-sm font-semibold">
         {t("Plex account watch state")}
         <Tooltip
           content={t(
-            "Connect this viewer's Plex account to import watched marks and ratings or export current state. Send future changes enables exports and ongoing updates; it does not upload existing history. Playback progress stays here.",
+            "Connect this viewer's Plex account to sync watched marks and ratings. Uploading existing Ether state is a separate action.",
           )}
         >
           <button type="button" aria-label={t("About Plex watch state")} className="text-fg-muted">
@@ -119,24 +159,105 @@ export function PlexWatchSync({ viewerId, plexId }: { viewerId: number; plexId: 
         />
       ) : null}
       <SettingsRow
-        title={t("Send future changes")}
+        title={t("Sync direction")}
         control={
-          <Switch
-            aria-label={t("Send future changes")}
-            checked={st.enabled}
+          <Select
+            aria-label={t("Sync direction")}
+            value={st.direction}
             disabled={busy || !st.connected}
-            onChange={(e) => void run("", "PUT", { enabled: e.currentTarget.checked })}
-          />
+            onChange={(e) =>
+              void run("", "PUT", {
+                direction: Number(e.currentTarget.value),
+                interval: st.importInterval,
+              })
+            }
+          >
+            <option value={0}>{t("Off")}</option>
+            <option value={1}>{t("Ether → Plex")}</option>
+            <option value={2}>{t("Plex → Ether")}</option>
+            <option value={3}>{t("Both")}</option>
+          </Select>
         }
       />
+      {(st.direction & 2) !== 0 ? (
+        <SettingsRow
+          title={t("Import interval")}
+          control={
+            <Select
+              aria-label={t("Import interval")}
+              value={st.importInterval}
+              disabled={busy || !st.connected}
+              onChange={(e) =>
+                void run("", "PUT", {
+                  direction: st.direction,
+                  interval: Number(e.currentTarget.value),
+                })
+              }
+            >
+              {[5, 10, 30, 60].map((n) => (
+                <option value={n} key={n}>
+                  {tn(n, "{count} minute", "{count} minutes")}
+                </option>
+              ))}
+            </Select>
+          }
+        />
+      ) : null}
+      <p className="px-5 py-2 text-sm text-fg-muted">
+        {t("Plex syncs watched and unwatched state and ratings, but not resume positions.")}
+      </p>
+      <SettingsRow
+        title={t("Last successful import")}
+        control={<span>{date(st.lastImport)}</span>}
+      />
+      <SettingsRow title={t("Last successful send")} control={<span>{date(st.lastSend)}</span>} />
+      {(st.direction & 2) !== 0 ? (
+        <SettingsRow
+          title={t("Next scheduled import")}
+          control={<span>{date(st.nextImport)}</span>}
+        />
+      ) : null}
+      {problem ? (
+        <SettingsRow title={t("Current problem")} control={<span>{problem}</span>} />
+      ) : null}
+      <SettingsRow
+        title={tn(st.skipped, "{count} unmatched title", "{count} unmatched titles")}
+        control={
+          st.skipped > 0 ? (
+            <Button disabled={busy} onClick={() => void loadUnmatched()}>
+              {t("View unmatched titles")}
+            </Button>
+          ) : null
+        }
+      />
+      {unmatched ? (
+        <div className="px-5 py-2">
+          <ul>
+            {unmatched.map((guid) => (
+              <li key={guid}>
+                <code>{guid}</code>
+              </li>
+            ))}
+          </ul>
+          {hasMore ? (
+            <Button
+              disabled={busy}
+              onClick={() => void loadUnmatched(unmatched[unmatched.length - 1])}
+            >
+              {t("Load more")}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-2 px-5 py-4">
         {(
           [
-            ["/import", t("Import from Plex")],
+            ["/import", t("Import now")],
             ["/export", t("Export current state")],
           ] as const
         ).map(([path, label]) => {
-          const disabled = busy || !st.connected || (path === "/export" && !st.enabled);
+          const disabled =
+            busy || !st.connected || (path === "/export" && (st.direction & 1) === 0);
           const button = (
             <Button
               variant={disabled ? "outline" : "default"}
@@ -152,8 +273,8 @@ export function PlexWatchSync({ viewerId, plexId }: { viewerId: number; plexId: 
               content={
                 !st.connected
                   ? t("Connect the Plex account first")
-                  : !st.enabled && path === "/export"
-                    ? t("Turn on Send future changes first")
+                  : (st.direction & 1) === 0 && path === "/export"
+                    ? t("Choose a direction that sends to Plex first")
                     : t("Please wait")
               }
             >
