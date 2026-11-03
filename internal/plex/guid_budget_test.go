@@ -71,11 +71,18 @@ func TestHubsWarmPlexGUIDsInBackgroundAndEpisodesRenderHierarchy(t *testing.T) {
 			case q.Get("type") == "1" && q.Get("guid") == "tmdb://550":
 				io.WriteString(w, `{"MediaContainer":{"Metadata":[{"guid":"`+fcGUID+`","type":"movie","Guid":[{"id":"tmdb://550"}]}]}}`)
 				return
+			case q.Get("type") == "2" && q.Get("guid") == "tmdb://1396":
+				io.WriteString(w, `{"MediaContainer":{"Metadata":[{"guid":"`+showGUID+`","type":"show","Guid":[{"id":"tmdb://1396"}]}]}}`)
+				return
 			case q.Get("type") == "4" && q.Get("guid") == "tmdb://1396" && q.Get("parentIndex") == "1" && q.Get("index") == "1":
 				io.WriteString(w, `{"MediaContainer":{"Metadata":[{"guid":"`+ep1GUID+`","type":"episode","index":1,"parentIndex":1,"parentGuid":"`+seasonGUID+`","grandparentGuid":"`+showGUID+`","Guid":[{"id":"tmdb://1396/1/1"}]}]}}`)
 				return
 			}
 			io.WriteString(w, `{"MediaContainer":{"Metadata":[]}}`)
+		case "/library/metadata/5d7768265af944001f1f6976":
+			io.WriteString(w, `{"MediaContainer":{"Metadata":[{"guid":"`+fcGUID+`","type":"movie","Guid":[{"id":"tmdb://550"}]}]}}`)
+		case "/library/metadata/5d9c086c46115600200aa2fe":
+			io.WriteString(w, `{"MediaContainer":{"Metadata":[{"guid":"`+showGUID+`","type":"show","Guid":[{"id":"tmdb://1396"}]}]}}`)
 		default:
 			http.NotFound(w, r)
 		}
@@ -115,7 +122,7 @@ func TestHubsWarmPlexGUIDsInBackgroundAndEpisodesRenderHierarchy(t *testing.T) {
 	rec = f.get(t, "/library/metadata/"+bbE1.Key.String())
 	body := rec.Body.String()
 	if rec.Code != 200 || !containsSubstr(body, ep1GUID) || !containsSubstr(body, seasonGUID) || !containsSubstr(body, showGUID) {
-		t.Fatalf("expected episode/season/show plex:// GUIDs in episode detail, got: %s", body)
+		t.Fatalf("expected episode/season/show plex:// GUIDs in episode detail (ep %v season %v show %v)", containsSubstr(body, ep1GUID), containsSubstr(body, seasonGUID), containsSubstr(body, showGUID))
 	}
 }
 

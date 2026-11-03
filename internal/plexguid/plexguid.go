@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -262,7 +263,7 @@ func resolvableKey(k core.RatingKey) bool {
 // Cached is safe for lists: no network requests or credentials are needed.
 func (s *Service) Cached(ctx context.Context, k core.RatingKey) string {
 	var guid string
-	_ = s.db.QueryRowContext(ctx, `SELECT guid FROM plexguid_mappings m WHERE rating_key=? AND checked_at>? AND EXISTS (SELECT 1 FROM plexguid_verified v WHERE v.rating_key=m.rating_key AND v.guid=m.guid)`, int64(k), time.Now().Add(-cacheTTL).Unix()).Scan(&guid)
+	_ = s.db.QueryRowContext(ctx, `SELECT guid FROM plexguid_mappings m WHERE rating_key=? AND checked_at>?`, int64(k), time.Now().Add(-cacheTTL).Unix()).Scan(&guid)
 	return guid
 }
 
@@ -303,7 +304,7 @@ func (s *Service) CachedMany(ctx context.Context, keys []core.RatingKey) map[cor
 			b.WriteByte('?')
 			args = append(args, int64(k))
 		}
-		b.WriteString(`) AND checked_at>? AND EXISTS (SELECT 1 FROM plexguid_verified v WHERE v.rating_key=plexguid_mappings.rating_key AND v.guid=plexguid_mappings.guid)`)
+		b.WriteString(`) AND checked_at>?`)
 		args = append(args, cutoff)
 		rows, err := s.db.QueryContext(ctx, b.String(), args...)
 		if err != nil {
@@ -359,10 +360,19 @@ func (s *Service) Resolve(ctx context.Context, k core.RatingKey) (string, error)
 		return "", core.ErrUnauthorized
 	}
 	switch k.Kind() {
-	case core.KindMovie:
-		return s.resolveMovieOrShow(ctx, k, "movie", "1")
-	case core.KindShow:
-		return s.resolveMovieOrShow(ctx, k, "show", "2")
+	case core.KindMovie, core.KindShow:
+		kind, typ := "movie", "1"
+		if k.Kind() == core.KindShow {
+			kind, typ = "show", "2"
+		}
+		guid, err := s.resolveMovieOrShow(ctx, k, kind, typ)
+		if err == nil && guid == "" {
+			// Existing mappings are served until re-verified (#289); one that
+			// no longer verifies (a namesake from another year or country)
+			// is dropped so Plex apps stop loading its cast and metadata.
+			_, _ = s.db.ExecContext(ctx, `DELETE FROM plexguid_mappings WHERE rating_key=? AND NOT EXISTS (SELECT 1 FROM plexguid_verified v WHERE v.rating_key=plexguid_mappings.rating_key AND v.guid=plexguid_mappings.guid)`, int64(k))
+		}
+		return guid, err
 	case core.KindSeason:
 		return s.resolveSeason(ctx, k)
 	case core.KindEpisode:
@@ -494,6 +504,9 @@ func hasExternalID(item providerItem, want ...string) bool {
 // verifyTitle checks the canonical metadata record, not just a search hit.
 func (s *Service) verifyTitle(ctx context.Context, k core.RatingKey, kind, guid string) (bool, error) {
 	items, err := s.getItems(ctx, "/library/metadata/"+guidHex(guid, kind), url.Values{"includeGuids": {"1"}})
+	if errors.Is(err, core.ErrNotFound) {
+		return false, nil // no canonical record: not verified
+	}
 	if err != nil {
 		return false, err
 	}
@@ -504,7 +517,9 @@ func (s *Service) verifyTitle(ctx context.Context, k core.RatingKey, kind, guid 
 		if item.GUID != guid || item.Type != kind {
 			continue
 		}
-		if year > 0 && year != item.Year {
+		// TMDB and Plex years can differ by one (festival vs release); a
+		// namesake from another decade cannot.
+		if year > 0 && item.Year > 0 && (item.Year < year-1 || item.Year > year+1) {
 			continue
 		}
 		if hasExternalID(item, fmt.Sprintf("tmdb://%d", k.TMDB()), externalIMDB(imdb)) {
@@ -623,6 +638,7 @@ func (s *Service) resolveEpisode(ctx context.Context, k core.RatingKey) (string,
 	showID := k.TMDB()
 	seasonNum := k.Season()
 	epNum := k.Episode()
+	showKey := core.ShowKey(showID)
 	seasonKey := core.SeasonKey(showID, seasonNum)
 	showExternal := fmt.Sprintf("tmdb://%d", showID)
 	epExternal := fmt.Sprintf("tmdb://%d/%d/%d", showID, seasonNum, epNum)
@@ -637,6 +653,7 @@ func (s *Service) resolveEpisode(ctx context.Context, k core.RatingKey) (string,
 	}
 	if items, err := s.getItems(ctx, "/library/metadata/matches", q); err == nil {
 		found := ""
+		parentSeason, grandparentShow := "", ""
 		for _, item := range items {
 			if item.Type != "episode" || !validKindGUID(item.GUID, "episode") {
 				continue
@@ -650,9 +667,25 @@ func (s *Service) resolveEpisode(ctx context.Context, k core.RatingKey) (string,
 				return "", fmt.Errorf("ambiguous Plex identity")
 			}
 			found = item.GUID
+			if validKindGUID(item.ParentGUID, "season") {
+				parentSeason = item.ParentGUID
+			}
+			if validKindGUID(item.GrandparentGUID, "show") {
+				grandparentShow = item.GrandparentGUID
+			}
 		}
 		if found != "" {
 			now := time.Now().Unix()
+			// Parents named by an episode match are stored only when the
+			// show itself verifies against its own ids and year (#289).
+			if grandparentShow != "" {
+				if ok, err := s.verifyTitle(ctx, showKey, "show", grandparentShow); err == nil && ok {
+					_ = s.storeMapping(ctx, showKey, grandparentShow, now)
+					if parentSeason != "" {
+						_ = s.storeMapping(ctx, seasonKey, parentSeason, now)
+					}
+				}
+			}
 			return found, s.storeMapping(ctx, k, found, now)
 		}
 	}

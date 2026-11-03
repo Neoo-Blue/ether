@@ -24,7 +24,7 @@ func (s *Service) ExactKey(ctx context.Context, guid string) (core.RatingKey, er
 	if !ok {
 		return 0, core.ErrNotFound
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT rating_key FROM plexguid_mappings WHERE guid=? AND EXISTS (SELECT 1 FROM plexguid_verified v WHERE v.rating_key=plexguid_mappings.rating_key AND v.guid=plexguid_mappings.guid) LIMIT 2`, guid)
+	rows, err := s.db.QueryContext(ctx, `SELECT rating_key FROM plexguid_mappings WHERE guid=? LIMIT 2`, guid)
 	if err != nil {
 		return 0, err
 	}
@@ -77,7 +77,7 @@ func (s *Service) Lookup(ctx context.Context, guid string) (core.RatingKey, erro
 	} else if !validKindGUID(guid, kind) {
 		return 0, core.ErrNotFound
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT rating_key FROM plexguid_mappings WHERE guid=? AND checked_at>? AND EXISTS (SELECT 1 FROM plexguid_verified v WHERE v.rating_key=plexguid_mappings.rating_key AND v.guid=plexguid_mappings.guid) LIMIT 2`, guid, time.Now().Add(-cacheTTL).Unix())
+	rows, err := s.db.QueryContext(ctx, `SELECT rating_key FROM plexguid_mappings WHERE guid=? AND checked_at>? LIMIT 2`, guid, time.Now().Add(-cacheTTL).Unix())
 	if err != nil {
 		return 0, err
 	}
