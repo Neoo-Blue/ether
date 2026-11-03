@@ -397,8 +397,8 @@ func callTool(t *testing.T, cat *tools.Catalogue, ctx context.Context, p tools.P
 func TestBuiltinCatalogueAndSchemaInvariants(t *testing.T) {
 	_, d := buildDeps()
 	all := builtin.All(d)
-	if len(all) != 26 {
-		t.Fatalf("expected 26 built-in tools, got %d", len(all))
+	if len(all) != 28 {
+		t.Fatalf("expected 28 built-in tools, got %d", len(all))
 	}
 
 	wantRead := []string{
@@ -406,6 +406,7 @@ func TestBuiltinCatalogueAndSchemaInvariants(t *testing.T) {
 		"release_health", "logs_tail", "catalog_search", "title_details",
 		"collection_list", "collection_preview", "livetv_channels", "sources_list",
 		"plugins_list", "plugin_health", "approval_status", "navigate",
+		"web_search", "web_fetch",
 	}
 	wantWrite := []string{
 		"collection_create_from_prompt", "release_blocklist", "release_pin",
@@ -725,4 +726,21 @@ func TestWriteToolsProposeBeforeMutating(t *testing.T) {
 			t.Fatalf("unexpected stremio URLs: %v", f.stremioURLs)
 		}
 	})
+}
+
+// The research tools never reach the owner's own network.
+func TestWebFetchRefusesPrivateAddresses(t *testing.T) {
+	_, d := buildDeps()
+	for _, tl := range builtin.All(d) {
+		if tl.Name != "web_fetch" {
+			continue
+		}
+		for _, target := range []string{"http://127.0.0.1:32400/", "http://169.254.169.254/latest/meta-data/", "file:///etc/passwd"} {
+			if _, err := tl.Execute(context.Background(), tools.Principal{IsOwner: true}, map[string]any{"url": target}); err == nil {
+				t.Errorf("fetched %s", target)
+			}
+		}
+		return
+	}
+	t.Fatal("web_fetch missing")
 }

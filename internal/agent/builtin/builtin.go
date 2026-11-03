@@ -238,6 +238,7 @@ func All(d Deps) []tools.Tool {
 	out := []tools.Tool{}
 	out = append(out, readTools(d)...)
 	out = append(out, writeTools(d)...)
+	out = append(out, webTools()...)
 	return out
 }
 

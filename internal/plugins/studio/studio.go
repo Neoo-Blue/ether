@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"path"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -41,7 +42,6 @@ type Project struct {
 	Name        string            `json:"name"`
 	PluginID    string            `json:"pluginId"`
 	Slot        string            `json:"slot,omitempty"`
-	StremioURL  string            `json:"stremioUrl,omitempty"`
 	Files       map[string]string `json:"files"`
 	Shadow      bool              `json:"shadow"`
 	Settings    map[string]any    `json:"settings,omitempty"`
@@ -193,6 +193,41 @@ func (s *Studio) Close() error {
 	return nil
 }
 
+var slugUnsafe = regexp.MustCompile(`[^a-z0-9]+`)
+
+// freshPluginID derives "community.<name>" from the draft's name, numbered
+// when a draft or installed plugin already uses it.
+func (s *Studio) freshPluginID(ctx context.Context, name string, tpl Template) string {
+	slug := strings.Trim(slugUnsafe.ReplaceAllString(strings.ToLower(strings.TrimSpace(name)), "-"), "-")
+	if len(slug) > 48 {
+		slug = strings.Trim(slug[:48], "-")
+	}
+	if slug == "" || slug[0] < 'a' || slug[0] > 'z' {
+		slug = strings.TrimPrefix(tpl.DefaultPluginID, "community.")
+		slug = strings.ReplaceAll(slug, ".", "-")
+	}
+	base := "community." + slug
+	taken := func(id string) bool {
+		s.mu.Lock()
+		_, used := s.lookupLocked(id)
+		s.mu.Unlock()
+		if used {
+			return true
+		}
+		if s.mgr != nil {
+			if _, err := s.mgr.Get(ctx, id); err == nil {
+				return true
+			}
+		}
+		return false
+	}
+	id := base
+	for n := 2; taken(id); n++ {
+		id = fmt.Sprintf("%s-%d", base, n)
+	}
+	return id
+}
+
 // CreateProject scaffolds a new Studio project from one of the 8 templates.
 func (s *Studio) CreateProject(ctx context.Context, opts CreateProjectOptions) (*Project, error) {
 	tplID := strings.TrimSpace(opts.Template)
@@ -202,6 +237,11 @@ func (s *Studio) CreateProject(ctx context.Context, opts CreateProjectOptions) (
 	tpl, ok := LookupTemplate(tplID)
 	if !ok {
 		return nil, fmt.Errorf("studio: unknown template %q", tplID)
+	}
+	if strings.TrimSpace(opts.PluginID) == "" {
+		// Each draft is its own plugin: a second draft from the same template
+		// must never update or replace the first one once installed.
+		opts.PluginID = s.freshPluginID(ctx, opts.Name, tpl)
 	}
 	pluginID, name, files := applyProjectOptions(tpl, opts)
 	comp := s.CompileFiles(files, "")
@@ -221,7 +261,6 @@ func (s *Studio) CreateProject(ctx context.Context, opts CreateProjectOptions) (
 		Name:        name,
 		PluginID:    pluginID,
 		Slot:        strings.TrimSpace(opts.Slot),
-		StremioURL:  strings.TrimSpace(opts.StremioURL),
 		Files:       files,
 		Shadow:      true,
 		Settings:    map[string]any{},
@@ -875,6 +914,9 @@ func (s *Studio) InstallProject(ctx context.Context, id string, opts plugins.Ins
 	return s.mgr.Install(ctx, preview, opts)
 }
 
+// installBundlePath is where an installed Studio plugin's compiled bundle lives.
+const installBundlePath = "dist/plugin.js"
+
 func (s *Studio) buildInstallSource(ctx context.Context, id string) (plugins.Source, error) {
 	p, err := s.GetProject(ctx, id)
 	if err != nil {
@@ -892,15 +934,34 @@ func (s *Studio) buildInstallSource(ctx context.Context, id string) (plugins.Sou
 	if err != nil {
 		return plugins.Source{}, err
 	}
+	manifest := json.RawMessage(p.Files["manifest.json"])
 	if man.Ether != nil && man.Ether.Runtime.Entry != "" && len(comp.compiledJS) > 0 {
-		byteFiles[man.Ether.Runtime.Entry] = comp.compiledJS
+		// Install the bundle Studio already built, under a .js entry. Left at
+		// the .ts path, the host would bundle the bundle again and its
+		// exports would vanish inside the second wrapper.
+		entry := installBundlePath
+		byteFiles[entry] = comp.compiledJS
 		if len(comp.sourcemap) > 0 {
-			byteFiles[man.Ether.Runtime.Entry+".map"] = comp.sourcemap
+			byteFiles[entry+".map"] = comp.sourcemap
 		}
+		var doc map[string]any
+		if err := json.Unmarshal(manifest, &doc); err != nil {
+			return plugins.Source{}, err
+		}
+		ether, _ := doc["ether"].(map[string]any)
+		runtime, _ := ether["runtime"].(map[string]any)
+		if runtime == nil {
+			return plugins.Source{}, fmt.Errorf("studio: manifest runtime is missing")
+		}
+		runtime["entry"] = entry
+		if manifest, err = json.Marshal(doc); err != nil {
+			return plugins.Source{}, err
+		}
+		byteFiles["manifest.json"] = manifest
 	}
 	return plugins.Source{
 		Kind:     "studio",
-		Manifest: json.RawMessage(p.Files["manifest.json"]),
+		Manifest: manifest,
 		Files:    byteFiles,
 	}, nil
 }

@@ -64,28 +64,7 @@ describe("registry navigation", () => {
     expect(mobile.map((i) => i.href)).toEqual(["/", "/activity", "/viewers", "/collections"]);
   });
 
-  it("places a fixture plugin page in its nav group", () => {
-    const groups = buildNavigation([...descriptors, fixturePluginPage]);
-    const server = groups.find((g) => g.label === "Server")!;
-    const item = server.items.find((i) => i.href === "/p/dev.example/wrapped");
-    expect(item?.label).toBe("Ether Wrapped");
-    expect(server.items.indexOf(item!)).toBe(server.items.length - 1);
-  });
-
-  it("deduplicates a plugin page paired with a host navItem", () => {
-    const hostPage: Descriptor = {
-      kind: "page",
-      id: "plugin:community.example.wrapped/wrapped",
-      owner: "community.example.wrapped",
-      label: { resolved: "Ether Wrapped", plugin: "community.example.wrapped" },
-      group: "Ether Wrapped",
-      meta: {
-        route: "/ether/view/wrapped",
-        pluginRoute: "/api/plugins/community.example.wrapped/views/wrapped",
-        group: "library",
-        icon: "https://example.org/wrapped.svg",
-      },
-    };
+  it("keeps plugin pages and plugin nav items out of the sidebar", () => {
     const hostNav: Descriptor = {
       kind: "navItem",
       id: "plugin:community.example.wrapped/page-wrapped",
@@ -94,20 +73,19 @@ describe("registry navigation", () => {
       group: "Ether Wrapped",
       meta: { route: "/plugins/community.example.wrapped/wrapped", pageKey: "wrapped" },
     };
-    const groups = buildNavigation([...descriptors, hostPage, hostNav]);
-    const library = groups.find((g) => g.label === "Library")!;
-    const matches = library.items.filter((i) => i.href === "/p/community.example.wrapped/wrapped");
-    expect(matches).toHaveLength(1);
-    expect(matches[0]?.label).toBe("Ether Wrapped");
+    const groups = buildNavigation([...descriptors, fixturePluginPage, hostNav]);
+    const hrefs = groups.flatMap((g) => g.items.map((i) => i.href));
+    expect(hrefs.filter((h) => h.startsWith("/p/"))).toEqual([]);
+    expect(groups[0]!.items[0]!.label).toBe("Overview");
   });
 
-  it("renders the sidebar and ⌘K plugin page destination from the mock registry", async () => {
+  it("keeps plugin pages out of the sidebar but finds them with ⌘K", async () => {
     renderApp("/");
     await settleUi(() => {
       expect(screen.getAllByRole("link", { name: "Integrations" }).length).toBeGreaterThan(0);
       expect(screen.getAllByRole("link", { name: "Plugins" }).length).toBeGreaterThan(0);
-      expect(screen.getAllByRole("link", { name: "Ether Wrapped" }).length).toBeGreaterThan(0);
     });
+    expect(screen.queryByRole("link", { name: "Ether Wrapped" })).toBeNull();
     const searchInput = screen.getByPlaceholderText("Search or jump to…");
     fireEvent.focus(searchInput);
     fireEvent.change(searchInput, { target: { value: "Ether Wrapped" } });

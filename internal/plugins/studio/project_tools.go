@@ -29,7 +29,7 @@ func ProjectTools(s *Studio) []tools.Tool {
 		}
 		return tools.Result{Data: map[string]any{"project": p}}, nil
 	}
-	create := tools.Tool{Name: "studio_project_create", Title: "Create Studio draft", Description: "Create a saved plugin draft from template page, list, channels, local_files, notification, ranking, tool or stremio_remix. Drafts are sandboxed and never installed, so this applies immediately. Read the saved source before editing it.", Audience: tools.AudienceOwner, Owner: "builtin", InputSchema: json.RawMessage(`{"type":"object","required":["template","name"],"properties":{"template":{"type":"string"},"name":{"type":"string"},"pluginId":{"type":"string"}},"additionalProperties":false}`)}
+	create := tools.Tool{Name: "studio_project_create", Title: "Create Studio draft", Description: "Create a saved plugin draft from template channels (Live TV), video_source (playable sources for catalogue titles), list (Home rows and collections), local_files, notification, ranking, tool, stremio_remix or page (console page; only when asked). Drafts are sandboxed and never installed, so this applies immediately. Read the saved source before editing it.", Audience: tools.AudienceOwner, Owner: "builtin", InputSchema: json.RawMessage(`{"type":"object","required":["template","name"],"properties":{"template":{"type":"string"},"name":{"type":"string"},"pluginId":{"type":"string"}},"additionalProperties":false}`)}
 	create.Execute = func(ctx context.Context, _ tools.Principal, input map[string]any) (tools.Result, error) {
 		template, err := reqString(input, "template", 64)
 		if err != nil {
@@ -53,7 +53,7 @@ func ProjectTools(s *Studio) []tools.Tool {
 		}
 		return tools.Result{Data: map[string]any{"project": p}}, nil
 	}
-	save := tools.Tool{Name: "studio_project_save", Title: "Save Studio source", Description: "Save source files to an existing Studio draft and return real compiler diagnostics. Requires the exact updatedAt from studio_project_read; a newer human edit makes a stale save fail, so read again and retry. Applies immediately; does not install the plugin. \"$t:key\" text resolves in manifest fields and ViewSpec literals only, never in view data values. Fix every diagnostic it returns before finishing.", Audience: tools.AudienceOwner, Owner: "builtin", InputSchema: json.RawMessage(`{"type":"object","required":["id","updatedAt","files"],"properties":{"id":{"type":"string"},"updatedAt":{"type":"string"},"files":{"type":"object","additionalProperties":{"type":"string"}}},"additionalProperties":false}`)}
+	save := tools.Tool{Name: "studio_project_save", Title: "Save Studio source", Description: "Save source files to an existing Studio draft and return real compiler diagnostics. Requires the exact updatedAt from studio_project_read; a newer human edit makes a stale save fail, so read again and retry. Applies immediately; does not install the plugin. \"$t:key\" text resolves in manifest fields and ViewSpec literals only, never in view data values. Fix every diagnostic, preview problem and installCheck error it returns before finishing; installed pages need $t: keys or { \"$\": \"field\" } data bindings for visible text, never literal strings.", Audience: tools.AudienceOwner, Owner: "builtin", InputSchema: json.RawMessage(`{"type":"object","required":["id","updatedAt","files"],"properties":{"id":{"type":"string"},"updatedAt":{"type":"string"},"files":{"type":"object","additionalProperties":{"type":"string"}}},"additionalProperties":false}`)}
 	save.Execute = func(ctx context.Context, _ tools.Principal, input map[string]any) (tools.Result, error) {
 		id, err := reqString(input, "id", 160)
 		if err != nil {
@@ -78,6 +78,15 @@ func ProjectTools(s *Studio) []tools.Tool {
 		data := map[string]any{"project": p, "compile": comp}
 		if comp.OK && p.DefaultPage != "" {
 			data["preview"] = renderedPreview(ctx, s, p)
+		}
+		// Run the real install checks too, so a draft that previews is also
+		// one the owner can install.
+		if comp.OK && s.mgr != nil {
+			if _, err := s.PreviewInstallProject(ctx, p.ID); err != nil {
+				data["installCheck"] = err.Error()
+			} else {
+				data["installCheck"] = "ok"
+			}
 		}
 		return tools.Result{Data: data}, nil
 	}

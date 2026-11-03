@@ -86,9 +86,10 @@ const NAV_GROUPS = new Set(["", "library", "streaming", "server"]);
  */
 export function pluginNavGroup(d: Descriptor<PageMeta>): string | undefined {
   const meta = d.meta;
-  const candidate = meta?.navGroup ?? meta?.group ?? d.group;
-  if (candidate === undefined) return undefined;
-  if (meta?.navGroup !== undefined || meta?.group !== undefined) return candidate;
+  const candidate = meta?.navGroup || meta?.group || d.group;
+  // Plugins never join the unlabelled top group above Overview.
+  if (!candidate) return undefined;
+  if (meta?.navGroup || meta?.group) return candidate;
   return NAV_GROUPS.has(candidate) ? candidate : "server";
 }
 

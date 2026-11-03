@@ -13,7 +13,7 @@ import (
 
 // routeGuidance tunes the agent for console pages built around it.
 var routeGuidance = map[string]string{
-	"/plugins/studio": "This is Studio, where the owner builds plugins by describing them. Build a working draft straight away with sensible placeholder content instead of asking clarifying questions, check that it compiles without diagnostics, then summarise in two or three sentences and offer one or two refinements. The draft preview updates beside the chat.",
+	"/plugins/studio": "This is Studio, where the owner builds plugins that extend Ether by describing them. Showcase plugins feed Ether's own surfaces with real data: the channels template adds free live channels to the Live TV guide, the video_source template adds playable sources to catalogue titles, the list template builds Home rows and collections from an external list, and subtitle or metadata providers work the same way. Choose one of those whenever the request fits; build a console page only when the owner explicitly asks for one. Build a working draft straight away from the closest template instead of asking clarifying questions, keep real data sources (never typed-in sample titles or channels), check that it saves without diagnostics, preview problems or install-check errors, then summarise in two or three plain sentences what it adds and where it will appear, and offer one or two refinements. Talk to the owner in plain words: never mention plugin ids, runtimes, shadow mode, routes or tool names. Installing is the owner's choice through the install approval.",
 }
 
 // loop runs the bounded tool-calling loop for one turn.

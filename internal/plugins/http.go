@@ -671,6 +671,9 @@ func (m *Manager) handleView(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if resp.Status >= 200 && resp.Status < 300 {
+		resp.Body = m.localizeView(r.Context(), id, query["locale"], resp.Body)
+	}
 	clean := m.store.redactKnown(r.Context(), id, string(resp.Body))
 	if !json.Valid([]byte(clean)) {
 		writeErr(w, http.StatusBadGateway, "invalid_view", "Plugin returned an invalid view.", nil)
@@ -680,6 +683,66 @@ func (m *Manager) handleView(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(resp.Status)
 	_, _ = w.Write(resp.Body)
+}
+
+// localizeView resolves "$t:key" references in a view's spec and title from
+// the plugin's shipped strings, the way Studio's preview does. View data is
+// plugin-supplied values and is left as sent.
+func (m *Manager) localizeView(ctx context.Context, id, locale string, body []byte) []byte {
+	row, err := m.store.settings(ctx, id)
+	if err != nil || len(row.Strings) == 0 {
+		return body
+	}
+	var doc map[string]json.RawMessage
+	if json.Unmarshal(body, &doc) != nil {
+		return body
+	}
+	resolve := func(key string) (string, bool) {
+		for _, loc := range []string{locale, strings.SplitN(locale, "-", 2)[0], "en"} {
+			if s, ok := row.Strings[loc][key]; ok && loc != "" {
+				return s, true
+			}
+		}
+		return "", false
+	}
+	var walk func(any) any
+	walk = func(v any) any {
+		switch t := v.(type) {
+		case string:
+			if key, ok := strings.CutPrefix(t, "$t:"); ok {
+				if s, found := resolve(key); found {
+					return s
+				}
+			}
+		case map[string]any:
+			for k, child := range t {
+				t[k] = walk(child)
+			}
+		case []any:
+			for i, child := range t {
+				t[i] = walk(child)
+			}
+		}
+		return v
+	}
+	for _, field := range []string{"spec", "title"} {
+		raw, ok := doc[field]
+		if !ok {
+			continue
+		}
+		var node any
+		if json.Unmarshal(raw, &node) != nil {
+			continue
+		}
+		if out, err := json.Marshal(walk(node)); err == nil {
+			doc[field] = out
+		}
+	}
+	out, err := json.Marshal(doc)
+	if err != nil {
+		return body
+	}
+	return out
 }
 
 func (m *Manager) handleAction(w http.ResponseWriter, r *http.Request) {

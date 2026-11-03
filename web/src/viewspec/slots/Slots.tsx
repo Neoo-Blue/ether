@@ -42,7 +42,7 @@ export function PanelSlots({
   const navigate = useNavigate();
   if (!slots.length && !enabled) return null;
   return (
-    <SlotAnchor slot={slot} className="space-y-4" onPickSlot={() => navigate("/plugins/develop")}>
+    <SlotAnchor slot={slot} className="space-y-4" onPickSlot={() => navigate("/plugins/studio")}>
       {slots.map((d) => {
         const content = (
           <PluginView
@@ -190,7 +190,7 @@ export function PluginActionMenu({
       <SlotAnchor
         slot={slot}
         className="inline-block"
-        onPickSlot={() => navigate("/plugins/develop")}
+        onPickSlot={() => navigate("/plugins/studio")}
       >
         {items.length || entries.length ? (
           <ActionMenu items={[...items, ...entries]} label={label} />

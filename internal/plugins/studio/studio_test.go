@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/braedonsaunders/ether/internal/plugins/kit"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -26,6 +27,8 @@ func newTestStudio(t *testing.T) (*Studio, *plugins.Manager, *[]string) {
 		DB:       db,
 		Registry: reg,
 		Tools:    cat,
+		// The production install check, so installs are tested as shipped.
+		CheckPackage: kit.CheckInstall,
 	})
 	if err != nil {
 		t.Fatalf("new manager: %v", err)
@@ -51,8 +54,8 @@ func TestTemplatesAllValidAndRunnable(t *testing.T) {
 	ctx := context.Background()
 
 	tpls := Templates()
-	if len(tpls) != 8 {
-		t.Fatalf("expected 8 templates, got %d", len(tpls))
+	if len(tpls) != 9 {
+		t.Fatalf("expected 9 templates, got %d", len(tpls))
 	}
 
 	for _, tpl := range tpls {
@@ -353,5 +356,85 @@ func TestMountedStudioRoute(t *testing.T) {
 	s.WrapPluginHandler(nil).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/studio/projects", nil))
 	if w.Code != 200 {
 		t.Fatalf("mounted route returned %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// A Studio draft installs as a working plugin: the installed runtime loads
+// the bundle Studio built instead of bundling it a second time.
+func TestInstalledDraftRunsItsHandler(t *testing.T) {
+	s, mgr, _ := newTestStudio(t)
+	ctx := context.Background()
+	p, err := s.CreateProject(ctx, CreateProjectOptions{Template: "page", Name: "Install check"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := s.InstallProject(ctx, p.ID, plugins.InstallOptions{})
+	if err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	src, err := s.buildInstallSource(ctx, p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	man, _ := plugins.ParseManifest(src.Manifest)
+	if man.Ether.Runtime.Entry != installBundlePath || len(src.Files[installBundlePath]) == 0 {
+		t.Fatalf("install entry %q, bundle %d bytes", man.Ether.Runtime.Entry, len(src.Files[installBundlePath]))
+	}
+	resp, err := mgr.Call(ctx, rec.ID, plugins.Request{Method: http.MethodGet, Path: "/ether/health"})
+	if err != nil || resp.Status != http.StatusOK {
+		t.Fatalf("installed draft did not answer: %v %+v", err, resp)
+	}
+	// Its page text arrives resolved, not as "$t:" keys.
+	w := httptest.NewRecorder()
+	mgr.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/"+rec.ID+"/views/overview?locale=en", nil))
+	if w.Code != http.StatusOK || strings.Contains(w.Body.String(), "$t:") || !strings.Contains(w.Body.String(), "Featured picks") {
+		t.Fatalf("installed view: %d %s", w.Code, w.Body.String())
+	}
+}
+
+// A remix's add-on link can hold a debrid key: it must not land in the
+// draft's source or its stored record.
+func TestRemixDoesNotPersistAddonLink(t *testing.T) {
+	s, _, _ := newTestStudio(t)
+	ctx := context.Background()
+	link := "https://addon.example/realdebrid=SECRETKEY123/manifest.json"
+	p, err := s.CreateProject(ctx, CreateProjectOptions{Template: "stremio_remix", Name: "Remix", StremioURL: link})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(p)
+	if strings.Contains(string(raw), "SECRETKEY123") {
+		t.Fatalf("add-on key persisted with the draft")
+	}
+	if !strings.Contains(p.Files["src/plugin.ts"], "addon.example") {
+		t.Fatal("upstream host not noted in source")
+	}
+}
+
+// Every draft is its own plugin, named after the draft, so installing a
+// second one never replaces the first.
+func TestDraftsGetTheirOwnPluginIDs(t *testing.T) {
+	s, _, _ := newTestStudio(t)
+	ctx := context.Background()
+	a, err := s.CreateProject(ctx, CreateProjectOptions{Template: "page", Name: "Friday screenings"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.InstallProject(ctx, a.ID, plugins.InstallOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteProject(ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.CreateProject(ctx, CreateProjectOptions{Template: "page", Name: "Friday screenings"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.CreateProject(ctx, CreateProjectOptions{Template: "page", Name: "Weekend picks!"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.PluginID != "community.friday-screenings" || b.PluginID != "community.friday-screenings-2" || c.PluginID != "community.weekend-picks" {
+		t.Fatalf("ids: %s %s %s", a.PluginID, b.PluginID, c.PluginID)
 	}
 }

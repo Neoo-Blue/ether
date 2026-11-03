@@ -10,7 +10,7 @@ import { useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { t } from "../i18n";
 import { DomainPage } from "../components/layout";
-import { PluginView, type PluginViewDoc } from "./PluginView";
+import { PluginView, pageHeaderText, type PluginViewDoc } from "./PluginView";
 
 export default function PluginPage() {
   const { plugin = "", page = "", "*": rest = "" } = useParams();
@@ -23,10 +23,13 @@ export default function PluginPage() {
   }
   if (rest) params.path = rest;
 
-  const title = doc?.title ?? page;
+  // A plugin's own page header becomes the page title, shown once.
+  const header = doc ? pageHeaderText(doc) : {};
+  const title = header.title || doc?.title || page;
   return (
     <DomainPage
       title={title}
+      description={header.description}
       base={`/p/${encodeURIComponent(plugin)}/${encodeURIComponent(page)}`}
       actions={
         <Badge variant="secondary">
@@ -45,6 +48,7 @@ export default function PluginPage() {
         page={page}
         params={params}
         onDoc={setDoc}
+        liftPageHeader
       />
     </DomainPage>
   );

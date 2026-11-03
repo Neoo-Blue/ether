@@ -995,27 +995,15 @@ func pluginInstallTool(deps ToolDeps) tools.Tool {
 				return tools.Result{}, tools.Userf("Plugin preview failed: %s", err.Error())
 			}
 
-			details := []tools.ProposalDetail{
-				{Label: "Plugin ID", Value: preview.Manifest.ID},
-				{Label: "Version", Value: preview.Manifest.Version},
-			}
-			if preview.Manifest.Ether != nil {
-				details = append(details, tools.ProposalDetail{
-					Label: "Runtime",
-					Value: preview.Manifest.Ether.Runtime.Kind,
-				})
-			}
+			// Owner-facing copy: what it adds and what it can reach, in plain
+			// words. Identifiers and runtimes stay out of the approval card.
+			details := []tools.ProposalDetail{{Label: "What it adds", Value: plainContributions(preview.Manifest)}}
+			access := "Nothing beyond its own storage"
 			if len(preview.PermissionLines) > 0 {
-				details = append(details, tools.ProposalDetail{
-					Label: "Permissions",
-					Value: strings.Join(preview.PermissionLines, "; "),
-				})
-			} else {
-				details = append(details, tools.ProposalDetail{
-					Label: "Permissions",
-					Value: "None",
-				})
+				access = strings.Join(preview.PermissionLines, "; ")
 			}
+			details = append(details, tools.ProposalDetail{Label: "What it can access", Value: access})
+			details = append(details, tools.ProposalDetail{Label: "Version", Value: preview.Manifest.Version})
 
 			opts := plugins.InstallOptions{
 				Grants:     plugins.Grants{LAN: lan},
@@ -1026,7 +1014,7 @@ func pluginInstallTool(deps ToolDeps) tools.Tool {
 
 			proposal := &tools.Proposal{
 				Category:    "Install plugin",
-				Description: fmt.Sprintf("Install %s (%s) version %s.", preview.Manifest.Name, preview.Manifest.ID, preview.Manifest.Version),
+				Description: fmt.Sprintf("Add %s to Ether.", preview.Manifest.Name),
 				Details:     details,
 				Input:       input,
 				Apply: func(applyCtx context.Context) (tools.Result, error) {
@@ -1216,4 +1204,36 @@ func encodeBoundedJSON(v any, maxBytes int, field string) ([]byte, error) {
 		}
 		return b, nil
 	}
+}
+
+// plainContributions says where an installed plugin shows up, for owners.
+func plainContributions(m plugins.Manifest) string {
+	var parts []string
+	e := m.EffectiveEther()
+	for _, c := range e.Capabilities {
+		switch c {
+		case plugins.CapLiveTV:
+			parts = append(parts, "live channels in the Live TV guide")
+		case plugins.CapStreamSource:
+			parts = append(parts, "playable sources on catalogue titles")
+		case plugins.CapListSource:
+			parts = append(parts, "Home rows and collections")
+		case plugins.CapSubtitles:
+			parts = append(parts, "subtitles in the player")
+		case plugins.CapMetadata:
+			parts = append(parts, "title details")
+		case plugins.CapRankingStep:
+			parts = append(parts, "a step in release ranking")
+		case plugins.CapNotify:
+			parts = append(parts, "notifications")
+		}
+	}
+	if len(e.Contributes.Pages) > 0 {
+		parts = append(parts, fmt.Sprintf("%d console page(s)", len(e.Contributes.Pages)))
+	}
+	if len(parts) == 0 {
+		return "Background behaviour only"
+	}
+	out := strings.Join(parts, ", ")
+	return strings.ToUpper(out[:1]) + out[1:]
 }
