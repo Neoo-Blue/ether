@@ -66,7 +66,13 @@ func (s *Service) loop(ctx context.Context, p tools.Principal, threadID, turnID 
 		persist()
 	}
 
-	for step := 0; step < s.maxSteps; step++ {
+	maxSteps, budget := s.maxSteps, s.budget
+	if tc.Route == "/plugins/studio" {
+		// Building a plugin reads, writes and re-checks source: give Studio
+		// turns room to finish instead of stopping mid-draft.
+		maxSteps, budget = max(maxSteps, 32), max(budget, 600_000)
+	}
+	for step := 0; step < maxSteps; step++ {
 		if err := emit(chunkStartStep()); err != nil {
 			persist()
 			return "error", err
@@ -166,12 +172,12 @@ func (s *Service) loop(ctx context.Context, p tools.Principal, threadID, turnID 
 		if err := emit(chunkFinishStep()); err != nil {
 			return "error", err
 		}
-		if tokensUsed > s.budget {
+		if tokensUsed > budget {
 			stopNote("I stopped because this turn used its token budget. Ask me to continue, or narrow the request.")
 			return "other", nil
 		}
 	}
-	stopNote(fmt.Sprintf("I stopped after %d steps without finishing. Ask me to continue and I will pick up from here.", s.maxSteps))
+	stopNote(fmt.Sprintf("I stopped after %d steps without finishing. Ask me to continue and I will pick up from here.", maxSteps))
 	return "tool-calls", nil
 }
 

@@ -3,6 +3,7 @@ package studio
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1209,12 +1210,61 @@ func (h *devHost) CallHost(ctx context.Context, name string, raw json.RawMessage
 		h.s.mu.Unlock()
 		return json.RawMessage("null"), nil
 
+	case "http.fetch":
+		// Previews use real data: the draft's declared network permissions
+		// gate the same guarded client an installed plugin gets.
+		man, _ := plugins.ParseManifest([]byte(p.Files["manifest.json"]))
+		h.s.mu.Unlock()
+		if h.s.mgr == nil || man.Ether == nil {
+			return json.RawMessage("null"), nil
+		}
+		var req struct {
+			Method     string            `json:"method"`
+			URL        string            `json:"url"`
+			Headers    map[string]string `json:"headers"`
+			Body       string            `json:"body"`
+			BodyBase64 string            `json:"bodyBase64"`
+		}
+		if len(args) > 0 {
+			_ = json.Unmarshal(args[0], &req)
+		}
+		body := []byte(req.Body)
+		if req.BodyBase64 != "" {
+			if b, err := base64.StdEncoding.DecodeString(req.BodyBase64); err == nil {
+				body = b
+			}
+		}
+		resp, err := h.s.mgr.PreviewFetch(ctx, man.Ether.Permissions.Network, plugins.FetchRequest{Method: req.Method, URL: req.URL, Headers: req.Headers, Body: body})
+		if err != nil {
+			return nil, wasm.Forbidden(err.Error())
+		}
+		return json.Marshal(map[string]any{
+			"status": resp.Status, "headers": resp.Headers,
+			"body": string(resp.Body), "bodyBase64": base64.StdEncoding.EncodeToString(resp.Body),
+		})
+
 	case "catalog.search":
 		h.s.mu.Unlock()
+		if h.s.mgr != nil {
+			if out, ok, err := h.s.mgr.PreviewCatalogSearch(ctx, str(0), int(num(1)), int(num(2))); ok {
+				if err != nil {
+					return nil, &wasm.Fault{Code: "unavailable", Message: err.Error()}
+				}
+				return out, nil
+			}
+		}
 		return json.RawMessage(`{"titles":[{"id":1,"title":"The Matrix","type":"movie","year":1999}]}`), nil
 
 	case "catalog.get":
 		h.s.mu.Unlock()
+		if h.s.mgr != nil {
+			if out, ok, err := h.s.mgr.PreviewCatalogGet(ctx, str(0)); ok {
+				if err != nil {
+					return nil, &wasm.Fault{Code: "unavailable", Message: err.Error()}
+				}
+				return out, nil
+			}
+		}
 		return json.RawMessage(`{"id":1,"title":"The Matrix","type":"movie","year":1999}`), nil
 
 	case "folders.list":

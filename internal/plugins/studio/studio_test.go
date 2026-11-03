@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/braedonsaunders/ether/internal/plugins/kit"
 	"net/http"
 	"net/http/httptest"
@@ -29,6 +30,8 @@ func newTestStudio(t *testing.T) (*Studio, *plugins.Manager, *[]string) {
 		Tools:    cat,
 		// The production install check, so installs are tested as shipped.
 		CheckPackage: kit.CheckInstall,
+		// Hermetic: template previews that fetch real data fail fast offline.
+		FetchClient: &http.Client{Transport: offlineTransport{}},
 	})
 	if err != nil {
 		t.Fatalf("new manager: %v", err)
@@ -437,4 +440,22 @@ func TestDraftsGetTheirOwnPluginIDs(t *testing.T) {
 	if a.PluginID != "community.friday-screenings" || b.PluginID != "community.friday-screenings-2" || c.PluginID != "community.weekend-picks" {
 		t.Fatalf("ids: %s %s %s", a.PluginID, b.PluginID, c.PluginID)
 	}
+}
+
+// A draft's preview reaches only the hosts its manifest declares.
+func TestPreviewFetchHonoursDeclaredNetwork(t *testing.T) {
+	_, mgr, _ := newTestStudio(t)
+	_, err := mgr.PreviewFetch(context.Background(), []string{"api.example.org"}, plugins.FetchRequest{URL: "https://elsewhere.example.net/"})
+	if err == nil || !strings.Contains(err.Error(), "network permissions") {
+		t.Fatalf("undeclared host allowed: %v", err)
+	}
+	if _, err := mgr.PreviewFetch(context.Background(), []string{"*"}, plugins.FetchRequest{URL: "file:///etc/passwd"}); err == nil {
+		t.Fatal("non-http scheme allowed")
+	}
+}
+
+type offlineTransport struct{}
+
+func (offlineTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("offline in tests")
 }
