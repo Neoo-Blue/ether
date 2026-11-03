@@ -323,28 +323,9 @@ func (a *App) supportViewer(userID int64) (diagnostics.ViewerFacts, error) {
 			}
 		}
 	}
-	rows, err := a.db.QueryContext(ctx, `SELECT view_offset_ns, view_count FROM state_watch WHERE user_id=? LIMIT 501`, userID)
-	if err != nil {
-		return v, err
+	if a.state == nil {
+		return v, nil
 	}
-	defer rows.Close()
-	for rows.Next() {
-		if v.WatchSample == 500 {
-			v.WatchSampleTruncated = true
-			break
-		}
-		var offset int64
-		var count int
-		if err = rows.Scan(&offset, &count); err != nil {
-			return v, err
-		}
-		v.WatchSample++
-		if offset > 0 {
-			v.InProgress++
-		}
-		if count > 0 {
-			v.Watched++
-		}
-	}
-	return v, rows.Err()
+	v.WatchSample, v.InProgress, v.Watched, v.WatchSampleTruncated, err = a.state.WatchSample(ctx, userID, 500)
+	return v, err
 }

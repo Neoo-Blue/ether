@@ -782,6 +782,39 @@ func (s *State) Rate(ctx context.Context, userID int64, key core.RatingKey, rati
 	})
 }
 
+// WatchSample counts, over at most limit of a viewer's watch-state rows, how
+// many are in progress and how many are watched (support diagnostics);
+// truncated reports more rows than limit.
+func (s *State) WatchSample(ctx context.Context, userID int64, limit int) (sampled, inProgress, watched int, truncated bool, err error) {
+	if limit <= 0 {
+		limit = 500
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT view_offset_ns, view_count FROM state_watch WHERE user_id=? LIMIT ?`, userID, limit+1)
+	if err != nil {
+		return 0, 0, 0, false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		if sampled == limit {
+			truncated = true
+			break
+		}
+		var offset int64
+		var count int
+		if err = rows.Scan(&offset, &count); err != nil {
+			return 0, 0, 0, false, err
+		}
+		sampled++
+		if offset > 0 {
+			inProgress++
+		}
+		if count > 0 {
+			watched++
+		}
+	}
+	return sampled, inProgress, watched, truncated, rows.Err()
+}
+
 // InProgress returns items with a resume point, most recently viewed first.
 func (s *State) InProgress(ctx context.Context, userID int64, limit int) ([]core.WatchStatus, error) {
 	if limit <= 0 {

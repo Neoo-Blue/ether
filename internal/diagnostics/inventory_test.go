@@ -108,7 +108,8 @@ func TestBudgetDropIsNotAdvertised(t *testing.T) {
 	if view.Preview == nil || !sameStrings(names, view.Preview.Files) {
 		t.Fatalf("preview %v zip %v", view.Preview.Files, names)
 	}
-	if containsName(names, "logs/capture.log") || containsName(names, "sessions.json") {
+	// sessions.json clips titles now, so it fits; the oversized log is dropped.
+	if containsName(names, "logs/capture.log") {
 		t.Fatalf("budget-dropped files remained %v", names)
 	}
 	if !containsName(names, "events.jsonl") || !containsName(names, "summary.json") {
@@ -125,7 +126,7 @@ func TestBudgetDropIsNotAdvertised(t *testing.T) {
 		}
 	}
 	omissions := string(unzip(t, blob)["omissions.json"])
-	if !strings.Contains(omissions, "logs/capture.log") || !strings.Contains(omissions, "sessions.json") {
+	if !strings.Contains(omissions, "logs/capture.log") {
 		t.Fatalf("budget gaps missing: %s", omissions)
 	}
 	var summary struct {
