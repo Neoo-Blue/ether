@@ -2,6 +2,7 @@ import { localized, t } from "../../i18n";
 
 export type Overlays = {
   enabled: boolean;
+  episodeBadges: boolean;
   status: boolean;
   quality: boolean;
   ratings: boolean;
@@ -26,6 +27,7 @@ export const normalizeOverlays = (s: Partial<Overlays>): Overlays => ({
   hideDenominator: false,
   hideDot: false,
   ...s,
+  episodeBadges: s.episodeBadges ?? true,
   style: s.style || "glass",
   position: s.position || "bottom",
   accent: s.accent || "#d4a574",

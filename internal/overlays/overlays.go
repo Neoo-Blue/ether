@@ -36,6 +36,7 @@ func init() {
 
 type Settings struct {
 	Enabled         bool   `json:"enabled"`
+	EpisodeBadges   *bool  `json:"episodeBadges"`
 	Status          bool   `json:"status"`
 	Quality         bool   `json:"quality"`
 	Ratings         bool   `json:"ratings"`
@@ -49,6 +50,9 @@ type Settings struct {
 	HideDenominator bool   `json:"hideDenominator"`
 	HideDot         bool   `json:"hideDot"`
 }
+
+func (v Settings) BadgesOnEpisodes() bool { return v.EpisodeBadges == nil || *v.EpisodeBadges }
+
 type Variant struct {
 	Path     string   `json:"path"`
 	Language string   `json:"language,omitempty"`
@@ -324,8 +328,15 @@ func (s *Service) Labels(ctx context.Context, u *core.User, t *core.Title) []str
 }
 func (s *Service) Version(ctx context.Context, u *core.User, t *core.Title, lang string) string {
 	cfg, _ := s.Settings(ctx)
+	if t.Type == core.TypeEpisode && !cfg.BadgesOnEpisodes() {
+		hash := sha256.Sum256([]byte(t.StillPath))
+		return hex.EncodeToString(hash[:8])
+	}
 	ctx = context.WithValue(ctx, previewSettingsKey{}, cfg)
 	p, b := s.Paths(ctx, u, t, lang)
+	if t.Type == core.TypeEpisode {
+		p = t.StillPath
+	}
 	labels := visibleLabels(s.presentation(ctx, u, t, cfg).Labels)
 	// Viewer identity and unrelated catalogue updates do not change pixels.
 	raw, _ := json.Marshal([]any{s.posterVersion(), p, b, t.LogoPath, labels, pixelStyle(cfg, len(labels) > 0), "compositor-v5"})
@@ -342,8 +353,14 @@ func (s *Service) Poster(ctx context.Context, u *core.User, t *core.Title, lang 
 	if err != nil {
 		return nil, "", err
 	}
+	if t.Type == core.TypeEpisode && !cfg.BadgesOnEpisodes() {
+		return s.o.Images.Get(ctx, t.StillPath, 500)
+	}
 	ctx = context.WithValue(ctx, previewSettingsKey{}, cfg)
 	path, _ := s.Paths(ctx, u, t, lang)
+	if t.Type == core.TypeEpisode {
+		path = t.StillPath
+	}
 	var data []byte
 	var ct string
 	if p, ok := s.o.Images.(posterSource); ok {

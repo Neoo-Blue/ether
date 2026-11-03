@@ -52,6 +52,11 @@ const OPTIONS = localized(
         hint: t("TMDB by default; cached provider scores when configured."),
       },
       {
+        key: "episodeBadges",
+        label: t("Badges on episodes"),
+        hint: t("Show badges on individual episode artwork."),
+      },
+      {
         key: "details",
         label: t("Title details"),
         hint: t("Year, runtime and content rating from the catalogue."),
