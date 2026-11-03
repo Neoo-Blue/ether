@@ -66,12 +66,12 @@ func (s *Service) NewReleases(ctx context.Context) ([]NewRelease, error) {
 		if at, known := homes[t.Key]; known && !at.IsZero() {
 			row.Digital = at.Unix()
 		}
-		_, state, _ := s.titleCheck(ctx, t.Key)
-		var next int64
-		var reason string
-		_ = s.db.QueryRowContext(ctx, `SELECT next_check,reason FROM availability_title_checks WHERE rating_key=?`, int64(t.Key)).Scan(&next, &reason)
-		row.NextCheck = next
-		row.Reason = reason
+		check, _ := s.titleCheck(ctx, t.Key)
+		state := check.state
+		if !check.next.IsZero() && check.state != "" {
+			row.NextCheck = check.next.Unix()
+		}
+		row.Reason = check.reason
 		src := evidence[t.Key]
 		switch {
 		case visible[t.Key] && src != "":

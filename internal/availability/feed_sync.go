@@ -103,6 +103,10 @@ func pageSize(f core.ReleaseFeed) int {
 func (s *Service) pollHead(parent context.Context, f core.ReleaseFeed) error {
 	ctx, cancel := context.WithTimeout(parent, 90*time.Second)
 	defer cancel()
+	previous, _, _, err := s.feedState(parent, f)
+	if err != nil {
+		return err
+	}
 	releases, err := s.d.Feeds.Recent(s.budgetContext(ctx, true), f.ID, 0, pageSize(f))
 	if err != nil {
 		if parent.Err() == nil {
@@ -118,7 +122,13 @@ func (s *Service) pollHead(parent context.Context, f core.ReleaseFeed) error {
 	if len(releases) > 0 {
 		head = releases[0].ID
 	}
-	return s.saveCheckpoint(parent, f, feedCheckpoint{head: head}, "Feed is current within the recent-release window", count, true)
+	if err := s.saveCheckpoint(parent, f, feedCheckpoint{head: head}, "Feed is current within the recent-release window", count, true); err != nil {
+		return err
+	}
+	// The page reaching back to the previous head means nothing posted
+	// between the polls was missed.
+	continuous := previous != "" && pageHolds(releases, previous)
+	return s.markCoverage(parent, f, continuous)
 }
 
 func (s *Service) ingestPage(ctx context.Context, f core.ReleaseFeed, releases []core.Release) (int, error) {
@@ -178,7 +188,12 @@ func (s *Service) syncFeed(parent context.Context, f core.ReleaseFeed) error {
 	canCheckpoint := old.target == ""
 	policy := s.policy()
 	finish := func() error {
-		return s.saveCheckpoint(parent, f, feedCheckpoint{head: head}, "Feed is current within the recent-release window", count, true)
+		if err := s.saveCheckpoint(parent, f, feedCheckpoint{head: head}, "Feed is current within the recent-release window", count, true); err != nil {
+			return err
+		}
+		// Reaching the previous head with no older gap pending means every
+		// release since the last sync was read.
+		return s.markCoverage(parent, f, old.head != "" && old.target == "" && foundHead)
 	}
 	for page := 0; page < limit; page++ {
 		requestCtx := s.budgetContext(ctx, true)
