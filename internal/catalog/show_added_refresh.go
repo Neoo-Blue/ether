@@ -3,6 +3,8 @@ package catalog
 import (
 	"context"
 	"time"
+
+	"github.com/braedonsaunders/ether/internal/store"
 )
 
 // refreshShowAdded advances a durable episode cursor. Each transaction reads
@@ -18,7 +20,11 @@ func (c *Catalog) refreshShowAdded(ctx context.Context) error {
 		return err
 	}
 	now := c.now().Unix()
-	rows, err := tx.QueryContext(ctx, `SELECT released_ts,key,show_key FROM catalog_titles WHERE type='episode' AND release_known=1 AND released_ts<=? AND (released_ts>? OR (released_ts=? AND key>?)) ORDER BY released_ts ASC,key ASC LIMIT 256`, now, ts, ts, key)
+	indexHint := ""
+	if store.DialectOf(c.db) == store.SQLite {
+		indexHint = " INDEXED BY catalog_titles_episode_recent"
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT released_ts,key,show_key FROM catalog_titles`+indexHint+` WHERE type='episode' AND release_known=1 AND released_ts<=? AND (released_ts,key)>(?,?) ORDER BY released_ts ASC,key ASC LIMIT 256`, now, ts, key)
 	if err != nil {
 		return err
 	}
