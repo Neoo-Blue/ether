@@ -184,3 +184,53 @@ func TestFetchDescendsMasterBeforeObservingSegment(t *testing.T) {
 		t.Fatal("accepted cross-host variant")
 	}
 }
+
+func TestAndroidWatchIdentifierInvariant(t *testing.T) {
+	for _, tc := range []struct {
+		body string
+		want int
+	}{
+		{`{"versions":[{"file_id":"1","duration_seconds":0},{"file_id":"2147483647","duration_seconds":12}],"user_data":{"last_file_id":"3"}}`, 0},
+		{`{"versions":[{"file_id":"2147483648","duration_seconds":"0"}],"user_data":{"last_file_id":"01"}}`, 3},
+		{`{"versions":[{"file_id":"0","duration_seconds":-1}]}`, 2},
+	} {
+		if got := len(watchIDProblems([]byte(tc.body))); got != tc.want {
+			t.Fatalf("%s: %d problems, want %d", tc.body, got, tc.want)
+		}
+	}
+}
+
+func TestAndroidWatchFlowUsesReturnedFileID(t *testing.T) {
+	p, err := Load("../profiles/silo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, request := range p.Corpus("silo-android") {
+		if request.Path != "/api/v2/watch/${item_id}" {
+			continue
+		}
+		count++
+		path := filepath.Join("../../../testdata/conform/silo/silo-android", p.FixtureName("silo-android", request, true)+".json")
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("watch reference: %v", err)
+		}
+		reference := conform.Response{Status: 200, Body: []byte(`{"content_id":"item","versions":[{"file_id":"3","duration_seconds":0}]}`)}
+		bad := conform.Response{Status: 200, Body: []byte(`{"content_id":"item","versions":[{"file_id":"2147483648","duration_seconds":0}]}`)}
+		if p.CompareRequest(request, reference, bad).Blocking() == 0 {
+			t.Fatal("out-of-range file ID did not block")
+		}
+		vars := map[string]string{"file_id": "old"}
+		p.Observe(request, reference, vars)
+		if vars["file_id"] != "3" {
+			t.Fatalf("file ID not observed: %v", vars)
+		}
+		p.Observe(request, bad, vars)
+		if vars["file_id"] != "" {
+			t.Fatalf("stale file ID retained: %v", vars)
+		}
+	}
+	if count != 2 {
+		t.Fatalf("watch flow count %d", count)
+	}
+}

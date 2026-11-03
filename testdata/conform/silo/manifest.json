@@ -3,7 +3,7 @@
     "silo-android: Silo item discovery is not yet configured"
   ],
   "fixtureCounts": {
-    "silo-android": 15,
+    "silo-android": 17,
     "silo-apple": 15,
     "silo-appletv": 195
   },
@@ -63,5 +63,6 @@
       "clientAudit": "Apple and Android declare playback-plan expires_at optional; their tracked runtime has no playback-plan expiry reader."
     }
   ],
-  "capturePolicy": "Captured reference responses; proxy errors excluded; mutating requests fixture-only; listings trimmed to 50 entries; binary bytes omitted."
+  "capturePolicy": "Captured reference responses; proxy errors excluded; mutating requests fixture-only; listings trimmed to 50 entries; binary bytes omitted.",
+  "androidWatchReference": "Two watch-detail probes use the existing Silo Apple TV capture 000328 for the same reference title; captured variable IDs are restored to positive decimal placeholders."
 }

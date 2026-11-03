@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/braedonsaunders/ether/internal/conform"
@@ -61,7 +62,60 @@ func (p *Protocol) CompareRequest(request conform.Request, reference, target con
 	if bytes.HasPrefix(bytes.TrimSpace(reference.Body), []byte("#EXTM3U")) || bytes.HasPrefix(bytes.TrimSpace(target.Body), []byte("#EXTM3U")) {
 		return compareSiloPlaylist(reference, target)
 	}
-	return p.Protocol.CompareRequest(request, reference, target)
+	report := p.Protocol.CompareRequest(request, reference, target)
+	if strings.HasPrefix(request.Name, "play_") && strings.HasPrefix(request.Path, "/api/v2/watch/") && target.Status == http.StatusOK {
+		for _, problem := range watchIDProblems(target.Body) {
+			report.Differences = append(report.Differences, conform.Difference{Path: problem, Kind: conform.KindValue, Blocking: true, Reason: "Silo Android requires a canonical positive Int32 identifier or a nonnegative numeric duration"})
+		}
+	}
+	return report
+}
+
+func watchIDProblems(body []byte) []string {
+	var value any
+	if json.Unmarshal(body, &value) != nil {
+		return []string{"$"}
+	}
+	valid := func(v any) bool {
+		s, ok := v.(string)
+		if !ok {
+			return false
+		}
+		n, err := strconv.ParseInt(s, 10, 32)
+		return err == nil && n > 0 && strconv.FormatInt(n, 10) == s
+	}
+	var problems []string
+	var walk func(any, string)
+	walk = func(value any, path string) {
+		switch v := value.(type) {
+		case map[string]any:
+			for key, child := range v {
+				p := path + "/" + key
+				switch key {
+				case "file_id":
+					if !valid(child) {
+						problems = append(problems, p)
+					}
+				case "last_file_id", "default_file_id":
+					if child != nil && !valid(child) {
+						problems = append(problems, p)
+					}
+				case "duration_seconds":
+					n, ok := child.(float64)
+					if !ok || n < 0 {
+						problems = append(problems, p)
+					}
+				}
+				walk(child, p)
+			}
+		case []any:
+			for _, child := range v {
+				walk(child, path+"[]")
+			}
+		}
+	}
+	walk(value, "$")
+	return problems
 }
 
 // Fetch follows the first HLS variant when a target exposes a master ladder.
@@ -69,6 +123,14 @@ func (p *Protocol) CompareRequest(request conform.Request, reference, target con
 // resolve against the selected variant rather than treating it as a segment.
 func (p *Protocol) Fetch(ctx context.Context, client *http.Client, base, token string, request conform.Request, profile string, vars map[string]string, jsonMode bool) (conform.Response, error) {
 	response, err := p.Protocol.Fetch(ctx, client, base, token, request, profile, vars, jsonMode)
+	if err == nil && profile == "silo-android" && request.Path == "/api/v2/watch/${item_id}" && response.Status == http.StatusOK {
+		var detail struct {
+			ContentID string `json:"content_id"`
+		}
+		if json.Unmarshal(response.Body, &detail) != nil || detail.ContentID != vars["item_id"] {
+			return conform.Response{}, fmt.Errorf("watch content_id does not match requested item")
+		}
+	}
 	if err != nil || request.Path != "${stream_url}" || response.Status != http.StatusOK {
 		return response, err
 	}
@@ -147,7 +209,25 @@ func masterVariant(basePath string, body []byte) (string, bool, error) {
 // Observe carries a playable session and its relative HLS paths into the
 // subsequent ordered probes. It never accepts an upstream-supplied hostname.
 func (*Protocol) Observe(request conform.Request, response conform.Response, vars map[string]string) {
-	if response.Status < 200 || response.Status >= 300 || vars == nil {
+	if vars == nil {
+		return
+	}
+	if request.Path == "/api/v2/watch/${item_id}" {
+		delete(vars, "file_id")
+		if response.Status < 200 || response.Status >= 300 {
+			return
+		}
+		var detail struct {
+			Versions []struct {
+				FileID string `json:"file_id"`
+			} `json:"versions"`
+		}
+		if json.Unmarshal(response.Body, &detail) == nil && len(detail.Versions) > 0 && len(watchIDProblems(response.Body)) == 0 {
+			vars["file_id"] = detail.Versions[0].FileID
+		}
+		return
+	}
+	if response.Status < 200 || response.Status >= 300 {
 		return
 	}
 	if request.Path == "/api/v2/playback/start" {

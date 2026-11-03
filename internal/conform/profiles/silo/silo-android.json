@@ -6,7 +6,8 @@
     "commit": "44a345dbfb8c0a5892dc366ee0dd33fc091b7cf2",
     "files": [
       "contracts/api/v2/openapi.json",
-      "contracts/api/v2/route-inventory.json"
+      "contracts/api/v2/route-inventory.json",
+      "silo-android WatchDetailV2Api.kt; watch response from silo-appletv capture 000328"
     ]
   },
   "headers": {
@@ -80,6 +81,14 @@
       }
     ],
     "play_direct": [
+      {
+        "name": "watch detail",
+        "method": "GET",
+        "path": "/api/v2/watch/${item_id}",
+        "headers": {
+          "X-Profile-Id": "${profile_id}"
+        }
+      },
       {
         "name": "direct playback plan",
         "method": "POST",
@@ -177,6 +186,14 @@
       }
     ],
     "play_transcode": [
+      {
+        "name": "watch detail",
+        "method": "GET",
+        "path": "/api/v2/watch/${item_id}",
+        "headers": {
+          "X-Profile-Id": "${profile_id}"
+        }
+      },
       {
         "name": "transcode playback plan",
         "method": "POST",
