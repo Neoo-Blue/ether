@@ -66,28 +66,38 @@ func (m *Manager) InstallAddon(ctx context.Context, in AddonInstall) (Record, er
 		off[r] = true
 	}
 	if created && in.Exclusive {
-		for _, r := range existing.Manifest.AddonRoles() {
+		// Every role but the requested ones stays off, including roles
+		// the add-on only declares later (its manifest is re-read hourly):
+		// a migrated entry keeps doing exactly what it did.
+		for _, r := range AddonCapabilities {
 			off[r] = true
 		}
 	}
 	for r := range want {
 		delete(off, r)
 	}
-	offered := map[Capability]bool{}
-	for _, r := range existing.Manifest.AddonRoles() {
-		offered[r] = true
+	if !created && len(want) == 0 {
+		return existing, nil
 	}
-	var list []Capability
+	list := make([]Capability, 0, len(off))
 	for r := range off {
-		if offered[r] {
-			list = append(list, r)
-		}
+		list = append(list, r)
 	}
-	if len(list) != len(existing.RolesOff) || created {
-		return mgr.SetRoles(ctx, id, list)
+	if err := mgr.store.setRolesOff(ctx, id, list); err != nil {
+		return Record{}, err
 	}
-	return existing, nil
+	saved, err := mgr.store.record(ctx, id)
+	if err != nil {
+		return Record{}, err
+	}
+	mgr.closeRuntime(id)
+	mgr.syncDescriptors(ctx, saved)
+	mgr.broadcast(ctx)
+	return saved, nil
 }
+
+// AddonCapabilities are the roles a plain Stremio add-on can play.
+var AddonCapabilities = []Capability{CapStreamSource, CapListSource, CapLiveTV, CapSubtitles, CapMetadata, CapPluginDirectory}
 
 // offlineManifest is a minimal manifest for a legacy entry whose add-on is
 // unreachable while it is migrated: it serves what the entry proves.
@@ -106,14 +116,18 @@ func offlineManifest(base, name string, resources []string) (json.RawMessage, er
 		}
 	}
 	res := stremio.Resources{}
+	var catalogs []stremio.Catalog
 	for _, r := range resources {
 		if r == "tv" {
+			// A `tv` add-on is one with tv catalogs and tv streams; the
+			// placeholder catalog is replaced by the real ones on refresh.
 			res = append(res, stremio.Resource{Name: stremio.ResourceStream, Short: true}, stremio.Resource{Name: stremio.ResourceCatalog, Short: true})
+			catalogs = append(catalogs, stremio.Catalog{Type: stremio.TypeTV, ID: "channels", Name: name})
 			continue
 		}
 		res = append(res, stremio.Resource{Name: r, Short: true})
 	}
-	return json.Marshal(stremio.Manifest{ID: "legacy." + strings.ReplaceAll(u.Hostname(), ".", "-"), Version: "0.0.0", Name: name, Types: types, IDPrefixes: []string{"tt"}, Resources: res})
+	return json.Marshal(stremio.Manifest{ID: "legacy." + strings.ReplaceAll(u.Hostname(), ".", "-"), Version: "0.0.0", Name: name, Types: types, IDPrefixes: []string{"tt"}, Resources: res, Catalogs: catalogs})
 }
 
 // privateHost reports a link whose host is a loopback, private or

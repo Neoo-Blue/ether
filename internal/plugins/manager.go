@@ -818,6 +818,13 @@ func (m *Manager) SetRoles(ctx context.Context, id string, off []Capability) (Re
 	}
 	seen := map[Capability]bool{}
 	var clean []Capability
+	// Roles the add-on does not offer yet but was set to keep off stay off.
+	for _, c := range r.RolesOff {
+		if !offered[c] && !seen[c] {
+			seen[c] = true
+			clean = append(clean, c)
+		}
+	}
 	for _, c := range off {
 		if !offered[c] {
 			return Record{}, &ValidationError{[]FieldError{{"roles", fmt.Sprintf("%s is not a role this add-on offers", c)}}}
