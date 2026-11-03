@@ -2952,7 +2952,7 @@ export function createFakeServer(opts: FakeOptions = {}) {
           id: `c${seq++}`,
           updatedAt: new Date().toISOString(),
           lastBuiltAt: new Date().toISOString(),
-          itemCount: evaluate(spec).total,
+          itemCount: spec.limit > 0 ? Math.min(evaluate(spec).total, spec.limit) : evaluate(spec).total,
         };
         state.collections.push(saved);
         return json(saved);

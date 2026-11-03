@@ -21,6 +21,7 @@ import {
   Globe,
   LifeBuoy,
   Plug,
+  Puzzle,
   Server,
   Bell,
   CalendarDays,
@@ -102,6 +103,8 @@ const Sources = lazy(() => import("./pages/sources/Sources"));
 const Quality = lazy(() => import("./pages/releases/Releases"));
 const Cache = lazy(() => import("./pages/cache/Cache"));
 const Playback = lazy(() => import("./pages/playback/Playback"));
+const Plugins = lazy(() => import("./pages/plugins/Plugins"));
+const Studio = lazy(() => import("./pages/plugins/Studio"));
 
 /** react-router links for every AppKit navigation primitive. */
 const RouterAnchor = forwardRef<
@@ -169,6 +172,7 @@ function navigation(): SidebarNavGroup[] {
         { href: "/server", label: t("General"), icon: <Server size={icon} /> },
         { href: "/apps", label: t("Apps"), icon: <Globe size={icon} /> },
         { href: "/services", label: t("Integrations"), icon: <Plug size={icon} /> },
+        { href: "/plugins", label: t("Plugins"), icon: <Puzzle size={icon} /> },
         { href: "/notifications", label: t("Notifications"), icon: <Bell size={icon} /> },
         { href: "/cluster", label: t("Cluster"), icon: <Boxes size={icon} /> },
         { href: "/maintenance", label: t("Maintenance"), icon: <LifeBuoy size={icon} /> },
@@ -459,6 +463,8 @@ function Shell() {
               <Route path="/server" element={<GeneralPage />} />
               <Route path="/apps/:tab?/:section?" element={<Apps />} />
               <Route path="/services/:tab?" element={<ServicesPage />} />
+              <Route path="/plugins" element={<Plugins />} />
+              <Route path="/plugins/studio" element={<Studio />} />
               <Route path="/cluster" element={<ClusterPage />} />
               <Route path="/maintenance/:tab?/:backupTab?" element={<MaintenancePage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
