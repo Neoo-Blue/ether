@@ -24,7 +24,10 @@ it.each([
     f.state.config.openSubtitles.enabled = false;
     f.state.config.markers = { theIntroDb: false, apiKey: "" };
   });
-  const toggle = await screen.findByRole("switch", { name: name + " enabled" });
+  const toggle =
+    name === "TMDB"
+      ? await screen.findByRole("button", { name: "Set up TMDB" })
+      : await screen.findByRole("switch", { name: name + " enabled" });
   await waitFor(() => expect(toggle).toBeEnabled());
   fireEvent.click(toggle);
   const dialog = await screen.findByRole("dialog");
@@ -81,6 +84,12 @@ it.each([
       }),
     ).toHaveAttribute("aria-selected", "true"),
   );
+  if (name === "TMDB")
+    expect(screen.queryByRole("switch", { name: "TMDB account enabled" })).toBeNull();
+  else
+    expect(
+      await screen.findByRole("switch", { name: name + " account enabled" }),
+    ).toBeInTheDocument();
   for (const field of fields)
     if (field) expect((await screen.findAllByText(field)).length).toBeGreaterThan(0);
   if (name === "Language model")

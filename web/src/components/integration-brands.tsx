@@ -69,3 +69,74 @@ export function TmdbMark() {
 export function TraktMark() {
   return <BrandMark src={trakt} color="#ed1c24" />;
 }
+
+/** Distinct poster-service symbols; Custom deliberately uses a neutral frame. */
+export function IntegrationMark({ id }: { id: string }) {
+  if (id === "tmdb") return <TmdbMark />;
+  if (id === "trakt") return <TraktMark />;
+  if (id === "simkl") return <SimklMark />;
+  const colors: Record<string, string> = {
+    postersplus: "#a78bfa",
+    xrdb: "#38bdf8",
+    betterposters: "#fb923c",
+    rpdb: "#facc15",
+  };
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 32 32"
+      className="size-8"
+      fill="none"
+      stroke={colors[id] ?? "currentColor"}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {id === "postersplus" ? (
+        <>
+          <rect x="5" y="3" width="18" height="26" rx="3" />
+          <path d="M10 10h8M10 15h5M23 17v12M17 23h12" />
+        </>
+      ) : id === "xrdb" ? (
+        <>
+          <path d="m16 2 13 7v14l-13 7-13-7V9Z" />
+          <path d="m10 10 12 12m0-12L10 22" />
+        </>
+      ) : id === "betterposters" ? (
+        <>
+          <rect x="5" y="4" width="22" height="25" rx="3" />
+          <path d="m8 22 6-7 5 4 5-8M21 1v6m-3-3h6" />
+        </>
+      ) : id === "rpdb" ? (
+        <>
+          <rect x="5" y="3" width="22" height="26" rx="3" />
+          <path d="m16 8 2.4 5 5.6.8-4 4 .9 5.6-4.9-2.7-4.9 2.7.9-5.6-4-4 5.6-.8Z" />
+        </>
+      ) : id === "llm" ? (
+        <>
+          <path d="m16 3 3.5 9.5L29 16l-9.5 3.5L16 29l-3.5-9.5L3 16l9.5-3.5Z" />
+        </>
+      ) : id === "introdb" ? (
+        <>
+          <circle cx="16" cy="16" r="13" />
+          <path d="m12 10 9 6-9 6Zm11 0v12" />
+        </>
+      ) : id === "ratings" ? (
+        <>
+          <path d="m16 3 4 8 9 1-6.5 6.5L24 28l-8-4-8 4 1.5-9.5L3 12l9-1Z" />
+        </>
+      ) : id === "opensubtitles" ? (
+        <>
+          <rect x="3" y="5" width="26" height="22" rx="4" />
+          <path d="M8 15h6m4 0h6M8 21h16" />
+        </>
+      ) : (
+        <>
+          <rect x="5" y="3" width="22" height="26" rx="3" />
+          <circle cx="12" cy="11" r="2" />
+          <path d="m6 24 7-8 5 5 5-6 4 4" />
+        </>
+      )}
+    </svg>
+  );
+}

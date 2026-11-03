@@ -4,6 +4,8 @@ import { Drawer } from "../../components/Drawer";
 import { MutationError } from "../../components/feedback";
 import { Field, SecretInput } from "../../components/fields";
 import { IntegrationAppCard } from "../../components/IntegrationAppCard";
+import { IntegrationTab } from "../../components/IntegrationTab";
+import { IntegrationMark } from "../../components/integration-brands";
 import { SaveBar } from "../../components/SaveBar";
 import { localized, t } from "../../i18n";
 import { api, apiFetch } from "../../lib/api";
@@ -176,6 +178,7 @@ export function PosterAccounts({
     <IntegrationAppCard
       key={s.id}
       identity={{ id: s.id, name: s.name }}
+      logo={<IntegrationMark id={s.id} />}
       description={s.description}
       enabled={!!config.data?.accounts?.[s.id]?.enabled}
       disabled={locked || saving || !config.data}
@@ -202,7 +205,20 @@ export function PosterAccounts({
       {children?.(cards)}
       {editing && (
         <>
-          <PosterAccountForm value={editing} onChange={setEditing} />
+          <IntegrationTab
+            id={tab}
+            name={POSTER_SERVICES.find((s) => s.id === tab)!.name}
+            enabled={!!config.data?.accounts?.[tab]?.enabled}
+            onToggle={(on) => void save({ ...editing, enabled: on })}
+            disabled={saving || locked}
+            href="/metadata/artwork"
+            usage={t("Use {app} posters in Metadata › Artwork.", {
+              app: POSTER_SERVICES.find((s) => s.id === tab)!.name,
+            })}
+            current={config.data?.source === tab}
+          >
+            <PosterAccountForm value={editing} onChange={setEditing} />
+          </IntegrationTab>
           <SaveBar
             dirty={JSON.stringify(editing) !== JSON.stringify(config.data?.accounts?.[tab])}
             saving={saving}

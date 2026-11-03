@@ -39,17 +39,21 @@ it("sets up RPDB and Custom from a fresh config before choosing either in Artwor
       <PosterProviders onSaved={() => {}} />
     </MemoryRouter>,
   );
-  const picker = await screen.findByRole("combobox", { name: "Poster source" });
+  const picker = await screen.findByRole("button", { name: "Poster source" });
   await waitFor(() => expect(picker).toBeEnabled());
+  fireEvent.click(picker);
   expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual([
     "TMDB",
     "RPDB",
     "Custom posters",
   ]);
-  for (const source of ["rpdb", "custom"]) {
-    fireEvent.change(picker, { target: { value: source } });
+  fireEvent.click(screen.getByRole("option", { name: "RPDB" }));
+  await waitFor(() => expect(picker).toBeEnabled());
+  for (const source of ["RPDB", "Custom posters"]) {
+    fireEvent.click(picker);
+    fireEvent.click(screen.getByRole("option", { name: source }));
     await waitFor(() => expect(picker).toBeEnabled());
-    expect(picker).toHaveValue(source);
+    expect(picker).toHaveTextContent(source);
   }
   expect(screen.queryByLabelText("API key")).not.toBeInTheDocument();
 });

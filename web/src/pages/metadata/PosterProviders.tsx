@@ -1,11 +1,10 @@
-import { Button, toast } from "@braedonsaunders/appkit-ui";
+import { Button, SearchSelect, toast } from "@braedonsaunders/appkit-ui";
 import { useState } from "react";
 import { MutationError } from "../../components/feedback";
 import { t } from "../../i18n";
 import { api, apiFetch } from "../../lib/api";
 import { useAsync } from "../../lib/hooks";
 import { normalizePosters, posterPayload, POSTER_SERVICES } from "../settings/PosterAccounts";
-import { nativeSelect } from "./shared";
 export function PosterProviders({ onSaved }: { onSaved: () => void }) {
   const config = useAsync(async () => normalizePosters((await api.getConfig()).posters), []);
   const [error, setError] = useState<unknown>(null);
@@ -15,12 +14,18 @@ export function PosterProviders({ onSaved }: { onSaved: () => void }) {
       <div className="metadata-section-title">
         <h3>{t("Poster source")}</h3>
       </div>
-      <select
-        aria-label={t("Poster source")}
-        className={nativeSelect}
+      <SearchSelect
+        ariaLabel={t("Poster source")}
+        options={[
+          { value: "tmdb", label: "TMDB" },
+          ...POSTER_SERVICES.filter((s) => config.data?.accounts?.[s.id]?.enabled).map((s) => ({
+            value: s.id,
+            label: s.name,
+          })),
+        ]}
         disabled={!config.data || saving}
         value={config.data?.source ?? "tmdb"}
-        onChange={async (e) => {
+        onChange={async (source) => {
           setSaving(true);
           setError(null);
           try {
@@ -28,7 +33,7 @@ export function PosterProviders({ onSaved }: { onSaved: () => void }) {
               "/config/posters",
               {
                 method: "PUT",
-                body: JSON.stringify(posterPayload({ ...config.data!, source: e.target.value })),
+                body: JSON.stringify(posterPayload({ ...config.data!, source })),
               },
             );
             config.setData(result.value);
@@ -40,14 +45,7 @@ export function PosterProviders({ onSaved }: { onSaved: () => void }) {
             setSaving(false);
           }
         }}
-      >
-        <option value="tmdb">TMDB</option>
-        {POSTER_SERVICES.filter((s) => config.data?.accounts?.[s.id]?.enabled).map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.name}
-          </option>
-        ))}
-      </select>
+      />
       {error || config.error ? (
         <>
           <MutationError error={error || config.error} />

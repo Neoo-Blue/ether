@@ -87,10 +87,7 @@ describe("Settings", () => {
     const required = await screen.findByRole("region", { name: "Required" }, WAIT);
     expect(screen.queryByRole("region", { name: "Essentials" })).toBeNull();
     expect(within(required).getByRole("listitem", { name: "TMDB" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Set up TMDB" })).toHaveAttribute(
-      "href",
-      "/services/tmdb",
-    );
+    expect(screen.getByRole("button", { name: "Set up TMDB" })).toBeEnabled();
     const artwork = screen.getByRole("region", { name: "Artwork and ratings" });
     const posters = await within(artwork).findByRole("listitem", { name: "PostersPlus" }, WAIT);
     const ratings = within(artwork).getByRole("listitem", { name: "OMDb and MDBList" });
@@ -120,7 +117,7 @@ describe("Settings", () => {
     expect(screen.getByRole("listitem", { name: "TheIntroDB" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save Simkl settings" })).toBeNull();
     expect(screen.queryByRole("switch", { name: "Prowlarr enabled" })).toBeNull();
-    expect(screen.getByRole("switch", { name: "TMDB enabled" })).toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "TMDB enabled" })).toBeNull();
   });
 
   it("keeps the TheIntroDB key, health and test on its integration tab", async () => {
@@ -739,7 +736,7 @@ describe("Settings", () => {
     expect(calls(fake, "PUT", "/discovery/ratings/settings")[0]!.body).toMatchObject({
       apiKey: "omdb-key",
     });
-    expect(screen.queryByText(/^Connected/)).toBeNull();
+    expect(screen.getByText("Connected")).toBeInTheDocument();
   });
 
   it("shows ratings status on its card and keeps score choices off Integrations", async () => {
