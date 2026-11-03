@@ -10,13 +10,13 @@ import (
 	"github.com/braedonsaunders/ether/internal/core"
 )
 
-// TestRecentShowsWalkMatchesSortedQuery checks the newest-first walk
+// TestRecentShowsWalkMatchesSortedQuery checks the indexed order
 // against the sorted query it replaces, over series with tied dates, no
 // episodes, only future episodes, premieres before 1970 and a filter.
-func TestRecentShowsWalkMatchesSortedQuery(t *testing.T) {
+func TestRecentShowsIndexMatchesSortedQuery(t *testing.T) {
 	ctx := context.Background()
 	c := newChunkTestCatalog(t)
-	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	now := time.Now().UTC()
 	c.SetNow(func() time.Time { return now })
 	rng := rand.New(rand.NewPCG(7, 11))
 	day := int64(24 * 3600)
@@ -78,7 +78,6 @@ func TestRecentShowsWalkMatchesSortedQuery(t *testing.T) {
 	}
 	// A short step puts ties at the page's last date across steps. That case
 	// is the unfiltered catalogue; the other filters repeat the same walk.
-	defer func(n int) { recentWalkBatch = n }(recentWalkBatch)
 	filters := []core.Filter{
 		{Type: core.TypeShow},
 		{Type: core.TypeShow, KnownAddedDate: true},
@@ -122,29 +121,39 @@ func TestRecentShowsWalkMatchesSortedQuery(t *testing.T) {
 				t.Fatal("newest window has no premiere-dated series")
 			}
 		}
-		batches := []int{256}
-		if fi == 0 {
-			batches = []int{256, 7}
-		}
-		for _, batch := range batches {
-			recentWalkBatch = batch
-			for _, page := range pages {
-				offset, limit := max(page[0], 0), page[1]
-				got, ok, err := c.recentShowsPage(ctx, where, args, asOf, offset, limit)
-				if err != nil || !ok {
-					t.Fatalf("batch %d %+v %v: walk ok=%v err=%v", batch, f, page, ok, err)
+		for _, page := range pages {
+			offset, limit := max(page[0], 0), page[1]
+			rows, err := c.db.QueryContext(ctx, `SELECT t.key,t.show_added_ts FROM catalog_titles t WHERE `+where+` ORDER BY t.show_added_ts DESC,t.key ASC LIMIT ? OFFSET ?`, append(append([]any{}, args...), limit, offset)...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := []addedKey{}
+			for rows.Next() {
+				var a addedKey
+				if err := rows.Scan(&a.key, &a.added); err != nil {
+					t.Fatal(err)
 				}
-				end := min(offset+limit, len(order))
-				want := []addedKey{}
-				if offset < len(order) {
-					want = order[offset:end]
-				}
-				if !slices.Equal(got, want) {
-					t.Fatalf("batch %d %+v page %v (total %d):\n got %v\nwant %v", batch, f, page, total, got, want)
-				}
+				got = append(got, a)
+			}
+			if err := rows.Err(); err != nil {
+				t.Fatal(err)
+			}
+			rows.Close()
+			end := min(offset+limit, len(order))
+			want := []addedKey{}
+			if offset < len(order) {
+				want = order[offset:end]
+			}
+			if !slices.Equal(got, want) {
+				t.Fatalf("%+v page %v: got %v want %v", f, page, got, want)
 			}
 		}
 	}
+}
+
+type addedKey struct {
+	key   core.RatingKey
+	added int64
 }
 
 func sortedAdded(t *testing.T, c *Catalog, where string, args []any, asOf time.Time, offset, limit int) []addedKey {
