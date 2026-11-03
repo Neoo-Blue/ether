@@ -10,23 +10,29 @@ import (
 
 // PlexWatchStatus is the viewer-facing connection. It never includes a token.
 type PlexWatchStatus struct {
-	Connected    bool   `json:"connected"`
-	PlexID       int64  `json:"plexId,omitempty"`
-	Username     string `json:"username,omitempty"`
-	Enabled      bool   `json:"enabled"`
-	Eligibility  string `json:"eligibility"`
-	Revoked      bool   `json:"revoked"`
-	Pending      int    `json:"pending"`
-	Held         int    `json:"held"`
-	HeldLegacy   int    `json:"heldLegacy"`
-	Dead         int    `json:"dead"`
-	InFlight     bool   `json:"inFlight"`
-	Skipped      int    `json:"skipped"`
-	Restricted   bool   `json:"restricted"`
-	PINCode      string `json:"pinCode,omitempty"`
-	PINURL       string `json:"pinUrl,omitempty"`
-	PINExpires   string `json:"pinExpires,omitempty"`
-	AccountMatch bool   `json:"accountMatch"`
+	Connected      bool   `json:"connected"`
+	PlexID         int64  `json:"plexId,omitempty"`
+	Username       string `json:"username,omitempty"`
+	Direction      int    `json:"direction"`
+	ImportInterval int    `json:"importInterval"`
+	LastImport     int64  `json:"lastImport"`
+	LastSend       int64  `json:"lastSend"`
+	NextImport     int64  `json:"nextImport"`
+	Problem        string `json:"problem"`
+	ProblemCode    int    `json:"problemCode"`
+	Eligibility    string `json:"eligibility"`
+	Revoked        bool   `json:"revoked"`
+	Pending        int    `json:"pending"`
+	Held           int    `json:"held"`
+	HeldLegacy     int    `json:"heldLegacy"`
+	Dead           int    `json:"dead"`
+	InFlight       bool   `json:"inFlight"`
+	Skipped        int    `json:"skipped"`
+	Restricted     bool   `json:"restricted"`
+	PINCode        string `json:"pinCode,omitempty"`
+	PINURL         string `json:"pinUrl,omitempty"`
+	PINExpires     string `json:"pinExpires,omitempty"`
+	AccountMatch   bool   `json:"accountMatch"`
 }
 
 // Sentinels returned by the app adapter so this package does not import
@@ -43,12 +49,13 @@ type PlexWatch interface {
 	Status(ctx context.Context, userID, plexID int64) (PlexWatchStatus, error)
 	BeginPIN(ctx context.Context, userID, plexID int64) (PlexWatchStatus, error)
 	FinishPIN(ctx context.Context, userID, plexID int64) (PlexWatchStatus, error)
-	SetEnabled(ctx context.Context, userID, plexID int64, on bool) (PlexWatchStatus, error)
+	SetDirection(ctx context.Context, userID, plexID int64, direction, interval int) (PlexWatchStatus, error)
 	Disconnect(ctx context.Context, userID, plexID int64) (PlexWatchStatus, error)
 	Retry(ctx context.Context, userID, plexID int64) (PlexWatchStatus, error)
 	Resolve(ctx context.Context, userID, plexID int64) (PlexWatchStatus, error)
 	ExportCurrent(ctx context.Context, userID, plexID int64) (PlexWatchStatus, error)
 	ImportCurrent(ctx context.Context, userID, plexID int64) (PlexWatchStatus, error)
+	Unmatched(ctx context.Context, userID, plexID int64, after string) ([]string, error)
 }
 
 func (h *Handler) plexWatchViewer(w http.ResponseWriter, r *http.Request) (*ViewerRecord, bool) {
@@ -117,14 +124,15 @@ func (h *Handler) handlePlexWatchEnabled(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var body struct {
-		Enabled bool `json:"enabled"`
+		Direction int `json:"direction"`
+		Interval  int `json:"interval"`
 	}
 	dec := json.NewDecoder(io.LimitReader(r.Body, maxBodyBytes))
 	if err := dec.Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_json", "expected a JSON object with enabled")
 		return
 	}
-	st, err := h.deps.PlexWatch.SetEnabled(r.Context(), v.ID, v.PlexID, body.Enabled)
+	st, err := h.deps.PlexWatch.SetDirection(r.Context(), v.ID, v.PlexID, body.Direction, body.Interval)
 	h.writePlexWatch(w, st, err)
 }
 
@@ -171,4 +179,22 @@ func (h *Handler) handlePlexWatchImport(w http.ResponseWriter, r *http.Request) 
 	}
 	st, err := h.deps.PlexWatch.ImportCurrent(r.Context(), v.ID, v.PlexID)
 	h.writePlexWatch(w, st, err)
+}
+
+func (h *Handler) handlePlexWatchUnmatched(w http.ResponseWriter, r *http.Request) {
+	v, ok := h.plexWatchViewer(w, r)
+	if !ok {
+		return
+	}
+	after := r.URL.Query().Get("after")
+	if len(after) > 256 {
+		writeError(w, http.StatusBadRequest, "bad_cursor", "invalid cursor")
+		return
+	}
+	items, err := h.deps.PlexWatch.Unmatched(r.Context(), v.ID, v.PlexID, after)
+	if err != nil {
+		h.writePlexWatch(w, PlexWatchStatus{}, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
 }

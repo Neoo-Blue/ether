@@ -34,6 +34,8 @@ var ErrAccountMismatch = errors.New("plexwatch: plex account does not belong to 
 var ErrNotEligible = errors.New("plexwatch: account has not allowed watch-state sync")
 
 // ErrRevoked means the stored account token was rejected.
+var ErrCredentialForbidden = errors.New("plexwatch: credential is not allowed to access watch state")
+
 var ErrRevoked = errors.New("plexwatch: account token rejected")
 
 // StatusError is an HTTP result that is not success. Body is not retained.
@@ -41,6 +43,7 @@ type StatusError struct {
 	Status     int
 	RetryAfter time.Duration
 	Op         string
+	PlexCode   int
 }
 
 func (e *StatusError) Error() string {
@@ -52,6 +55,8 @@ func (e *StatusError) Is(target error) bool {
 	case ErrRevoked:
 		return e.Status == http.StatusUnauthorized
 	case ErrNotEligible:
+		return false
+	case ErrCredentialForbidden:
 		return e.Status == http.StatusForbidden
 	default:
 		return false
@@ -323,8 +328,18 @@ func (c *Client) call(ctx context.Context, method string, base *url.URL, pathAnd
 		}
 	}
 	if !good {
-		delay, _ := retryafter.Parse(resp.Header.Get("Retry-After"), c.now(), 15*time.Minute)
-		return resp.StatusCode, &StatusError{Status: resp.StatusCode, RetryAfter: delay, Op: method + " " + u.Host}
+		delay, _ := retryafter.Parse(resp.Header.Get("Retry-After"), c.now(), 0)
+		var body struct {
+			Errors []struct {
+				Code int `json:"code"`
+			} `json:"errors"`
+		}
+		_ = json.Unmarshal(slurp, &body)
+		code := 0
+		if len(body.Errors) > 0 {
+			code = body.Errors[0].Code
+		}
+		return resp.StatusCode, &StatusError{Status: resp.StatusCode, RetryAfter: delay, Op: method + " " + u.Host, PlexCode: code}
 	}
 	if dest != nil && len(bytes.TrimSpace(slurp)) > 0 {
 		if err := json.Unmarshal(slurp, dest); err != nil {

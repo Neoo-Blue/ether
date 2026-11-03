@@ -63,6 +63,7 @@ func (h *Handler) personalizationRoutes(api func(pattern string, fn http.Handler
 	api("GET /api/insights/ranker", h.handleInsightRanker)
 	api("GET /api/insights/activity", h.handleInsightActivity)
 
+	api("GET /api/viewers/{id}/plex-watch/unmatched", h.handlePlexWatchUnmatched)
 	api("GET /api/viewers/{id}/plex-watch", h.handlePlexWatchStatus)
 	api("POST /api/viewers/{id}/plex-watch/pin", h.handlePlexWatchPIN)
 	api("POST /api/viewers/{id}/plex-watch/pin/finish", h.handlePlexWatchPINFinish)

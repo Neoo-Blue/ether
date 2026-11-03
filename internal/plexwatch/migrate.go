@@ -74,38 +74,37 @@ func (s *Service) ExportCurrent(ctx context.Context, userID, plexID int64) (Stat
 // ImportCurrent reads the account's current watch state and applies records
 // that are newer than the local row. Episode GUIDs apply only when that exact
 // GUID is already stored. Show GUIDs are not expanded into episodes.
-func (s *Service) ImportCurrent(ctx context.Context, userID, plexID int64) (Status, error) {
+func (s *Service) importCurrent(ctx context.Context, userID, plexID int64, generation int64) error {
 	acct, err := s.requireMatch(ctx, userID, plexID)
 	if err != nil {
-		return Status{}, err
+		return err
 	}
 	if acct.eligibility != "allowed" {
-		return Status{}, ErrNotEligible
+		return ErrNotEligible
 	}
 	cursor := acct.cursor
 	for page := 0; page < 20; page++ {
 		remote, err := s.client.fetchState(ctx, acct.token, acct.plexID, cursor)
 		if err != nil {
-			return Status{}, err
+			return err
 		}
 		for _, item := range remote.Items {
 			if err := s.applyRemoteItem(ctx, userID, item); err != nil && !errors.Is(err, errUnmappedStored) {
-				return Status{}, err
+				return err
 			}
 		}
 		if remote.EndCursor != "" {
 			cursor = remote.EndCursor
 		}
-		if _, err := s.db.ExecContext(ctx, `UPDATE plexwatch_account SET import_cursor=?, updated_at=? WHERE user_id=? AND plex_id=?`,
-			cursor, s.now().UnixNano(), userID, plexID); err != nil {
-			return Status{}, err
+		if _, err := s.db.ExecContext(ctx, `UPDATE plexwatch_account SET import_cursor=?, updated_at=? WHERE user_id=? AND plex_id=? AND token_generation=?`,
+			cursor, s.now().UnixNano(), userID, plexID, generation); err != nil {
+			return err
 		}
 		if !remote.HasNextPage {
 			break
 		}
 	}
-	_ = s.reconcileUser(ctx, userID, false)
-	return s.Status(ctx, userID, plexID)
+	return nil
 }
 
 func (s *Service) applyRemoteItem(ctx context.Context, userID int64, item remoteItem) error {

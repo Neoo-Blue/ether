@@ -632,6 +632,7 @@ func (a *App) Run(ctx context.Context) error {
 	background.start(func() { a.trakt.Start(ctx) })
 	if a.plexWatch != nil {
 		background.start(func() { a.plexWatch.Run(ctx) })
+		background.start(func() { a.cluster.RunAsLeader(ctx, "plex watch imports", a.plexWatch.RunImports) })
 	}
 	background.start(func() {
 		a.cluster.RunAsLeader(ctx, "simkl delivery", func(ctx context.Context) {

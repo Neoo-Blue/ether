@@ -75,6 +75,19 @@ CREATE TABLE plexwatch_permit (
   until_at INTEGER NOT NULL
 );
 CREATE INDEX plexwatch_permit_live ON plexwatch_permit(user_id, until_at);`)
+	store.Register("plexwatch", 5, `
+ALTER TABLE plexwatch_account RENAME COLUMN enabled TO direction;
+ALTER TABLE plexwatch_account ADD COLUMN import_interval INTEGER NOT NULL DEFAULT 10;
+ALTER TABLE plexwatch_account ADD COLUMN next_import INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE plexwatch_account ADD COLUMN last_import INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE plexwatch_account ADD COLUMN last_send INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE plexwatch_account ADD COLUMN import_problem TEXT NOT NULL DEFAULT '';
+ALTER TABLE plexwatch_account ADD COLUMN send_problem TEXT NOT NULL DEFAULT '';
+ALTER TABLE plexwatch_account ADD COLUMN problem_code INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE plexwatch_account ADD COLUMN import_failures INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE plexwatch_account ADD COLUMN import_lease INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE plexwatch_account ADD COLUMN next_allowed INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX plexwatch_import_due ON plexwatch_account(next_import, user_id);`)
 	// Applies after state_plexwatch; standalone state need not import account sync.
 	store.Register("watchsend", 1, `CREATE TABLE plexwatch_attempt (
   attempt_id TEXT PRIMARY KEY,
@@ -202,23 +215,29 @@ func (s *Service) Close() error {
 
 // Status is the viewer-facing connection, with no token and no history.
 type Status struct {
-	Connected    bool   `json:"connected"`
-	PlexID       int64  `json:"plexId,omitempty"`
-	Username     string `json:"username,omitempty"`
-	Enabled      bool   `json:"enabled"`
-	Eligibility  string `json:"eligibility"`
-	Revoked      bool   `json:"revoked"`
-	Pending      int    `json:"pending"`
-	Held         int    `json:"held"`
-	HeldLegacy   int    `json:"heldLegacy"`
-	Dead         int    `json:"dead"`
-	InFlight     bool   `json:"inFlight"`
-	Skipped      int    `json:"skipped"`
-	Restricted   bool   `json:"restricted"`
-	PINCode      string `json:"pinCode,omitempty"`
-	PINURL       string `json:"pinUrl,omitempty"`
-	PINExpires   string `json:"pinExpires,omitempty"`
-	AccountMatch bool   `json:"accountMatch"`
+	Connected      bool   `json:"connected"`
+	PlexID         int64  `json:"plexId,omitempty"`
+	Username       string `json:"username,omitempty"`
+	Direction      int    `json:"direction"`
+	ImportInterval int    `json:"importInterval"`
+	LastImport     int64  `json:"lastImport"`
+	LastSend       int64  `json:"lastSend"`
+	NextImport     int64  `json:"nextImport"`
+	Problem        string `json:"problem"`
+	ProblemCode    int    `json:"problemCode"`
+	Eligibility    string `json:"eligibility"`
+	Revoked        bool   `json:"revoked"`
+	Pending        int    `json:"pending"`
+	Held           int    `json:"held"`
+	HeldLegacy     int    `json:"heldLegacy"`
+	Dead           int    `json:"dead"`
+	InFlight       bool   `json:"inFlight"`
+	Skipped        int    `json:"skipped"`
+	Restricted     bool   `json:"restricted"`
+	PINCode        string `json:"pinCode,omitempty"`
+	PINURL         string `json:"pinUrl,omitempty"`
+	PINExpires     string `json:"pinExpires,omitempty"`
+	AccountMatch   bool   `json:"accountMatch"`
 }
 
 type accountRow struct {
@@ -226,7 +245,7 @@ type accountRow struct {
 	plexID          int64
 	username        string
 	token           string
-	enabled         bool
+	direction       int
 	eligibility     string
 	revoked         bool
 	cursor          string
@@ -237,7 +256,7 @@ func (s *Service) Status(ctx context.Context, userID, plexID int64) (Status, err
 	if err := viewerIDs(userID, plexID); err != nil {
 		return Status{}, err
 	}
-	st := Status{Eligibility: "unchecked", AccountMatch: true}
+	st := Status{Eligibility: "unchecked", AccountMatch: true, ImportInterval: 10}
 	row, ok, err := s.loadAccount(ctx, userID)
 	if err != nil {
 		return Status{}, err
@@ -246,13 +265,27 @@ func (s *Service) Status(ctx context.Context, userID, plexID int64) (Status, err
 		st.Connected = row.token != "" && !row.revoked
 		st.PlexID = row.plexID
 		st.Username = row.username
-		st.Enabled = row.enabled
+		st.Direction = row.direction
+		var sendProblem string
+		if err := s.db.QueryRowContext(ctx, `SELECT import_interval,last_import,last_send,next_import,import_problem,problem_code,send_problem FROM plexwatch_account WHERE user_id=?`, userID).Scan(&st.ImportInterval, &st.LastImport, &st.LastSend, &st.NextImport, &st.Problem, &st.ProblemCode, &sendProblem); err != nil {
+			return Status{}, err
+		}
 		st.Eligibility = row.eligibility
+		if st.Problem == "" {
+			st.Problem = sendProblem
+		}
+		st.NextImport /= int64(time.Second)
+		if st.Problem == "" && row.eligibility == "refused" {
+			st.Problem = "consent"
+		}
+		if row.revoked {
+			st.Problem = "token"
+		}
 		st.Revoked = row.revoked
 		st.AccountMatch = row.plexID == plexID
 		if row.plexID != plexID {
 			st.Connected = false
-			st.Enabled = false
+			st.Direction = 0
 		}
 	}
 	pending, dead, err := s.state.PendingSyncCount(ctx, userID)
@@ -356,11 +389,11 @@ func (s *Service) FinishPIN(ctx context.Context, userID, plexID int64) (Status, 
 		if err := tx.QueryRowContext(ctx, `UPDATE plexwatch_fence SET generation=generation+1 WHERE user_id=? RETURNING generation`, userID).Scan(&gen); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO plexwatch_account(user_id, plex_id, username, token, enabled, eligibility, checked_at, revoked, updated_at, token_generation)
+		if _, err := tx.ExecContext(ctx, `INSERT INTO plexwatch_account(user_id, plex_id, username, token, direction, eligibility, checked_at, revoked, updated_at, token_generation)
 			VALUES(?,?,?,?,0,?,?,0,?,?)
 			ON CONFLICT(user_id) DO UPDATE SET plex_id=excluded.plex_id, username=excluded.username, token=excluded.token,
-			  enabled=0, eligibility=excluded.eligibility, checked_at=excluded.checked_at, revoked=0, updated_at=excluded.updated_at,
-			  token_generation=excluded.token_generation`,
+			  direction=0, eligibility=excluded.eligibility, checked_at=excluded.checked_at, revoked=0, updated_at=excluded.updated_at,
+			  token_generation=excluded.token_generation, import_lease=0, next_allowed=0, next_import=0, import_problem='', send_problem='', problem_code=0, import_failures=0`,
 			userID, plexID, acct.Username, sealed, eligibility, s.now().UnixNano(), s.now().UnixNano(), gen); err != nil {
 			return err
 		}
@@ -380,15 +413,18 @@ func (s *Service) FinishPIN(ctx context.Context, userID, plexID int64) (Status, 
 	return st, err
 }
 
-// SetEnabled turns delivery on or off. On does not upload existing history.
-// Off cancels undelivered intents. A later enable sends only newer changes.
-func (s *Service) SetEnabled(ctx context.Context, userID, plexID int64, on bool) (Status, error) {
+// SetDirection selects outbound (bit 0) and inbound (bit 1) sync.
+// Enabling outbound does not upload existing history.
+func (s *Service) SetDirection(ctx context.Context, userID, plexID int64, direction, interval int) (Status, error) {
+	if direction < 0 || direction > 3 || (interval != 5 && interval != 10 && interval != 30 && interval != 60) {
+		return Status{}, errors.New("plexwatch: invalid sync settings")
+	}
 	row, err := s.requireMatch(ctx, userID, plexID)
 	if err != nil {
 		return Status{}, err
 	}
-	if on {
-		if err := s.refreshEligibility(ctx, userID, row); err != nil {
+	if direction != 0 {
+		if err = s.refreshEligibility(ctx, userID, row); err != nil {
 			return Status{}, err
 		}
 		row, err = s.requireMatch(ctx, userID, plexID)
@@ -401,17 +437,20 @@ func (s *Service) SetEnabled(ctx context.Context, userID, plexID int64, on bool)
 		if s.beforeEnable != nil {
 			s.beforeEnable()
 		}
+	}
+	if direction&1 == 0 {
+		if err = s.rotateDisabled(ctx, userID, plexID, "disabled", direction, interval, row.tokenGeneration); err != nil {
+			return Status{}, err
+		}
+	} else {
 		err = s.withFence(ctx, userID, func(tx *sql.Tx) error {
-			res, err := tx.ExecContext(ctx, `UPDATE plexwatch_account SET enabled=1, updated_at=?
-				WHERE user_id=? AND plex_id=? AND token_generation=? AND revoked=0 AND token<>'' AND eligibility='allowed'
-				AND token_generation=(SELECT generation FROM plexwatch_fence WHERE user_id=?)`,
-				s.now().UnixNano(), userID, plexID, row.tokenGeneration, userID)
-			if err != nil {
-				return err
+			res, e := tx.ExecContext(ctx, `UPDATE plexwatch_account SET direction=?,import_interval=?,next_import=CASE WHEN (direction & 2)=0 AND (? & 2)<>0 THEN ? WHEN import_interval<>? AND (? & 2)<>0 THEN ? ELSE next_import END,updated_at=? WHERE user_id=? AND plex_id=? AND token_generation=? AND revoked=0 AND token<>'' AND eligibility='allowed' AND token_generation=(SELECT generation FROM plexwatch_fence WHERE user_id=?)`, direction, interval, direction, s.now().UnixNano(), interval, direction, s.now().Add(time.Duration(interval)*time.Minute).UnixNano(), s.now().UnixNano(), userID, plexID, row.tokenGeneration, userID)
+			if e != nil {
+				return e
 			}
-			n, err := res.RowsAffected()
-			if err != nil {
-				return err
+			n, e := res.RowsAffected()
+			if e != nil {
+				return e
 			}
 			if n != 1 {
 				return errStaleGeneration
@@ -422,27 +461,28 @@ func (s *Service) SetEnabled(ctx context.Context, userID, plexID int64, on bool)
 			return Status{}, err
 		}
 		_ = s.reconcileUser(ctx, userID, false)
-	} else if err := s.rotateDisabled(ctx, userID, plexID, "disabled"); err != nil {
-		return Status{}, err
 	}
 	return s.Status(ctx, userID, plexID)
 }
 
 // rotateDisabled bumps the fence, records that generation on the account, and
 // cancels pending intents in one transaction.
-func (s *Service) rotateDisabled(ctx context.Context, userID, plexID int64, reason string) error {
+func (s *Service) rotateDisabled(ctx context.Context, userID, plexID int64, reason string, direction, interval int, expected int64) error {
 	return s.withFence(ctx, userID, func(tx *sql.Tx) error {
 		var current int64
 		if err := tx.QueryRowContext(ctx, `SELECT generation FROM plexwatch_fence WHERE user_id=?`, userID).Scan(&current); err != nil {
 			return err
 		}
+		if current != expected {
+			return errStaleGeneration
+		}
 		var next int64
 		if err := tx.QueryRowContext(ctx, `UPDATE plexwatch_fence SET generation=generation+1 WHERE user_id=? AND generation=? RETURNING generation`, userID, current).Scan(&next); err != nil {
 			return err
 		}
-		res, err := tx.ExecContext(ctx, `UPDATE plexwatch_account SET enabled=0, token_generation=?, updated_at=?
+		res, err := tx.ExecContext(ctx, `UPDATE plexwatch_account SET direction=?, import_interval=?, next_import=CASE WHEN (direction & 2)=0 AND (? & 2)<>0 THEN ? WHEN import_interval<>? AND (? & 2)<>0 THEN ? ELSE next_import END, token_generation=?, updated_at=?
 			WHERE user_id=? AND plex_id=? AND token_generation=?`,
-			next, s.now().UnixNano(), userID, plexID, current)
+			direction, interval, direction, s.now().UnixNano(), interval, direction, s.now().Add(time.Duration(interval)*time.Minute).UnixNano(), next, s.now().UnixNano(), userID, plexID, current)
 		if err != nil {
 			return err
 		}
@@ -551,7 +591,7 @@ func (s *Service) refreshEligibility(ctx context.Context, userID int64, row acco
 		}
 		return nil
 	case errors.Is(err, ErrNotEligible):
-		res, e := s.db.ExecContext(ctx, `UPDATE plexwatch_account SET eligibility='refused', enabled=0, checked_at=?, updated_at=?
+		res, e := s.db.ExecContext(ctx, `UPDATE plexwatch_account SET eligibility='refused', checked_at=?, updated_at=?
 			WHERE user_id=? AND token_generation=? AND revoked=0`,
 			s.now().UnixNano(), s.now().UnixNano(), userID, row.tokenGeneration)
 		if e != nil {
@@ -579,7 +619,7 @@ var errStaleGeneration = errors.New("plexwatch: stored account changed before co
 func (s *Service) revoke(ctx context.Context, userID, generation int64) error {
 	revoked := false
 	err := s.withFence(ctx, userID, func(tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, `UPDATE plexwatch_account SET token='', enabled=0, revoked=1, eligibility='unauthorized', updated_at=?
+		res, err := tx.ExecContext(ctx, `UPDATE plexwatch_account SET token='', direction=0, revoked=1, eligibility='unauthorized', updated_at=?
 			WHERE user_id=? AND token_generation=?`, s.now().UnixNano(), userID, generation)
 		if err != nil {
 			return err
@@ -654,11 +694,11 @@ func viewerIDs(userID, plexID int64) error {
 
 func (s *Service) loadAccount(ctx context.Context, userID int64) (accountRow, bool, error) {
 	var row accountRow
-	var enabled, revoked int
+	var direction, revoked int
 	var sealed string
-	err := s.db.QueryRowContext(ctx, `SELECT plex_id, username, token, enabled, eligibility, revoked, import_cursor, token_generation
+	err := s.db.QueryRowContext(ctx, `SELECT plex_id, username, token, direction, eligibility, revoked, import_cursor, token_generation
 		FROM plexwatch_account WHERE user_id=?`, userID).
-		Scan(&row.plexID, &row.username, &sealed, &enabled, &row.eligibility, &revoked, &row.cursor, &row.tokenGeneration)
+		Scan(&row.plexID, &row.username, &sealed, &direction, &row.eligibility, &revoked, &row.cursor, &row.tokenGeneration)
 	if errors.Is(err, sql.ErrNoRows) {
 		return accountRow{}, false, nil
 	}
@@ -666,7 +706,7 @@ func (s *Service) loadAccount(ctx context.Context, userID int64) (accountRow, bo
 		return accountRow{}, false, err
 	}
 	row.userID = userID
-	row.enabled = enabled != 0
+	row.direction = direction
 	row.revoked = revoked != 0
 	if sealed != "" {
 		plain, _, err := config.OpenWith(s.sealer, sealed, "plexwatch", "token", strconv.FormatInt(userID, 10), "scrobbles.plex.tv")

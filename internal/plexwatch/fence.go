@@ -95,7 +95,7 @@ func (s *Service) acquireSend(ctx context.Context, row state.SyncRow, attempt st
 	var enabled, revoked int
 	var tokenGen int64
 	var plexID int64
-	err = tx.QueryRowContext(ctx, `SELECT plex_id, token, enabled, revoked, token_generation, eligibility FROM plexwatch_account WHERE user_id=?`, row.UserID).
+	err = tx.QueryRowContext(ctx, `SELECT plex_id, token, direction, revoked, token_generation, eligibility FROM plexwatch_account WHERE user_id=?`, row.UserID).
 		Scan(&plexID, &sealed, &enabled, &revoked, &tokenGen, &eligibility)
 	accountMissing := errors.Is(err, sql.ErrNoRows)
 	if err != nil && !accountMissing {
@@ -106,7 +106,7 @@ func (s *Service) acquireSend(ctx context.Context, row state.SyncRow, attempt st
 		return sendPermit{}, err
 	}
 	stale := fenceMissing || accountMissing || consent != fenceGen || consent != row.ConsentGen
-	disabled := enabled == 0 || revoked != 0 || sealed == "" || tokenGen != fenceGen
+	disabled := enabled&1 == 0 || revoked != 0 || sealed == "" || tokenGen != fenceGen
 	notEligible := eligibility != "allowed"
 	if !owned || stale || disabled || notEligible {
 		out := sendPermit{}

@@ -32,7 +32,7 @@ func (a *App) buildPlexWatch() error {
 	a.closers = append(a.closers, func() { _ = svc.Close() })
 	a.state.SetJournalGate(func(ctx context.Context, tx *sql.Tx, userID int64) (int64, bool, error) {
 		var enabled, gen int64
-		err := tx.QueryRowContext(ctx, `SELECT a.enabled, f.generation
+		err := tx.QueryRowContext(ctx, `SELECT a.direction, f.generation
 			FROM plexwatch_account a JOIN plexwatch_fence f ON f.user_id=a.user_id
 			WHERE a.user_id=? AND a.revoked=0 AND a.token<>'' AND a.token_generation=f.generation`, userID).Scan(&enabled, &gen)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -41,7 +41,7 @@ func (a *App) buildPlexWatch() error {
 		if err != nil {
 			return 0, false, err
 		}
-		return gen, enabled != 0, nil
+		return gen, enabled&1 != 0, nil
 	})
 	return nil
 }
@@ -53,7 +53,7 @@ type plexWatchAdmin struct{ svc *plexwatch.Service }
 func (p plexWatchAdmin) status(st plexwatch.Status) admin.PlexWatchStatus {
 	return admin.PlexWatchStatus{
 		Connected: st.Connected, PlexID: st.PlexID, Username: st.Username,
-		Enabled: st.Enabled, Eligibility: st.Eligibility, Revoked: st.Revoked,
+		Direction: st.Direction, ImportInterval: st.ImportInterval, LastImport: st.LastImport, LastSend: st.LastSend, NextImport: st.NextImport, Problem: st.Problem, ProblemCode: st.ProblemCode, Eligibility: st.Eligibility, Revoked: st.Revoked,
 		Pending: st.Pending, Held: st.Held, HeldLegacy: st.HeldLegacy,
 		Dead: st.Dead, InFlight: st.InFlight, Skipped: st.Skipped, Restricted: st.Restricted,
 		PINCode: st.PINCode, PINURL: st.PINURL, PINExpires: st.PINExpires,
@@ -88,8 +88,8 @@ func (p plexWatchAdmin) FinishPIN(ctx context.Context, userID, plexID int64) (ad
 	st, err := p.svc.FinishPIN(ctx, userID, plexID)
 	return p.status(st), mapPlexWatchErr(err)
 }
-func (p plexWatchAdmin) SetEnabled(ctx context.Context, userID, plexID int64, on bool) (admin.PlexWatchStatus, error) {
-	st, err := p.svc.SetEnabled(ctx, userID, plexID, on)
+func (p plexWatchAdmin) SetDirection(ctx context.Context, userID, plexID int64, direction, interval int) (admin.PlexWatchStatus, error) {
+	st, err := p.svc.SetDirection(ctx, userID, plexID, direction, interval)
 	return p.status(st), mapPlexWatchErr(err)
 }
 func (p plexWatchAdmin) Disconnect(ctx context.Context, userID, plexID int64) (admin.PlexWatchStatus, error) {
@@ -111,4 +111,8 @@ func (p plexWatchAdmin) ExportCurrent(ctx context.Context, userID, plexID int64)
 func (p plexWatchAdmin) ImportCurrent(ctx context.Context, userID, plexID int64) (admin.PlexWatchStatus, error) {
 	st, err := p.svc.ImportCurrent(ctx, userID, plexID)
 	return p.status(st), mapPlexWatchErr(err)
+}
+
+func (p plexWatchAdmin) Unmatched(ctx context.Context, userID, plexID int64, after string) ([]string, error) {
+	return p.svc.Unmatched(ctx, userID, plexID, after)
 }

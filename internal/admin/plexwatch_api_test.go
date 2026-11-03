@@ -24,7 +24,7 @@ func (f *fakePlexWatch) remember(userID, plexID int64) {
 }
 
 func (f *fakePlexWatch) status() admin.PlexWatchStatus {
-	return admin.PlexWatchStatus{Eligibility: "unchecked", AccountMatch: true, Enabled: f.on}
+	return admin.PlexWatchStatus{Eligibility: "unchecked", AccountMatch: true, Direction: boolDirection(f.on)}
 }
 
 func (f *fakePlexWatch) Status(_ context.Context, userID, plexID int64) (admin.PlexWatchStatus, error) {
@@ -44,9 +44,16 @@ func (f *fakePlexWatch) FinishPIN(_ context.Context, userID, plexID int64) (admi
 	}
 	return f.status(), nil
 }
-func (f *fakePlexWatch) SetEnabled(_ context.Context, userID, plexID int64, on bool) (admin.PlexWatchStatus, error) {
+func boolDirection(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}
+
+func (f *fakePlexWatch) SetDirection(_ context.Context, userID, plexID int64, direction, interval int) (admin.PlexWatchStatus, error) {
 	f.remember(userID, plexID)
-	f.on = on
+	f.on = direction&1 != 0
 	return f.status(), nil
 }
 func (f *fakePlexWatch) Disconnect(_ context.Context, userID, plexID int64) (admin.PlexWatchStatus, error) {
@@ -86,7 +93,7 @@ func TestPlexWatchUsesViewerPlexID(t *testing.T) {
 		},
 	})
 
-	r := req(http.MethodPut, "/ether/api/viewers/7/plex-watch", `{"enabled":true}`)
+	r := req(http.MethodPut, "/ether/api/viewers/7/plex-watch", `{"direction":1,"interval":10}`)
 	r.Header.Set("X-Plex-Token", ownerToken)
 	rec := serve(h, r)
 	if rec.Code != http.StatusOK {
@@ -116,4 +123,8 @@ func TestPlexWatchUsesViewerPlexID(t *testing.T) {
 	if rec.Code != http.StatusOK || !watch.resolved || watch.userID != 7 || watch.plexID != 99 {
 		t.Fatalf("resolve: %d resolved=%v user=%d plex=%d", rec.Code, watch.resolved, watch.userID, watch.plexID)
 	}
+}
+
+func (f *fakePlexWatch) Unmatched(_ context.Context, _, _ int64, _ string) ([]string, error) {
+	return []string{}, nil
 }

@@ -35,7 +35,7 @@ func TestUncertainSendNoSecondPOST(t *testing.T) {
 			h := newHarness(t, 42)
 			h.connect(t, 2, 42)
 			ctx := context.Background()
-			if _, err := h.svc.SetEnabled(ctx, 2, 42, true); err != nil {
+			if _, err := h.svc.SetDirection(ctx, 2, 42, 1, 10); err != nil {
 				t.Fatal(err)
 			}
 			key := core.MovieKey(550)
@@ -140,7 +140,7 @@ func TestUncertainSendCrashAndCommitBoundaries(t *testing.T) {
 			h := newHarness(t, 42)
 			ctx := context.Background()
 			h.connect(t, 2, 42)
-			if _, err := h.svc.SetEnabled(ctx, 2, 42, true); err != nil {
+			if _, err := h.svc.SetDirection(ctx, 2, 42, 1, 10); err != nil {
 				t.Fatal(err)
 			}
 			key := core.MovieKey(550)
@@ -235,7 +235,7 @@ func TestUncertainSendSurvivesLifecycle(t *testing.T) {
 			h := newHarness(t, 42)
 			ctx := context.Background()
 			h.connect(t, 2, 42)
-			if _, err := h.svc.SetEnabled(ctx, 2, 42, true); err != nil {
+			if _, err := h.svc.SetDirection(ctx, 2, 42, 1, 10); err != nil {
 				t.Fatal(err)
 			}
 			key := core.MovieKey(550)
@@ -259,14 +259,14 @@ func TestUncertainSendSurvivesLifecycle(t *testing.T) {
 					t.Fatal(err)
 				}
 				h.connect(t, 2, 42)
-				if _, err := h.svc.SetEnabled(ctx, 2, 42, true); err != nil {
+				if _, err := h.svc.SetDirection(ctx, 2, 42, 1, 10); err != nil {
 					t.Fatal(err)
 				}
 			case "consent":
-				if _, err := h.svc.SetEnabled(ctx, 2, 42, false); err != nil {
+				if _, err := h.svc.SetDirection(ctx, 2, 42, 0, 10); err != nil {
 					t.Fatal(err)
 				}
-				if _, err := h.svc.SetEnabled(ctx, 2, 42, true); err != nil {
+				if _, err := h.svc.SetDirection(ctx, 2, 42, 1, 10); err != nil {
 					t.Fatal(err)
 				}
 			case "remap":
@@ -336,7 +336,7 @@ func TestUncertainSendTwoNodesAndUnaffectedWork(t *testing.T) {
 	h := newHarness(t, 42)
 	ctx := context.Background()
 	h.connect(t, 2, 42)
-	if _, err := h.svc.SetEnabled(ctx, 2, 42, true); err != nil {
+	if _, err := h.svc.SetDirection(ctx, 2, 42, 1, 10); err != nil {
 		t.Fatal(err)
 	}
 	key := core.MovieKey(550)
@@ -395,7 +395,7 @@ func TestUncertainSendTwoNodesAndUnaffectedWork(t *testing.T) {
 		t.Fatalf("unrelated title or aspect blocked: %d posts", n)
 	}
 	h.connect(t, 8, 84)
-	if _, err := h.svc.SetEnabled(ctx, 8, 84, true); err != nil {
+	if _, err := h.svc.SetDirection(ctx, 8, 84, 1, 10); err != nil {
 		t.Fatal(err)
 	}
 	if err := h.st.Scrobble(ctx, 8, key); err != nil {
@@ -480,7 +480,7 @@ func TestUncertainSendProcessCrash(t *testing.T) {
 			}
 			h := newHarnessDB(t, 42, db)
 			h.connect(t, 2, 42)
-			if _, err := h.svc.SetEnabled(ctx, 2, 42, true); err != nil {
+			if _, err := h.svc.SetDirection(ctx, 2, 42, 1, 10); err != nil {
 				t.Fatal(err)
 			}
 			key := core.MovieKey(550)
@@ -542,7 +542,7 @@ func TestUncertainSendLegacyUpgrade(t *testing.T) {
 		h := newHarness(t, 42)
 		ctx := context.Background()
 		h.connect(t, 2, 42)
-		if _, err := h.svc.SetEnabled(ctx, 2, 42, true); err != nil {
+		if _, err := h.svc.SetDirection(ctx, 2, 42, 1, 10); err != nil {
 			t.Fatal(err)
 		}
 		key := core.MovieKey(550)
@@ -579,7 +579,7 @@ func TestUncertainSendLegacyUpgrade(t *testing.T) {
 			h := newHarness(t, 42)
 			ctx := context.Background()
 			h.connect(t, 2, 42)
-			if _, err := h.svc.SetEnabled(ctx, 2, 42, true); err != nil {
+			if _, err := h.svc.SetDirection(ctx, 2, 42, 1, 10); err != nil {
 				t.Fatal(err)
 			}
 			key := core.MovieKey(550)
@@ -610,7 +610,7 @@ func TestUncertainSendLegacyUpgrade(t *testing.T) {
 			}
 			if disconnected {
 				h.connect(t, 2, 42)
-				if _, err := h.svc.SetEnabled(ctx, 2, 42, true); err != nil {
+				if _, err := h.svc.SetDirection(ctx, 2, 42, 1, 10); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -657,7 +657,7 @@ func TestUncertainSendLegacyRowAfterUpgrade(t *testing.T) {
 	h := newHarness(t, 42)
 	ctx := context.Background()
 	h.connect(t, 2, 42)
-	if _, err := h.svc.SetEnabled(ctx, 2, 42, true); err != nil {
+	if _, err := h.svc.SetDirection(ctx, 2, 42, 1, 10); err != nil {
 		t.Fatal(err)
 	}
 	key := core.MovieKey(550)
@@ -695,7 +695,7 @@ func TestUncertainSendReconcileReceiptAndRelease(t *testing.T) {
 		h := newHarness(t, 42)
 		ctx := context.Background()
 		h.connect(t, 2, 42)
-		if _, err := h.svc.SetEnabled(ctx, 2, 42, true); err != nil {
+		if _, err := h.svc.SetDirection(ctx, 2, 42, 1, 10); err != nil {
 			t.Fatal(err)
 		}
 		key := core.MovieKey(550)
@@ -759,7 +759,7 @@ func TestUncertainSendReconcileReceiptAndRelease(t *testing.T) {
 				h := newHarness(t, 42)
 				ctx := context.Background()
 				h.connect(t, 2, 42)
-				if _, err := h.svc.SetEnabled(ctx, 2, 42, true); err != nil {
+				if _, err := h.svc.SetDirection(ctx, 2, 42, 1, 10); err != nil {
 					t.Fatal(err)
 				}
 				key := core.MovieKey(550)
@@ -800,7 +800,7 @@ func TestUncertainSendReconcileReceiptAndRelease(t *testing.T) {
 					if _, err := h.svc.FinishPIN(ctx, 2, 42); err != nil {
 						t.Fatal(err)
 					}
-					if _, err := h.svc.SetEnabled(ctx, 2, 42, true); err != nil {
+					if _, err := h.svc.SetDirection(ctx, 2, 42, 1, 10); err != nil {
 						t.Fatal(err)
 					}
 					if err := h.st.Scrobble(ctx, 2, key); err != nil {
@@ -810,10 +810,10 @@ func TestUncertainSendReconcileReceiptAndRelease(t *testing.T) {
 						t.Fatal(err)
 					}
 				case "consent":
-					if _, err := h.svc.SetEnabled(ctx, 2, 42, false); err != nil {
+					if _, err := h.svc.SetDirection(ctx, 2, 42, 0, 10); err != nil {
 						t.Fatal(err)
 					}
-					if _, err := h.svc.SetEnabled(ctx, 2, 42, true); err != nil {
+					if _, err := h.svc.SetDirection(ctx, 2, 42, 1, 10); err != nil {
 						t.Fatal(err)
 					}
 					if err := h.st.Scrobble(ctx, 2, key); err != nil {
@@ -853,7 +853,7 @@ func TestDefinitiveRefusalClearsAdmissionFence(t *testing.T) {
 			h := newHarness(t, 42)
 			ctx := context.Background()
 			h.connect(t, 2, 42)
-			if _, err := h.svc.SetEnabled(ctx, 2, 42, true); err != nil {
+			if _, err := h.svc.SetDirection(ctx, 2, 42, 1, 10); err != nil {
 				t.Fatal(err)
 			}
 			key := core.MovieKey(550)
@@ -873,11 +873,11 @@ func TestDefinitiveRefusalClearsAdmissionFence(t *testing.T) {
 			h.fake.postStatus = 201
 			if code == 401 {
 				h.connect(t, 2, 42)
-				if _, err := h.svc.SetEnabled(ctx, 2, 42, true); err != nil {
+				if _, err := h.svc.SetDirection(ctx, 2, 42, 1, 10); err != nil {
 					t.Fatal(err)
 				}
 			} else if code == 403 {
-				if _, err := h.svc.SetEnabled(ctx, 2, 42, true); err != nil {
+				if _, err := h.svc.SetDirection(ctx, 2, 42, 1, 10); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -900,7 +900,7 @@ func TestEligibilityDeferAndRetryRevives(t *testing.T) {
 	h := newHarness(t, 42)
 	ctx := context.Background()
 	h.connect(t, 2, 42)
-	if _, err := h.svc.SetEnabled(ctx, 2, 42, true); err != nil {
+	if _, err := h.svc.SetDirection(ctx, 2, 42, 1, 10); err != nil {
 		t.Fatal(err)
 	}
 	key := core.MovieKey(550)
