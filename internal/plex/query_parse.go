@@ -63,10 +63,19 @@ func (s *Server) handleSectionQueryParse(w http.ResponseWriter, r *http.Request,
 			titles[k] = v
 		}
 	}
+	q := parseQueryTree(r.URL.RawQuery, typ, titles)
+	w.Header().Set("Content-Type", "application/json")
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false) // operators such as ">>=" and "<=" stay literal, as PMS writes them
+	_ = enc.Encode(map[string]parsedQuery{"Query": q})
+}
+
+// parseQueryTree retains the order of parameters, including nested groups.
+func parseQueryTree(rawQuery string, typ int, titles map[string]string) parsedQuery {
 	q := parsedQuery{Type: typ}
 	// Groups are built in parameter order, which url.Values loses.
 	stack := []*queryRule{{Type: "composite", Operator: "and"}}
-	for _, pair := range strings.Split(r.URL.RawQuery, "&") {
+	for _, pair := range strings.Split(rawQuery, "&") {
 		if pair == "" {
 			continue
 		}
@@ -125,10 +134,7 @@ func (s *Server) handleSectionQueryParse(w http.ResponseWriter, r *http.Request,
 		}
 	}
 	q.Rule = collapseQueryGroup(*stack[0])
-	w.Header().Set("Content-Type", "application/json")
-	enc := json.NewEncoder(w)
-	enc.SetEscapeHTML(false) // operators such as ">>=" and "<=" stay literal, as PMS writes them
-	_ = enc.Encode(map[string]parsedQuery{"Query": q})
+	return q
 }
 
 // collapseQueryGroup drops an empty group and unwraps a group of one rule.

@@ -548,9 +548,46 @@ func applyTimeFilter(op string, ts int64, dateOnly bool, after, before *int64) {
 }
 
 // parseBrowse converts Plex filter/sort params into a catalogue query.
-func (s *Server) parseBrowse(ctx context.Context, sec Section, t core.MediaType, u *core.User, q url.Values) browseRequest {
+func (s *Server) parseBrowse(ctx context.Context, sec Section, t core.MediaType, u *core.User, q url.Values, raw ...string) browseRequest {
 	br := browseRequest{}
-	f := core.Filter{Type: t}
+	var group *core.FilterGroup
+	if len(raw) > 0 && (q.Has("push") || q.Has("or") || q.Has("pop")) {
+		tree := parseQueryTree(raw[0], typeNumber(t), nil)
+		var convert func(*queryRule) *core.FilterGroup
+		convert = func(rule *queryRule) *core.FilterGroup {
+			if rule == nil {
+				return nil
+			}
+			if rule.Type == "composite" {
+				g := &core.FilterGroup{Operator: rule.Operator}
+				for i := range rule.Rule {
+					if child := convert(&rule.Rule[i]); child != nil {
+						g.Children = append(g.Children, *child)
+					}
+				}
+				if len(g.Children) == 0 {
+					return nil
+				}
+				return g
+			}
+			if rule.Value == nil {
+				return nil
+			}
+			key := rule.Field + strings.TrimSuffix(rule.Operator, "=")
+			leaf := s.parseBrowse(ctx, sec, t, nil, url.Values{key: []string{*rule.Value}}).q.Filter
+			return &core.FilterGroup{Filter: &leaf}
+		}
+		group = convert(tree.Rule)
+		// Keep response-shaping arguments, but rules are represented by the tree.
+		reduced := url.Values{}
+		for k, v := range q {
+			if queryParamIgnored(k) || k == "type" || k == "sort" {
+				reduced[k] = v
+			}
+		}
+		q = reduced
+	}
+	f := core.Filter{Type: t, Group: group}
 	if u != nil {
 		f.MaxContentRating = u.MaxContentRating
 	}
@@ -1253,7 +1290,7 @@ func (s *Server) sectionList(w http.ResponseWriter, r *http.Request, sec Section
 		s.write(w, r, mc)
 		return
 	}
-	br := s.parseBrowse(ctx, sec, t, pr.User, q)
+	br := s.parseBrowse(ctx, sec, t, pr.User, q, r.URL.RawQuery)
 	switch sub {
 	case "unwatched":
 		want := true

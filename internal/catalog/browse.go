@@ -333,7 +333,24 @@ func (c *Catalog) LibraryPosters(ctx context.Context, typ core.MediaType, limit 
 // browseFilterKey distinguishes a nil IncludeKeys (no restriction) from an
 // empty list (match nothing). fmt %+v prints both as [].
 func browseFilterKey(f core.Filter) string {
+	group := f.Group
+	f.Group = nil
 	key := fmt.Sprintf("%+v", f)
+	var groupKey func(*core.FilterGroup) string
+	groupKey = func(g *core.FilterGroup) string {
+		if g == nil {
+			return ""
+		}
+		if g.Filter != nil {
+			return "leaf(" + browseFilterKey(*g.Filter) + ")"
+		}
+		out := g.Operator + "("
+		for i := range g.Children {
+			out += groupKey(&g.Children[i]) + ";"
+		}
+		return out + ")"
+	}
+	key += "|group:" + groupKey(group)
 	if f.IncludeKeys != nil {
 		key += "|include"
 		for _, k := range f.IncludeKeys {
@@ -738,6 +755,38 @@ func (c *Catalog) browseWhere(f core.Filter) (string, []any, error) {
 			conds = append(conds, "t.release_known=1 AND t.released_ts<=?")
 		}
 		args = append(args, nowTS)
+	}
+	if f.Group != nil {
+		var compile func(*core.FilterGroup) (string, []any, error)
+		compile = func(g *core.FilterGroup) (string, []any, error) {
+			if g.Filter != nil {
+				return c.browseWhere(*g.Filter)
+			}
+			parts := make([]string, 0, len(g.Children))
+			var vals []any
+			for i := range g.Children {
+				sql, a, err := compile(&g.Children[i])
+				if err != nil {
+					return "", nil, err
+				}
+				parts = append(parts, "("+sql+")")
+				vals = append(vals, a...)
+			}
+			if len(parts) == 0 {
+				return "1=1", nil, nil
+			}
+			op := " AND "
+			if g.Operator == "or" {
+				op = " OR "
+			}
+			return strings.Join(parts, op), vals, nil
+		}
+		clause, values, err := compile(f.Group)
+		if err != nil {
+			return "", nil, err
+		}
+		conds = append(conds, "("+clause+")")
+		args = append(args, values...)
 	}
 	return strings.Join(conds, " AND "), args, nil
 }

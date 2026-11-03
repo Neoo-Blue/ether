@@ -53,8 +53,16 @@ type CreditFilter struct {
 	Exclude bool    `json:"exclude,omitempty"`
 }
 
+// FilterGroup represents a nested boolean expression of browse filters.
+type FilterGroup struct {
+	Operator string        `json:"operator"`
+	Filter   *Filter       `json:"filter,omitempty"`
+	Children []FilterGroup `json:"children,omitempty"`
+}
+
 // Filter narrows a browse or a smart collection. Zero values mean "any".
 type Filter struct {
+	Group           *FilterGroup       `json:"group,omitempty"`
 	RuleVisibility  string             `json:"-"` // owner-only rules browser: hidden or shown
 	PreviewRules    []LibraryExclusion `json:"-"`
 	PreviewFallback string             `json:"-"`
