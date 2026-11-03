@@ -56,8 +56,8 @@ export default function LivePlugins() {
     <Button variant="outline" onClick={()=>{setAdding(true);setPreview(null);setImportError("");}}><Plus size={15}/>{t("Import add-on")}</Button>
     <Link to="/plugins/studio" className={buttonVariants()}><Sparkles size={15}/>{t("Build a plugin")}</Link>
   </>}>
-    <div className="grid gap-3 sm:grid-cols-3">
-      {[{label:t("Installed manifests"),value:items.length},{label:t("Enabled"),value:items.filter(p=>p.enabled).length},{label:t("Resource support"),value:t("Not connected")}].map(x=><div key={x.label} className="rounded-xl border border-border bg-surface px-4 py-3.5"><p className="text-xs text-fg-muted">{x.label}</p><p className="mt-1 text-2xl font-semibold text-fg">{x.value}</p></div>)}
+    <div className="grid grid-cols-3 gap-2 sm:gap-3">
+      {[{label:t("Installed manifests"),value:items.length},{label:t("Enabled"),value:items.filter(p=>p.enabled).length},{label:t("Resource support"),value:t("Not connected")}].map(x=><div key={x.label} className="rounded-xl border border-border bg-surface px-3 py-2.5 sm:px-4 sm:py-3.5"><p className="text-xs text-fg-muted">{x.label}</p><p className="mt-1 text-sm font-semibold text-fg sm:text-2xl">{x.value}</p></div>)}
     </div>
     <p className="text-sm text-fg-muted">{t("Manifests are saved on this server. Native catalogue, stream and subtitle contributions are not connected in this build.")}</p>
     {error?<p role="alert" className="text-danger">{error}</p>:null}
