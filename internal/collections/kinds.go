@@ -309,6 +309,7 @@ func builtinSourceKinds() []SourceKind {
 	return []SourceKind{
 		catalogKind{kindDef: def("catalog", 10, extend.T("Whole catalogue"), extend.T("Everything browsable in Ether"), "library", "none", nil, `{}`)},
 		tmdbListKind{},
+		tmdbUserListKind{},
 		titlesKind{},
 		personKind{},
 		lookupKind{id: "tmdbCollection", order: 50, label: extend.T("TMDB collection"), hint: extend.T("A franchise such as “The Lord of the Rings”"), icon: "layers", lookup: "collection", entity: "collection"},

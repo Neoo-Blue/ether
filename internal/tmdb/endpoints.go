@@ -395,3 +395,34 @@ func (c *Client) TVDetailsFresh(ctx context.Context, id int64) (*TVDetails, erro
 	err := c.getFreshJSON(ctx, fmt.Sprintf("/tv/%d", id), q, &out)
 	return &out, err
 }
+
+// UserListPage is one page of a public TMDB user list.
+type UserListPage struct {
+	Page         int            `json:"page"`
+	TotalPages   int            `json:"total_pages"`
+	TotalResults int            `json:"total_results"`
+	Results      []UserListItem `json:"results"`
+	Items        []UserListItem `json:"items"`
+}
+
+type UserListItem struct {
+	ID        int64  `json:"id"`
+	MediaType string `json:"media_type"`
+}
+
+// UserList retrieves one page using the configured TMDB credentials and cache.
+func (c *Client) UserList(ctx context.Context, id int64, page int) (UserListPage, error) {
+	return GetUserListPage(ctx, c, id, page)
+}
+
+// GetUserListPage retrieves a page through a rate-limited TMDB JSON client.
+func GetUserListPage(ctx context.Context, client interface {
+	GetJSON(context.Context, string, url.Values, any) error
+}, id int64, page int) (UserListPage, error) {
+	var result UserListPage
+	if id <= 0 || page <= 0 {
+		return result, fmt.Errorf("tmdb: invalid list ID or page")
+	}
+	err := client.GetJSON(ctx, fmt.Sprintf("/list/%d", id), url.Values{"page": {strconv.Itoa(page)}}, &result)
+	return result, err
+}
