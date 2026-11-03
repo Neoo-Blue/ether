@@ -1,6 +1,6 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { calls, renderApp } from "./harness";
+import { renderApp } from "./harness";
 
 describe("Stremio built-ins", () => {
   it("sends subtitle add-ons through Plugins, the one install path", async () => {

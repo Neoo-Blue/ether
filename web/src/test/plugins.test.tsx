@@ -96,7 +96,9 @@ describe("Server › Plugins (WS10a)", () => {
 
     expect(screen.getByRole("button", { name: "Open the marketplace" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Install from a link/i })).toBeTruthy();
-    expect(screen.getAllByRole("link", { name: /Build a plugin/i }).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByRole("link", { name: /Build a plugin/i }).length).toBeGreaterThanOrEqual(
+      2,
+    );
   });
 
   it("opens the plugin drawer and covers Overview, Settings (with validation & Test), Permissions, Health, Activity, Logs, Updates, and Remove", async () => {
