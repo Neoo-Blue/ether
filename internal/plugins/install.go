@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/braedonsaunders/ether/internal/stremio"
 	"io"
 	"net/http"
 	"net/url"
@@ -159,6 +160,13 @@ func (m *Manager) loadSource(ctx context.Context, src Source) (raw json.RawMessa
 		}
 		return readPkg(src.Pkg)
 	case "url", "github", "catalogue", "":
+		if src.Kind == "url" && len(src.Manifest) > 0 {
+			// A link whose manifest the caller already holds (a migrated
+			// add-on recorded while its host was unreachable); the hourly
+			// refresh replaces it with the add-on's own.
+			files["manifest.json"] = src.Manifest
+			return src.Manifest, files, nil
+		}
 		if len(src.Pkg) > 0 {
 			if src.SHA256 != "" {
 				if err := verifyArtifactDigest(src.Pkg, src.SHA256); err != nil {
@@ -182,10 +190,13 @@ func (m *Manager) loadSource(ctx context.Context, src Source) (raw json.RawMessa
 		if IsGitHubURL(src.URL) {
 			return m.loadGitHub(ctx, src)
 		}
-		manURL := src.URL
-		if !strings.HasSuffix(manURL, "/manifest.json") {
-			manURL = strings.TrimSuffix(manURL, "/") + "/manifest.json"
+		// Install links are Stremio-style: stremio://, a configure page
+		// or a manifest URL, with configuration in the path or query.
+		base, err := stremio.NormalizeURL(src.URL)
+		if err != nil {
+			return nil, nil, err
 		}
+		manURL := stremio.ManifestURL(base)
 		b, err := m.fetch(ctx, manURL, src.LAN, 1<<20)
 		if err != nil {
 			return nil, nil, err
@@ -445,6 +456,16 @@ func (m *Manager) PreviewInstall(ctx context.Context, src Source) (*Preview, err
 	if src.Version != "" && man.Version != src.Version {
 		return nil, fmt.Errorf("plugins: manifest version %q does not match catalogue version %q", man.Version, src.Version)
 	}
+	if man.IsStremioOnly() && src.URL != "" {
+		// One record per configured add-on: the same add-on installed with
+		// two configurations (two debrid accounts) is two records, and the
+		// same link pasted on another page is the same record.
+		id, base, err := StremioInstallID(src.URL)
+		if err != nil {
+			return nil, err
+		}
+		man.ID, src.URL = id, base
+	}
 	p := &Preview{Manifest: man, source: src, files: files, manifestRaw: raw, Verified: src.Verified, StremioOnly: man.IsStremioOnly()}
 	p.PermissionLines, p.NeedsViewers, p.NeedsFolders = PermissionSheet(man)
 	if err := p.resolve(); err != nil {
@@ -604,6 +625,18 @@ func (m *Manager) CheckUpdate(ctx context.Context, id string) (*Preview, bool, e
 	if err != nil {
 		return nil, false, err
 	}
+	if r.Manifest.IsStremioOnly() && p.Manifest.IsStremioOnly() {
+		// Same link, same add-on record, whatever id its manifest names.
+		p.Manifest.ID = r.ID
+		// A Stremio add-on changes its catalogs and resources without
+		// versioning them, and asks for no permissions: its current
+		// manifest always applies.
+		if bytes.Equal(p.manifestRaw, r.ManifestRaw) {
+			return p, false, nil
+		}
+		_, err := m.Install(ctx, p, InstallOptions{AutoUpdate: r.AutoUpdate, Shadow: r.Shadow})
+		return p, true, err
+	}
 	if CompareSemVer(p.Manifest.Version, r.Version) <= 0 {
 		return p, false, nil
 	}
@@ -648,6 +681,7 @@ func (m *Manager) ApplyUpdate(ctx context.Context, id string, acceptAdded bool) 
 	if err != nil {
 		return Record{}, err
 	}
+	man.ID = r.ID
 	var files map[string][]byte
 	if err := json.Unmarshal([]byte(r.updateFiles), &files); err != nil {
 		return Record{}, err
@@ -683,6 +717,7 @@ func (m *Manager) Rollback(ctx context.Context, id string) (Record, error) {
 	if err != nil {
 		return Record{}, err
 	}
+	man.ID = r.ID
 	prev := r.PrevVersion
 	r.Version, r.Manifest, r.ManifestRaw, r.Name = prev, man, manRaw, man.Name
 	if man.Ether != nil {
@@ -1025,4 +1060,17 @@ func (m *Manager) CheckHealth(ctx context.Context, id string) (Health, error) {
 		return Health{}, err
 	}
 	return h, nil
+}
+
+// StremioInstallID is the record id of a plain Stremio add-on installed
+// from link, and the normalised base URL it is reached at. The id depends
+// on the link alone: the same link pasted on any page is the same add-on,
+// even when its manifest changes, and two configurations of one add-on
+// (two debrid accounts) are two add-ons.
+func StremioInstallID(link string) (id, base string, err error) {
+	u, err := stremio.NormalizeURL(link)
+	if err != nil {
+		return "", "", err
+	}
+	return "addon." + stremio.Fingerprint(u)[:16], u.String(), nil
 }

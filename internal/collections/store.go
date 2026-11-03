@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/braedonsaunders/ether/internal/config"
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/store"
 )
@@ -143,7 +142,7 @@ func (r *specRow) view() core.CollectionSpec {
 
 const specCols = `id,slug,builtin,owner_user_id,spec_json,enabled,created_at,updated_at,last_built_at,item_count,warnings_json,build_hash,changed_at`
 
-func scanSpecRow(sc interface{ Scan(...any) error }, sealer ...config.FieldSealer) (*specRow, error) {
+func scanSpecRow(sc interface{ Scan(...any) error }) (*specRow, error) {
 	var r specRow
 	var builtin, enabled int
 	var specJSON, warnJSON string
@@ -154,11 +153,6 @@ func scanSpecRow(sc interface{ Scan(...any) error }, sealer ...config.FieldSeale
 	}
 	if err := json.Unmarshal([]byte(specJSON), &r.spec); err != nil {
 		return nil, fmt.Errorf("collections: spec %d: %w", r.id, err)
-	}
-	if len(sealer) > 0 && sealer[0] != nil {
-		if err := openSpecSources(sealer[0], &r.spec, r.id); err != nil {
-			return nil, fmt.Errorf("collections: spec %d: %w", r.id, err)
-		}
 	}
 	r.rawSpec = specJSON
 	Normalize(&r.spec)
@@ -222,7 +216,7 @@ func (s *Service) loadRows(ctx context.Context) ([]*specRow, error) {
 	defer rows.Close()
 	var out []*specRow
 	for rows.Next() {
-		r, err := scanSpecRow(rows, s.sealer)
+		r, err := scanSpecRow(rows)
 		if err != nil {
 			s.log.Warn("collections: skipping unreadable collection", "err", err)
 			continue
@@ -243,7 +237,7 @@ func (s *Service) rowByID(ctx context.Context, id string) (*specRow, error) {
 	} else {
 		return nil, core.ErrNotFound
 	}
-	r, err := scanSpecRow(row, s.sealer)
+	r, err := scanSpecRow(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, core.ErrNotFound
 	}
@@ -317,11 +311,7 @@ func (s *Service) insertSpecTx(ctx context.Context, tx *sql.Tx, sp core.Collecti
 	if err != nil {
 		return 0, err
 	}
-	sealed, err := s.sealSpec(sp, id)
-	if err != nil {
-		return 0, err
-	}
-	js, err := specJSON(sealed)
+	js, err := specJSON(sp)
 	if err != nil {
 		return 0, err
 	}
@@ -334,11 +324,7 @@ func (s *Service) insertSpecTx(ctx context.Context, tx *sql.Tx, sp core.Collecti
 }
 
 func (s *Service) updateRow(ctx context.Context, id int64, sp core.CollectionSpec) error {
-	sealed, err := s.sealSpec(sp, id)
-	if err != nil {
-		return err
-	}
-	js, err := specJSON(sealed)
+	js, err := specJSON(sp)
 	if err != nil {
 		return err
 	}

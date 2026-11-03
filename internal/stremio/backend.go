@@ -2,6 +2,7 @@ package stremio
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -248,6 +249,9 @@ type stream struct {
 	NZBURL        string        `json:"nzbUrl"`
 	Sources       []string      `json:"sources"`
 	BehaviorHints behaviorHints `json:"behaviorHints"`
+	// Ether is the optional per-stream block of an Ether source plugin
+	// (read by internal/plugins/adapters).
+	Ether json.RawMessage `json:"ether,omitempty"`
 }
 
 // behaviorHints is the part of a stream's behaviorHints Ether reads.
@@ -289,6 +293,9 @@ type convertOptions struct {
 	// entryEpisode is the episode number inside the anime database entry
 	// the addon was asked for (0 for IMDb and TMDB lookups).
 	entryEpisode int
+	// sources, when set, receives the index of the stream each release
+	// came from.
+	sources *[]int
 }
 
 // convertWith turns addon streams into releases, best first as the addon
@@ -318,6 +325,11 @@ func convertWith(streams []stream, req core.SearchRequest, packs bool, opts conv
 		text := s.Description
 		if text == "" {
 			text = s.Title
+		}
+		if text == "" {
+			// Some add-ons put the release only in the stream's name,
+			// which is otherwise their label.
+			text = s.Name
 		}
 		torrent, file := names(text, s.BehaviorHints.Filename)
 		var name string
@@ -389,6 +401,9 @@ func convertWith(streams []stream, req core.SearchRequest, packs bool, opts conv
 		}
 		seen[rel.GUID] = true
 		out = append(out, rel)
+		if opts.sources != nil {
+			*opts.sources = append(*opts.sources, i)
+		}
 	}
 	return out, skippedNoHash, skippedAmbiguous
 }

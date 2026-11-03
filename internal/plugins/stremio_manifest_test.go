@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/braedonsaunders/ether/internal/extend"
+	"github.com/braedonsaunders/ether/internal/stremio"
 	"strings"
 	"testing"
 )
 
 func TestPlainStremioCopyAndNativeValidation(t *testing.T) {
-	m := Manifest{ID: "org.Example.Addon", Name: strings.Repeat("Long name ", 10), Version: "1.0.0", Description: strings.Repeat("Simply watch — enjoy! ", 30), Resources: json.RawMessage(`["catalog","meta","subtitles",{"name":"stream","types":["movie"],"idPrefixes":["tt"]}]`), Types: []string{"movie"}, Catalogs: []StremioCat{{Type: "movie", ID: "top", Name: "Popular"}}}
+	m := Manifest{ID: "org.Example.Addon", Name: strings.Repeat("Long name ", 10), Version: "1.0.0", Description: strings.Repeat("Simply watch — enjoy! ", 30), Resources: stremio.ParseResources(`["catalog","meta","subtitles",{"name":"stream","types":["movie"],"idPrefixes":["tt"]}]`), Types: []string{"movie"}, Catalogs: []StremioCat{{Type: "movie", ID: "top", Name: "Popular"}}}
 	raw, _ := json.Marshal(m)
 	if err := m.Validate(); err != nil {
 		t.Fatalf("foreign copy rejected: %v", err)
@@ -35,7 +36,7 @@ func TestPlainStremioCopyAndNativeValidation(t *testing.T) {
 	}
 }
 func TestStremioResourceLocalFilters(t *testing.T) {
-	m := Manifest{Types: []string{"movie"}, IDPrefixes: []string{"tmdb:"}, Resources: json.RawMessage(`["meta",{"name":"stream","types":["series"]},{"name":"subtitles","types":["movie"],"idPrefixes":["tt"]}]`)}
+	m := Manifest{Types: []string{"movie"}, IDPrefixes: []string{"tmdb:"}, Resources: stremio.ParseResources(`["meta",{"name":"stream","types":["series"]},{"name":"subtitles","types":["movie"],"idPrefixes":["tt"]}]`)}
 	for _, c := range []struct {
 		r, typ, id string
 		want       bool
@@ -85,7 +86,7 @@ func TestStremioCatalogRequiredExtrasAndLifecycle(t *testing.T) {
 }
 
 func TestStremioDirectoryTypesUseTheirOwnDeclarations(t *testing.T) {
-	m := Manifest{Types: []string{"movie", "series"}, Resources: json.RawMessage(`["catalog","addon_catalog"]`), Catalogs: []StremioCat{{Type: "movie", ID: "top"}}, AddonCatalogs: []StremioCat{{Type: "all", ID: "official"}, {Type: "channel", ID: "community"}}}
+	m := Manifest{Types: []string{"movie", "series"}, Resources: stremio.ParseResources(`["catalog","addon_catalog"]`), Catalogs: []StremioCat{{Type: "movie", ID: "top"}}, AddonCatalogs: []StremioCat{{Type: "all", ID: "official"}, {Type: "channel", ID: "community"}}}
 	if !m.AcceptsResource("addon_catalog", "all", "official") || !m.AcceptsResource("addon_catalog", "channel", "community") {
 		t.Fatal("directory types incorrectly restricted to title types")
 	}

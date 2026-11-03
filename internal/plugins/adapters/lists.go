@@ -5,13 +5,8 @@ package adapters
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
-	"regexp"
-	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -22,11 +17,11 @@ import (
 	"github.com/braedonsaunders/ether/internal/livetv"
 	"github.com/braedonsaunders/ether/internal/personalize"
 	"github.com/braedonsaunders/ether/internal/plugins"
+	"github.com/braedonsaunders/ether/internal/stremio"
 )
 
-const MaxPluginListItems = 2000
-
-var yearPrefixRe = regexp.MustCompile(`^(\d{4})`)
+// MaxPluginListItems bounds one list source refresh.
+const MaxPluginListItems = stremio.MaxCatalogItems
 
 // Bridge tracks the source kinds registered for each plugin so enable,
 // disable, update and uninstall cleanly replace or remove them.
@@ -99,6 +94,7 @@ func (b *Bridge) Sync(_ context.Context, r plugins.Record) {
 			meta:       ls,
 			fields:     plugins.ParseListParamFields(ls.Params),
 		}
+		kind.catalog, kind.declared = listCatalog(r.Manifest.Stremio(), ls)
 		if b.cols != nil {
 			_ = b.cols.RegisterSourceKind(kind)
 		}
@@ -114,6 +110,10 @@ func (b *Bridge) Sync(_ context.Context, r plugins.Record) {
 			pluginID:   r.ID,
 			pluginName: r.Name,
 			meta:       *c.Channels,
+			mode:       modeNative,
+		}
+		if r.Manifest.IsStremioOnly() {
+			chKind.mode = modeAddon
 		}
 		if b.tv != nil {
 			_ = b.tv.RegisterSourceKind(chKind)
@@ -151,6 +151,36 @@ type listSourceKind struct {
 	pluginName string
 	meta       plugins.ListSourceMeta
 	fields     []plugins.ListParamField
+	// catalog is the catalog the list reads. Its Type is empty for a
+	// plugin list that serves whichever of movies and series a collection
+	// asks for. declared marks a catalog the manifest declares (every
+	// Stremio add-on catalog): its extras are checked against the
+	// declaration and it pages only when it declares skip.
+	catalog  stremio.Catalog
+	declared bool
+}
+
+// listCatalog reads a list source's catalog ("movie/top", or an id alone)
+// and its declaration in the manifest. A plugin's own list that the
+// manifest does not declare pages with skip, as the plugin contract says.
+func listCatalog(m stremio.Manifest, ls plugins.ListSourceMeta) (stremio.Catalog, bool) {
+	spec := strings.TrimSuffix(strings.TrimPrefix(strings.Trim(strings.TrimSpace(ls.Catalog), "/"), "catalog/"), ".json")
+	typ, id, ok := strings.Cut(spec, "/")
+	if !ok {
+		typ, id = "", spec
+	}
+	typ, id = strings.ToLower(strings.TrimSpace(typ)), strings.TrimSpace(id)
+	if id == "" {
+		id = ls.Key
+	}
+	switch typ {
+	case "show", "tv":
+		typ = stremio.TypeSeries
+	}
+	if c, ok := m.CatalogNamed(typ, id); ok {
+		return c, true
+	}
+	return stremio.Catalog{Type: typ, ID: id, Extra: []stremio.Extra{{Name: "skip"}}}, false
 }
 
 func (k *listSourceKind) MinRefresh() time.Duration {
@@ -170,11 +200,10 @@ func (k *listSourceKind) label() string {
 }
 
 func (k *listSourceKind) mediaTypes() []string {
-	catType, _ := splitCatalogSpec(k.meta.Catalog)
-	switch catType {
-	case "movie":
+	switch k.catalog.Type {
+	case stremio.TypeMovie:
 		return []string{"movie"}
-	case "series", "show", "tv":
+	case stremio.TypeSeries:
 		return []string{"show"}
 	default:
 		return []string{"movie", "show"}
@@ -198,394 +227,180 @@ func (k *listSourceKind) Describe() collections.KindDescribe {
 }
 
 func (k *listSourceKind) Validate(ve *collections.ValidationError, path string, src core.CollectionSource) {
+	if src.MaxItems < 0 || src.MaxItems > MaxPluginListItems {
+		ve.Add(path+".maxItems", fmt.Sprintf("must be between 1 and %d", MaxPluginListItems))
+	}
+	if k.declared {
+		if err := k.catalog.ValidateExtras(catalogExtras(src.Params)); err != nil {
+			name, _, _ := strings.Cut(err.Error(), " ")
+			ve.Add(path+".params."+name, err.Error())
+		}
+		return
+	}
 	for _, f := range k.fields {
-		if !f.Required {
-			continue
-		}
 		key := firstNonEmpty(f.Key, f.Name)
-		if key == "" {
-			continue
-		}
-		val := strings.TrimSpace(src.Params[key])
-		if val == "" {
+		if f.Required && key != "" && strings.TrimSpace(src.Params[key]) == "" {
 			ve.Add(path+".params."+key, key+" is required")
 		}
 	}
 }
 
+// catalogExtras are a source's params as catalog extras: set values only,
+// and never skip, which the reader adds while paging.
+func catalogExtras(params map[string]string) map[string]string {
+	out := map[string]string{}
+	for k, v := range params {
+		if v = strings.TrimSpace(v); k != "" && k != "skip" && v != "" {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// maxItems is how many items one refresh reads: the source's own limit,
+// within the list's, within MaxPluginListItems.
+func (k *listSourceKind) maxItems(src core.CollectionSource) int {
+	n := MaxPluginListItems
+	if k.meta.MaxItems > 0 && k.meta.MaxItems < n {
+		n = k.meta.MaxItems
+	}
+	if src.MaxItems > 0 && src.MaxItems < n {
+		n = src.MaxItems
+	}
+	return n
+}
+
+// catalogs are the catalogs one gather reads: the list's own, or for a
+// list without a type, one per media type the collection asks for.
+func (k *listSourceKind) catalogs(kinds []string) []stremio.Catalog {
+	if k.catalog.Type != "" {
+		return []stremio.Catalog{k.catalog}
+	}
+	var out []stremio.Catalog
+	for _, typ := range []string{stremio.TypeMovie, stremio.TypeSeries} {
+		for _, kind := range kinds {
+			if (kind == "tv") == (typ == stremio.TypeSeries) {
+				c := k.catalog
+				c.Type = typ
+				out = append(out, c)
+				break
+			}
+		}
+	}
+	if len(out) == 0 {
+		c := k.catalog
+		c.Type = stremio.TypeMovie
+		out = append(out, c)
+	}
+	return out
+}
+
+// Gather reads the list through the add-on protocol and matches its items
+// to the catalogue by id. It runs only in background builds and owner
+// previews (collections never gathers a plugin list on a viewer request);
+// a preview reads the first page only. Items without an id Ether can
+// match are counted with the unmatched ones, never guessed by title.
 func (k *listSourceKind) Gather(g *collections.Gather) {
 	if k.mgr == nil {
 		g.Warn("%s is unavailable", k.label())
 		return
 	}
-	maxItems := k.meta.MaxItems
-	if maxItems <= 0 || maxItems > MaxPluginListItems {
-		maxItems = MaxPluginListItems
-	}
-	if collections.IsPreview(g.Ctx) && maxItems > collections.PreviewItems {
-		maxItems = collections.PreviewItems
-	}
-	targets := k.catalogTargets(g)
-	var refs []collections.ExternalRef
-	for _, target := range targets {
-		if len(refs) >= maxItems {
-			break
-		}
-		rem := maxItems - len(refs)
-		tRefs, ok := k.fetchCatalogPages(g, target.catType, target.catID, rem)
-		if !ok && len(refs) == 0 && len(tRefs) == 0 {
-			return
-		}
-		refs = append(refs, tRefs...)
-	}
-	if len(refs) > maxItems {
-		refs = refs[:maxItems]
-	}
-	if len(refs) == 0 {
-		g.Warn("%s is empty", k.label())
-		return
-	}
-	g.ResolveExternal(k.label(), refs)
-}
-
-type catalogTarget struct {
-	catType string
-	catID   string
-}
-
-func splitCatalogSpec(spec string) (string, string) {
-	spec = strings.Trim(strings.TrimSpace(spec), "/")
-	spec = strings.TrimPrefix(spec, "catalog/")
-	spec = strings.TrimSuffix(spec, ".json")
-	if i := strings.IndexByte(spec, '/'); i >= 0 {
-		return strings.ToLower(strings.TrimSpace(spec[:i])), strings.TrimSpace(spec[i+1:])
-	}
-	return "", spec
-}
-
-func (k *listSourceKind) catalogTargets(g *collections.Gather) []catalogTarget {
-	catType, catID := splitCatalogSpec(k.meta.Catalog)
-	if catID == "" {
-		catID = k.meta.Key
-	}
-	if catType != "" {
-		return []catalogTarget{{catType: catType, catID: catID}}
-	}
-	var out []catalogTarget
-	seen := map[string]bool{}
-	for _, kind := range g.Kinds {
-		ct := "movie"
-		if kind == "tv" || kind == "show" || kind == "series" {
-			ct = "series"
-		}
-		if !seen[ct] {
-			seen[ct] = true
-			out = append(out, catalogTarget{catType: ct, catID: catID})
-		}
-	}
-	if len(out) == 0 {
-		out = append(out, catalogTarget{catType: "movie", catID: catID})
-	}
-	return out
-}
-
-type catalogMeta struct {
-	ID          string `json:"id"`
-	IMDBID      string `json:"imdb_id"`
-	IMDBAlt     string `json:"imdbId"`
-	TMDBID      any    `json:"tmdb_id"`
-	TMDBAlt     any    `json:"tmdbId"`
-	TVDBID      any    `json:"tvdb_id"`
-	Type        string `json:"type"`
-	Name        string `json:"name"`
-	Title       string `json:"title"`
-	ReleaseInfo string `json:"releaseInfo"`
-	Year        any    `json:"year"`
-}
-
-func (k *listSourceKind) fetchCatalogPages(g *collections.Gather, catType, catID string, maxItems int) ([]collections.ExternalRef, bool) {
-	defaultMedia := "movie"
-	if catType == "series" || catType == "show" || catType == "tv" {
-		defaultMedia = "show"
-	}
 	rec, err := k.mgr.Get(g.Ctx, k.pluginID)
 	if err != nil {
 		g.Warn("%s: %v", k.label(), err)
-		return nil, false
-	}
-	foreign := rec.Manifest.Ether == nil
-	metadata := rec.Manifest.HasCapability(plugins.CapMetadata)
-	canPage := !foreign
-	if foreign {
-		for _, cat := range rec.Manifest.Catalogs {
-			if cat.Type == catType && cat.ID == catID {
-				var extras []plugins.StremioExtra
-				_ = json.Unmarshal(cat.Extra, &extras)
-				for _, x := range extras {
-					if x.Name == "skip" {
-						canPage = true
-					}
-				}
-			}
-		}
-	}
-	var refs []collections.ExternalRef
-	seenRaw := map[string]bool{}
-	skip := 0
-	for pageNum := 0; pageNum < maxItems && len(refs) < maxItems; pageNum++ {
-		path := buildCatalogPath(catType, catID, g.Src.Params, skip)
-		var resp plugins.Response
-		var err error
-		if foreign {
-			extras := map[string]string{}
-			for key, value := range g.Src.Params {
-				if value != "" {
-					extras[key] = value
-				}
-			}
-			if skip > 0 {
-				extras["skip"] = strconv.Itoa(skip)
-			}
-			resp, err = k.mgr.StremioResource(g.Ctx, k.pluginID, "catalog", catType, catID, extras)
-		} else {
-			resp, err = k.mgr.Call(g.Ctx, k.pluginID, plugins.Request{Method: "GET", Path: path})
-		}
-		if err != nil {
-			if collections.IsPreview(g.Ctx) && errors.Is(err, context.DeadlineExceeded) {
-				g.Fail(fmt.Errorf("plugin list preview timed out: %w", err))
-			} else {
-				g.Warn("%s: %v", k.label(), err)
-			}
-			return refs, false
-		}
-		if resp.Status >= 400 {
-			k.mgr.RecordFailure(g.Ctx, k.pluginID, fmt.Sprintf("catalog %s returned HTTP %d", path, resp.Status))
-			g.Warn("%s returned HTTP %d", k.label(), resp.Status)
-			return refs, false
-		}
-		items, hasMore, err := decodeCatalogPage(resp.Body)
-		if err != nil {
-			k.mgr.RecordFailure(g.Ctx, k.pluginID, fmt.Sprintf("catalog %s returned invalid JSON", path))
-			g.Warn("%s returned invalid JSON", k.label())
-			return refs, false
-		}
-		if len(items) == 0 {
-			break
-		}
-		newOnPage := 0
-		for _, item := range items {
-			rawKey := itemIdentity(item)
-			if rawKey != "" {
-				if !seenRaw[rawKey] {
-					seenRaw[rawKey] = true
-					newOnPage++
-				}
-			} else {
-				newOnPage++
-			}
-			ref, _ := parseCatalogMeta(item, defaultMedia)
-			if metadata && item.ID != "" {
-				ref.MetadataProvider = extend.PluginID(k.pluginID, "metadata")
-				ref.ProviderID = item.ID
-				ref.Type = defaultMedia
-			}
-			refs = append(refs, ref)
-			if len(refs) >= maxItems {
-				break
-			}
-		}
-		if collections.IsPreview(g.Ctx) || !canPage {
-			break
-		}
-		if hasMore != nil && !*hasMore {
-			break
-		}
-		if pageNum > 0 && newOnPage == 0 {
-			break
-		}
-		skip += len(items)
-	}
-	return refs, true
-}
-
-func buildCatalogPath(catType, catID string, params map[string]string, skip int) string {
-	var parts []string
-	if len(params) > 0 {
-		keys := make([]string, 0, len(params))
-		for k, v := range params {
-			if strings.TrimSpace(k) != "" && strings.TrimSpace(v) != "" && k != "skip" {
-				keys = append(keys, k)
-			}
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			parts = append(parts, url.QueryEscape(k)+"="+url.QueryEscape(strings.TrimSpace(params[k])))
-		}
-	}
-	if skip > 0 {
-		parts = append(parts, "skip="+strconv.Itoa(skip))
-	}
-	base := "/catalog/" + url.PathEscape(catType) + "/" + url.PathEscape(catID)
-	if len(parts) == 0 {
-		return base + ".json"
-	}
-	return base + "/" + strings.Join(parts, "&") + ".json"
-}
-
-func decodeCatalogPage(body json.RawMessage) ([]catalogMeta, *bool, error) {
-	var page struct {
-		Metas   *[]catalogMeta `json:"metas"`
-		HasMore *bool          `json:"hasMore,omitempty"`
-	}
-	if err := json.Unmarshal(body, &page); err != nil {
-		return nil, nil, err
-	}
-	if page.Metas == nil {
-		return nil, nil, fmt.Errorf("missing metas array")
-	}
-	return *page.Metas, page.HasMore, nil
-}
-
-func itemIdentity(m catalogMeta) string {
-	if m.ID != "" {
-		return m.ID
-	}
-	if m.IMDBID != "" {
-		return m.IMDBID
-	}
-	if m.IMDBAlt != "" {
-		return m.IMDBAlt
-	}
-	if tmdb := parseAnyInt64(m.TMDBID); tmdb > 0 {
-		return "tmdb:" + strconv.FormatInt(tmdb, 10)
-	}
-	if tmdb := parseAnyInt64(m.TMDBAlt); tmdb > 0 {
-		return "tmdb:" + strconv.FormatInt(tmdb, 10)
-	}
-	return firstNonEmpty(m.Name, m.Title)
-}
-
-func parseCatalogMeta(m catalogMeta, defaultMedia string) (collections.ExternalRef, bool) {
-	media := normalizeMediaType(m.Type, defaultMedia)
-	ref := collections.ExternalRef{
-		Type:  media,
-		Title: strings.TrimSpace(firstNonEmpty(m.Name, m.Title)),
-		Year:  int(parseAnyInt64(m.Year)),
-	}
-	if ref.Year == 0 && m.ReleaseInfo != "" {
-		if match := yearPrefixRe.FindStringSubmatch(strings.TrimSpace(m.ReleaseInfo)); len(match) == 2 {
-			ref.Year, _ = strconv.Atoi(match[1])
-		}
-	}
-	for _, candidate := range []string{m.ID, m.IMDBID, m.IMDBAlt} {
-		applyIDToken(&ref, candidate)
-	}
-	if ref.TMDB == 0 {
-		if id := parseAnyInt64(m.TMDBID); id > 0 {
-			ref.TMDB = id
-		} else if id := parseAnyInt64(m.TMDBAlt); id > 0 {
-			ref.TMDB = id
-		}
-	}
-	if ref.TVDB == 0 {
-		if id := parseAnyInt64(m.TVDBID); id > 0 {
-			ref.TVDB = id
-		}
-	}
-	// Plugin lists only match stable catalogue IDs, never title guesses.
-	ref.Title, ref.TVDB = "", 0
-	if ref.TMDB == 0 && ref.IMDB == "" {
-		return collections.ExternalRef{}, false
-	}
-	return ref, true
-}
-
-func applyIDToken(ref *collections.ExternalRef, raw string) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
 		return
 	}
-	// Strip episode suffix like "tt1234567:1:2" or "tmdb:12345:1:1".
-	lower := strings.ToLower(raw)
-	switch {
-	case strings.HasPrefix(lower, "tt"):
-		id := lower
-		if i := strings.IndexByte(id, ':'); i > 0 {
-			id = id[:i]
+	preview := collections.IsPreview(g.Ctx)
+	limit := k.maxItems(g.Src)
+	if preview && limit > collections.PreviewItems {
+		limit = collections.PreviewItems
+	}
+	extra := catalogExtras(g.Src.Params)
+	metadata := rec.Manifest.HasCapability(plugins.CapMetadata)
+	var refs []collections.ExternalRef
+	read, total, unidentified := false, 0, 0
+	for _, cat := range k.catalogs(g.Kinds) {
+		if total >= limit {
+			break
 		}
-		if len(id) > 2 && isDigits(id[2:]) && ref.IMDB == "" {
-			ref.IMDB = id
+		fetcher := &healthFetcher{inner: k.mgr.Fetcher(rec.ID)}
+		addon := k.mgr.Addon(rec)
+		addon.Fetcher = fetcher
+		var metas []stremio.MetaPreview
+		if preview {
+			metas, _, err = addon.CatalogPage(g.Ctx, cat.Type, cat.ID, extra)
+		} else {
+			metas, err = addon.Catalog(g.Ctx, cat, extra, limit-total)
 		}
-	case strings.HasPrefix(lower, "imdb:"):
-		rest := strings.TrimPrefix(lower, "imdb:")
-		applyIDToken(ref, rest)
-	case strings.HasPrefix(lower, "tmdb:"):
-		parts := strings.Split(strings.TrimPrefix(lower, "tmdb:"), ":")
-		if len(parts) >= 2 && (parts[0] == "movie" || parts[0] == "show" || parts[0] == "series" || parts[0] == "tv") {
-			ref.Type = normalizeMediaType(parts[0], ref.Type)
-			if n, err := strconv.ParseInt(parts[1], 10, 64); err == nil && n > 0 && ref.TMDB == 0 {
-				ref.TMDB = n
+		if err != nil {
+			if preview && errors.Is(err, context.DeadlineExceeded) {
+				g.Fail(fmt.Errorf("plugin list preview timed out: %w", err))
+				return
 			}
-		} else if len(parts) >= 1 {
-			if n, err := strconv.ParseInt(parts[0], 10, 64); err == nil && n > 0 && ref.TMDB == 0 {
-				ref.TMDB = n
+			if !fetcher.recorded {
+				k.mgr.RecordFailure(g.Ctx, rec.ID, fmt.Sprintf("catalog %s/%s: %v", cat.Type, cat.ID, err))
 			}
+			g.Warn("%s: %v", k.label(), err)
 		}
-	case strings.HasPrefix(lower, "tvdb:"):
-		parts := strings.Split(strings.TrimPrefix(lower, "tvdb:"), ":")
-		if len(parts) >= 1 {
-			if n, err := strconv.ParseInt(parts[0], 10, 64); err == nil && n > 0 && ref.TVDB == 0 {
-				ref.TVDB = n
+		if err == nil || len(metas) > 0 {
+			read = true
+		}
+		for _, m := range metas {
+			if total >= limit {
+				break
+			}
+			total++
+			if ref, ok := catalogRef(m, cat.Type, metadata, rec.ID); ok {
+				refs = append(refs, ref)
+			} else {
+				unidentified++
 			}
 		}
 	}
+	if !read {
+		return
+	}
+	if total == 0 {
+		g.Warn("%s is empty", k.label())
+		return
+	}
+	g.ResolveExternal(k.label(), refs, unidentified)
 }
 
-func normalizeMediaType(raw, fallback string) string {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "movie", "movies", "film":
-		return "movie"
-	case "series", "show", "shows", "tv":
-		return "show"
-	default:
-		if fallback != "" {
-			return fallback
-		}
-		return "movie"
+// catalogRef is a catalog item's identity: its IMDb, TMDB or TVDB id, or,
+// when the add-on also provides title details, the add-on's own id.
+func catalogRef(m stremio.MetaPreview, catType string, metadata bool, pluginID string) (collections.ExternalRef, bool) {
+	typ := strings.ToLower(m.Type)
+	if typ != stremio.TypeMovie && typ != stremio.TypeSeries {
+		typ = catType
 	}
+	ref := collections.ExternalRef{Type: "movie"}
+	if typ == stremio.TypeSeries {
+		ref.Type = "show"
+	}
+	ref.IMDB, ref.TMDB, ref.TVDB = m.Ref()
+	if metadata && m.ID != "" {
+		ref.MetadataProvider = extend.PluginID(pluginID, "metadata")
+		ref.ProviderID = m.ID
+	}
+	return ref, ref.MetadataProvider != "" || ref.IMDB != "" || ref.TMDB > 0 || ref.TVDB > 0
 }
 
-func parseAnyInt64(v any) int64 {
-	switch val := v.(type) {
-	case float64:
-		return int64(val)
-	case int64:
-		return val
-	case int:
-		return int64(val)
-	case json.Number:
-		n, _ := val.Int64()
-		return n
-	case string:
-		s := strings.TrimSpace(val)
-		s = strings.TrimPrefix(strings.ToLower(s), "tmdb:")
-		n, _ := strconv.ParseInt(s, 10, 64)
-		return n
-	default:
-		return 0
-	}
+// healthFetcher reads through the plugin runtime, which records transport
+// failures in the plugin's health itself; recorded tells the caller not
+// to record that failure again.
+type healthFetcher struct {
+	inner    stremio.Fetcher
+	recorded bool
 }
 
-func isDigits(s string) bool {
-	if s == "" {
-		return false
+func (f *healthFetcher) Fetch(ctx context.Context, route string, limit int64) ([]byte, error) {
+	body, err := f.inner.Fetch(ctx, route, limit)
+	var status *stremio.HTTPError
+	if err != nil && !errors.As(err, &status) {
+		f.recorded = true
 	}
-	for i := 0; i < len(s); i++ {
-		if s[i] < '0' || s[i] > '9' {
-			return false
-		}
-	}
-	return true
+	return body, err
 }
 
 func firstNonEmpty(vals ...string) string {

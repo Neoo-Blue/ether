@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/braedonsaunders/ether/internal/stremio"
 	"io"
 	"log/slog"
 	"net/http"
@@ -35,6 +36,7 @@ type URLClient struct {
 	base       *url.URL
 	httpClient *http.Client
 	credential string
+	plain      bool
 	locale     string
 	trusted    bool
 	maxBytes   int64
@@ -44,6 +46,22 @@ type URLClient struct {
 
 	mu     sync.Mutex
 	closed bool
+}
+
+// plainUserAgent identifies Ether honestly to third-party add-ons. An
+// add-on that serves only the Stremio app may refuse it; Ether never
+// poses as a browser or as Stremio.
+const plainUserAgent = "Ether (+https://github.com/braedonsaunders/ether)"
+
+// plainHeaders are the caller's headers without any X-Ether-* header.
+func plainHeaders(req Request) map[string][]string {
+	h := cloneHeaders(req.Headers)
+	for k := range h {
+		if strings.HasPrefix(strings.ToLower(k), "x-ether-") {
+			delete(h, k)
+		}
+	}
+	return h
 }
 
 // URLOptions configures a URLClient.
@@ -58,6 +76,10 @@ type URLOptions struct {
 	// Credential is sent as X-Ether-Plugin-Credential on every call.
 	// Plain Stremio add-ons have none.
 	Credential string
+	// Plain marks a third-party Stremio add-on: it is sent only standard
+	// HTTP headers (no X-Ether-* request id, deadline or locale), as the
+	// Stremio app would, and its base keeps its configuration query.
+	Plain bool
 	// Locale is sent as X-Ether-Locale unless a request overrides it.
 	Locale string
 	// TrustedOrigin allows this exact origin to resolve to private
@@ -151,6 +173,7 @@ func NewURLClient(opts URLOptions) (*URLClient, error) {
 			return nil
 		}}),
 		credential: opts.Credential,
+		plain:      opts.Plain,
 		locale:     opts.Locale,
 		trusted:    trusted,
 		maxBytes:   maxBytes,
@@ -174,13 +197,10 @@ func parseBase(raw string) (*url.URL, error) {
 	if u.User != nil {
 		return nil, fmt.Errorf("%w: base URL must not carry credentials", ErrInvalid)
 	}
-	// A manifest URL names the base by its directory.
-	u.Path = strings.TrimSuffix(u.Path, "/manifest.json")
-	u.Path = strings.TrimSuffix(u.Path, "/")
-	u.RawPath = ""
-	u.RawQuery = ""
-	u.Fragment = ""
-	return u, nil
+	// A manifest or configure URL names the base by its directory; the
+	// query and path escaping are kept (Stremio add-ons carry their
+	// configuration in either).
+	return stremio.NormalizeURL(u.String())
 }
 
 // urlFor joins a plugin route onto the base.
@@ -199,7 +219,15 @@ func (c *URLClient) urlFor(req Request) (string, error) {
 	u.Path = c.base.Path + decoded
 	u.RawPath = c.base.EscapedPath() + req.Path
 	if len(req.Query) > 0 {
-		u.RawQuery = cloneQuery(req.Query).Encode()
+		q := cloneQuery(req.Query)
+		if base, err := url.ParseQuery(c.base.RawQuery); err == nil {
+			for k, vs := range base {
+				if _, set := q[k]; !set {
+					q[k] = vs
+				}
+			}
+		}
+		u.RawQuery = q.Encode()
 	}
 	return u.String(), nil
 }
@@ -250,11 +278,18 @@ func (c *URLClient) do(ctx context.Context, req Request) (*http.Response, contex
 	if locale == "" {
 		locale = c.locale
 	}
-	for k, vs := range etherHeaders(req, requestID, locale, c.credential, deadline) {
+	headers := etherHeaders(req, requestID, locale, c.credential, deadline)
+	if c.plain {
+		headers = plainHeaders(req)
+	}
+	for k, vs := range headers {
 		httpReq.Header.Del(k)
 		for _, v := range vs {
 			httpReq.Header.Add(k, v)
 		}
+	}
+	if c.plain {
+		httpReq.Header.Set("User-Agent", plainUserAgent)
 	}
 	if len(req.Body) > 0 && httpReq.Header.Get("Content-Type") == "" {
 		httpReq.Header.Set("Content-Type", "application/json")

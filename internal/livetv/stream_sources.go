@@ -24,6 +24,38 @@ type StreamSource struct {
 	// AuthSourceID names the source whose provider credentials this input
 	// uses; empty means the channel's own source.
 	AuthSourceID string `json:"authSourceId,omitempty"`
+	// Headers are request headers this input needs (a Stremio stream's
+	// proxy headers), sent after the source's own.
+	Headers map[string]string `json:"headers,omitempty"`
+}
+
+// MaxChannelInputs bounds one channel's stream inputs.
+const MaxChannelInputs = 16
+
+// maxInputHeaders bounds one input's request headers.
+const maxInputHeaders = 16
+
+// CleanInputHeaders keeps the request headers an input may carry, with
+// canonical names: no headers the HTTP stack or the proxy manages, no line
+// breaks, at most 16. It returns nil when none remain.
+func CleanInputHeaders(in map[string]string) map[string]string {
+	var out map[string]string
+	for k, v := range in {
+		name := http.CanonicalHeaderKey(strings.TrimSpace(k))
+		if !validInputHeader(name, v) || len(out) == maxInputHeaders {
+			continue
+		}
+		if out == nil {
+			out = map[string]string{}
+		}
+		out[name] = v
+	}
+	return out
+}
+
+func validInputHeader(name, value string) bool {
+	return name != "" && len(name) <= 128 && len(value) <= 4096 &&
+		!strings.ContainsAny(name, " :\r\n") && !strings.ContainsAny(value, "\r\n") && !forbiddenHeaders[name]
 }
 
 type StreamSourceStatus struct {
@@ -59,8 +91,8 @@ func normalizeStreamSources(c *Channel) error {
 		}
 		c.StreamSources = []StreamSource{{ID: id, Name: "Primary stream", URL: c.StreamURL, Enabled: true}}
 	}
-	if len(c.StreamSources) > 16 {
-		return fmt.Errorf("a channel supports at most 16 stream sources")
+	if len(c.StreamSources) > MaxChannelInputs {
+		return fmt.Errorf("a channel supports at most %d stream sources", MaxChannelInputs)
 	}
 	c.StreamSources = append([]StreamSource(nil), c.StreamSources...)
 	ids, urls := map[string]bool{}, map[string]bool{}
@@ -79,6 +111,14 @@ func normalizeStreamSources(c *Channel) error {
 		}
 		if src.Name == "" {
 			src.Name = fmt.Sprintf("Stream %d", i+1)
+		}
+		if len(src.Headers) > maxInputHeaders {
+			return fmt.Errorf("stream source %d has more than %d headers", i+1, maxInputHeaders)
+		}
+		for k, v := range src.Headers {
+			if !validInputHeader(http.CanonicalHeaderKey(strings.TrimSpace(k)), v) {
+				return fmt.Errorf("stream source %d: header %q can't be set", i+1, k)
+			}
 		}
 		ids[src.ID], urls[src.URL] = true, true
 	}

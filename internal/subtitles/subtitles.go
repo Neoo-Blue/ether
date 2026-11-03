@@ -55,14 +55,13 @@ const defaultBaseURL = "https://api.opensubtitles.com/api/v1"
 // Options construct a Service. Config is a snapshot; call UpdateConfig on
 // config changes if desired.
 type Options struct {
-	Config      config.OpenSubtitles
-	Providers   []config.SubtitleProvider
-	StremioHTTP *http.Client
-	CacheDir    string // data dir subfolder for downloaded subtitles
-	BaseURL     string // override for tests
-	HTTPClient  *http.Client
-	Logger      *slog.Logger
-	UserAgent   string // OpenSubtitles requires an app User-Agent
+	Config     config.OpenSubtitles
+	Providers  []config.SubtitleProvider
+	CacheDir   string // data dir subfolder for downloaded subtitles
+	BaseURL    string // override for tests
+	HTTPClient *http.Client
+	Logger     *slog.Logger
+	UserAgent  string // OpenSubtitles requires an app User-Agent
 	// NegativeTTL is how long "no subtitle found" for a title+language is
 	// remembered before searching again (default 6h).
 	NegativeTTL time.Duration
@@ -77,12 +76,12 @@ type Options struct {
 	FFmpeg string
 }
 
-// Service is the OpenSubtitles + Stremio subtitle client and disk cache.
+// Service is the subtitle client (OpenSubtitles and add-on providers) and
+// disk cache.
 type Service struct {
 	cfg             config.OpenSubtitles
 	providers       []config.SubtitleProvider
 	pluginProviders map[string]PluginProvider
-	stremioHTTP     *http.Client
 	dir             string
 	base            string
 	http            *http.Client
@@ -155,12 +154,11 @@ func New(opts Options) *Service {
 		}
 	}
 	return &Service{
-		cfg:         opts.Config,
-		providers:   append([]config.SubtitleProvider(nil), opts.Providers...),
-		stremioHTTP: opts.StremioHTTP,
-		dir:         opts.CacheDir,
-		base:        strings.TrimSuffix(opts.BaseURL, "/"),
-		http:        opts.HTTPClient, log: opts.Logger, agent: opts.UserAgent,
+		cfg:       opts.Config,
+		providers: append([]config.SubtitleProvider(nil), opts.Providers...),
+		dir:       opts.CacheDir,
+		base:      strings.TrimSuffix(opts.BaseURL, "/"),
+		http:      opts.HTTPClient, log: opts.Logger, agent: opts.UserAgent,
 		negative:       map[string]time.Time{},
 		negTTL:         opts.NegativeTTL,
 		maxWait:        opts.MaxRetryAfter,
@@ -604,9 +602,6 @@ func (s *Service) download(ctx context.Context, c Candidate) ([]byte, error) {
 			return nil, err
 		}
 		return unzipSubtitleCandidate(raw, c)
-	}
-	if c.DownloadURL != "" {
-		return s.downloadStremio(ctx, c)
 	}
 	link, err := s.requestLink(ctx, c)
 	if err != nil {

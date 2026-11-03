@@ -63,7 +63,7 @@ func SetupStatus(cfg config.Config) (steps []SetupStep, complete bool) {
 			continue
 		}
 		enabledIndexers++
-		// A Stremio addon is a source on its own: it needs no debrid or Usenet account.
+		// A Stremio add-on is a source on its own: it needs no debrid or Usenet account.
 		if ix.IsStremio() && strings.TrimSpace(ix.URL) != "" {
 			keylessSources++
 		}

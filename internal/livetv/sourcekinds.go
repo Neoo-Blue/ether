@@ -18,6 +18,9 @@ import (
 type Fetched struct {
 	Channels []Channel
 	Guide    XMLGuide
+	// AddonInputs marks channels whose inputs an add-on owns (ids carry
+	// AddonInputPrefix); see addon_streams.go.
+	AddonInputs bool
 }
 
 // SourceKind is one Live TV source kind: how the console describes it, how
@@ -26,9 +29,9 @@ type Fetched struct {
 // request path; playback reads stored channels.
 //
 // To add a kind: implement SourceKind and register it (built-ins in
-// builtinSourceKinds; runtime kinds such as Stremio tv add-ons or plugin
-// channel sources via Service.RegisterSourceKind). Then serve the result of
-// KindRegistry.Descriptors through the extend registry. A kind that needs
+// builtinSourceKinds; runtime kinds such as plugin channel sources, which
+// include Stremio `tv` add-ons, via Service.RegisterSourceKind). Then serve
+// the result of KindRegistry.Descriptors through the extend registry. A kind that needs
 // its own Source fields beyond playlist/guide/auth must extend Source
 // additively and classify in Matches before "m3u".
 type SourceKind interface {
@@ -195,7 +198,7 @@ func (s *Service) SourceKindOf(src Source) string {
 }
 
 func builtinSourceKinds() []SourceKind {
-	return []SourceKind{stremioKind{}, xtreamKind{}, guideOnlyKind{}, m3uKind{}, virtualKind{}}
+	return []SourceKind{xtreamKind{}, guideOnlyKind{}, m3uKind{}, virtualKind{}}
 }
 
 func authParams() []extend.ParamField {
@@ -219,7 +222,10 @@ func (m3uKind) Describe() SourceDescribe {
 	}
 }
 func (m3uKind) Matches(src Source) bool {
-	return strings.TrimSpace(src.Playlist) != "" || src.PlaylistURL != ""
+	// A legacy Stremio source's link is an add-on, never a playlist, and a
+	// plugin source whose plugin is off is not one either.
+	return src.Kind != legacyStremioKind && !strings.HasPrefix(src.Kind, "plugin:") &&
+		(strings.TrimSpace(src.Playlist) != "" || src.PlaylistURL != "")
 }
 func (m3uKind) Fetch(ctx context.Context, s *Service, src *Source) (Fetched, error) {
 	return fetchPlaylistGuide(ctx, s, src, true)

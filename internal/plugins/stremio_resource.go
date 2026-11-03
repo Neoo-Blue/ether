@@ -4,9 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/braedonsaunders/ether/internal/stremio"
 	"net/http"
-	"net/url"
-	"sort"
 	"strings"
 )
 
@@ -48,30 +47,15 @@ func (m *Manager) StremioResource(ctx context.Context, plugin, resource, typ, id
 		if cat == nil {
 			return Response{}, &ValidationError{[]FieldError{{"catalog", "This catalogue is not declared by the add-on."}}}
 		}
-		var fields []StremioExtra
-		_ = json.Unmarshal(cat.Extra, &fields)
-		declared := map[string]bool{}
-		for _, field := range fields {
-			declared[field.Name] = true
-			if field.Required && strings.TrimSpace(extra[field.Name]) == "" {
-				return Response{}, &ValidationError{[]FieldError{{field.Name, "is required by the add-on"}}}
-			}
-			if value := extra[field.Name]; value != "" && len(field.Options) > 0 {
-				found := false
-				for _, option := range field.Options {
-					if value == option {
-						found = true
-					}
-				}
-				if !found {
-					return Response{}, &ValidationError{[]FieldError{{field.Name, "must be one of the add-on's declared options"}}}
-				}
+		check := make(map[string]string, len(extra))
+		for k, v := range extra {
+			if k != "skip" {
+				check[k] = v
 			}
 		}
-		for key := range extra {
-			if !declared[key] {
-				return Response{}, &ValidationError{[]FieldError{{key, "is not declared by the add-on"}}}
-			}
+		if err := cat.ValidateExtras(check); err != nil {
+			name, msg, _ := strings.Cut(err.Error(), " ")
+			return Response{}, &ValidationError{[]FieldError{{name, msg}}}
 		}
 	} else if len(extra) > 0 {
 		return Response{}, &ValidationError{[]FieldError{{"extra", "Metadata requests do not accept catalogue filters."}}}
@@ -79,22 +63,7 @@ func (m *Manager) StremioResource(ctx context.Context, plugin, resource, typ, id
 	if typ == "" || id == "" || len(id) > 2048 {
 		return Response{}, &ValidationError{[]FieldError{{"id", "A type and identifier are required."}}}
 	}
-	route := "/" + resource + "/" + url.PathEscape(typ) + "/" + url.PathEscape(id)
-	keys := make([]string, 0, len(extra))
-	for key, value := range extra {
-		if value != "" {
-			keys = append(keys, key)
-		}
-	}
-	sort.Strings(keys)
-	var parts []string
-	for _, key := range keys {
-		parts = append(parts, url.QueryEscape(key)+"="+url.QueryEscape(extra[key]))
-	}
-	if len(parts) > 0 {
-		route += "/" + strings.Join(parts, "&")
-	}
-	route += ".json"
+	route := stremio.Route(resource, typ, id, extra)
 	resp, err := m.Call(ctx, plugin, Request{Method: http.MethodGet, Path: route})
 	if err != nil {
 		return Response{}, err
@@ -128,4 +97,41 @@ func (m *Manager) handleStremioResource(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(resp.Body)
+}
+
+// AddonFetcher reads an installed add-on's routes through Call, so every
+// request is guarded, metered, redacted and counted in its health.
+type AddonFetcher struct {
+	m      *Manager
+	plugin string
+}
+
+// Fetcher returns the stremio.Fetcher for an installed plugin.
+func (m *Manager) Fetcher(plugin string) AddonFetcher { return AddonFetcher{m: m, plugin: plugin} }
+
+// Fetch implements stremio.Fetcher.
+func (f AddonFetcher) Fetch(ctx context.Context, route string, limit int64) ([]byte, error) {
+	resp, err := f.m.Call(ctx, f.plugin, Request{Method: http.MethodGet, Path: route})
+	if err != nil {
+		return nil, err
+	}
+	if resp.Status < 200 || resp.Status > 299 {
+		retry := ""
+		for k, v := range resp.Headers {
+			if strings.EqualFold(k, "Retry-After") {
+				retry = v
+			}
+		}
+		return nil, &stremio.HTTPError{Status: resp.Status, RetryAfter: retry}
+	}
+	if limit > 0 && int64(len(resp.Body)) > limit {
+		return nil, fmt.Errorf("the add-on answered with more than %d bytes", limit)
+	}
+	return resp.Body, nil
+}
+
+// Addon is the installed plugin as a Stremio add-on: its Stremio manifest
+// read through Fetcher.
+func (m *Manager) Addon(rec Record) stremio.Addon {
+	return stremio.Addon{Manifest: rec.Manifest.Stremio(), Fetcher: m.Fetcher(rec.ID)}
 }

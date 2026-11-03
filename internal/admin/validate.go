@@ -12,7 +12,6 @@ import (
 	"github.com/braedonsaunders/ether/internal/libraryfilter"
 	"github.com/braedonsaunders/ether/internal/releasepolicy"
 	"github.com/braedonsaunders/ether/internal/remote"
-	"github.com/braedonsaunders/ether/internal/stremio"
 )
 
 // FieldError is one validation problem, addressed by dotted field path.
@@ -87,10 +86,6 @@ func ValidateConfig(cfg config.Config) []FieldError {
 				v.add(field+".kind", "OpenSubtitles can only appear once")
 			}
 			openSubtitles = true
-		case config.SubtitleProviderStremio:
-			if _, err := stremio.BaseURL(provider.URL); err != nil {
-				v.add(field+".url", "enter a valid Stremio add-on URL")
-			}
 		default:
 			if !strings.HasPrefix(provider.Kind, "plugin:") || !strings.HasSuffix(provider.Kind, "/subtitles") || provider.ID != provider.Kind {
 				v.add(field+".kind", "unknown subtitle provider")

@@ -16,6 +16,7 @@ import (
 
 	"github.com/braedonsaunders/ether/internal/animemap"
 	"github.com/braedonsaunders/ether/internal/core"
+	"github.com/braedonsaunders/ether/internal/egress"
 	"github.com/braedonsaunders/ether/internal/releaseparse"
 	"github.com/braedonsaunders/ether/internal/safefetch"
 )
@@ -40,58 +41,20 @@ type idLookup struct {
 // in the order they are tried.
 var animeDatabases = []string{animemap.Kitsu, animemap.MAL, animemap.AniList, animemap.AniDB}
 
-// lookupID chooses how to ask the addon for req: by IMDb id when the addon
-// takes them, else by TMDB id, else (for anime) by an anime database id
-// the community mapping knows unambiguously. ok is false when the addon
-// cannot be asked, which skips it for this title.
+// lookupID chooses how to ask the addon for req (LookupStreams). Without
+// a readable manifest the addon is asked by IMDb id, as before prefixes
+// were read.
 func (b *Backend) lookupID(ctx context.Context, req core.SearchRequest) (idLookup, bool) {
 	m := b.currentManifest(ctx)
-	if m != nil {
-		kind := "movie"
-		if req.Type != core.TypeMovie {
-			kind = "series"
-		}
-		if !m.serves(kind) {
-			return idLookup{}, false
-		}
+	if m == nil {
+		m = &Manifest{Resources: Resources{{Name: ResourceStream, Types: []string{TypeMovie, TypeSeries}, IDPrefixes: []string{"tt"}}}}
 	}
-	takes := func(prefix string) bool { return m == nil && prefix == "tt" || m != nil && m.takesIDs(prefix) }
-	movie := req.Type == core.TypeMovie
-	ep, packs := req.Episode, false
-	if !movie && ep <= 0 {
-		ep, packs = 1, true
+	var anime AnimeIDs
+	if req.Anime {
+		anime = b.svc.animeIDs()
 	}
-	if imdb := imdbID(req.IDs.IMDB); imdb != "" && takes("tt") {
-		if movie {
-			return idLookup{kind: "movie", id: imdb}, true
-		}
-		return idLookup{kind: "series", id: fmt.Sprintf("%s:%d:%d", imdb, req.Season, ep), packs: packs}, true
-	}
-	if req.IDs.TMDB > 0 && takes("tmdb") {
-		if movie {
-			return idLookup{kind: "movie", id: fmt.Sprintf("tmdb:%d", req.IDs.TMDB)}, true
-		}
-		return idLookup{kind: "series", id: fmt.Sprintf("tmdb:%d:%d:%d", req.IDs.TMDB, req.Season, ep), packs: packs}, true
-	}
-	// Anime databases number each season or cour separately; whole-season
-	// pack requests and non-anime titles never load the mapping.
-	if !req.Anime || packs || m == nil {
-		return idLookup{}, false
-	}
-	for _, db := range animeDatabases {
-		if !m.takesIDs(db) {
-			continue
-		}
-		id, episode, ok, err := b.svc.animeIDs().Lookup(ctx, req, db)
-		if err != nil || !ok {
-			continue
-		}
-		if movie {
-			return idLookup{kind: "movie", id: fmt.Sprintf("%s:%d", db, id)}, true
-		}
-		return idLookup{kind: "series", id: fmt.Sprintf("%s:%d:%d", db, id, episode), entryEpisode: episode}, true
-	}
-	return idLookup{}, false
+	look, ok := LookupStreams(ctx, *m, req, anime)
+	return idLookup{kind: look.Type, id: look.ID, packs: look.Packs, entryEpisode: look.EntryEpisode}, ok
 }
 
 // origin is the addon's scheme://host[:port], without credentials.
@@ -192,6 +155,13 @@ func entryEpisodeIdentity(info core.ReleaseInfo, req core.SearchRequest, entryEp
 // body today says nothing permanent about the release. Only a release
 // without a usable NZB link is rejected (core.ErrReleaseRejected).
 func (b *Backend) FetchNZB(ctx context.Context, r core.Release, reserve func(context.Context, string) error) ([]byte, error) {
+	return FetchNZB(ctx, b.svc.nzb, b.origin(), r, reserve)
+}
+
+// FetchNZB downloads an add-on Usenet stream's NZB with client, trusting
+// only the add-on's own origin (see Backend.FetchNZB). Installed add-ons
+// (internal/plugins/adapters) fetch their NZBs through it too.
+func FetchNZB(ctx context.Context, client *http.Client, origin string, r core.Release, reserve func(context.Context, string) error) ([]byte, error) {
 	if r.Protocol != core.ProtocolUsenet || r.NZBURL == "" {
 		return nil, fmt.Errorf("stremio: %q has no NZB to fetch: %w", r.Name, core.ErrReleaseRejected)
 	}
@@ -202,12 +172,12 @@ func (b *Backend) FetchNZB(ctx context.Context, r core.Release, reserve func(con
 	if err := reserve(ctx, "grab"); err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(safefetch.WithTrustedOriginFor(ctx, b.origin(), r.NZBURL), http.MethodGet, r.NZBURL, nil)
+	req, err := http.NewRequestWithContext(safefetch.WithTrustedOriginFor(ctx, origin, r.NZBURL), http.MethodGet, r.NZBURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("stremio: NZB from %s: invalid request", link.Host)
 	}
 	req.Header.Set("User-Agent", userAgent)
-	resp, err := b.svc.nzb.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -234,4 +204,19 @@ func (b *Backend) FetchNZB(ctx context.Context, r core.Release, reserve func(con
 		return nil, fmt.Errorf("stremio: %s did not answer with an NZB: %w", link.Host, core.ErrSourceUnavailable)
 	}
 	return body, nil
+}
+
+// DefaultNZBClient is the guarded client add-on NZBs are downloaded with.
+func DefaultNZBClient() *http.Client {
+	return (&safefetch.Guard{}).Client(egress.Client(egress.CapStremio, nzbTimeout))
+}
+
+// AnimeIDs is the service's anime id mapping, loaded the first time an
+// add-on needs it; installed add-ons share it (internal/plugins/adapters).
+func (s *Service) AnimeIDs() AnimeIDs { return lazyAnime{s} }
+
+type lazyAnime struct{ s *Service }
+
+func (l lazyAnime) Lookup(ctx context.Context, req core.SearchRequest, db string) (int64, int, bool, error) {
+	return l.s.animeIDs().Lookup(ctx, req, db)
 }

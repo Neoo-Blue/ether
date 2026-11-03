@@ -14,6 +14,7 @@ import (
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/langtag"
 	"github.com/braedonsaunders/ether/internal/plugins"
+	"github.com/braedonsaunders/ether/internal/stremio"
 	"github.com/braedonsaunders/ether/internal/subtitles"
 )
 
@@ -42,89 +43,120 @@ type subtitleProvider struct {
 }
 
 func (p *subtitleProvider) ID() string { return p.id }
-func subtitleIdentity(t *core.Title) (string, string) {
-	if t.Type == core.TypeEpisode {
-		imdb := t.ShowIDs.IMDB
-		if imdb == "" {
-			imdb = t.IDs.IMDB
-		}
-		season, ep := t.Season, t.Episode
-		if season == 0 {
-			season, ep = t.Key.Season(), t.Key.Episode()
-		}
-		if imdb == "" || season <= 0 || ep <= 0 {
-			return "", ""
-		}
-		return "series", fmt.Sprintf("%s:%d:%d", imdb, season, ep)
+
+// contentID is a title's protocol content id (stremio.TitleID), an
+// episode's season and number read from its key when missing. imdb reports
+// an id led by an IMDb id.
+func contentID(t *core.Title) (typ, id string, imdb, ok bool) {
+	tt := *t
+	if tt.Type == core.TypeEpisode && tt.Season <= 0 && tt.Key.Kind() == core.KindEpisode {
+		tt.Season, tt.Episode = tt.Key.Season(), tt.Key.Episode()
 	}
-	if t.IDs.IMDB == "" {
-		return "", ""
+	if tt.Type == core.TypeEpisode && (tt.Season <= 0 || tt.Episode <= 0) {
+		return "", "", false, false
 	}
-	return "movie", t.IDs.IMDB
+	if typ, id, ok = stremio.TitleID(&tt); !ok {
+		return "", "", false, false
+	}
+	return typ, id, stremio.IMDbID(strings.SplitN(id, ":", 2)[0]) != "", true
 }
-func (p *subtitleProvider) Search(ctx context.Context, t *core.Title, lang, hash string, size int64) ([]subtitles.Candidate, error) {
-	typ, id := subtitleIdentity(t)
-	if id == "" {
-		return nil, nil
+
+// subtitleLookup is how to ask a provider for a title's subtitles. A plugin
+// is asked by IMDb id. A plain add-on is asked only for ids its subtitles
+// resource takes, and by a non-IMDb id only when it declares id prefixes.
+func subtitleLookup(m stremio.Manifest, plain bool, t *core.Title) (typ, id string, ok bool) {
+	typ, id, imdb, ok := contentID(t)
+	if !ok {
+		return "", "", false
 	}
+	if !plain {
+		return typ, id, imdb
+	}
+	r, declared := m.Resource(stremio.ResourceSubtitles)
+	if !declared || !m.TakesID(stremio.ResourceSubtitles, typ, id) || (!imdb && len(r.IDPrefixes) == 0) {
+		return "", "", false
+	}
+	return typ, id, true
+}
+
+// Search lists the provider's subtitles for one title and language. It is
+// a listing only: nothing is downloaded until a viewer picks one. The
+// moviehash and size are sent when the caller already has them, and an
+// offer the add-on marks as a hash match (or whose id, link or file name
+// carries the hash) ranks above the rest.
+func (p *subtitleProvider) Search(ctx context.Context, t *core.Title, lang, hash string, size int64) ([]subtitles.Candidate, error) {
 	record, err := p.mgr.Get(ctx, p.id)
 	if err != nil {
 		return nil, err
 	}
-	if record.Manifest.Ether == nil && !record.Manifest.AcceptsResource("subtitles", typ, id) {
+	plain := record.Manifest.IsStremioOnly()
+	addon := p.mgr.Addon(record)
+	typ, id, ok := subtitleLookup(addon.Manifest, plain, t)
+	if !ok {
 		return nil, nil
 	}
-	extra := url.Values{}
+	extra := map[string]string{}
 	if hash != "" {
-		extra.Set("videoHash", hash)
+		extra["videoHash"] = hash
 	}
 	if size > 0 {
-		extra.Set("videoSize", strconv.FormatInt(size, 10))
+		extra["videoSize"] = strconv.FormatInt(size, 10)
 	}
-	route := "/subtitles/" + url.PathEscape(typ) + "/" + url.PathEscape(id)
-	if len(extra) > 0 {
-		route += "/" + extra.Encode()
-	}
-	route += ".json"
-	resp, err := p.mgr.Call(ctx, p.id, plugins.Request{Method: "GET", Path: route})
+	fetcher := &healthFetcher{inner: addon.Fetcher}
+	addon.Fetcher = fetcher
+	subs, err := addon.Subtitles(ctx, typ, id, extra)
 	if err != nil {
+		if !fetcher.recorded {
+			p.mgr.RecordFailure(ctx, p.id, "subtitle search: "+err.Error())
+		}
 		return nil, err
 	}
-	if resp.Status >= 400 {
-		p.mgr.RecordFailure(ctx, p.id, fmt.Sprintf("subtitle search HTTP %d", resp.Status))
-		return nil, fmt.Errorf("subtitle search HTTP %d", resp.Status)
-	}
-	var result struct {
-		Subtitles *[]struct {
-			ID     string `json:"id"`
-			Lang   string `json:"lang"`
-			Format string `json:"format"`
-			Name   string `json:"name"`
-			URL    string `json:"url"`
-		} `json:"subtitles"`
-	}
-	if err := json.Unmarshal(resp.Body, &result); err != nil || result.Subtitles == nil {
-		p.mgr.RecordFailure(ctx, p.id, "invalid subtitle search response")
-		return nil, fmt.Errorf("invalid subtitle search response")
-	}
+	hash = strings.ToLower(hash)
 	var out []subtitles.Candidate
-	for _, sub := range *result.Subtitles {
+	for _, sub := range subs {
 		l := langtag.Normalize(sub.Lang)
-		if sub.ID == "" || l == "" || langtag.MatchTier(lang, l) == 0 {
+		if l == "" || langtag.MatchTier(lang, l) == 0 {
 			continue
 		}
-		h := fnv.New64a()
-		_, _ = h.Write([]byte(p.id + "\x00" + sub.ID))
-		file := path.Base(sub.Name)
-		if file == "." || file == "/" || file == "" {
-			file = "Subtitle " + sub.ID
-			if format := strings.TrimPrefix(sub.Format, "."); format != "" {
-				file += "." + format
-			}
+		// A plain add-on's file is fetched from its link; a plugin can
+		// also serve it by id.
+		if sub.URL == "" && (plain || sub.ID == "") {
+			continue
 		}
-		out = append(out, subtitles.Candidate{FileID: int64(1)<<62 | int64(h.Sum64()&((1<<62)-1)), FileName: file, Language: l, Release: strings.TrimSuffix(file, path.Ext(file)), Provider: p.name, ProviderID: p.id, PluginID: p.id, PluginSubtitleID: sub.ID, PluginFormat: sub.Format, DownloadURL: sub.URL})
+		file := subtitleFileName(sub)
+		h := fnv.New64a()
+		_, _ = h.Write([]byte(p.id + "\x00" + sub.ID + "\x00" + sub.URL))
+		out = append(out, subtitles.Candidate{
+			FileID:   int64(1)<<62 | int64(h.Sum64()&((1<<62)-1)),
+			FileName: file, Language: l, Release: strings.TrimSuffix(file, path.Ext(file)),
+			HashMatch: sub.HashMatch || (hash != "" && strings.Contains(strings.ToLower(sub.ID+" "+sub.URL+" "+file), hash)),
+			Provider:  p.name, ProviderID: p.id, PluginID: p.id, PluginSubtitleID: sub.ID, PluginFormat: sub.Format, DownloadURL: sub.URL,
+		})
 	}
 	return out, nil
+}
+
+// subtitleFileName names an offer after its file: the add-on's filename,
+// else the last path segment of its name or link (never the link's query,
+// which may carry a token).
+func subtitleFileName(sub stremio.Subtitle) string {
+	file := firstNonEmpty(sub.Filename, sub.SubFileName, sub.Name)
+	if file == "" {
+		if u, err := url.Parse(sub.URL); err == nil {
+			file = u.Path
+		}
+	}
+	file = path.Base(strings.SplitN(strings.SplitN(file, "?", 2)[0], "#", 2)[0])
+	if file == "." || file == "/" || file == "" {
+		file = "Subtitle"
+		if sub.ID != "" {
+			file += " " + sub.ID
+		}
+		if format := strings.TrimPrefix(sub.Format, "."); format != "" {
+			file += "." + format
+		}
+	}
+	return file
 }
 
 type pickKey struct{}

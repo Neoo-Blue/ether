@@ -102,13 +102,12 @@ type Service struct {
 type scorerBox struct{ s core.PersonalScorer }
 
 type options struct {
-	tmdb        TMDB
-	httpClient  *http.Client
-	stremioHTTP *http.Client
-	userAgent   string
-	indexTTL    time.Duration
-	bases       *ExternalBases
-	noSeed      bool
+	tmdb       TMDB
+	httpClient *http.Client
+	userAgent  string
+	indexTTL   time.Duration
+	bases      *ExternalBases
+	noSeed     bool
 }
 
 // Option customises a Service.
@@ -384,7 +383,7 @@ func (s *Service) membersFor(ctx context.Context, row *specRow, wait bool) (*mem
 		}
 		return nil, errNotBuilt
 	}
-	// Plugin list sources and Stremio catalogs are remote lists: they are
+	// Plugin and add-on list sources are remote lists: they are
 	// refreshed in the background and never fetched on a viewer request,
 	// even when a viewer requests a synchronous live evaluation.
 	for _, src := range row.spec.Sources {
@@ -498,10 +497,8 @@ func (s *Service) buildNow(ctx context.Context, row *specRow) (*memberSet, error
 	}
 	resolved := row.rawSpec
 	if !row.builtin && resolvedChanged(row.spec, res.resolved) {
-		if sealed, err := s.sealSpec(res.resolved, row.id); err == nil {
-			if js, err := specJSON(sealed); err == nil {
-				resolved = js
-			}
+		if js, err := specJSON(res.resolved); err == nil {
+			resolved = js
 		}
 	}
 	at := s.now().UTC().Truncate(time.Second)

@@ -102,6 +102,10 @@ export default function CollectionEditor() {
   const location = useLocation();
   const navigate = useNavigate();
   const templateId = search.get("template");
+  const pickAddonCatalog = !id && search.get("source") === "addonCatalog";
+  // The picker opens once, with the first Build panel; switching tabs back
+  // later does not reopen it.
+  const [openAddonPicker, setOpenAddonPicker] = useState(pickAddonCatalog);
   const incoming = (location.state as { spec?: CollectionSpec } | null)?.spec;
   const [newDraftId] = useState(() => search.get("draft") ?? `new-${Date.now().toString(36)}`);
 
@@ -123,14 +127,10 @@ export default function CollectionEditor() {
       if (!tpl) throw new ApiError(404, "not_found", t("That template no longer exists."));
       return normalizeSpec({ ...tpl.spec, id: undefined, enabled: false, templateId: tpl.id });
     }
-    if (search.get("source") === "stremioCatalog") {
+    if (pickAddonCatalog) {
+      // A Home row from an add-on catalog: the catalog is chosen in Build.
       const spec = blankSpec();
-      const seeded: CollectionSpec = {
-        ...spec,
-        sources: [{ kind: "stremioCatalog", url: "", list: "", mediaType: "movie", maxItems: 100 }],
-        targets: { ...spec.targets, homeRow: true },
-      };
-      return seeded;
+      return { ...spec, targets: { ...spec.targets, homeRow: true } };
     }
     return blankSpec();
   }, [id, templateId]);
@@ -162,6 +162,9 @@ export default function CollectionEditor() {
   }, [source.data, dKey]);
 
   const ready = baseline !== null;
+  useEffect(() => {
+    if (ready && openAddonPicker) setOpenAddonPicker(false);
+  }, [ready, openAddonPicker]);
   const dirty = ready && !same(spec, baseline);
   const isNew = !id;
   const readOnly = Boolean(baseline?.builtIn);
@@ -170,17 +173,6 @@ export default function CollectionEditor() {
   const debouncedSpec = useDebouncedValue(spec, 600);
   useEffect(() => {
     if (!ready) return;
-    // Configured add-on URLs contain credentials; never persist a draft
-    // holding a freshly pasted URL in browser storage.
-    if (
-      debouncedSpec.sources.some(
-        (s) => s.kind === "stremioCatalog" && s.url && !s.url.endsWith(" (saved)"),
-      )
-    ) {
-      clearDraft(dKey);
-      setSavedLocallyAt(null);
-      return;
-    }
     if (!same(debouncedSpec, baseline)) {
       saveDraft(dKey, debouncedSpec, baseline?.updatedAt);
       setSavedLocallyAt(new Date().toISOString());
@@ -591,7 +583,14 @@ export default function CollectionEditor() {
               disabled={readOnly && (tab === "build" || tab === "schedule")}
               className="min-w-0 p-3 sm:p-5"
             >
-              {tab === "build" ? <BuildPanel spec={spec} update={update} region={region} /> : null}
+              {tab === "build" ? (
+                <BuildPanel
+                  spec={spec}
+                  update={update}
+                  region={region}
+                  pickAddonCatalog={openAddonPicker}
+                />
+              ) : null}
               {tab === "schedule" ? (
                 <SchedulePanel
                   spec={spec}

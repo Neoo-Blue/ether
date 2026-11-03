@@ -374,7 +374,8 @@ func (e *placeholderErrors) unredactIndexer(field string, ix config.Indexer, fla
 			break
 		}
 	}
-	// A redacted Stremio install URL restores only for the same entry
+	// A legacy Stremio indexer row (migrated at start into an installed
+	// add-on) keeps its link redacted. A redacted install URL restores only for the same entry
 	// still pointing at the same host; anything else must be pasted again.
 	if ix.IsStremio() && isRedactedStremioURL(ix.URL) {
 		if found && old.IsStremio() && stremioURLHost(ix.URL) != "" && stremioURLHost(ix.URL) == stremioURLHost(old.URL) {

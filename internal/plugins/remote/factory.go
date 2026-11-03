@@ -65,6 +65,7 @@ func (f *Factory) RuntimeFactory() plugins.RuntimeFactory {
 			opts := URLOptions{
 				Base:                 base,
 				AllowPublicRedirects: inst.Manifest.IsStremioOnly(),
+				Plain:                inst.Manifest.IsStremioOnly(),
 				Guard:                f.Guard,
 				Locale:               f.Locale,
 				Logger:               f.Logger,

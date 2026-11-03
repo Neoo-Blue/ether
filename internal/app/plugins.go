@@ -276,6 +276,12 @@ func (a *App) buildPlugins(ctx context.Context, cfg config.Config) (*pluginRunti
 		return nil, err
 	}
 	a.bindStreamSources(mgr)
+	// Installed plugins that serve streams are run-time indexer rows: keep
+	// the running search manager in step with installs, removals and role
+	// switches.
+	mgr.OnSync(func(context.Context, plugins.Record) { a.reapplyAddonIndexers() })
+	mgr.OnRemove(func(context.Context, string) { a.reapplyAddonIndexers() })
+
 	if a.resolver != nil {
 		a.resolver.SetRankingHooks(adapters.Ranking{Manager: mgr, Registry: a.extendRT.registry})
 	}

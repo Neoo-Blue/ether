@@ -13,6 +13,7 @@ import {
   LayoutGrid,
   ListVideo,
   Plus,
+  Puzzle,
   Save,
   Search,
   Sparkles,
@@ -21,6 +22,8 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { AddAddonDrawer } from "../../components/addons/AddAddonDrawer";
+import type { AddonSummary } from "../../components/addons/addons";
 import { Drawer } from "../../components/Drawer";
 import { ErrorPanel } from "../../components/feedback";
 import { ToolbarPicker } from "../../components/ToolbarPicker";
@@ -44,9 +47,11 @@ import { SourceEditor, type SourceKind } from "./SourceEditor";
 import {
   MINUTE,
   TEMPLATES,
+  addonChannelsKind,
   browserTimeZone,
   byNumber,
   emptyChannel,
+  emptySource,
   groupBy,
   nextNumber,
   tv,
@@ -120,6 +125,7 @@ export default function LiveTV() {
   const [baseline, setBaseline] = useState("");
   const [saving, setSaving] = useState(false);
   const [newKind, setNewKind] = useState<SourceKind>("playlist");
+  const [addingAddon, setAddingAddon] = useState(false);
 
   useInterval(() => setNow(Date.now()), 30_000);
   const from = useMemo(() => windowStart(shift), [shift]);
@@ -390,6 +396,45 @@ export default function LiveTV() {
 
   // ---- header actions ---------------------------------------------------------------
 
+  // An add-on's channels are one Live TV source of its channel kind; adding
+  // the same add-on again opens that source instead of importing it twice.
+  const addAddonSource = async (addon: AddonSummary) => {
+    const kind = addonChannelsKind(addon.id);
+    setLeftTab("sources");
+    const existing = sources.find((s) => s.kind === kind || s.playlistUrl === kind);
+    if (existing) {
+      toast.info(t("{name} is already in Live TV", { name: existing.name }));
+      await go({ kind: "source", id: existing.id });
+      return;
+    }
+    if (!addon.roles?.some((r) => r.role === "livetv_channels" && r.on)) {
+      toast.error(t("Live TV channels are off for {name}", { name: addon.name }), {
+        description: t("Switch them on in Plugins to add its channels."),
+      });
+      return;
+    }
+    const importing = toast.loading(t("Importing channels from {name}…", { name: addon.name }));
+    try {
+      const saved = await tv.saveSource({
+        ...emptySource(),
+        name: addon.name,
+        kind,
+        playlistUrl: kind,
+      });
+      toast.success(t("Source imported"), {
+        id: importing,
+        description: t("Channel numbers, mappings and access rules are kept."),
+      });
+      await reloadAll();
+      await go({ kind: "source", id: saved.id }, { force: true });
+    } catch (e) {
+      toast.error(t("Couldn't import channels from {name}", { name: addon.name }), {
+        id: importing,
+        description: errorMessage(e),
+      });
+    }
+  };
+
   const editing = (selection.kind === "channel" || selection.kind === "new") && !!draft;
   const actions = (
     <AddMenu
@@ -399,6 +444,7 @@ export default function LiveTV() {
         setLeftTab("sources");
         void go({ kind: "source", id: "new" });
       }}
+      onAddon={() => setAddingAddon(true)}
     />
   );
 
@@ -718,9 +764,11 @@ export default function LiveTV() {
         onClose={() => void go({ kind: "guide" })}
         title={sourceTitle}
         description={
-          newKind === "guide"
-            ? t("XMLTV listings for any channel.")
-            : t("An M3U playlist, optionally with a guide.")
+          sourceRecord?.kind?.startsWith("plugin:")
+            ? undefined
+            : newKind === "guide"
+              ? t("XMLTV listings for any channel.")
+              : t("An M3U playlist, optionally with a guide.")
         }
         size="lg"
       >
@@ -742,6 +790,12 @@ export default function LiveTV() {
           />
         )}
       </Drawer>
+      <AddAddonDrawer
+        open={addingAddon}
+        role="livetv_channels"
+        onClose={() => setAddingAddon(false)}
+        onAdded={(addon) => void addAddonSource(addon)}
+      />
     </>
   );
 }
@@ -749,9 +803,11 @@ export default function LiveTV() {
 function AddMenu({
   onChannel,
   onSource,
+  onAddon,
 }: {
   onChannel: () => void;
   onSource: (k: SourceKind) => void;
+  onAddon: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const item = (icon: React.ReactNode, title: string, hint: string, fn: () => void) => (
@@ -802,10 +858,10 @@ function AddMenu({
           () => onSource("playlist"),
         )}
         {item(
-          <ListVideo size={16} />,
+          <Puzzle size={16} />,
           t("Stremio add-on"),
           t("Live channels from a Stremio add-on"),
-          () => onSource("stremio"),
+          onAddon,
         )}
         {item(
           <CalendarRange size={16} />,

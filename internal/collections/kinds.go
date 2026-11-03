@@ -98,41 +98,45 @@ type ExternalRef struct {
 	Year             int
 }
 
-// ResolveExternal resolves external references to catalogue titles, appends
-// matched titles to the gather result, records warnings for unmatched items,
-// and returns the matched titles and unmatched count.
-func (g *Gather) ResolveExternal(sourceLabel string, refs []ExternalRef) ([]core.Title, int) {
-	if len(refs) == 0 {
-		return nil, 0
-	}
-	ext := make([]extRef, len(refs))
-	for i, r := range refs {
-		ext[i] = extRef{
-			MetadataProvider: r.MetadataProvider, ProviderID: r.ProviderID,
-			TMDB:  r.TMDB,
-			IMDB:  r.IMDB,
-			TVDB:  r.TVDB,
-			Type:  r.Type,
-			Title: r.Title,
-			Year:  r.Year,
-		}
-	}
+// ResolveExternal resolves external references to catalogue titles and
+// appends the matched ones to the gather result. unidentified counts items
+// the source read but could not identify at all (no id Ether can match);
+// they are reported with the references that did not resolve, as one
+// "N of M items … could not be matched" warning plus its reasons. It
+// returns the matched titles and the unmatched count.
+func (g *Gather) ResolveExternal(sourceLabel string, refs []ExternalRef, unidentified int) ([]core.Title, int) {
 	if sourceLabel == "" {
 		sourceLabel = sourceName(g.Src)
 	}
-	titles, unresolved, pending, details := g.Svc.resolveExternalDetailed(g.Ctx, g.Src.Kind, ext)
-	g.Res.titles = append(g.Res.titles, titles...)
-	if len(details) > 0 {
-		for _, detail := range details {
-			g.Warn("%s: %s", sourceLabel, detail)
+	var titles []core.Title
+	unresolved, pending := 0, 0
+	var details []string
+	if len(refs) > 0 {
+		ext := make([]extRef, len(refs))
+		for i, r := range refs {
+			ext[i] = extRef{
+				MetadataProvider: r.MetadataProvider, ProviderID: r.ProviderID,
+				TMDB:  r.TMDB,
+				IMDB:  r.IMDB,
+				TVDB:  r.TVDB,
+				Type:  r.Type,
+				Title: r.Title,
+				Year:  r.Year,
+			}
 		}
-	} else if unresolved > 0 {
-		g.Warn("%d of %d items in %s could not be matched to TMDB", unresolved, len(refs), sourceLabel)
+		titles, unresolved, pending, details = g.Svc.resolveExternalDetailed(g.Ctx, g.Src.Kind, ext)
+		g.Res.titles = append(g.Res.titles, titles...)
+	}
+	if unmatched := unresolved + unidentified; unmatched > 0 {
+		g.Warn("%d of %d items in %s could not be matched to the catalogue", unmatched, len(refs)+unidentified, sourceLabel)
+	}
+	for _, detail := range details {
+		g.Warn("%s: %s", sourceLabel, detail)
 	}
 	if pending > 0 {
 		g.Warn("%d items in %s are still being matched; they will appear after the next refresh", pending, sourceLabel)
 	}
-	return titles, unresolved + pending
+	return titles, unresolved + unidentified + pending
 }
 
 // Titles returns the titles gathered so far.
@@ -334,7 +338,6 @@ func builtinSourceKinds() []SourceKind {
 				return s.fetchAniList(ctx, src.URL)
 			}},
 		stevenLuKind{},
-		stremioCatalogKind{},
 	}
 }
 

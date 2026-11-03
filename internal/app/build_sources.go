@@ -59,7 +59,7 @@ func (a *App) buildSources(ctx context.Context, cfg config.Config) error {
 	}
 	a.sites = cardigann.New(siteOpts)
 	a.addons = stremio.NewService(nil)
-	a.indexers = newznab.NewManager(a.db, cfg.Indexers, newznab.Options{
+	a.indexers = newznab.NewManager(a.db, a.addonIndexers(context.Background(), cfg.Indexers), newznab.Options{
 		Logger:         log.With("component", "newznab"),
 		SearchCacheTTL: cfg.Resolver.SearchCacheTTL.D(),
 		NZBDir:         filepath.Join(dataDir, "nzb"),
@@ -68,11 +68,19 @@ func (a *App) buildSources(ctx context.Context, cfg config.Config) error {
 			if ix.IsStremio() {
 				return a.addons.Backend(ix)
 			}
+			// An installed plugin's streams (made at run time, never saved).
+			if ix.IsAddon() {
+				if ss := a.streamSources(); ss != nil {
+					return ss.Backend(ix)
+				}
+				return nil, fmt.Errorf("indexer %q: add-ons are not available yet", ix.Name)
+			}
 			return a.sites.Backend(ix)
 		},
 	})
 	a.debrid = debrid.NewService(cfg.Debrid, debrid.Options{DB: a.db, Logger: log.With("component", "debrid")})
 	ss := a.initStreamSources(a.indexers)
+	ss.SetAnimeIDs(a.addons.AnimeIDs())
 	usenetReady := func() bool {
 		if a.fetcher != nil {
 			return a.fetcher.HasUsableProvider()

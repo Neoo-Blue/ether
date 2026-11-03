@@ -54,6 +54,35 @@ describe("plugin collection parameters", () => {
       params: { genre: "scifi", adult: "true" },
     });
   });
+
+  it("caps how many items a list source reads, within 1 to 2,000", () => {
+    function Harness() {
+      const [source, setSource] = useState<Source>({ kind: descriptor.id } as unknown as Source);
+      return (
+        <>
+          <SourceEditor
+            source={source}
+            onChange={setSource}
+            onRemove={() => {}}
+            index={0}
+            region="US"
+            removable={false}
+            descriptor={descriptor}
+            descriptors={[descriptor]}
+          />
+          <output>{JSON.stringify(source)}</output>
+        </>
+      );
+    }
+    render(<Harness />);
+    const max = screen.getByRole("spinbutton", { name: "Source 1 maximum items" });
+    fireEvent.change(max, { target: { value: "5000" } });
+    expect(JSON.parse(screen.getByText(/"kind":"plugin:/).textContent!).maxItems).toBe(2000);
+    fireEvent.change(max, { target: { value: "" } });
+    expect(JSON.parse(screen.getByText(/"kind":"plugin:/).textContent!)).toEqual({
+      kind: descriptor.id,
+    });
+  });
 });
 
 describe("catalogue lookup options", () => {

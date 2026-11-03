@@ -533,7 +533,7 @@ func (a *App) applyConfig(c config.Config) {
 	a.llm.UpdateConfig(c.LLM)
 	a.fetcher.UpdateConfig(c.Usenet)
 	a.sites.ApplyConfig(c)
-	a.indexers.ApplyConfig(c)
+	a.indexers.ApplyConfig(a.withAddonIndexers(c))
 	a.engine.UpdateRepair(c.Usenet.Repair)
 	a.debrid.UpdateConfig(c.Debrid)
 	a.resolver.UpdateConfig(c)

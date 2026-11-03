@@ -24,7 +24,6 @@ describe("collection source kinds from the registry", () => {
         "letterboxdList",
         "mdblist",
         "stevenlu",
-        "stremioCatalog",
         "titles",
         "tmdbCollection",
         "tmdbCompany",
@@ -37,18 +36,6 @@ describe("collection source kinds from the registry", () => {
         "watchProvider",
       ].sort(),
     );
-  });
-
-  it("requires an add-on URL and catalog, including saved URLs", () => {
-    const source = {
-      kind: "stremioCatalog" as const,
-      url: "https://addon.example (saved)",
-      list: "top",
-      mediaType: "movie" as const,
-    };
-    expect(isSourceComplete(source)).toBe(true);
-    expect(isSourceComplete({ ...source, list: "" })).toBe(false);
-    expect(isSourceComplete({ ...source, url: "" })).toBe(false);
   });
 
   it("describes a streaming service with the default region", () => {

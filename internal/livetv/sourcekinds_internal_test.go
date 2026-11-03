@@ -14,7 +14,8 @@ func TestSourceKindClassification(t *testing.T) {
 		want string
 	}{
 		{"m3u url", Source{PlaylistURL: "https://x.test/p.m3u"}, "m3u"},
-		{"stremio", Source{Kind: "stremio", PlaylistURL: "https://x.test/manifest.json"}, "stremio"},
+		{"legacy stremio waits for its migration", Source{Kind: "stremio", PlaylistURL: "https://x.test/manifest.json"}, ""},
+		{"plugin source whose plugin is off", Source{Kind: "plugin:addon.x/channels", PlaylistURL: "plugin:addon.x/channels"}, ""},
 		{"m3u upload", Source{Playlist: "#EXTM3U"}, "m3u"},
 		{"guide only url", Source{GuideURL: "https://x.test/g.xml"}, "guideOnly"},
 		{"guide only upload", Source{Guide: "<tv/>"}, "guideOnly"},
@@ -36,8 +37,8 @@ func TestSourceKindClassification(t *testing.T) {
 
 func TestLiveTVSourceDescriptors(t *testing.T) {
 	ds := BuiltinDescriptors()
-	if len(ds) != 5 {
-		t.Fatalf("descriptors = %d, want 5", len(ds))
+	if len(ds) != 4 {
+		t.Fatalf("descriptors = %d, want 4", len(ds))
 	}
 	byID := map[string]extend.Descriptor{}
 	for _, d := range ds {

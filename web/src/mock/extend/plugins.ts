@@ -27,6 +27,8 @@ export interface PluginSummary {
   sourceKind?: string;
   stremioOnly?: boolean;
   installedAt: number;
+  roles?: { role: string; on: boolean }[];
+  host?: string;
 }
 
 export interface PluginHealth {
@@ -254,6 +256,53 @@ function catalogueFixtures(): CatalogueEntry[] {
   ];
 }
 
+/** An installed Stremio add-on (no ether block) and its roles. */
+export function addonDetail(
+  id: string,
+  name: string,
+  host: string,
+  roles: { role: string; on: boolean }[],
+): PluginDetail {
+  return {
+    id,
+    name,
+    version: "1.0.0",
+    summary: `${name} streams and catalogs`,
+    enabled: true,
+    verified: false,
+    shadow: false,
+    autoUpdate: false,
+    health: "ok",
+    capabilities: roles.filter((r) => r.on).map((r) => r.role),
+    sourceKind: "url",
+    stremioOnly: true,
+    installedAt: NOW - 86400 * 3,
+    roles,
+    host,
+    manifest: { id: "org.example.addon", version: "1.0.0", name, types: ["movie", "series"] },
+    permissions: {
+      lines: ["Connects to the add-on address you gave"],
+      declared: {},
+      grants: {},
+      needsViewers: false,
+      needsFolders: false,
+    },
+    healthDetail: { status: "ok", restarts: 0, slow: 0, drops: 0, observed: {}, egressBytes: 0 },
+    privacy: { declaredHosts: [host], observedHosts: { [host]: 12 } },
+    impact: {
+      calls: 12,
+      errors: 0,
+      p50Ms: 900,
+      p95Ms: 2400,
+      egressBytes: 0,
+      kvBytes: 0,
+      slow: 0,
+      eventDrops: 0,
+      restarts: 0,
+    },
+  };
+}
+
 function fixturePlugins(): Fixture[] {
   const pluto: PluginDetail = {
     id: "community.plutotv.ether",
@@ -461,7 +510,21 @@ function fixturePlugins(): Fixture[] {
     },
   };
   const text = (plugin: string, s: string) => ({ resolved: s, plugin });
+  const streamAddon: Fixture = {
+    detail: addonDetail("addon.mockstreams", "Stream Addon", "addon.example", [
+      { role: "stream_source", on: true },
+      { role: "list_source", on: false },
+    ]),
+    settings: {},
+    schema: {},
+    descriptors: [],
+    journal: [],
+    shadowJournal: [],
+    logs: [],
+    calls: [],
+  } as unknown as Fixture;
   return [
+    streamAddon,
     {
       detail: pluto,
       settings: { region: "us", token: "Saved" },
@@ -849,6 +912,76 @@ export function createPluginsMock(): {
     if (method === "GET" && seg[1] === "catalogue" && seg.length === 2) {
       if (q.get("empty") === "1") return json({ entries: [] });
       return json({ entries: catalogue });
+    }
+    if (method === "POST" && seg[1] === "addons" && seg[2] === "preview") {
+      const url = String((body as { url?: string })?.url ?? "").trim();
+      if (!/^(https?|stremio):\/\//.test(url)) {
+        return json(
+          { error: { code: "invalid", message: "That is not an add-on install link." } },
+          400,
+        );
+      }
+      const host = safeHost(url.replace(/^stremio:/, "https:"));
+      const id = `addon.${host.replace(/[^a-z0-9]/gi, "")}`;
+      const existing = byId(id);
+      return json({
+        id,
+        name: existing?.detail.name ?? (host.split(".")[0] || "Add-on"),
+        description: "Streams, catalogs and subtitles from one add-on.",
+        version: "1.0.0",
+        host,
+        alreadyInstalled: Boolean(existing),
+        roles: existing?.detail.roles ?? [
+          { role: "stream_source", on: true },
+          { role: "list_source", on: true },
+          { role: "subtitles", on: true },
+        ],
+        catalogs: [
+          { key: "catalog-top", type: "movie", id: "top", name: "Popular" },
+          { key: "catalog-new", type: "series", id: "new", name: "New series" },
+        ],
+      });
+    }
+    if (method === "POST" && seg[1] === "addons" && seg.length === 2) {
+      const req = (body ?? {}) as { url?: string; roles?: string[] };
+      const host = safeHost(String(req.url ?? "").replace(/^stremio:/, "https:"));
+      const id = `addon.${host.replace(/[^a-z0-9]/gi, "")}`;
+      let f = byId(id);
+      const offered = ["stream_source", "list_source", "subtitles"];
+      if (!f) {
+        f = {
+          detail: addonDetail(
+            id,
+            host.split(".")[0] || "Add-on",
+            host,
+            offered.map((role) => ({ role, on: (req.roles ?? offered).includes(role) })),
+          ),
+          settings: {},
+          schema: {},
+          descriptors: [],
+          journal: [],
+          shadowJournal: [],
+          logs: [],
+          calls: [],
+        } as unknown as Fixture;
+        fixtures.push(f);
+      } else {
+        f.detail.roles = (f.detail.roles ?? []).map((r) => ({
+          ...r,
+          on: r.on || (req.roles ?? []).includes(r.role),
+        }));
+      }
+      bump();
+      return json(summary(f.detail));
+    }
+    if (method === "PUT" && seg[2] === "roles") {
+      const f = byId(seg[1] ?? "");
+      if (!f) return json({ error: { code: "not_found", message: "not found" } }, 404);
+      const off = ((body ?? {}) as { off?: string[] }).off ?? [];
+      f.detail.roles = (f.detail.roles ?? []).map((r) => ({ ...r, on: !off.includes(r.role) }));
+      f.detail.capabilities = f.detail.roles.filter((r) => r.on).map((r) => r.role);
+      bump();
+      return json({ roles: f.detail.roles });
     }
     if (method === "POST" && seg[1] === "install" && seg[2] === "preview") {
       const req = (body && typeof body === "object" ? body : {}) as { url?: string };

@@ -1105,6 +1105,9 @@ func (s *Service) ImportSource(ctx context.Context, src Source) (Source, error) 
 	if strings.TrimSpace(src.Name) == "" {
 		return src, fmt.Errorf("source needs a name")
 	}
+	if src.Kind == legacyStremioKind {
+		return src, errLegacyStremio
+	}
 	if err := s.keepStoredUploads(ctx, &src); err != nil {
 		return src, err
 	}
@@ -1112,6 +1115,9 @@ func (s *Service) ImportSource(ctx context.Context, src Source) (Source, error) 
 		return src, err
 	}
 	kind, ok := s.kindRegistry().Classify(src)
+	if !ok && strings.HasPrefix(src.Kind, "plugin:") {
+		return src, fmt.Errorf("the plugin behind this source is off or removed; switch it on in Plugins")
+	}
 	if !ok {
 		return src, fmt.Errorf("source needs a playlist or an XMLTV guide")
 	}
@@ -1166,8 +1172,8 @@ func (s *Service) ImportSource(ctx context.Context, src Source) (Source, error) 
 			c.GuideID = previous.GuideID
 			c.GuideSourceID = previous.GuideSourceID
 			c.Transcode = previous.Transcode
-			if src.Kind == "stremio" {
-				c.StreamSources = mergeStremioStreams(c.StreamSources, previous.StreamSources)
+			if fetched.AddonInputs {
+				c.StreamSources = mergeAddonStreams(c.StreamSources, previous.StreamSources)
 			} else {
 				c.StreamSources = mergeImportedStreams(c, previous)
 			}
@@ -1206,7 +1212,7 @@ func (s *Service) ImportSource(ctx context.Context, src Source) (Source, error) 
 	err = tx.Commit()
 	if err == nil {
 		s.bumpLineup()
-		if src.Kind == "stremio" {
+		if fetched.AddonInputs {
 			var newChannels []string
 			for _, c := range stored {
 				if _, existed := oldByID[c.ID]; !existed {
