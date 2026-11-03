@@ -78,6 +78,16 @@ func (r *Recorder) Finish(token, id string, in FinishIn) (CaptureView, error) {
 		events: c.evidenceCopy(c.started.Add(-preRoll), c.finished), uncorr: c.uncorrelated,
 		view: r.viewLocked(c), limit: r.testArchiveLimit,
 	}
+	for _, e := range snap.events {
+		if e.ViewerID == 0 {
+			continue
+		}
+		if snap.viewerID == 0 {
+			snap.viewerID = e.ViewerID
+		} else if snap.viewerID != e.ViewerID {
+			snap.viewerAmbiguous = true
+		}
+	}
 	r.mu.Unlock()
 
 	uses := r.secretUses()
@@ -119,16 +129,18 @@ func (r *Recorder) Archive(token, id string) ([]byte, error) {
 }
 
 type finishSnap struct {
-	id        string
-	started   time.Time
-	finished  time.Time
-	note      string
-	deviceKey string
-	flags     [3]bool
-	events    []Event
-	uncorr    int
-	view      CaptureView
-	limit     int
+	id              string
+	started         time.Time
+	finished        time.Time
+	note            string
+	deviceKey       string
+	flags           [3]bool
+	events          []Event
+	uncorr          int
+	view            CaptureView
+	limit           int
+	viewerID        int64
+	viewerAmbiguous bool
 }
 
 func buildZip(snap finishSnap, extra []archived, coverage []Gap, uses []secretUse) ([]byte, []string, IdentityPreview, []Gap) {
@@ -288,6 +300,17 @@ func retainedIdentity(files []archived, flags [3]bool) IdentityPreview {
 	if flags[0] {
 		if b, ok := body["sessions.json"]; ok {
 			collectSessionTitles(b, &p)
+		}
+		if b, ok := body["viewer.json"]; ok {
+			var v ViewerFacts
+			if json.Unmarshal(b, &v) == nil {
+				for _, x := range v.Sections {
+					p.Titles = mergeStrings(p.Titles, []string{x.Title})
+				}
+				for _, x := range v.Candidates {
+					p.Titles = mergeStrings(p.Titles, []string{x.Title})
+				}
+			}
 		}
 	}
 	return p

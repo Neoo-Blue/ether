@@ -181,6 +181,7 @@ func (s *Server) supportEvent(pr *Request, kind diagnostics.Kind) diagnostics.Ev
 	}
 	if pr.User != nil {
 		ev.Username = pr.User.Username
+		ev.ViewerID = pr.User.ID
 	}
 	return ev
 }

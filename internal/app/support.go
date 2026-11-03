@@ -2,15 +2,18 @@ package app
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/braedonsaunders/ether/internal/admin"
 	"github.com/braedonsaunders/ether/internal/config"
+	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/diagnostics"
 	"github.com/braedonsaunders/ether/internal/logfile"
 	"github.com/braedonsaunders/ether/internal/updater"
@@ -30,6 +33,7 @@ func (a *App) supportDeps() diagnostics.Deps {
 		Hardware:     a.supportHardware,
 		Storage:      a.supportStorage,
 		Connectivity: func() (diagnostics.ConnectivityFact, error) { return supportConnectivity(a.cfg.Get()), nil },
+		Viewer:       a.supportViewer,
 		LogExtract:   a.supportLogs,
 	}
 }
@@ -201,4 +205,67 @@ func containerHint() string {
 		return "yes"
 	}
 	return ""
+}
+
+func (a *App) supportViewer(userID int64) (diagnostics.ViewerFacts, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	user, err := a.users.ActiveUser(ctx, userID)
+	if err != nil {
+		return diagnostics.ViewerFacts{}, err
+	}
+	server := a.currentPlexServer()
+	if server == nil {
+		return diagnostics.ViewerFacts{}, errors.New("Plex unavailable")
+	}
+	v, err := server.SupportViewer(ctx, user)
+	if err != nil {
+		return v, err
+	}
+	if a.personalize != nil {
+		layout, e := a.personalize.HomeLayout(ctx)
+		if e != nil {
+			return v, e
+		}
+		add := func(layer string, pages []core.LayoutPage) {
+			for _, p := range pages {
+				for _, row := range p.Rows {
+					if len(v.Layout) >= 256 {
+						return
+					}
+					v.Layout = append(v.Layout, diagnostics.ViewerLayoutRow{Layer: layer, Section: p.Section, Row: row.Row, Status: row.Status, Slot: row.Slot})
+				}
+			}
+		}
+		add("global", layout.Global)
+		for _, viewer := range layout.Viewers {
+			if viewer.UserID == userID {
+				add("viewer", viewer.Pages)
+			}
+		}
+	}
+	rows, err := a.db.QueryContext(ctx, `SELECT view_offset_ns, view_count FROM state_watch WHERE user_id=? LIMIT 501`, userID)
+	if err != nil {
+		return v, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		if v.WatchSample == 500 {
+			v.WatchSampleTruncated = true
+			break
+		}
+		var offset int64
+		var count int
+		if err = rows.Scan(&offset, &count); err != nil {
+			return v, err
+		}
+		v.WatchSample++
+		if offset > 0 {
+			v.InProgress++
+		}
+		if count > 0 {
+			v.Watched++
+		}
+	}
+	return v, rows.Err()
 }

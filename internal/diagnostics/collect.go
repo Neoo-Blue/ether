@@ -20,6 +20,37 @@ func (r *Recorder) collect(snap finishSnap, uses []secretUse) ([]archived, []Gap
 		"platform":  redactString(r.deps.Platform, uses),
 		"container": redactString(r.deps.Container, uses),
 	})
+	if snap.viewerAmbiguous {
+		gaps = append(gaps, Gap{Collector: "viewer", Status: "unavailable", Detail: "Multiple viewers used this device during the recording; viewer state was not selected."})
+	} else if snap.viewerID == 0 || r.deps.Viewer == nil {
+		gaps = append(gaps, Gap{Collector: "viewer", Status: "unavailable", Detail: "No authenticated viewer was observed for this device."})
+	} else if v, err := r.deps.Viewer(snap.viewerID); err != nil {
+		gaps = append(gaps, Gap{Collector: "viewer", Status: "failed", Detail: "Viewer state could not be collected."})
+	} else {
+		for i := range v.Sections {
+			if !snap.flags[0] {
+				v.Sections[i].Title = ""
+			} else {
+				v.Sections[i].Title = clipFree(redactNetworkText(v.Sections[i].Title), maxString, uses)
+			}
+			v.Sections[i].Type = clipFree(v.Sections[i].Type, 40, uses)
+		}
+		for i := range v.Candidates {
+			if !snap.flags[0] {
+				v.Candidates[i].Title = ""
+			} else {
+				v.Candidates[i].Title = clipFree(redactNetworkText(v.Candidates[i].Title), maxString, uses)
+			}
+			v.Candidates[i].Reason = clipFree(v.Candidates[i].Reason, maxString, uses)
+		}
+		for i := range v.Layout {
+			v.Layout[i].Layer = clipFree(v.Layout[i].Layer, 40, uses)
+			v.Layout[i].Section = clipFree(v.Layout[i].Section, 40, uses)
+			v.Layout[i].Row = clipFree(redactNetworkText(v.Layout[i].Row), maxString, uses)
+			v.Layout[i].Status = clipFree(v.Layout[i].Status, 40, uses)
+		}
+		put("viewer.json", v)
+	}
 	if r.deps.Settings == nil {
 		gaps = append(gaps, Gap{Collector: "settings", Status: "unavailable", Detail: "Settings were not collected."})
 	} else if s, err := r.deps.Settings(); err != nil {

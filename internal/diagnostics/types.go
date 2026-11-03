@@ -99,6 +99,7 @@ type Event struct {
 	Title            string
 	SourceName       string
 	Username         string
+	ViewerID         int64 // correlation only; never exported
 	Peer             string
 	// Uncorrelated is set when a correlation id was too long to retain.
 	// The id is not stored, so it cannot be merged with another id.
@@ -264,6 +265,37 @@ type ConnectivityFact struct {
 	PublicPort            int    `json:"publicPort,omitempty"`
 }
 
+type ViewerSection struct {
+	ID    int    `json:"id"`
+	Type  string `json:"type"`
+	Title string `json:"title,omitempty"`
+}
+type ViewerCandidate struct {
+	Key      int64  `json:"key"`
+	Title    string `json:"title,omitempty"`
+	OffsetMS int64  `json:"offsetMs"`
+	Reason   string `json:"reason"`
+	Included bool   `json:"included"`
+}
+type ViewerLayoutRow struct {
+	Layer   string `json:"layer"`
+	Section string `json:"section"`
+	Row     string `json:"row"`
+	Status  string `json:"status"`
+	Slot    int    `json:"slot,omitempty"`
+}
+type ViewerFacts struct {
+	Sections             []ViewerSection   `json:"sections"`
+	Candidates           []ViewerCandidate `json:"candidates"`
+	Layout               []ViewerLayoutRow `json:"layout"`
+	WatchSample          int               `json:"watchSample"`
+	InProgress           int               `json:"inProgress"`
+	Watched              int               `json:"watched"`
+	WatchSampleTruncated bool              `json:"watchSampleTruncated"`
+	CandidatesTruncated  bool              `json:"candidatesTruncated"`
+	Notes                []string          `json:"notes,omitempty"`
+}
+
 // Deps are the only inputs the archive collectors may use.
 type Deps struct {
 	Now       func() time.Time
@@ -280,6 +312,7 @@ type Deps struct {
 	Hardware     func() (HardwareFact, error)
 	Storage      func() (StorageFact, error)
 	Connectivity func() (ConnectivityFact, error)
+	Viewer       func(userID int64) (ViewerFacts, error)
 	// LogExtract returns structured records. Callers correlate on exact
 	// fields inside [From, Until] and must not match substrings.
 	LogExtract func(q LogQuery) (records []LogRecord, truncated bool, err error)
