@@ -333,10 +333,7 @@ export function Meter({
 }) {
   const id = useId();
   const v = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
-  const b = Math.max(
-    v,
-    Math.min(1, Number.isFinite(buffered ?? NaN) ? (buffered as number) : v),
-  );
+  const b = Math.max(v, Math.min(1, Number.isFinite(buffered ?? NaN) ? (buffered as number) : v));
   return (
     <div>
       {label || valueLabel ? (

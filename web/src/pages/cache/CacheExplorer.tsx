@@ -274,9 +274,7 @@ export function CacheExplorer({
                         >
                           <Pin
                             size={14}
-                            className={
-                              r.Pins?.includes("owner") ? "fill-primary text-primary" : ""
-                            }
+                            className={r.Pins?.includes("owner") ? "fill-primary text-primary" : ""}
                           />
                         </Button>
                         <Button
