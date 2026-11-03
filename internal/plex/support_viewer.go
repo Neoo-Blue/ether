@@ -2,6 +2,7 @@ package plex
 
 import (
 	"context"
+	"time"
 
 	"github.com/braedonsaunders/ether/internal/core"
 	"github.com/braedonsaunders/ether/internal/diagnostics"
@@ -59,6 +60,9 @@ func (s *Server) SupportViewer(ctx context.Context, user *core.User) (diagnostic
 		case !s.visibleTitle(ctx, user, &ti):
 			c.Title = ti.Title
 			c.Reason = "not available to this viewer"
+		case s.d.Discovery != nil && s.d.Discovery.Personal != nil && !s.d.Discovery.Personal.ContinueAllowed(ctx, user.ID, &ti):
+			c.Title = ti.Title
+			c.Reason = "Continue Watching dismissal applies or its lookup failed"
 		case s.sameDayUnavailable(ctx, pr, &ti):
 			c.Title = ti.Title
 			c.Reason = "unavailable under release rules"
@@ -72,6 +76,31 @@ func (s *Server) SupportViewer(ctx context.Context, user *core.User) (diagnostic
 	for _, ti := range visible {
 		if !seen[ti.Key] {
 			out.Candidates = append(out.Candidates, diagnostics.ViewerCandidate{Key: int64(ti.Key), Title: ti.Title, Included: true, Reason: "next episode selected from completed viewing history"})
+		}
+	}
+	// Completed history can yield a next episode even when no resume point
+	// remains. Check current state because history can outlive an unscrobble.
+	history, err := s.d.State.History(ctx, user.ID, time.Time{}, 100)
+	if err != nil {
+		return out, err
+	}
+	var completed []core.RatingKey
+	for _, h := range history {
+		if h.Completed && !seen[h.Key] {
+			seen[h.Key] = true
+			completed = append(completed, h.Key)
+			if len(completed) == 50 {
+				break
+			}
+		}
+	}
+	completedStates, err := s.d.State.GetMany(ctx, user.ID, completed)
+	if err != nil {
+		return out, err
+	}
+	for _, ti := range s.getTitles(ctx, completed) {
+		if completedStates[ti.Key].ViewCount > 0 {
+			out.Candidates = append(out.Candidates, diagnostics.ViewerCandidate{Key: int64(ti.Key), Title: ti.Title, Reason: "finished; history may supply the next episode"})
 		}
 	}
 	out.Notes = append(out.Notes, "Snapshot taken when the archive was built; selection may differ from an earlier response.")

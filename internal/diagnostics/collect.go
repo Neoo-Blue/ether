@@ -13,13 +13,17 @@ func (r *Recorder) collect(snap finishSnap, uses []secretUse) ([]archived, []Gap
 		}
 		files = append(files, archived{name: name, body: body})
 	}
-	put("server.json", map[string]string{
+	server := map[string]any{
 		"version":   redactString(r.deps.Version, uses),
 		"commit":    redactString(r.deps.Commit, uses),
 		"buildDate": redactString(r.deps.BuildDate, uses),
 		"platform":  redactString(r.deps.Platform, uses),
 		"container": redactString(r.deps.Container, uses),
-	})
+	}
+	if r.deps.Uptime != nil {
+		server["uptimeSeconds"] = int64(r.deps.Uptime().Seconds())
+	}
+	put("server.json", server)
 	if snap.viewerAmbiguous {
 		gaps = append(gaps, Gap{Collector: "viewer", Status: "unavailable", Detail: "Multiple viewers used this device during the recording; viewer state was not selected."})
 	} else if snap.viewerID == 0 || r.deps.Viewer == nil {
@@ -79,6 +83,7 @@ func (r *Recorder) collect(snap finishSnap, uses []secretUse) ([]archived, []Gap
 	} else if s, err := r.deps.Storage(); err != nil {
 		gaps = append(gaps, Gap{Collector: "storage", Status: "failed", Detail: "Storage could not be collected."})
 	} else {
+		s.Filesystem = clipFree(s.Filesystem, 40, uses)
 		put("storage.json", s)
 	}
 	if r.deps.Connectivity == nil {

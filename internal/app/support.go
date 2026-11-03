@@ -20,6 +20,7 @@ import (
 )
 
 func (a *App) supportDeps() diagnostics.Deps {
+	started := time.Now()
 	return diagnostics.Deps{
 		Now:          parityClock(),
 		Version:      a.opts.Version,
@@ -27,6 +28,7 @@ func (a *App) supportDeps() diagnostics.Deps {
 		BuildDate:    updater.Date,
 		Platform:     runtime.GOOS + "/" + runtime.GOARCH,
 		Container:    containerHint(),
+		Uptime:       func() time.Duration { return time.Since(started) },
 		Secrets:      func() []string { return supportSecrets(a.cfg.Get()) },
 		Settings:     func() (diagnostics.Settings, error) { return supportSettings(a.cfg.Get()), nil },
 		Sessions:     a.supportSessions,
@@ -116,6 +118,7 @@ func (a *App) supportHardware() (diagnostics.HardwareFact, error) {
 func (a *App) supportStorage() (diagnostics.StorageFact, error) {
 	cfg := a.cfg.Get()
 	fact := diagnostics.StorageFact{CacheBudgetBytes: cfg.Cache.BudgetBytes}
+	fact.Filesystem = supportFilesystem(a.opts.DataDir)
 	if info, err := os.Stat(filepath.Join(a.opts.DataDir, "ether.db")); err == nil {
 		fact.DatabaseBytes = info.Size()
 	}
@@ -203,6 +206,21 @@ func (a *App) supportLogs(q diagnostics.LogQuery) ([]diagnostics.LogRecord, bool
 func containerHint() string {
 	if _, err := os.Stat("/.dockerenv"); err == nil {
 		return "yes"
+	}
+	if os.Getenv("container") != "" {
+		return "yes"
+	}
+	if runtime.GOOS == "linux" {
+		if raw, err := os.ReadFile("/proc/1/cgroup"); err == nil {
+			for _, marker := range []string{"docker", "kubepods", "containerd", "podman", "lxc"} {
+				if strings.Contains(string(raw), marker) {
+					return "yes"
+				}
+			}
+		}
+	}
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		return "no"
 	}
 	return ""
 }

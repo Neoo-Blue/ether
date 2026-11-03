@@ -40,7 +40,7 @@ func (s *Server) observeRequest(r *http.Request, sr *statusRecorder, elapsed tim
 			ev.DBTime = stats.DBTime()
 		}
 		if sr.sampling {
-			ev.Response = summarizePlexResponse(sr.sample, sr.truncated)
+			ev.Response = summarizePlexResponse(sr.sample, sr.truncated, sr.Header().Get("Content-Encoding"))
 		}
 	}
 	s.d.Support.Observe(ev)
@@ -162,7 +162,7 @@ func (s *Server) playbackVariants(pr *Request, key core.RatingKey, tr core.Decis
 }
 
 func (s *Server) supportEvent(pr *Request, kind diagnostics.Kind) diagnostics.Event {
-	ev := diagnostics.Event{Time: s.now(), Kind: kind}
+	ev := diagnostics.Event{Time: s.now(), Kind: kind, Protocol: "plex"}
 	if pr == nil {
 		return ev
 	}

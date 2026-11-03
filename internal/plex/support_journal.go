@@ -1,8 +1,11 @@
 package plex
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"encoding/xml"
+	"io"
 	"net/url"
 	"regexp"
 	"strings"
@@ -99,9 +102,21 @@ func journalTitles(a, b []journalItem) []string {
 	}
 	return out
 }
-func summarizePlexResponse(raw []byte, truncated bool) *diagnostics.ResponseSummary {
+func summarizePlexResponse(raw []byte, truncated bool, encoding string) *diagnostics.ResponseSummary {
 	if truncated {
 		return &diagnostics.ResponseSummary{Truncated: true}
+	}
+	if strings.EqualFold(strings.TrimSpace(encoding), "gzip") {
+		gz, err := gzip.NewReader(bytes.NewReader(raw))
+		if err != nil {
+			return &diagnostics.ResponseSummary{Truncated: true}
+		}
+		defer gz.Close()
+		decoded, err := io.ReadAll(io.LimitReader(gz, (1<<20)+1))
+		if err != nil || len(decoded) > 1<<20 {
+			return &diagnostics.ResponseSummary{Truncated: true}
+		}
+		raw = decoded
 	}
 	var c journalContainer
 	var doc struct {

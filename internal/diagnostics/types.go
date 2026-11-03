@@ -21,7 +21,7 @@ const (
 	maxNoteRunes          = 500
 	maxCandidates         = 8
 	maxPlaybackCandidates = 24
-	maxDuration           = 3 * time.Minute
+	maxDuration           = 10 * time.Minute
 	preRoll               = 90 * time.Second
 	retainFor             = 15 * time.Minute
 	coalesceWindow        = 2 * time.Second
@@ -251,11 +251,12 @@ type HardwareFact struct {
 
 // StorageFact has no cache directory.
 type StorageFact struct {
-	CacheBudgetBytes int64 `json:"cacheBudgetBytes,omitempty"`
-	DiskFreeBytes    int64 `json:"diskFreeBytes,omitempty"`
-	DiskFreeKnown    bool  `json:"diskFreeKnown"`
-	DatabaseBytes    int64 `json:"databaseBytes,omitempty"`
-	WALBytes         int64 `json:"walBytes,omitempty"`
+	CacheBudgetBytes int64  `json:"cacheBudgetBytes,omitempty"`
+	DiskFreeBytes    int64  `json:"diskFreeBytes,omitempty"`
+	DiskFreeKnown    bool   `json:"diskFreeKnown"`
+	DatabaseBytes    int64  `json:"databaseBytes,omitempty"`
+	WALBytes         int64  `json:"walBytes,omitempty"`
+	Filesystem       string `json:"filesystem,omitempty"`
 }
 
 // ConnectivityFact has no public host, custom URL, or certificate path.
@@ -305,6 +306,7 @@ type Deps struct {
 	BuildDate string
 	Platform  string
 	Container string // "yes", "no", or "" when the caller could not tell
+	Uptime    func() time.Duration
 	Secrets   func() []string
 	Settings  func() (Settings, error)
 	// Sessions returns facts for deviceKey and a count of sessions that

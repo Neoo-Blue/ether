@@ -107,7 +107,7 @@ func analyzeJournal(body string) ([]reportRow, []Finding) {
 	add("other_hero", "A hero row other than Continue Watching was returned.", hero)
 	add("slow_request", "A request exceeded a wall-time or database budget.", slow)
 	add("http_error", "A request returned an HTTP error.", errors)
-	add("cancelled_request", "A request context was cancelled before the response completed.", cancelled)
+	add("cancelled_request", "A request context was cancelled when the handler returned.", cancelled)
 	if len(playbackFailures) >= 2 {
 		add("repeated_playback_failures", "Multiple playback decision or encoder failures were observed.", playbackFailures)
 	}
@@ -122,6 +122,27 @@ func reportMarkdown(rows []reportRow, findings []Finding, extra []archived) []by
 	}
 	for _, f := range findings {
 		fmt.Fprintf(&b, "- %s (journal lines %v)\n", f.Text, f.Lines)
+	}
+	for _, file := range extra {
+		switch file.name {
+		case "server.json":
+			var server struct {
+				Version   string `json:"version"`
+				Commit    string `json:"commit"`
+				BuildDate string `json:"buildDate"`
+				Platform  string `json:"platform"`
+				Container string `json:"container"`
+				Uptime    int64  `json:"uptimeSeconds"`
+			}
+			if json.Unmarshal(file.body, &server) == nil {
+				fmt.Fprintf(&b, "\n## Server\n\nVersion %s, commit %s, build date %s, platform %s, container %s, uptime %d seconds. Empty values were not available.\n", strconv.Quote(server.Version), strconv.Quote(server.Commit), strconv.Quote(server.BuildDate), strconv.Quote(server.Platform), strconv.Quote(server.Container), server.Uptime)
+			}
+		case "storage.json":
+			var storage StorageFact
+			if json.Unmarshal(file.body, &storage) == nil {
+				fmt.Fprintf(&b, "\n## Storage\n\nDatabase %d bytes; WAL %d bytes; filesystem %s; free space %d bytes (known: %t).\n", storage.DatabaseBytes, storage.WALBytes, strconv.Quote(storage.Filesystem), storage.DiskFreeBytes, storage.DiskFreeKnown)
+			}
+		}
 	}
 	for _, file := range extra {
 		if file.name != "viewer.json" {
@@ -149,11 +170,14 @@ func reportMarkdown(rows []reportRow, findings []Finding, extra []archived) []by
 		if e.Kind != KindRequest {
 			continue
 		}
-		fmt.Fprintf(&b, "- Line %d, %s: %s %s", row.line, e.At.Format("15:04:05.000"), e.Method, e.Route)
+		fmt.Fprintf(&b, "- Line %d, %s: %s %s", row.line, e.At.UTC().Format("15:04:05.000"), e.Method, e.Route)
 		if e.Query != "" {
 			fmt.Fprintf(&b, "?%s", e.Query)
 		}
 		fmt.Fprintf(&b, " → HTTP %d, %d ms, %d bytes, %d database statements in %d ms.\n", e.Status, e.DurationMS, e.Bytes, e.DBQueries, e.DBTimeMS)
+		if e.Product != "" || e.Platform != "" || e.DeviceType != "" || e.Model != "" || e.AppVersion != "" {
+			fmt.Fprintf(&b, "  - Client: product %s, version %s, platform %s, device %s, model %s.\n", strconv.Quote(e.Product), strconv.Quote(e.AppVersion), strconv.Quote(e.Platform), strconv.Quote(e.DeviceType), strconv.Quote(e.Model))
+		}
 		if e.Response == nil {
 			continue
 		}

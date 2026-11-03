@@ -54,10 +54,10 @@ func (r *Recorder) Finish(token, id string, in FinishIn) (CaptureView, error) {
 		r.mu.Unlock()
 		return CaptureView{}, ErrNotRecording
 	}
+	if in.SetFlags && len(c.zip) == 0 {
+		c.titles, c.users, c.addrs = in.IncludeTitles, in.IncludeUsernames, in.IncludeAddresses
+	}
 	if c.state == "recording" {
-		if in.SetFlags {
-			c.titles, c.users, c.addrs = in.IncludeTitles, in.IncludeUsernames, in.IncludeAddresses
-		}
 		r.finishLocked(c, r.now())
 	}
 	if c.state != "finished" {
@@ -214,8 +214,12 @@ func sealKnown(snap finishSnap, content []archived, known []Gap, extra Gap, pre,
 }
 
 func summaryBytes(snap finishSnap, ident IdentityPreview, uses []secretUse) []byte {
+	observed := append([]Observation(nil), snap.view.Observations...)
+	for _, finding := range snap.findings {
+		observed = append(observed, Observation{At: snap.finished, Kind: Kind("finding"), Code: finding.Code, Text: finding.Text, JournalLines: finding.Lines})
+	}
 	return mustMarshal(map[string]any{
-		"observations": snap.view.Observations,
+		"observations": observed,
 		"hypotheses":   snap.view.Hypotheses,
 		"findings":     snap.findings,
 		"identity":     ident,

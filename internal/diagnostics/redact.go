@@ -14,9 +14,19 @@ import (
 	"github.com/braedonsaunders/ether/internal/logredact"
 )
 
-var supportNetworkText = regexp.MustCompile(`(?i)https?://[^\s]+|\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b|\b(?:[a-z0-9-]+\.)+(?:com|net|org|local|internal|lan|io)\b|\[[0-9a-f:]+\]`)
+var supportNetworkText = regexp.MustCompile(`(?i)https?://[^\s]+|\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b|\b(?:[a-z0-9-]+\.)+(?:com|net|org|local|localdomain|internal|lan|home|io|dev|test|example|direct)\b|\[[0-9a-f:]+\]|(?:[0-9a-f]{0,4}:){2,}[0-9a-f]{0,4}`)
+var supportIPText = regexp.MustCompile(`(?i)https?://[^\s]+|\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b|\[[0-9a-f:]+\]|(?:[0-9a-f]{0,4}:){2,}[0-9a-f]{0,4}`)
 
 func redactNetworkText(s string) string { return supportNetworkText.ReplaceAllString(s, redactMask) }
+
+func redactHubID(s string) string {
+	for _, prefix := range []string{"home.", "movie.", "tv.", "collection.", "discovery."} {
+		if strings.HasPrefix(s, prefix) {
+			return supportIPText.ReplaceAllString(s, redactMask)
+		}
+	}
+	return redactNetworkText(s)
+}
 
 // secretForms lists literal encodings of a nonempty secret. Percent-encoded
 // forms are not enumerated: redactPercentEncoded decodes bounded runs, so

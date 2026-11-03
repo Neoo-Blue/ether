@@ -43,7 +43,7 @@ func boundEvent(e Event, uses []secretUse) Event {
 	}
 	e.Route = clipFree(stripQuery(e.Route), maxString, uses)
 	if e.Kind == KindRequest {
-		e.Route = requestRoute(e.Route)
+		e.Route = redactNetworkText(requestRoute(e.Route))
 	}
 	e.Query = clipFree(e.Query, 4096, uses)
 	if e.Response != nil {
@@ -57,7 +57,7 @@ func boundEvent(e Event, uses []secretUse) Event {
 		v.Hubs = append([]HubSummary(nil), v.Hubs...)
 		for i := range v.Hubs {
 			h := &v.Hubs[i]
-			h.Identifier = clipFree(redactNetworkText(h.Identifier), maxString, uses)
+			h.Identifier = clipFree(redactHubID(h.Identifier), maxString, uses)
 			h.Title = clipFree(redactNetworkText(h.Title), maxString, uses)
 			h.Style = clipFree(redactNetworkText(h.Style), 80, uses)
 			h.Type = clipFree(redactNetworkText(h.Type), 80, uses)
@@ -89,8 +89,8 @@ func boundEvent(e Event, uses []secretUse) Event {
 	e.Rejection = clipFree(e.Rejection, maxExcerpt, uses)
 	e.ErrorExcerpt = clipFree(e.ErrorExcerpt, maxExcerpt, uses)
 	e.FFmpegExcerpt = clipFree(e.FFmpegExcerpt, maxExcerpt, uses)
-	e.Title = clipFree(e.Title, maxString, uses)
-	e.SourceName = clipFree(e.SourceName, maxString, uses)
+	e.Title = clipFree(redactNetworkText(e.Title), maxString, uses)
+	e.SourceName = clipFree(redactNetworkText(e.SourceName), maxString, uses)
 	e.Username = clipFree(e.Username, 80, uses)
 	e.Peer = clipFree(e.Peer, 80, uses)
 	if e.Media != nil {

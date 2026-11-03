@@ -595,6 +595,8 @@ func (r *Recorder) coverageLocked(c *capture) []Gap {
 		{Collector: "compose", Status: "unavailable", Detail: "VPS host Compose mappings are not visible from this process."},
 		{Collector: "dns", Status: "unavailable", Detail: "Remote DNS vantage is not observed."},
 		{Collector: "cluster", Status: "unavailable", Detail: "Other cluster nodes' events are not included."},
+		{Collector: "protocols", Status: "unavailable", Detail: "Request and response journals currently cover Plex only; other client protocols are not captured."},
+		{Collector: "query", Status: "omitted", Detail: "Unknown query parameter names and values are masked because they may contain credentials or addresses."},
 	}
 	if !c.confirmed {
 		gaps = append(gaps, Gap{Collector: "device", Status: "unconfirmed", Detail: "No device is confirmed. Playback from other devices is not retained."})

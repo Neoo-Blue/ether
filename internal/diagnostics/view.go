@@ -4,13 +4,16 @@ import "time"
 
 // Observation is one fact shown to the owner. It is not a diagnosis.
 type Observation struct {
-	At     time.Time `json:"at"`
-	Kind   Kind      `json:"kind"`
-	Count  int       `json:"count,omitempty"`
-	Status int       `json:"status,omitempty"`
-	Route  string    `json:"route,omitempty"`
-	Bytes  int64     `json:"bytes,omitempty"`
-	Device string    `json:"device,omitempty"`
+	At           time.Time `json:"at"`
+	Kind         Kind      `json:"kind"`
+	Count        int       `json:"count,omitempty"`
+	Status       int       `json:"status,omitempty"`
+	Route        string    `json:"route,omitempty"`
+	Bytes        int64     `json:"bytes,omitempty"`
+	Device       string    `json:"device,omitempty"`
+	Code         string    `json:"code,omitempty"`
+	Text         string    `json:"text,omitempty"`
+	JournalLines []int     `json:"journalLines,omitempty"`
 }
 
 // Hypothesis is an inference kept separate from observations.
