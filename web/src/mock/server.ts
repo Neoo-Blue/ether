@@ -148,7 +148,7 @@ function defaultConfig(): EtherConfig {
       token: "••••",
       clientIdentifier: "mock-client",
       ownerPlexId: 1,
-      ownerUsername: "owner",
+      ownerUsername: "Braedon",
       claimed: true,
       remoteAccess: true,
       useUpnp: true,
@@ -1837,7 +1837,7 @@ export function createFakeServer(opts: FakeOptions = {}) {
         })),
         remote: {
           claimed: true,
-          ownerUsername: "owner",
+          ownerUsername: "Braedon",
           publicAddress: "203.0.113.7",
           remoteAccess: state.config.plex.remoteAccess,
           listed: true,
@@ -2544,7 +2544,7 @@ export function createFakeServer(opts: FakeOptions = {}) {
       case "POST /plex/claim":
         state.config.plex.claimed = true;
         if (!state.config.plex.token) state.config.plex.token = "••••";
-        if (!state.config.plex.ownerUsername) state.config.plex.ownerUsername = "owner";
+        if (!state.config.plex.ownerUsername) state.config.plex.ownerUsername = "Braedon";
         return json({ ok: true });
       case "POST /auth/pin":
         return json({ handle: "h1", code: "ABCD", authUrl: "https://app.plex.tv/auth#?code=ABCD" });

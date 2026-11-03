@@ -203,7 +203,9 @@ function PlexAccount({
           state={claimed ? "reachable" : "unknown"}
           title={
             claimed
-              ? t("Claimed by {owner}", { owner: owner || t("your Plex account") })
+              ? owner
+                ? t("Claimed by Plex account {name}", { name: owner })
+                : t("Claimed by owner")
               : t("Not claimed")
           }
           control={
