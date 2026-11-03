@@ -373,6 +373,20 @@ func (c *Catalog) BrowseStoredEpisodes(ctx context.Context, q core.BrowseQuery) 
 		}
 	}
 
+	if q.SortLastViewed {
+		where, args, err := c.storedEpisodesWhere(q.Filter)
+		if err != nil {
+			return core.Page{}, err
+		}
+		items, err := c.browseHistoryPage(ctx, q, where, args, "e", offset, limit)
+		if err != nil {
+			return core.Page{}, err
+		}
+		if q.NoTotal {
+			total = offset + len(items)
+		}
+		return core.Page{Items: items, Total: total}, nil
+	}
 	keyOrder := !q.SortLastViewed && len(q.SecondarySorts) == 0 && (q.Sort == "" || (q.Sort == core.SortPopularity && !q.Desc))
 	if !q.SortLastViewed && !keyOrder && len(q.SecondarySorts) == 0 && q.Sort == core.SortPopularity {
 		if unranked, err := c.EpisodesUnranked(ctx); err == nil && unranked {
@@ -435,9 +449,6 @@ func (c *Catalog) BrowseStoredEpisodes(ctx context.Context, q core.BrowseQuery) 
 }
 
 func storedChildOrder(alias string, q core.BrowseQuery) string {
-	if q.SortLastViewed {
-		return lastViewedOrder(alias, q)
-	}
 	col := alias + ".key"
 	switch q.Sort {
 	case core.SortTitle:
@@ -639,9 +650,35 @@ func (c *Catalog) BrowseStoredSeasons(ctx context.Context, q core.BrowseQuery) (
 		if err != nil {
 			return core.Page{}, err
 		}
-		if total == 0 || offset >= total {
+		if !q.SortLastViewed && (total == 0 || offset >= total) {
 			return core.Page{Items: []core.Title{}, Total: total}, nil
 		}
+	}
+
+	if q.SortLastViewed {
+		where, args, err := c.storedSeasonsWhere(q.Filter, false)
+		if err != nil {
+			return core.Page{}, err
+		}
+		// Mirror listableSeason: a known released season with aired children,
+		// or an undated specials season with an aired special. If no child
+		// records exist, retain the released season's stored child count.
+		where += ` AND ((s.release_known=1 AND s.released_ts<=?) OR (s.season=0 AND s.released_ts=0 AND EXISTS (SELECT 1 FROM catalog_titles x WHERE x.type='episode' AND x.show_key=s.show_key AND x.season=s.season AND x.adult=0 AND x.release_known=1 AND x.released_ts<=?))) AND (EXISTS (SELECT 1 FROM catalog_titles x WHERE x.type='episode' AND x.show_key=s.show_key AND x.season=s.season AND x.adult=0 AND x.release_known=1 AND x.released_ts<=?) OR (s.child_count>0 AND NOT EXISTS (SELECT 1 FROM catalog_titles x WHERE x.type='episode' AND x.show_key=s.show_key AND x.season=s.season)))`
+		now := c.now().Unix()
+		args = append(args, now, now, now)
+		if !q.NoTotal {
+			if err = c.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM catalog_titles s JOIN catalog_titles t ON t.key=s.show_key WHERE `+where, args...).Scan(&total); err != nil {
+				return core.Page{}, err
+			}
+		}
+		items, err := c.browseHistoryPage(ctx, q, where, args, "s", offset, limit)
+		if err != nil {
+			return core.Page{}, err
+		}
+		if q.NoTotal {
+			total = offset + len(items)
+		}
+		return core.Page{Items: items, Total: total}, nil
 	}
 
 	keyOrder := !q.SortLastViewed && len(q.SecondarySorts) == 0 && (q.Sort == "" || (q.Sort == core.SortPopularity && !q.Desc))

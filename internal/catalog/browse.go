@@ -113,6 +113,16 @@ func (c *Catalog) Browse(ctx context.Context, q core.BrowseQuery) (core.Page, er
 		}
 		return page, nil
 	}
+	if q.SortLastViewed {
+		items, err := c.browseHistoryPage(ctx, q, where, args, "t", offset, limit)
+		if err != nil {
+			return core.Page{}, err
+		}
+		if q.NoTotal {
+			total = offset + len(items)
+		}
+		return core.Page{Items: items, Total: total}, nil
+	}
 	pageWhere, pageArgs := where, args
 	if q.Sort == core.SortUpdated && q.Filter.UpdatedAfter == 0 {
 		pageWhere += " AND t.fetched_at>=?"
@@ -263,9 +273,6 @@ func browseSecondaryOrder(alias string, specs []core.SortSpec) string {
 }
 
 func browseOrder(q core.BrowseQuery) string {
-	if q.SortLastViewed {
-		return lastViewedOrder("t", q) + ", t.sort_title ASC"
-	}
 	col := sortColumn("t", q.Sort)
 	dir := "ASC"
 	if q.Desc {
@@ -276,19 +283,6 @@ func browseOrder(q core.BrowseQuery) string {
 		dir = "DESC"
 	}
 	return col + " " + dir + browseSecondaryOrder("t", q.SecondarySorts)
-}
-
-// lastViewedOrder uses a numeric viewer identity and the state primary key.
-func lastViewedOrder(alias string, q core.BrowseQuery) string {
-	col := "(0+0)"
-	if q.SortViewerID > 0 {
-		col = fmt.Sprintf("COALESCE((SELECT w.last_viewed_at FROM state_watch w WHERE w.user_id=%d AND w.rating_key=%s.key),0)", q.SortViewerID, alias)
-	}
-	dir := "ASC"
-	if q.Desc {
-		dir = "DESC"
-	}
-	return col + " " + dir + browseSecondaryOrder(alias, q.SecondarySorts)
 }
 
 // CountBrowsable is the library size behind a view list. The (type, browsable,

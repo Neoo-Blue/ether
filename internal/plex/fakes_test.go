@@ -180,6 +180,12 @@ func (c *fakeCatalog) Browse(_ context.Context, q core.BrowseQuery) (core.Page, 
 				bstate, _ = c.state.Get(context.Background(), q.SortViewerID, b.Key)
 			}
 			av, bv := unixOrZero(astate.LastViewedAt), unixOrZero(bstate.LastViewedAt)
+			if (av > 0) != (bv > 0) {
+				if av > 0 {
+					return -1
+				}
+				return 1
+			}
 			if av != bv {
 				if q.Desc {
 					return cmp.Compare(bv, av)

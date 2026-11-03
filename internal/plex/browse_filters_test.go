@@ -479,10 +479,10 @@ func TestBrowseSortsGrammarLastViewedAndUnknown(t *testing.T) {
 	if !slices.Equal(gotOwnerDesc, []string{"Alien", "Matrix", "Fjord Harbor"}) {
 		t.Fatalf("owner lastViewedAt:desc: got %v, want [Alien Matrix Fjord Harbor]", gotOwnerDesc)
 	}
-	// Owner lastViewedAt:asc -> Fjord Harbor (unviewed sorts below viewed, so first on asc), Matrix, Alien.
+	// Owner lastViewedAt:asc -> viewed titles oldest first, then unviewed titles.
 	gotOwnerAsc := browseTitles(t, f, "/library/sections/1/all?sort=lastViewedAt:asc")
-	if !slices.Equal(gotOwnerAsc, []string{"Fjord Harbor", "Matrix", "Alien"}) {
-		t.Fatalf("owner lastViewedAt:asc: got %v, want [Fjord Harbor Matrix Alien]", gotOwnerAsc)
+	if !slices.Equal(gotOwnerAsc, []string{"Matrix", "Alien", "Fjord Harbor"}) {
+		t.Fatalf("owner lastViewedAt:asc: got %v, want [Matrix Alien Fjord Harbor]", gotOwnerAsc)
 	}
 
 	// Friend lastViewedAt:desc -> Fjord Harbor (viewed), then Alien, Matrix (unviewed tied, titleSort ASC!).
