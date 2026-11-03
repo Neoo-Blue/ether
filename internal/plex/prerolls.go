@@ -117,7 +117,9 @@ func (s *Server) prerollPart(w http.ResponseWriter, r *http.Request, key core.Ra
 		return
 	}
 	s.prewarmFeature(ctx, pr, s.featureForExtra(pr, e), s.clientCaps(pr))
-	s.prerollStarted(ctx, pr, e)
+	if r.Method != http.MethodHead {
+		s.prerollStarted(ctx, pr, e)
+	}
 	w.Header().Set("Content-Type", "video/mp4")
 	http.ServeContent(w, r, "", st.ModTime(), f)
 }
