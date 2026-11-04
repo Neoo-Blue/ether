@@ -1155,7 +1155,10 @@ function ProfileList({
               draft={draft}
               patch={patch}
               rankingError={errors.ranking}
-              hasScores={hasImportedRules(draft, resolver)}
+              hasScores={
+                Object.keys(draft.customFormatScores ?? {}).length > 0 ||
+                (resolver?.customFormats ?? []).length > 0
+              }
               onEditScores={editScores}
             />
 
