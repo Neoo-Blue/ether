@@ -555,3 +555,56 @@ func TestPluginRankingStepsAreAcceptedAndNeutral(t *testing.T) {
 		t.Fatalf("plugin step must be neutral: with %v, without %v", got, plain)
 	}
 }
+
+// The custom score step (#252): a ladder saved before it existed keeps
+// ranking exactly as it did, because the score goes back directly before
+// verified; and moving it lets an owner put resolution first, then score.
+func TestCustomScoreRankingStep(t *testing.T) {
+	// Default-position insertion would put the step ahead of size here.
+	saved := []string{core.RankSize, core.RankLanguage, core.RankConnection, core.RankResolution,
+		core.RankReleaseType, core.RankHDR, core.RankVerified, core.RankVideoCodec, core.RankAudioFormat}
+	old := core.QualityProfile{Name: "4K", MaxHeight: 2160, Ranking: saved}
+	want := slices.Insert(slices.Clone(saved), 6, core.RankCustomScore)
+	if got := old.EffectiveRanking(); !slices.Equal(got, want) {
+		t.Fatalf("EffectiveRanking = %v, want %v", got, want)
+	}
+	explicit := old
+	explicit.Ranking = want
+	if old.ComputeSelectionKey() != explicit.ComputeSelectionKey() {
+		t.Fatal("custom score in its implied place changed the SelectionKey")
+	}
+
+	cand := func(height int, score float64, verified bool) candidate {
+		return candidate{rel: core.Release{Score: score}, quality: qualityRank{height: height}, verified: verified, langOK: true}
+	}
+	uhdLow, hdHigh, hdVerified := cand(2160, 129, false), cand(1080, 2806, false), cand(1080, 900, true)
+
+	// Default ladder: score ranks above verified, below resolution.
+	def := core.QualityProfile{Name: "4K", MaxHeight: 2160}
+	if !compareCandidates(hdHigh, hdVerified, def) || !compareCandidates(uhdLow, hdHigh, def) {
+		t.Fatal("default ladder: want 2160p first, then the higher score ahead of the verified release")
+	}
+	// Custom score first: the score decides before resolution.
+	first := def
+	first.Ranking = append([]string{core.RankCustomScore}, core.DefaultRankingSteps...)
+	if !compareCandidates(hdHigh, uhdLow, first) {
+		t.Fatal("custom score first: want the 2806-scored 1080p ahead of the 129-scored 2160p")
+	}
+	// Requested setup: resolution first, then custom score.
+	resFirst := def
+	resFirst.Ranking = []string{core.RankResolution, core.RankCustomScore, core.RankLanguage, core.RankConnection,
+		core.RankReleaseType, core.RankHDR, core.RankVerified, core.RankVideoCodec, core.RankAudioFormat, core.RankSize}
+	if err := core.ValidateRanking(resFirst.Ranking, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !compareCandidates(uhdLow, hdHigh, resFirst) || !compareCandidates(hdHigh, hdVerified, resFirst) {
+		t.Fatal("resolution then custom score: want 2160p first, then the higher score")
+	}
+	// Verified above custom score: the owner's choice wins.
+	verifiedFirst := def
+	verifiedFirst.Ranking = []string{core.RankLanguage, core.RankConnection, core.RankResolution, core.RankReleaseType,
+		core.RankHDR, core.RankVerified, core.RankCustomScore, core.RankVideoCodec, core.RankAudioFormat, core.RankSize}
+	if !compareCandidates(hdVerified, hdHigh, verifiedFirst) {
+		t.Fatal("verified above custom score: want the verified release first")
+	}
+}

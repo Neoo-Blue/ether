@@ -95,7 +95,8 @@ type RankingStepMeta struct {
 	DefaultPosition int `json:"defaultPosition"`
 	// ConfigKey names the QualityProfile field the editor edits for
 	// built-in steps (preferredLanguages, preferredSources,
-	// preferredCodecs, preferredAudio, preferLargest, heightRange, hdr).
+	// preferredCodecs, preferredAudio, preferLargest, heightRange, hdr,
+	// customFormatScores).
 	// Plugin steps leave it empty; their settings arrive with WS9h.
 	ConfigKey string `json:"configKey,omitempty"`
 }

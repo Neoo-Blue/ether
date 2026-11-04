@@ -37,10 +37,14 @@ const (
 	RankResolution   = "resolution"
 	RankReleaseType  = "releaseType"
 	RankHDR          = "hdr"
-	RankVerified     = "verified"
-	RankVideoCodec   = "videoCodec"
-	RankAudioFormat  = "audioFormat"
-	RankSize         = "size"
+	// RankCustomScore orders by the release's total score: Ether's own
+	// quality points plus the owner's custom format scores (TRaSH,
+	// AIOStreams-style imports) plus client compatibility.
+	RankCustomScore = "customScore"
+	RankVerified    = "verified"
+	RankVideoCodec  = "videoCodec"
+	RankAudioFormat = "audioFormat"
+	RankSize        = "size"
 )
 
 // DefaultRankingSteps is the built-in ranking ladder order after any Prefer rules.
@@ -50,6 +54,7 @@ var DefaultRankingSteps = []string{
 	RankResolution,
 	RankReleaseType,
 	RankHDR,
+	RankCustomScore,
 	RankVerified,
 	RankVideoCodec,
 	RankAudioFormat,
@@ -267,7 +272,9 @@ type QualityProfile struct {
 // EffectiveRanking returns the complete ranking ladder for p: DefaultRanking
 // when Ranking is empty, or p.Ranking with any unmentioned Prefer rules
 // prepended and any omitted built-in steps placed in their default relative
-// positions.
+// positions. An omitted custom score step goes directly before verified:
+// ladders saved before the step existed compared the score there, so they
+// keep ranking exactly as they did.
 func (p QualityProfile) EffectiveRanking() []string {
 	if len(p.Ranking) == 0 {
 		return DefaultRanking(p.ReleaseRules)
@@ -310,6 +317,12 @@ func (p QualityProfile) EffectiveRanking() []string {
 	for bi, b := range DefaultRankingSteps {
 		if mentioned[b] {
 			continue
+		}
+		if b == RankCustomScore {
+			if i := slices.Index(out, RankVerified); i >= 0 {
+				out = slices.Insert(out, i, b)
+				continue
+			}
 		}
 		inserted := false
 		for i, step := range out {
@@ -362,6 +375,12 @@ func (p QualityProfile) ComputeSelectionKey() string {
 	if slices.Equal(eff, DefaultRanking(p.ReleaseRules)) {
 		p.Ranking = nil
 	} else {
+		// The custom score directly before verified is where a ladder
+		// without the step ranks it, so both spell the same order and
+		// keep the key they had before the step existed.
+		if i := slices.Index(eff, RankCustomScore); i >= 0 && i+1 < len(eff) && eff[i+1] == RankVerified {
+			eff = slices.Delete(eff, i, i+1)
+		}
 		p.Ranking = eff
 	}
 	b, err := json.Marshal(p)

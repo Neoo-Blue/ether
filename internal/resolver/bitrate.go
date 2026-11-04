@@ -291,11 +291,15 @@ func compareCandidates(a, b candidate, profile core.QualityProfile) bool {
 			if a.quality.hdr != b.quality.hdr {
 				return a.quality.hdr > b.quality.hdr
 			}
-		case step == core.RankVerified:
-			// Evidence breaks score ties; it must not hide the owner's preferred release.
+		case step == core.RankCustomScore:
+			// The total score: Ether's quality points, the owner's custom
+			// format scores and client compatibility.
 			if a.rel.Score != b.rel.Score {
 				return a.rel.Score > b.rel.Score
 			}
+		case step == core.RankVerified:
+			// Evidence ranks only where the owner puts it; by default the
+			// custom score step comes first, so it breaks score ties.
 			if a.verified != b.verified {
 				return a.verified
 			}
