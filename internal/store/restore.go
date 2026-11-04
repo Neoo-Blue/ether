@@ -25,7 +25,7 @@ import (
 // foreign-key checks on) and restores every table verbatim. Two things then
 // stand in for what the triggers would have done:
 //   - Components register RestoreHooks for state that must move because a
-//     restore happened (the policy epoch advances once).
+//     restore happened (the policy epoch advances once, never per row).
 //   - A trigger that writes a table the dump does not carry (a dump from a
 //     release before that table existed) is replayed over the restored
 //     rows, so derived tables the dump lacks are built as row-by-row writes
@@ -36,16 +36,24 @@ import (
 // function it returns runs after every row is restored, before commit.
 type RestoreHook func(ctx context.Context, tx *sql.Tx) (after func(context.Context, *sql.Tx) error, err error)
 
-var restoreHooks = map[string]RestoreHook{}
+var (
+	restoreHooks     = map[string]RestoreHook{}
+	restoreMaintains = map[string]bool{}
+)
 
-// RegisterRestore adds component's restore hook. Call from init().
-func RegisterRestore(component string, hook RestoreHook) {
+// RegisterRestore adds component's restore hook. Call from init(). The
+// hook alone maintains the named tables across a restore: their triggers'
+// writes are never replayed, even for a dump that lacks the tables.
+func RegisterRestore(component string, hook RestoreHook, maintains ...string) {
 	regMu.Lock()
 	defer regMu.Unlock()
 	if _, ok := restoreHooks[component]; ok {
 		panic("store: RegisterRestore " + component + " already registered")
 	}
 	restoreHooks[component] = hook
+	for _, table := range maintains {
+		restoreMaintains[table] = true
+	}
 }
 
 // beginRestoreHooks runs every hook's first half and returns the second.
@@ -231,7 +239,7 @@ func resumeTriggers(ctx context.Context, tx *sql.Tx, d Dialect, triggers []suspe
 			rows.Close()
 			return err
 		}
-		if !restored[name] {
+		if !restored[name] && !maintained(name) {
 			absent[name] = true
 		}
 	}
@@ -294,6 +302,12 @@ func resumeTriggers(ctx context.Context, tx *sql.Tx, d Dialect, triggers []suspe
 		}
 	}
 	return nil
+}
+
+func maintained(table string) bool {
+	regMu.Lock()
+	defer regMu.Unlock()
+	return restoreMaintains[table]
 }
 
 // replayInserts fires triggers as if table's restored rows were inserted

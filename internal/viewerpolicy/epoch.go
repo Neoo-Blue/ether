@@ -65,7 +65,7 @@ func init() {
 		pg += fmt.Sprintf(` DO $$ BEGIN IF to_regclass('%s') IS NOT NULL THEN EXECUTE 'CREATE TRIGGER viewer_policy_%s AFTER %s ON %s FOR EACH STATEMENT EXECUTE FUNCTION viewer_policy_bump()'; END IF; END $$;`, table, table, operation, table)
 	}
 	store.RegisterDialect("viewer_policy", 1, store.Postgres, pg)
-	store.RegisterRestore("viewer_policy", restoreEpoch)
+	store.RegisterRestore("viewer_policy", restoreEpoch, "viewer_policy_epoch")
 }
 
 // restoreEpoch advances the epoch once past both the restored value and the
