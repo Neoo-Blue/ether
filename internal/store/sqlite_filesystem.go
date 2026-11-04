@@ -17,6 +17,10 @@ func checkSQLiteFilesystem(path string) error {
 	if err != nil {
 		return nil
 	}
+	return sqliteFilesystemError(path, info)
+}
+
+func sqliteFilesystemError(path string, info datafs.Info) error {
 	why := datafs.SQLiteUnsafe(info)
 	if why == "" {
 		return nil
