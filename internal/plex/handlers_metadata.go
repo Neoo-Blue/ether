@@ -193,6 +193,18 @@ func (s *Server) handleMetadata(w http.ResponseWriter, r *http.Request) {
 	if mc == nil {
 		mc = libraryContainer()
 	}
+	// PMS answers checkFiles=1 with Part@exists/@accessible. Plex for Apple TV
+	// sends it before playback and shows "Unavailable Media" when they are absent.
+	if r.URL.Query().Get("checkFiles") == "1" {
+		for i := range mc.Metadata {
+			for j := range mc.Metadata[i].Media {
+				for k := range mc.Metadata[i].Media[j].Part {
+					p := &mc.Metadata[i].Media[j].Part[k]
+					p.Exists, p.Accessible = model.Ptr(true), model.Ptr(true)
+				}
+			}
+		}
+	}
 	mc.Size = len(mc.Metadata)
 	s.write(w, r, mc)
 }
