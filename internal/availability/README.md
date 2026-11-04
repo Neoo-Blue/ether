@@ -72,6 +72,19 @@ live so owner pauses and allowance changes take effect during background work.
 Resolver candidate checks still apply their existing policy; this snapshot does
 not bypass access, identity or quality checks or promise to remove all Home delay.
 
+Library pages and section hubs never judge feed releases inside a request.
+They read the last computed hidden set for the evidence window; a set older
+than fifteen seconds, or older than a new observation or invalidation, is
+served while one background refresh recomputes it. Before the first set
+exists every title in the window stays hidden, as it would until evidence
+arrives. Each refresh asks the resolver only about (title, release) pairs
+without a durable verdict under the current policy key (profile, resolver
+settings, catalogue language, rule fields): verdicts live in
+`availability_verdicts`, bound to the release descriptor and the title facts
+matching reads, pruned with feed items and capped at 60,000 rows. Short-lived
+gates (blocklist marks, a brief health-failure skip) are reapplied on every
+read; hosted ranking sessions make every verdict short-lived.
+
 Only fresh checked movies move ahead within popular/trending/recommendation
 shelves; no items are removed. Explicit chronology and Continue Watching retain
 their order. Newly available shelves mean first successfully checked by this
