@@ -79,6 +79,9 @@ func (s *Server) handleStartDASH(w http.ResponseWriter, r *http.Request) {
 	}
 	if !ok || ps == nil || !p.sameSettings(entry.requested) {
 		if _, ps, _, err = s.prepare(ctx, pr, &p); err != nil {
+			if ctx.Err() != nil {
+				return // the player dropped this request; its preparation carries on
+			}
 			s.log.Info("start DASH playback failed", "key", p.key, "reason", playbackMessage(err), "err", err)
 			s.writeErr(w, r, err)
 			return

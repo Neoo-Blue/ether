@@ -1116,6 +1116,9 @@ func (s *Server) handleStartHLS(w http.ResponseWriter, r *http.Request) {
 		// preceding decision request. Reapply the normal policy and decision
 		// path before deciding whether a running encoder can be reused.
 		if _, ps, _, err = s.prepare(ctx, pr, &p); err != nil {
+			if ctx.Err() != nil {
+				return // the player dropped this request; its preparation carries on
+			}
 			s.log.Info("start playback failed", "key", p.key, "reason", playbackMessage(err), "err", err)
 			s.writeErr(w, r, err)
 			return

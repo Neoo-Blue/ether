@@ -222,6 +222,10 @@ type session struct {
 	activeReads atomic.Int32
 	rate        rateMeter
 
+	// claimed (guarded by Manager.mu): a caller took the session over
+	// after its flight completed (see abandonFlightLocked).
+	claimed bool
+
 	mu               sync.Mutex
 	preparedOnly     bool
 	stoppedBySurface bool
