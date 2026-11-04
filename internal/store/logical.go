@@ -82,8 +82,8 @@ type queryer interface {
 
 func listTables(ctx context.Context, q queryer, d Dialect) ([]string, error) {
 	// Ordinary tables only: a virtual table (a full-text index) and its
-	// shadow tables are derived from the tables they index and are rebuilt
-	// by their triggers as rows are restored.
+	// shadow tables are derived from the tables they index; a restore
+	// rebuilds them by replaying their triggers (restore.go).
 	query := `SELECT name FROM pragma_table_list WHERE schema='main' AND type='table' AND name NOT LIKE 'sqlite\_%' ESCAPE '\' ORDER BY name`
 	if d == Postgres {
 		query = `SELECT table_name FROM information_schema.tables WHERE table_schema=current_schema() AND table_type='BASE TABLE' ORDER BY table_name`
@@ -329,6 +329,8 @@ var ErrNotEmpty = errors.New("store: restore target database is not empty")
 
 // ImportLogical loads a logical dump into db, which must be migrated and
 // hold no rows in any table the dump contains. It runs in one transaction.
+// The target's triggers are suspended while rows are written; see
+// restore.go.
 func ImportLogical(ctx context.Context, db *sql.DB, r io.Reader) (err error) {
 	d := DialectOf(db)
 	dec := newLogicalDecoder(r)
@@ -372,6 +374,16 @@ func ImportLogical(ctx context.Context, db *sql.DB, r io.Reader) (err error) {
 	for _, t := range targetTables {
 		known[t] = true
 	}
+	finish, err := beginRestoreHooks(ctx, tx)
+	if err != nil {
+		return err
+	}
+	// See restore.go: the dump already holds what triggers derive.
+	suspended, err := suspendTriggers(ctx, tx, d)
+	if err != nil {
+		return err
+	}
+	restored := map[string]bool{}
 	var tables int
 	var total int64
 	for {
@@ -388,6 +400,10 @@ func ImportLogical(ctx context.Context, db *sql.DB, r io.Reader) (err error) {
 		if !known[head.Table] {
 			return fmt.Errorf("store: backup table %s does not exist on this server", head.Table)
 		}
+		if restored[head.Table] {
+			return fmt.Errorf("store: backup holds table %s twice", head.Table)
+		}
+		restored[head.Table] = true
 		kinds, err := targetKinds(ctx, tx, head.Table, head.Columns)
 		if err != nil {
 			return err
@@ -420,10 +436,16 @@ func ImportLogical(ctx context.Context, db *sql.DB, r io.Reader) (err error) {
 		tables++
 		total += n
 	}
+	if err := resumeTriggers(ctx, tx, d, suspended, restored); err != nil {
+		return err
+	}
 	if d == Postgres {
 		if err := resetIdentities(ctx, tx); err != nil {
 			return err
 		}
+	}
+	if err := finish(ctx, tx); err != nil {
+		return err
 	}
 	return tx.Commit()
 }
@@ -482,28 +504,66 @@ func targetKinds(ctx context.Context, tx *sql.Tx, table string, cols []string) (
 	return out, nil
 }
 
+// restoreBatchParams bounds one multi-row INSERT: below SQLite's 32766
+// variable limit and PostgreSQL's 65535 parameters, and small enough that a
+// batch's arguments stay a few hundred kilobytes.
+const (
+	restoreBatchParams = 30000
+	restoreBatchRows   = 500
+)
+
+// importRows inserts a table's rows in multi-row batches. One statement per
+// row costs a round trip and an executor start per row, which dominates a
+// restore of a large library.
 func importRows(ctx context.Context, tx *sql.Tx, dec *logicalDecoder, head *logicalTable, kinds []string, width int, keep []int, d Dialect) (int64, error) {
-	quoted := make([]string, len(head.Columns))
-	marks := make([]string, len(head.Columns))
+	cols := len(head.Columns)
+	if cols == 0 {
+		return 0, errors.New("no restorable columns")
+	}
+	quoted := make([]string, cols)
 	for i, c := range head.Columns {
 		quoted[i] = quoteIdent(c)
-		marks[i] = "?"
 	}
+	tuple := "(" + strings.TrimSuffix(strings.Repeat("?,", cols), ",") + ")"
 	// A GENERATED ALWAYS identity column rejects an explicit id (428C9).
 	// The dump carries the ids the rest of the backup points at, so the
 	// restore supplies them. OVERRIDING SYSTEM VALUE is a no-op for columns
 	// that are not generated that way.
-	insert := `INSERT INTO ` + quoteIdent(head.Table) + `(` + strings.Join(quoted, ",") + `) `
+	prefix := `INSERT INTO ` + quoteIdent(head.Table) + `(` + strings.Join(quoted, ",") + `) `
 	if d == Postgres {
-		insert += `OVERRIDING SYSTEM VALUE `
+		prefix += `OVERRIDING SYSTEM VALUE `
 	}
-	insert += `VALUES(` + strings.Join(marks, ",") + `)`
-	stmt, err := tx.PrepareContext(ctx, insert)
-	if err != nil {
-		return 0, err
+	prefix += `VALUES`
+	insert := func(rows int) string {
+		return prefix + strings.TrimSuffix(strings.Repeat(tuple+",", rows), ",")
 	}
-	defer stmt.Close()
-	args := make([]any, len(head.Columns))
+	batch := min(restoreBatchRows, max(1, restoreBatchParams/cols))
+	var full *sql.Stmt
+	defer func() {
+		if full != nil {
+			full.Close()
+		}
+	}()
+	args := make([]any, 0, batch*cols)
+	flush := func() error {
+		rows := len(args) / cols
+		if rows == 0 {
+			return nil
+		}
+		var err error
+		if rows == batch {
+			if full == nil {
+				if full, err = tx.PrepareContext(ctx, insert(batch)); err != nil {
+					return err
+				}
+			}
+			_, err = full.ExecContext(ctx, args...)
+		} else {
+			_, err = tx.ExecContext(ctx, insert(rows), args...)
+		}
+		args = args[:0]
+		return err
+	}
 	var n int64
 	for {
 		row, ok, err := dec.row()
@@ -511,20 +571,24 @@ func importRows(ctx context.Context, tx *sql.Tx, dec *logicalDecoder, head *logi
 			return n, err
 		}
 		if !ok {
-			return n, nil
+			return n, flush()
 		}
 		if len(row) != width {
 			return n, fmt.Errorf("row %d has %d values, want %d", n+1, len(row), width)
 		}
 		for i, src := range keep {
-			if args[i], err = decodeValue(row[src], kinds[i]); err != nil {
+			v, err := decodeValue(row[src], kinds[i])
+			if err != nil {
 				return n, fmt.Errorf("row %d column %s: %w", n+1, head.Columns[i], err)
 			}
-		}
-		if _, err := stmt.ExecContext(ctx, args...); err != nil {
-			return n, err
+			args = append(args, v)
 		}
 		n++
+		if len(args) == batch*cols {
+			if err := flush(); err != nil {
+				return n, fmt.Errorf("rows up to %d: %w", n, err)
+			}
+		}
 	}
 }
 
