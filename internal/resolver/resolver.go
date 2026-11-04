@@ -1174,6 +1174,11 @@ func (s *Service) rankCandidates(ctx context.Context, req core.ResolveRequest, s
 	wanted := wantedAudio(profile, req.User, s.catalogLanguage())
 	accepted := acceptedAudio(profile, req.User, s.catalogLanguage(), t)
 	upscales := presumedUpscales(results, isAnime(t))
+	ids := make([]string, len(results))
+	for i, r := range results {
+		ids[i] = r.ID
+	}
+	verifiedIDs := s.verifiedAmong(ctx, ids)
 	var cands []candidate
 	clientRejected := false
 	for ri, rel := range results {
@@ -1186,13 +1191,8 @@ func (s *Service) rankCandidates(ctx context.Context, req core.ResolveRequest, s
 		// previous title's original language or a custom-format guess.
 		policyContext := releasepolicy.Context{OriginalLanguage: titleOriginalLanguage(t)}
 		if hot != nil {
-			verifiedKnown, verifiedValue := false, false
 			policyContext.ExternalMatch = func(r core.Release, c core.ReleaseCondition) (bool, bool) {
-				if !verifiedKnown {
-					verifiedValue = s.recentlyVerified(ctx, r.ID)
-					verifiedKnown = true
-				}
-				return hot.Match(r, c, verifiedValue)
+				return hot.Match(r, c, verifiedIDs[r.ID])
 			}
 		}
 		policyResult := policy.Evaluate(rel, policyContext)
@@ -1267,7 +1267,7 @@ func (s *Service) rankCandidates(ctx context.Context, req core.ResolveRequest, s
 		ct.CompatibilityReason = sc.compat
 		rel.Score = sc.total
 		ct.Score = rel.Score
-		verified := s.recentlyVerified(ctx, rel.ID)
+		verified := verifiedIDs[rel.ID]
 		if verified {
 			ct.CompatibilityReason = strings.TrimSpace(sc.compat + "; source recently verified playable")
 			ct.CompatibilityReason = strings.TrimPrefix(ct.CompatibilityReason, "; ")

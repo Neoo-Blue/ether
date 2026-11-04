@@ -2,6 +2,8 @@ package resolver
 
 import (
 	"context"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/braedonsaunders/ether/internal/core"
@@ -110,6 +112,67 @@ func (s *Service) recentlyVerified(ctx context.Context, releaseID string) bool {
 		}
 	}
 	return ok && s.now().Sub(at) < s.healthTTL
+}
+
+// verifiedAmong is recentlyVerified for every release in ids, reading the
+// table once per 500 ids instead of once per release: ranking a search with
+// hundreds of results must not issue a query for each of them.
+func (s *Service) verifiedAmong(ctx context.Context, ids []string) map[string]bool {
+	if s.healthTTL <= 0 || len(ids) == 0 {
+		return nil
+	}
+	now := s.now()
+	out := make(map[string]bool, len(ids))
+	var missing []string
+	s.mu.RLock()
+	for _, id := range ids {
+		if id == "" {
+			continue
+		}
+		if at, ok := s.verified[id]; ok {
+			out[id] = now.Sub(at) < s.healthTTL
+		} else {
+			missing = append(missing, id)
+		}
+	}
+	s.mu.RUnlock()
+	if s.db == nil || len(missing) == 0 {
+		return out
+	}
+	slices.Sort(missing)
+	missing = slices.Compact(missing)
+	found := map[string]time.Time{}
+	for start := 0; start < len(missing); start += 500 {
+		batch := missing[start:min(start+500, len(missing))]
+		args := make([]any, len(batch))
+		for i, id := range batch {
+			args[i] = id
+		}
+		rows, err := s.db.QueryContext(ctx, `SELECT release_id, checked_at FROM resolver_verified WHERE release_id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")+`)`, args...)
+		if err != nil {
+			continue
+		}
+		for rows.Next() {
+			var id string
+			var unix int64
+			if rows.Scan(&id, &unix) == nil {
+				found[id] = time.Unix(unix, 0)
+			}
+		}
+		rows.Close()
+	}
+	if len(found) > 0 {
+		s.mu.Lock()
+		s.boundVerifiedLocked(now)
+		for id, at := range found {
+			s.verified[id] = at
+		}
+		s.mu.Unlock()
+	}
+	for id, at := range found {
+		out[id] = now.Sub(at) < s.healthTTL
+	}
+	return out
 }
 
 func (s *Service) forgetVerified(ctx context.Context, releaseID string) {
