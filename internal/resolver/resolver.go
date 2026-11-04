@@ -209,6 +209,7 @@ type Service struct {
 	searchCache   map[string]searchCacheEntry
 	retentionDays int
 	verified      map[string]time.Time // release id -> last passed health check
+	verifiedMiss  map[string]time.Time // release id -> when resolver_verified last had no fresh check
 	failedHealth  map[string]time.Time // confirmed source failures, briefly skipped on subsequent resolves
 	healthTTL     time.Duration
 
@@ -1154,25 +1155,49 @@ func (s *Service) scoreCandidates(ctx context.Context, req core.ResolveRequest, 
 // instead of the profile and identity rules, and is otherwise scored and
 // traced like every other result. Interactive search reads the same trace.
 func (s *Service) rankCandidates(ctx context.Context, req core.ResolveRequest, sreq core.SearchRequest, profile core.QualityProfile, results []core.Release, trace *Trace, pinID string) ([]candidate, bool, error) {
-	t := req.Title
 	policy, err := s.compileRules(profile.ReleaseRules)
 	if err != nil {
 		return nil, true, err
 	}
-	var hot RankingSession
+	env := rankEnv{policy: policy}
 	if usesPluginRanking(profile) {
-		hot = s.rankingSession(ctx, req.Client)
-		if hot != nil {
-			defer hot.Close()
+		env.hot = s.rankingSession(ctx, req.Client)
+		if env.hot != nil {
+			defer env.hot.Close()
 		}
 	}
-	exclude := map[string]bool{}
+	env.exclude = map[string]bool{}
 	for _, id := range req.Exclude {
-		exclude[id] = true
+		env.exclude[id] = true
 	}
-	rcfg := s.resolverCfg()
-	wanted := wantedAudio(profile, req.User, s.catalogLanguage())
-	accepted := acceptedAudio(profile, req.User, s.catalogLanguage(), t)
+	env.rcfg = s.resolverCfg()
+	env.lang = s.catalogLanguage()
+	env.audio(profile, req)
+	return s.rankWith(ctx, env, req, sreq, profile, results, trace, pinID)
+}
+
+// rankEnv is what ranking reads besides the results: the compiled rules,
+// the hosted ranking session, resolver settings and audio languages. The
+// feed evidence pass prepares it once and reuses it for every release.
+type rankEnv struct {
+	policy           *releasepolicy.Policy
+	hot              RankingSession
+	exclude          map[string]bool
+	rcfg             config.Resolver
+	lang             string
+	wanted, accepted []string
+}
+
+// audio fills the request's wanted and accepted audio languages.
+func (env *rankEnv) audio(profile core.QualityProfile, req core.ResolveRequest) {
+	env.wanted = wantedAudio(profile, req.User, env.lang)
+	env.accepted = acceptedAudio(profile, req.User, env.lang, req.Title)
+}
+
+// rankWith is rankCandidates with its environment already prepared.
+func (s *Service) rankWith(ctx context.Context, env rankEnv, req core.ResolveRequest, sreq core.SearchRequest, profile core.QualityProfile, results []core.Release, trace *Trace, pinID string) ([]candidate, bool, error) {
+	t := req.Title
+	policy, hot, exclude, rcfg, wanted, accepted := env.policy, env.hot, env.exclude, env.rcfg, env.wanted, env.accepted
 	upscales := presumedUpscales(results, isAnime(t))
 	var cands []candidate
 	clientRejected := false

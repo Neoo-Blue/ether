@@ -51,6 +51,7 @@ func (s *Service) applyRemote(ctx context.Context, hints []string, all bool) {
 		s.reps = map[string]reputation{}
 		s.avail = map[int64]availEntry{}
 		s.verified = map[string]time.Time{}
+		s.verifiedMiss = nil
 		s.mu.Unlock()
 		s.loadPersisted(ctx)
 		return

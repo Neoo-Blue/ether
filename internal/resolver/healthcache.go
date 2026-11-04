@@ -2,6 +2,8 @@ package resolver
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/braedonsaunders/ether/internal/core"
@@ -85,6 +87,7 @@ func (s *Service) markVerified(ctx context.Context, releaseID string) {
 	s.mu.Lock()
 	s.boundVerifiedLocked(now)
 	s.verified[releaseID] = now
+	delete(s.verifiedMiss, releaseID)
 	s.mu.Unlock()
 	if s.db != nil {
 		_, _ = s.db.ExecContext(ctx, `INSERT INTO resolver_verified(release_id, checked_at) VALUES (?, ?)
@@ -96,21 +99,45 @@ func (s *Service) recentlyVerified(ctx context.Context, releaseID string) bool {
 	if s.healthTTL <= 0 || releaseID == "" {
 		return false
 	}
+	now := s.now()
 	s.mu.RLock()
 	at, ok := s.verified[releaseID]
+	missed, known := s.verifiedMiss[releaseID]
 	s.mu.RUnlock()
+	if !ok && known && now.Sub(missed) < verifiedMissTTL && !now.Before(missed) {
+		return false
+	}
 	if !ok && s.db != nil {
 		var unix int64
-		if err := s.db.QueryRowContext(ctx, `SELECT checked_at FROM resolver_verified WHERE release_id=?`, releaseID).Scan(&unix); err == nil {
+		err := s.db.QueryRowContext(ctx, `SELECT checked_at FROM resolver_verified WHERE release_id=?`, releaseID).Scan(&unix)
+		switch {
+		case err == nil && now.Sub(time.Unix(unix, 0)) < s.healthTTL:
 			at, ok = time.Unix(unix, 0), true
 			s.mu.Lock()
-			s.boundVerifiedLocked(s.now())
+			s.boundVerifiedLocked(now)
 			s.verified[releaseID] = at
+			delete(s.verifiedMiss, releaseID)
+			s.mu.Unlock()
+		case err == nil || errors.Is(err, sql.ErrNoRows):
+			// Absent or expired: remember the miss briefly, so ranking
+			// many feed releases does not ask the table again per
+			// request. markVerified clears it on this node; a check
+			// passed on another node is seen once the miss expires.
+			s.mu.Lock()
+			if s.verifiedMiss == nil {
+				s.verifiedMiss = map[string]time.Time{}
+			}
+			boundMap(s.verifiedMiss, maxVerifiedEntries, func(at time.Time) bool { return now.Sub(at) >= verifiedMissTTL })
+			s.verifiedMiss[releaseID] = now
 			s.mu.Unlock()
 		}
 	}
-	return ok && s.now().Sub(at) < s.healthTTL
+	return ok && now.Sub(at) < s.healthTTL
 }
+
+// verifiedMissTTL bounds how long a "not recently verified" answer is
+// reused without reading resolver_verified.
+const verifiedMissTTL = 2 * time.Minute
 
 func (s *Service) forgetVerified(ctx context.Context, releaseID string) {
 	if s.invalidated != nil {
