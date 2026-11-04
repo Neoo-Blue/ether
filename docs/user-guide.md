@@ -635,6 +635,27 @@ to **Paste JSON** and paste or upload a profile file from the guide's
 folder. Custom formats Ether can't fetch are marked **Not found**; paste them
 under **Custom scoring** and import the profile again.
 
+## Rank releases by custom score
+
+A quality profile's **What matters most** list is checked from top to bottom;
+the first step where two releases differ decides which plays first. **Custom
+score** is one of those steps. It ranks the release with the higher total
+score first: Ether's own quality points plus the profile's custom format
+scores (imported from TRaSH Guides, Radarr or Sonarr, or entered under
+**Custom scoring**) plus how well the release suits the app.
+
+By default **Custom score** sits just above **Played fine recently**, so your
+language, resolution, release type and HDR preferences come first, and a
+release that already played well only wins among equally scored ones. Drag it
+to change that. For example, put **Resolution** first and **Custom score**
+second to play 4K whenever a 4K release exists and let your scores rank
+everything else. Profiles saved before this step existed rank exactly as they
+did.
+
+**Edit scores** on the step opens the profile's custom scoring editor.
+**Only play** and **Never play** filters still decide which releases are
+allowed at all; the step only orders the ones that pass.
+
 ## Choose and fix releases
 
 **Quality** explains and overrides which release plays for each title.

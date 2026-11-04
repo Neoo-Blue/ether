@@ -65,6 +65,11 @@ func rankingStepDescriptors() []extend.Descriptor {
 			configKey: "hdr", movable: true,
 			options: extend.Options("dv", "hdr10", "sdr"),
 		},
+		core.RankCustomScore: {
+			editor:    extend.RankingEditorNone,
+			configKey: "customFormatScores", movable: true,
+			hint: extend.T("Higher total score first, including your custom format scores"),
+		},
 		core.RankVerified: {
 			editor: extend.RankingEditorNone,
 			hint:   extend.T("Verified streams rank ahead of untested ones"), required: true,
@@ -92,6 +97,7 @@ func rankingStepDescriptors() []extend.Descriptor {
 		core.RankResolution:  extend.T("Resolution"),
 		core.RankReleaseType: extend.T("Release type"),
 		core.RankHDR:         extend.T("HDR"),
+		core.RankCustomScore: extend.T("Custom score"),
 		core.RankVerified:    extend.T("Played fine recently"),
 		core.RankVideoCodec:  extend.T("Video codec"),
 		core.RankAudioFormat: extend.T("Audio format"),

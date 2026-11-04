@@ -137,6 +137,9 @@ function PreferenceList({
   );
 }
 
+/** Anchor of the profile drawer's custom scoring section. */
+const CUSTOM_SCORES_ID = "profile-custom-scores";
+
 export function hasImportedRules(draft: QualityProfile, resolver: ResolverPolicy | null): boolean {
   const gates = draft.allowedQualities ?? [];
   const ownScores = Object.keys(draft.customFormatScores ?? {}).length;
@@ -158,20 +161,28 @@ function ImportedSection({
   scoring,
   setScoring,
   patch,
+  revealed,
 }: {
   draft: QualityProfile;
   resolver: ResolverPolicy | null;
   scoring: { formats: string; scores: string } | null;
   setScoring: React.Dispatch<React.SetStateAction<{ formats: string; scores: string } | null>>;
   patch: (p: Partial<QualityProfile>) => void;
+  /** The Custom score step's "Edit scores" asked for the scoring editor. */
+  revealed: boolean;
 }) {
-  if (!hasImportedRules(draft, resolver)) return null;
+  const imported = hasImportedRules(draft, resolver);
+  if (!imported && !revealed) return null;
   const gates = draft.allowedQualities ?? [];
   const scored = Object.keys(draft.customFormatScores ?? {}).length;
   return (
     <SettingsSection
-      title={t("Imported from TRaSH / Radarr / Sonarr")}
-      description={t("Carried over from a Radarr or Sonarr profile.")}
+      title={imported ? t("Imported from TRaSH / Radarr / Sonarr") : t("Custom scores")}
+      description={
+        imported
+          ? t("Carried over from a Radarr or Sonarr profile.")
+          : t("Give custom formats points. Higher totals rank first at the Custom score step.")
+      }
     >
       {gates.length ? (
         <SettingsRow
@@ -213,7 +224,7 @@ function ImportedSection({
           />
         }
       />
-      <MoreOptions label={t("More options: Custom scoring")}>
+      <MoreOptions label={t("More options: Custom scoring")} reveal={revealed}>
         <div className="space-y-4 py-3">
           <p className="px-4 text-sm text-fg-muted">
             {tx("Scores are whole numbers, for example {example}.", {
@@ -262,10 +273,16 @@ function WhatMattersMostSection({
   draft,
   patch,
   rankingError,
+  hasScores,
+  onEditScores,
 }: {
   draft: QualityProfile;
   patch: (p: Partial<QualityProfile>) => void;
   rankingError?: string;
+  /** The profile or the shared custom formats carry scores. */
+  hasScores: boolean;
+  /** Shows and scrolls to the profile's custom scoring editor. */
+  onEditScores: () => void;
 }) {
   const { steps, fields } = useRankingRegistry();
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -476,6 +493,12 @@ function WhatMattersMostSection({
             ? t("HDR10 › SDR")
             : t("SDR only"),
       },
+      customScore: {
+        title: t("Custom score"),
+        summary: hasScores
+          ? t("Higher total score first, including your custom format scores")
+          : t("Higher total score first. No custom format scores yet."),
+      },
       verified: {
         title: t("Played fine recently"),
         summary: t("Verified streams rank ahead of untested ones"),
@@ -521,6 +544,11 @@ function WhatMattersMostSection({
             <p className="truncate text-xs text-fg-muted">{meta.summary}</p>
           </div>
           {fixed ? <Badge variant="secondary">{t("Automatic")}</Badge> : null}
+          {step === "customScore" ? (
+            <Button variant="ghost" size="sm" onClick={onEditScores}>
+              {t("Edit scores")}
+            </Button>
+          ) : null}
           {step === "size" ? (
             <Switch
               aria-label={t("Larger file")}
@@ -716,6 +744,7 @@ function ProfileList({
     away: false,
   });
   const [scoring, setScoring] = useState<{ formats: string; scores: string } | null>(null);
+  const [scoringShown, setScoringShown] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
   const [error, setError] = useState<unknown>(null);
   const [saving, setSaving] = useState(false);
@@ -732,7 +761,18 @@ function ProfileList({
       away: isExisting && quality.remote === draft.name,
     });
     setScoring(scoringText(resolver, draft));
+    setScoringShown(false);
   };
+
+  function editScores() {
+    setScoringShown(true);
+    // The section renders on this state change; scroll once it exists.
+    requestAnimationFrame(() =>
+      document
+        .getElementById(CUSTOM_SCORES_ID)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+  }
 
   async function save() {
     if (!editing) return;
@@ -742,7 +782,7 @@ function ProfileList({
       ranking: normalizeRanking(profileDraft, steps),
     };
     let parsed: ReturnType<typeof parseScoring> | null = null;
-    if (scoring && hasImportedRules(profileDraft, resolver)) {
+    if (scoring && (scoringShown || hasImportedRules(profileDraft, resolver))) {
       try {
         parsed = parseScoring(scoring.formats, scoring.scores);
       } catch (e) {
@@ -1111,15 +1151,27 @@ function ProfileList({
               />
             </SettingsSection>
 
-            <WhatMattersMostSection draft={draft} patch={patch} rankingError={errors.ranking} />
-
-            <ImportedSection
+            <WhatMattersMostSection
               draft={draft}
-              resolver={resolver}
-              scoring={scoring}
-              setScoring={setScoring}
               patch={patch}
+              rankingError={errors.ranking}
+              hasScores={
+                Object.keys(draft.customFormatScores ?? {}).length > 0 ||
+                (resolver?.customFormats ?? []).length > 0
+              }
+              onEditScores={editScores}
             />
+
+            <div id={CUSTOM_SCORES_ID} className="scroll-mt-4">
+              <ImportedSection
+                draft={draft}
+                resolver={resolver}
+                scoring={scoring}
+                setScoring={setScoring}
+                patch={patch}
+                revealed={scoringShown}
+              />
+            </div>
           </>
         ) : null}
       </RecordDrawer>

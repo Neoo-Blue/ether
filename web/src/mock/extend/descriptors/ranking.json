@@ -148,6 +148,24 @@
   },
   {
     "kind": "rankingStep",
+    "id": "customScore",
+    "owner": "builtin",
+    "label": {
+      "source": "Custom score"
+    },
+    "hint": {
+      "source": "Higher total score first, including your custom format scores"
+    },
+    "order": 5,
+    "meta": {
+      "editor": "none",
+      "canMove": true,
+      "defaultPosition": 5,
+      "configKey": "customFormatScores"
+    }
+  },
+  {
+    "kind": "rankingStep",
     "id": "verified",
     "owner": "builtin",
     "label": {
@@ -156,12 +174,12 @@
     "hint": {
       "source": "Verified streams rank ahead of untested ones"
     },
-    "order": 5,
+    "order": 6,
     "meta": {
       "editor": "none",
       "required": true,
       "canMove": false,
-      "defaultPosition": 5
+      "defaultPosition": 6
     }
   },
   {
@@ -172,7 +190,7 @@
       "source": "Video codec"
     },
     "hint": {},
-    "order": 6,
+    "order": 7,
     "meta": {
       "editor": "ordered_list",
       "options": [
@@ -198,7 +216,7 @@
         }
       ],
       "canMove": true,
-      "defaultPosition": 6,
+      "defaultPosition": 7,
       "configKey": "preferredCodecs"
     }
   },
@@ -210,7 +228,7 @@
       "source": "Audio format"
     },
     "hint": {},
-    "order": 7,
+    "order": 8,
     "meta": {
       "editor": "ordered_list",
       "options": [
@@ -248,7 +266,7 @@
         }
       ],
       "canMove": true,
-      "defaultPosition": 7,
+      "defaultPosition": 8,
       "configKey": "preferredAudio"
     }
   },
@@ -260,11 +278,11 @@
       "source": "Larger file"
     },
     "hint": {},
-    "order": 8,
+    "order": 9,
     "meta": {
       "editor": "toggle",
       "canMove": true,
-      "defaultPosition": 8,
+      "defaultPosition": 9,
       "configKey": "preferLargest"
     }
   },
@@ -278,7 +296,9 @@
     "hint": {},
     "meta": {
       "valueClass": "language",
-      "operators": ["equals"],
+      "operators": [
+        "equals"
+      ],
       "defaultOperator": "equals",
       "choices": [
         {
@@ -431,7 +451,9 @@
     "order": 1,
     "meta": {
       "valueClass": "language",
-      "operators": ["equals"],
+      "operators": [
+        "equals"
+      ],
       "defaultOperator": "equals",
       "choices": [
         {
@@ -586,7 +608,9 @@
     "order": 2,
     "meta": {
       "valueClass": "none",
-      "operators": ["equals"],
+      "operators": [
+        "equals"
+      ],
       "defaultOperator": "equals"
     }
   },
@@ -601,7 +625,11 @@
     "order": 3,
     "meta": {
       "valueClass": "text",
-      "operators": ["equals", "contains", "regex"],
+      "operators": [
+        "equals",
+        "contains",
+        "regex"
+      ],
       "defaultOperator": "contains"
     }
   },
@@ -616,7 +644,11 @@
     "order": 4,
     "meta": {
       "valueClass": "text",
-      "operators": ["equals", "contains", "regex"],
+      "operators": [
+        "equals",
+        "contains",
+        "regex"
+      ],
       "defaultOperator": "equals",
       "singleValue": true
     }
@@ -632,7 +664,11 @@
     "order": 5,
     "meta": {
       "valueClass": "choice",
-      "operators": ["equals", "contains", "regex"],
+      "operators": [
+        "equals",
+        "contains",
+        "regex"
+      ],
       "defaultOperator": "equals",
       "choices": [
         {
@@ -678,7 +714,11 @@
     "order": 6,
     "meta": {
       "valueClass": "choice",
-      "operators": ["equals", "contains", "regex"],
+      "operators": [
+        "equals",
+        "contains",
+        "regex"
+      ],
       "defaultOperator": "equals",
       "choices": [
         {
@@ -716,7 +756,11 @@
     "order": 7,
     "meta": {
       "valueClass": "choice",
-      "operators": ["equals", "contains", "regex"],
+      "operators": [
+        "equals",
+        "contains",
+        "regex"
+      ],
       "defaultOperator": "equals",
       "choices": [
         {
@@ -762,7 +806,9 @@
     "order": 8,
     "meta": {
       "valueClass": "number",
-      "operators": ["range"],
+      "operators": [
+        "range"
+      ],
       "defaultOperator": "range",
       "unit": "p"
     }
@@ -778,7 +824,9 @@
     "order": 9,
     "meta": {
       "valueClass": "number",
-      "operators": ["range"],
+      "operators": [
+        "range"
+      ],
       "defaultOperator": "range",
       "unit": "GiB"
     }
@@ -794,7 +842,11 @@
     "order": 10,
     "meta": {
       "valueClass": "choice",
-      "operators": ["equals", "contains", "regex"],
+      "operators": [
+        "equals",
+        "contains",
+        "regex"
+      ],
       "defaultOperator": "equals",
       "choices": [
         {
@@ -819,7 +871,11 @@
     "order": 11,
     "meta": {
       "valueClass": "text",
-      "operators": ["equals", "contains", "regex"],
+      "operators": [
+        "equals",
+        "contains",
+        "regex"
+      ],
       "defaultOperator": "equals",
       "singleValue": true
     }
@@ -835,7 +891,11 @@
     "order": 12,
     "meta": {
       "valueClass": "text",
-      "operators": ["equals", "contains", "regex"],
+      "operators": [
+        "equals",
+        "contains",
+        "regex"
+      ],
       "defaultOperator": "equals",
       "singleValue": true
     }
@@ -851,7 +911,11 @@
     "order": 13,
     "meta": {
       "valueClass": "choice",
-      "operators": ["equals", "contains", "regex"],
+      "operators": [
+        "equals",
+        "contains",
+        "regex"
+      ],
       "defaultOperator": "equals",
       "choices": [
         {

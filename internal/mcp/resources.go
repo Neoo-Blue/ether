@@ -68,7 +68,7 @@ Key ideas for answering questions:
   resolve_trace for that title, then release_health and logs_tail if the
   trace points at a sick release or source.
 - **Ranking** follows the owner's quality profile: an ordered list of
-  what matters (language, connection, resolution, verified health and
+  what matters (language, connection, resolution, custom score, verified health and
   more), plus rules (require, avoid, prefer). Pins beat ranking for one
   title; the blocklist removes a release forever.
 - **Collections** are smart lists rebuilt from rules. **Live TV** mixes

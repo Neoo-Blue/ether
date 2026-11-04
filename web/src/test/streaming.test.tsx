@@ -222,6 +222,11 @@ describe("Releases", () => {
     expect(within(drawer).getByLabelText("Episode maximum MB per minute")).toHaveValue(0);
     expect(within(drawer).getByRole("switch", { name: "Larger file" })).not.toBeChecked();
     expect(within(drawer).queryByText("Imported from TRaSH / Radarr / Sonarr")).toBeNull();
+    // The Custom score step links to the scoring editor, even before any import.
+    expect(within(drawer).getByText("Custom score")).toBeInTheDocument();
+    fireEvent.click(within(drawer).getByRole("button", { name: "Edit scores" }));
+    expect(await within(drawer).findByText("Custom scores")).toBeInTheDocument();
+    expect(within(drawer).getByText("Custom format definitions")).toBeInTheDocument();
   });
 
   it("reorders steps in What matters most and saves the new ranking ladder", async () => {
@@ -239,6 +244,7 @@ describe("Releases", () => {
       "releaseType",
       "resolution",
       "hdr",
+      "customScore",
       "verified",
       "videoCodec",
       "audioFormat",
