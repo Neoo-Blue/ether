@@ -26,6 +26,7 @@ import (
 	"runtime"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -535,11 +536,65 @@ func migrateSQLite(ctx context.Context, db *sql.DB, progress func(Progress)) err
 			tx.Rollback()
 			return err
 		}
+		if err := analyseNewIndexes(ctx, tx); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("migration %s/%d: statistics: %w", m.component, m.version, err)
+		}
 		if err := tx.Commit(); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// analyseNewIndexes gives planner statistics to indexes a migration just
+// created on tables that already have them. Without statistics such an
+// index carries SQLite's default estimates beside analysed siblings and can
+// look far more selective than it is: catalog/26's type-prefixed index drew
+// a later per-show backfill into scanning every episode for each show (ten
+// minutes on a 270k-title library). Only those indexes are analysed, each
+// sampling a bounded number of rows, so the cost does not grow with the
+// library. A fresh database has no statistics; every index is then
+// estimated alike and nothing is analysed. Empty tables have no statistics
+// either and are skipped the same way.
+func analyseNewIndexes(ctx context.Context, tx *sql.Tx) error {
+	var stats int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_schema WHERE name='sqlite_stat1'`).Scan(&stats); err != nil || stats == 0 {
+		return err
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT i.name FROM sqlite_schema i WHERE i.type='index'
+		AND EXISTS (SELECT 1 FROM sqlite_stat1 s WHERE s.tbl=i.tbl_name)
+		AND NOT EXISTS (SELECT 1 FROM sqlite_stat1 s WHERE s.idx=i.name)`)
+	if err != nil {
+		return err
+	}
+	var names []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			rows.Close()
+			return err
+		}
+		names = append(names, n)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil || len(names) == 0 {
+		return err
+	}
+	var limit int
+	if err := tx.QueryRowContext(ctx, `PRAGMA analysis_limit`).Scan(&limit); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `PRAGMA analysis_limit=1000`); err != nil {
+		return err
+	}
+	for _, n := range names {
+		if _, err := tx.ExecContext(ctx, `ANALYZE "`+strings.ReplaceAll(n, `"`, `""`)+`"`); err != nil {
+			return err
+		}
+	}
+	_, err = tx.ExecContext(ctx, `PRAGMA analysis_limit=`+strconv.Itoa(limit))
+	return err
 }
 
 // AppliedMigrations returns the recorded (component -> highest version).
