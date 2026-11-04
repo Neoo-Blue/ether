@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/braedonsaunders/ether/internal/datafs"
 	"github.com/braedonsaunders/ether/internal/store"
 	"golang.org/x/sys/unix"
 )
@@ -22,8 +23,8 @@ func TestPayloadFilesystemFreeBSDLocal(t *testing.T) {
 	if (name != "zfs" && name != "ufs" && name != "tmpfs") || st.Flags&unix.MNT_LOCAL == 0 || st.Flags&unix.MNT_UNION != 0 {
 		t.Skip("temporary directory is not on a supported direct local filesystem")
 	}
-	if ok, err := payloadFilesystemReliable(dir); err != nil || !ok {
-		t.Fatalf("local filesystem rejected: ok=%v err=%v", ok, err)
+	if info, err := datafs.Inspect(dir); err != nil || info.Class != datafs.Local {
+		t.Fatalf("local filesystem not recognised: info=%+v err=%v", info, err)
 	}
 	p, err := openPayloadStore(context.Background(), store.OpenTest(t), dir)
 	if err != nil {
@@ -63,8 +64,8 @@ func TestPayloadFilesystemFreeBSDErrors(t *testing.T) {
 			if tc.want == unix.EACCES && os.Geteuid() == 0 {
 				t.Skip("root bypasses directory search permissions")
 			}
-			if ok, err := payloadFilesystemReliable(tc.path); ok || err != tc.want {
-				t.Errorf("filesystem error: ok=%v err=%v want=%v", ok, err, tc.want)
+			if _, err := datafs.Inspect(tc.path); err != tc.want {
+				t.Errorf("filesystem error: err=%v want=%v", err, tc.want)
 			}
 			if p, err := openPayloadStore(context.Background(), nil, tc.path); p != nil || err != tc.want {
 				t.Errorf("store error before DB access: store=%v err=%v want=%v", p, err, tc.want)

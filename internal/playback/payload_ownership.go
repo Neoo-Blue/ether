@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/braedonsaunders/ether/internal/core"
+	"github.com/braedonsaunders/ether/internal/datafs"
 	"github.com/braedonsaunders/ether/internal/handles/capability"
 	"github.com/braedonsaunders/ether/internal/store"
 )
@@ -35,7 +36,7 @@ var errPayloadCommitUnknown = errors.New("playback: payload ownership commit out
 var errPayloadRetained = errors.New("playback: payload owner remains with a non-source holder")
 
 var errPayloadWitnessCapacity = errors.New("playback: all 128 payload ownership witness slots are held or unreconciled")
-var errPayloadFilesystem = errors.New("playback: payload ownership requires a verified local filesystem; network or unknown filesystems cannot authorize reclamation")
+var errPayloadFilesystem = errors.New("playback: payload ownership requires the filesystem checked at startup")
 
 type payloadAnchor struct {
 	owner      payloadOwner
@@ -77,6 +78,14 @@ type payloadStore struct {
 	afterOwnerCommit         func() error
 	afterRemove              func() error
 	afterRetireCommit        func() error
+
+	// fs is the data folder's filesystem as judged at open; fsKind is its
+	// cheap identity. degraded is why crash recovery runs in safe mode,
+	// "" when witness locks prove death. beatStop ends the safe-mode lease.
+	fs       PayloadFilesystem
+	fsKind   string
+	degraded string
+	beatStop chan struct{}
 }
 type payloadOwnerState struct {
 	id       string
@@ -135,13 +144,12 @@ func readWitness(f *os.File) (string, error) {
 	return string(b), nil
 }
 func openPayloadStore(ctx context.Context, db *sql.DB, dir string) (*payloadStore, error) {
-	reliable, err := payloadFilesystemReliable(dir)
+	info, err := inspectPayloadFilesystem(dir)
 	if err != nil {
 		return nil, err
 	}
-	if !reliable {
-		return nil, payloadFilesystemError(dir)
-	}
+	degraded := payloadTrust(info.Class, func() error { return datafs.Probe(dir) })
+	p := &payloadStore{gate: make(chan struct{}, 1), anchors: make(map[string]*payloadAnchor), parks: map[string]*payloadPark{}, releaseStop: make(chan struct{}), db: db, dir: dir, incarnation: randomID(32), fsKind: info.Kind, degraded: degraded}
 	locks := filepath.Join(dir, ".owners")
 	if err := os.MkdirAll(locks, 0700); err != nil {
 		return nil, err
@@ -151,10 +159,10 @@ func openPayloadStore(ctx context.Context, db *sql.DB, dir string) (*payloadStor
 		return nil, err
 	}
 	defer domainFile.Close()
-	if err := lockPayloadWitness(domainFile); err != nil {
+	if err := p.lockWitness(domainFile); err != nil {
 		return nil, fmt.Errorf("playback: payload domain lock: %w", err)
 	}
-	if err := verifyWitnessFile(domainFile); err != nil {
+	if err := p.checkWitness(domainFile); err != nil {
 		return nil, err
 	}
 	domain, err := readWitness(domainFile)
@@ -172,18 +180,18 @@ func openPayloadStore(ctx context.Context, db *sql.DB, dir string) (*payloadStor
 	}
 	// The domain lock only serializes identity creation, not backend lifetimes.
 	domainFile.Close()
-	p := &payloadStore{gate: make(chan struct{}, 1), anchors: make(map[string]*payloadAnchor), parks: map[string]*payloadPark{}, releaseStop: make(chan struct{}), db: db, dir: dir, domain: domain, incarnation: randomID(32)}
+	p.domain = domain
 	recovery := 0
 	for slot := 0; slot < payloadWitnessSlots; slot++ {
 		f, err := os.OpenFile(filepath.Join(locks, fmt.Sprintf("%03d.lock", slot)), os.O_CREATE|os.O_RDWR, 0600)
 		if err != nil {
 			return nil, err
 		}
-		if err := lockPayloadWitness(f); err != nil {
+		if err := p.lockWitness(f); err != nil {
 			f.Close()
 			continue
 		}
-		if err := verifyWitnessFile(f); err != nil {
+		if err := p.checkWitness(f); err != nil {
 			f.Close()
 			continue
 		}
@@ -198,7 +206,7 @@ func openPayloadStore(ctx context.Context, db *sql.DB, dir string) (*payloadStor
 				f.Close()
 				continue
 			}
-			if recovery >= 4 {
+			if recovery >= 4 || !p.leaseExpired(f, parts[1]) {
 				f.Close()
 				continue
 			}
@@ -233,6 +241,11 @@ func openPayloadStore(ctx context.Context, db *sql.DB, dir string) (*payloadStor
 		}
 		p.file = f
 		heldPayloadWitnesses.Store(p.incarnation, p)
+		p.fs = newPayloadFilesystem(info, degraded)
+		if degraded != "" {
+			p.beatStop = make(chan struct{})
+			go p.beat(f.Name(), p.beatStop)
+		}
 		return p, nil
 	}
 	return nil, errPayloadWitnessCapacity
@@ -259,10 +272,8 @@ func (p *payloadStore) close() {
 		p.closing = true
 		close(p.releaseStop)
 	}
-	if p.active == 0 && p.file != nil {
-		p.file.Close()
-		p.file = nil
-		heldPayloadWitnesses.Delete(p.incarnation)
+	if p.active == 0 {
+		p.dropWitnessLocked()
 	}
 }
 func (p *payloadStore) begin() error {
@@ -278,10 +289,8 @@ func (p *payloadStore) finish() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.active--
-	if p.closing && p.active == 0 && p.file != nil {
-		p.file.Close()
-		p.file = nil
-		heldPayloadWitnesses.Delete(p.incarnation)
+	if p.closing && p.active == 0 {
+		p.dropWitnessLocked()
 	}
 }
 func payloadLock(ctx context.Context, db *sql.DB, tx *sql.Tx, domain, hash string) error {
@@ -856,17 +865,13 @@ func (p *payloadStore) enter(ctx context.Context) error {
 func (p *payloadStore) leave() { <-p.gate }
 
 func (p *payloadStore) verifyProof(f *os.File, incarnation string) error {
-	reliable, err := payloadFilesystemReliable(p.dir)
-	if err != nil {
+	if err := p.checkFilesystem(); err != nil {
 		return err
-	}
-	if !reliable {
-		return payloadFilesystemError(p.dir)
 	}
 	if f == nil {
 		return core.ErrNotAvailable
 	}
-	if err := verifyWitnessFile(f); err != nil {
+	if err := p.checkWitness(f); err != nil {
 		return err
 	}
 	value, err := readWitness(f)
@@ -875,6 +880,17 @@ func (p *payloadStore) verifyProof(f *os.File, incarnation string) error {
 	}
 	if value != p.domain+"\n"+incarnation {
 		return core.ErrNotAvailable
+	}
+	if p.degraded != "" {
+		// Without trusted file identity, the witness at the path must be
+		// the one this store holds open.
+		byPath, err := os.ReadFile(f.Name())
+		if err != nil {
+			return err
+		}
+		if string(byPath) != value {
+			return core.ErrNotAvailable
+		}
 	}
 	domain, err := os.ReadFile(filepath.Join(p.dir, ".domain"))
 	if err != nil {
@@ -913,12 +929,8 @@ func (p *payloadStore) scheduleRecovery() {
 	}()
 }
 func (p *payloadStore) reconcileSlots(ctx context.Context) error {
-	reliable, err := payloadFilesystemReliable(p.dir)
-	if err != nil {
+	if err := p.checkFilesystem(); err != nil {
 		return err
-	}
-	if !reliable {
-		return payloadFilesystemError(p.dir)
 	}
 	p.mu.Lock()
 	first := p.cursor
@@ -936,7 +948,7 @@ func (p *payloadStore) reconcileSlots(ctx context.Context) error {
 			}
 			return err
 		}
-		if err := lockPayloadWitness(f); err != nil {
+		if err := p.lockWitness(f); err != nil {
 			f.Close()
 			continue
 		}
@@ -946,7 +958,7 @@ func (p *payloadStore) reconcileSlots(ctx context.Context) error {
 			return err
 		}
 		parts := strings.Split(value, "\n")
-		if len(parts) != 2 || parts[0] != p.domain || !validPayloadID(parts[1]) || parts[1] == p.incarnation {
+		if len(parts) != 2 || parts[0] != p.domain || !validPayloadID(parts[1]) || parts[1] == p.incarnation || !p.leaseExpired(f, parts[1]) {
 			f.Close()
 			continue
 		}
