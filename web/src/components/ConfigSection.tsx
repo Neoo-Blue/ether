@@ -27,17 +27,20 @@ export function MoreOptions({
   label,
   text,
   hasError = false,
+  reveal = false,
   children,
 }: {
   label: string;
   text?: string;
   hasError?: boolean;
+  /** Opens the options when it turns true, such as a link to them elsewhere. */
+  reveal?: boolean;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
-    if (hasError) setOpen(true);
-  }, [hasError]);
+    if (hasError || reveal) setOpen(true);
+  }, [hasError, reveal]);
   return (
     <div className="border-t border-border">
       <button

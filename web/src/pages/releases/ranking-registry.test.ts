@@ -36,6 +36,7 @@ describe("registry-driven ranking ladder", () => {
       "resolution",
       "releaseType",
       "hdr",
+      "customScore",
       "verified",
       "videoCodec",
       "audioFormat",
@@ -102,17 +103,30 @@ describe("registry-driven ranking ladder", () => {
     );
     // Same placement core EffectiveRanking computes: an omitted step goes
     // ahead of the first step whose default position is larger, and the
-    // saved relative order of verified/connection is kept.
+    // saved relative order of verified/connection is kept. The custom
+    // score goes directly before verified, where older ladders compared it.
     expect(ladder).toEqual([
       "language",
       "resolution",
       "releaseType",
       "hdr",
+      "customScore",
       "verified",
       "connection",
       "videoCodec",
       "audioFormat",
       "size",
+    ]);
+  });
+
+  it("puts an omitted custom score directly before verified", () => {
+    // Plain default-position insertion would put it ahead of size here.
+    const saved = ["size", "language", "connection", "resolution", "releaseType", "hdr"];
+    const tail = ["verified", "videoCodec", "audioFormat"];
+    expect(normalizeRanking({ ranking: [...saved, ...tail], releaseRules: [] }, steps)).toEqual([
+      ...saved,
+      "customScore",
+      ...tail,
     ]);
   });
 

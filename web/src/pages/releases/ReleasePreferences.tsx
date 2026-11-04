@@ -260,9 +260,14 @@ export function normalizeRanking(
   const missingPrefer = preferSteps.filter((step) => !seen.has(step));
   let out = [...missingPrefer, ...kept];
   for (const step of defaultSteps) {
-    if (!seen.has(step)) {
-      out = insertStepAtDefaultPosition(out, steps, step);
-    }
+    if (seen.has(step)) continue;
+    // A ladder saved before the custom score step existed compared the
+    // score just before verified, so the step goes back exactly there.
+    const verified = out.indexOf("verified");
+    out =
+      step === "customScore" && verified >= 0
+        ? [...out.slice(0, verified), step, ...out.slice(verified)]
+        : insertStepAtDefaultPosition(out, steps, step);
   }
   return out;
 }
