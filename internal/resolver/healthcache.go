@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/braedonsaunders/ether/internal/core"
@@ -138,6 +140,79 @@ func (s *Service) recentlyVerified(ctx context.Context, releaseID string) bool {
 // verifiedMissTTL bounds how long a "not recently verified" answer is
 // reused without reading resolver_verified.
 const verifiedMissTTL = 2 * time.Minute
+
+// verifiedAmong is recentlyVerified for every release in ids, reading the
+// table once per 500 ids instead of once per release: ranking a search with
+// hundreds of results must not issue a query for each of them.
+func (s *Service) verifiedAmong(ctx context.Context, ids []string) map[string]bool {
+	if s.healthTTL <= 0 || len(ids) == 0 {
+		return nil
+	}
+	now := s.now()
+	out := make(map[string]bool, len(ids))
+	var missing []string
+	s.mu.RLock()
+	for _, id := range ids {
+		if id == "" {
+			continue
+		}
+		if at, ok := s.verified[id]; ok {
+			out[id] = now.Sub(at) < s.healthTTL
+		} else if missed, known := s.verifiedMiss[id]; known && now.Sub(missed) < verifiedMissTTL && !now.Before(missed) {
+			out[id] = false
+		} else {
+			missing = append(missing, id)
+		}
+	}
+	s.mu.RUnlock()
+	if s.db == nil || len(missing) == 0 {
+		return out
+	}
+	slices.Sort(missing)
+	missing = slices.Compact(missing)
+	found := map[string]time.Time{}
+	for start := 0; start < len(missing); start += 500 {
+		batch := missing[start:min(start+500, len(missing))]
+		args := make([]any, len(batch))
+		for i, id := range batch {
+			args[i] = id
+		}
+		rows, err := s.db.QueryContext(ctx, `SELECT release_id, checked_at FROM resolver_verified WHERE release_id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")+`)`, args...)
+		if err != nil {
+			continue
+		}
+		for rows.Next() {
+			var id string
+			var unix int64
+			if rows.Scan(&id, &unix) == nil {
+				found[id] = time.Unix(unix, 0)
+			}
+		}
+		rows.Close()
+	}
+	s.mu.Lock()
+	if len(found) > 0 {
+		s.boundVerifiedLocked(now)
+	}
+	for _, id := range missing {
+		if at, ok := found[id]; ok && now.Sub(at) < s.healthTTL {
+			s.verified[id] = at
+			delete(s.verifiedMiss, id)
+			continue
+		}
+		// Absent or expired: remember the miss as recentlyVerified does.
+		if s.verifiedMiss == nil {
+			s.verifiedMiss = map[string]time.Time{}
+		}
+		boundMap(s.verifiedMiss, maxVerifiedEntries, func(at time.Time) bool { return now.Sub(at) >= verifiedMissTTL })
+		s.verifiedMiss[id] = now
+	}
+	s.mu.Unlock()
+	for id, at := range found {
+		out[id] = now.Sub(at) < s.healthTTL
+	}
+	return out
+}
 
 func (s *Service) forgetVerified(ctx context.Context, releaseID string) {
 	if s.invalidated != nil {

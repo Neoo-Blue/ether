@@ -98,6 +98,13 @@ type Options struct {
 	StoppedGrace time.Duration
 	// PrepareTimeout bounds resolve+open+probe (default 90s).
 	PrepareTimeout time.Duration
+	// AbandonedPrepareGrace keeps a Prepare running this long after its
+	// last caller gave up (default 30s; negative cancels at once). A Plex
+	// client that drops its decision request follows it with start.mpd,
+	// start.m3u8 or a retry, which joins the same preparation instead of
+	// inheriting its cancellation (#304). Unclaimed work is released when
+	// the grace ends.
+	AbandonedPrepareGrace time.Duration
 	// ProbeTimeout bounds one Transcoder.Probe (default 30s).
 	ProbeTimeout time.Duration
 	// VerifyNativeProbe runs ffprobe in the background after every native
@@ -167,6 +174,9 @@ func (o *Options) defaults() {
 	def(&o.WriteStallTimeout, o.IdleTimeout)
 	def(&o.StoppedGrace, time.Minute)
 	def(&o.PrepareTimeout, 90*time.Second)
+	if o.AbandonedPrepareGrace == 0 {
+		o.AbandonedPrepareGrace = 30 * time.Second
+	}
 	def(&o.ProbeTimeout, 30*time.Second)
 	def(&o.FailoverTimeout, 90*time.Second)
 	def(&o.PinInterval, 5*time.Minute)
@@ -314,8 +324,15 @@ type flight struct {
 	cancel   context.CancelFunc
 	waiters  int
 	detached bool
-	sess     *session
-	err      error
+	// playRequest: a play request (Prepare, or a bounded PrepareWithin
+	// wait) joined, so the flight outlives its callers for a grace
+	// (abandonFlightLocked). Surface plans and detail pages cancel at once.
+	playRequest bool
+	// abandoned counts the times the last caller left; a grace timer
+	// acts only if no caller joined since it was armed.
+	abandoned int
+	sess      *session
+	err       error
 }
 
 // releaseLabel prefers the release name and falls back to the indexer.
@@ -852,6 +869,7 @@ func (m *Manager) prepareOwnedWithin(ctx context.Context, wait time.Duration, us
 						return nil, nil, fmt.Errorf("%w: server is at its limit of %d streams", core.ErrStreamLimit, serverLimit)
 					}
 				}
+				s.claimed = true
 				m.mu.Unlock()
 				s.touch(now)
 				m.reg.poke()
@@ -867,6 +885,16 @@ func (m *Manager) prepareOwnedWithin(ctx context.Context, wait time.Duration, us
 	}
 	fk := flightKey{id: id, prefer: prefer, exact: exact, deferSupersession: deferSupersession}
 	f := m.flights[fk]
+	if f == nil && !deferSupersession && prefer == "" && !exact {
+		// The automatic choice a bounded decision wait (PrepareWithin) is
+		// already preparing is the same source: join it rather than
+		// resolving and opening a second one in parallel.
+		alt := fk
+		alt.deferSupersession = true
+		if f = m.flights[alt]; f != nil {
+			fk = alt
+		}
+	}
 	if f == nil {
 		wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), m.opts.PrepareTimeout)
 		f = &flight{sources: newSourceLifetime(user.ID, string(caps.Protocol), caps.ClientID), done: make(chan struct{}), cancel: cancel}
@@ -875,6 +903,7 @@ func (m *Manager) prepareOwnedWithin(ctx context.Context, wait time.Duration, us
 		go m.runFlight(wctx, f, fk, &u, caps)
 	}
 	f.waiters++
+	f.playRequest = f.playRequest || !deferSupersession || wait > 0
 	m.mu.Unlock()
 	var timeout <-chan time.Time
 	if wait > 0 {
@@ -892,7 +921,7 @@ func (m *Manager) prepareOwnedWithin(ctx context.Context, wait time.Duration, us
 	case <-ctx.Done():
 		m.mu.Lock()
 		if f.waiters--; f.waiters == 0 && !f.detached {
-			f.cancel() // nobody wants it any more
+			m.abandonFlightLocked(fk, f)
 		}
 		m.mu.Unlock()
 		return nil, f.sources, ctx.Err()
@@ -905,12 +934,61 @@ func (m *Manager) prepareOwnedWithin(ctx context.Context, wait time.Duration, us
 	}
 }
 
+// abandonFlightLocked handles a flight whose last caller gave up. One
+// play request's cancellation must not decide for the next: the flight
+// keeps running for AbandonedPrepareGrace so a following start or retry
+// joins it. Only then, still unwanted, is it cancelled, or its prepared session
+// released. A cancelled flight leaves m.flights at once, so a later
+// caller starts a new one instead of inheriting context.Canceled.
+func (m *Manager) abandonFlightLocked(fk flightKey, f *flight) {
+	if !f.playRequest || m.opts.AbandonedPrepareGrace < 0 {
+		m.cancelFlightLocked(fk, f)
+		return
+	}
+	f.abandoned++
+	gen := f.abandoned
+	time.AfterFunc(m.opts.AbandonedPrepareGrace, func() { m.expireAbandonedFlight(fk, f, gen) })
+}
+
+func (m *Manager) cancelFlightLocked(fk flightKey, f *flight) {
+	if m.flights[fk] == f {
+		delete(m.flights, fk)
+	}
+	f.cancel()
+}
+
+func (m *Manager) expireAbandonedFlight(fk flightKey, f *flight, gen int) {
+	m.mu.Lock()
+	if f.waiters > 0 || f.detached || f.abandoned != gen {
+		m.mu.Unlock()
+		return
+	}
+	select {
+	case <-f.done:
+	default:
+		m.cancelFlightLocked(fk, f)
+		m.mu.Unlock()
+		return
+	}
+	s := f.sess
+	if s == nil || s.claimed || m.sessions[s.id] != s {
+		m.mu.Unlock()
+		return
+	}
+	g := m.detachSessionLocked(s)
+	m.mu.Unlock()
+	m.log.Debug("abandoned preparation was not claimed; releasing it", "session", s.id, "key", fk.id.key)
+	m.finishSessionStop(s, g)
+}
+
 func (m *Manager) runFlight(ctx context.Context, f *flight, fk flightKey, user *core.User, caps core.ClientCaps) {
 	defer close(f.done)
 	defer f.cancel()
-	s, err := m.prepare(ctx, fk.id, user, caps, fk.prefer, fk.exact, fk.deferSupersession, f.sources)
+	s, err := m.prepare(ctx, fk.id, user, caps, fk.prefer, fk.exact, fk.deferSupersession, f)
 	m.mu.Lock()
-	delete(m.flights, fk)
+	if m.flights[fk] == f {
+		delete(m.flights, fk)
+	}
 	if err != nil && m.byIdent[fk.id] == nil {
 		delete(m.channelGroups, fk.id)
 	}
@@ -922,7 +1000,8 @@ func (m *Manager) runFlight(ctx context.Context, f *flight, fk flightKey, user *
 	}
 }
 
-func (m *Manager) prepare(ctx context.Context, id identity, user *core.User, caps core.ClientCaps, prefer string, exact, deferSupersession bool, sources *sourceLifetime) (*session, error) {
+func (m *Manager) prepare(ctx context.Context, id identity, user *core.User, caps core.ClientCaps, prefer string, exact, deferSupersession bool, f *flight) (*session, error) {
+	sources := f.sources
 	log := m.log.With("user", userLabel(user), "client", caps.ClientID, "key", id.key)
 	if err := m.reserve(ctx, user, id); err != nil {
 		log.Info("stream limit", "err", err)
@@ -1015,9 +1094,12 @@ func (m *Manager) prepare(ctx context.Context, id identity, user *core.User, cap
 		return existing, nil
 	}
 	var replaced []string
+	// Nobody waits for an abandoned flight: it must not end the client's
+	// other playback, which may be the title it went on to.
+	abandoned := f.waiters == 0 && !f.detached
 	for _, o := range m.sessions {
 		// Broker supersession occurs on Open, not while a plan is prepared.
-		if !deferSupersession && o.ident.userID == id.userID && o.ident.clientID == id.clientID && o.ident.surface == id.surface && o.ident.key != id.key {
+		if !deferSupersession && !abandoned && o.ident.userID == id.userID && o.ident.clientID == id.clientID && o.ident.surface == id.surface && o.ident.key != id.key {
 			replaced = append(replaced, o.id)
 		}
 	}
