@@ -130,8 +130,8 @@ func (s *Service) filterReleaseDiscovery(ctx context.Context, items []core.Title
 		pairs = append(pairs, feedPair{t: titles[o.key], r: r})
 	}
 	// One evaluation pass for every observation; durable verdicts answer
-	// the ones judged before without evaluating them again.
-	for i, ok := range s.judge(ctx, pairs) {
+	// the ones judged before, and a title stops at its first acceptance.
+	for i, ok := range s.judge(ctx, pairs, true) {
 		if ok {
 			acceptable[pairs[i].t.Key] = true
 		}

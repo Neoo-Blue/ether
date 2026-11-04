@@ -189,7 +189,7 @@ func (s *Service) attachRetained(ctx context.Context, titles map[core.RatingKey]
 		}
 	}
 	var found []observed
-	for i, ok := range s.judge(ctx, pairs) {
+	for i, ok := range s.judge(ctx, pairs, false) {
 		if ok {
 			found = append(found, candidates[i])
 		}

@@ -12,14 +12,16 @@ import (
 )
 
 func init() {
-	// One durable "When they can play" verdict per (policy, title, release).
+	// One durable "When they can play" verdict per (policy, title, release
+	// descriptor): a feed item and a recorded search can describe the same
+	// release id differently, and each keeps its own verdict.
 	// The policy key covers the owner's profile and resolver settings, so a
 	// section load only evaluates feed items it has never judged (#303).
 	store.Register("availability_verdicts", 1, `
 CREATE TABLE availability_verdicts (
  policy TEXT NOT NULL, rating_key INTEGER NOT NULL, release_id TEXT NOT NULL,
  digest TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', evaluated_at INTEGER NOT NULL,
- PRIMARY KEY(policy, rating_key, release_id));
+ PRIMARY KEY(policy, rating_key, release_id, digest));
 CREATE INDEX availability_verdicts_release ON availability_verdicts(release_id);
 CREATE INDEX availability_verdicts_age ON availability_verdicts(evaluated_at);`)
 }
@@ -38,17 +40,24 @@ type feedEvaluator interface {
 // judge reports which pairs the owner's quality policy accepts. A validator
 // that prepares evaluation passes is asked once per pass, and only for
 // pairs with no durable verdict under the current policy; others are asked
-// one release at a time.
-func (s *Service) judge(ctx context.Context, pairs []feedPair) []bool {
+// one release at a time. With anyPerTitle the caller only needs to know
+// whether each title has an accepted release: a title's remaining pairs are
+// skipped (reported false) once one is accepted.
+func (s *Service) judge(ctx context.Context, pairs []feedPair, anyPerTitle bool) []bool {
 	ok := make([]bool, len(pairs))
 	if len(pairs) == 0 {
 		return ok
 	}
 	source, batched := s.d.Validator.(feedEvaluator)
 	if !batched {
+		accepted := map[core.RatingKey]bool{}
 		for i, p := range pairs {
+			if anyPerTitle && accepted[p.t.Key] {
+				continue
+			}
 			_, reason, err := s.d.Validator.FeedCandidate(ctx, p.t, p.r)
 			ok[i] = err == nil && reason == ""
+			accepted[p.t.Key] = accepted[p.t.Key] || ok[i]
 		}
 		return ok
 	}
@@ -75,9 +84,17 @@ func (s *Service) judge(ctx context.Context, pairs []feedPair) []bool {
 	}
 	var order []core.RatingKey
 	pending := map[core.RatingKey]*group{}
+	accepted := map[core.RatingKey]bool{}
+	hits := make([]bool, len(pairs))
 	for i, p := range pairs {
-		if v, hit := stored[verdictKey(p.t.Key, p.r.ID)]; hit && v.digest == digests[i] {
-			ok[i] = v.reason == "" && ev.Transient(p.r.ID) == ""
+		if reason, hit := stored[verdictKey(p.t.Key, p.r.ID, digests[i])]; hit {
+			hits[i] = true
+			ok[i] = reason == "" && ev.Transient(p.r.ID) == ""
+			accepted[p.t.Key] = accepted[p.t.Key] || ok[i]
+		}
+	}
+	for i, p := range pairs {
+		if hits[i] || (anyPerTitle && accepted[p.t.Key]) {
 			continue
 		}
 		g := pending[p.t.Key]
@@ -96,21 +113,31 @@ func (s *Service) judge(ctx context.Context, pairs []feedPair) []bool {
 	written := map[string]bool{}
 	for _, k := range order {
 		g := pending[k]
-		rs := make([]core.Release, len(g.indexes))
-		for j, i := range g.indexes {
-			rs[j] = pairs[i].r
+		// The whole title in one call, or release by release until one is
+		// accepted when that is all the caller needs.
+		step := len(g.indexes)
+		if anyPerTitle {
+			step = 1
 		}
-		verdicts, err := ev.Evaluate(ctx, g.t, rs)
-		if err != nil || len(verdicts) != len(rs) {
-			continue
-		}
-		for j, i := range g.indexes {
-			v := verdicts[j]
-			ok[i] = v.Reason == ""
-			vk := verdictKey(k, pairs[i].r.ID)
-			if !v.Volatile && !written[vk] {
-				written[vk] = true
-				durable = append(durable, fresh{key: k, id: pairs[i].r.ID, digest: digests[i], why: v.Reason})
+		for start := 0; start < len(g.indexes) && !(anyPerTitle && accepted[k]); start += step {
+			batch := g.indexes[start:min(start+step, len(g.indexes))]
+			rs := make([]core.Release, len(batch))
+			for j, i := range batch {
+				rs[j] = pairs[i].r
+			}
+			verdicts, err := ev.Evaluate(ctx, g.t, rs)
+			if err != nil || len(verdicts) != len(rs) {
+				break
+			}
+			for j, i := range batch {
+				v := verdicts[j]
+				ok[i] = v.Reason == ""
+				accepted[k] = accepted[k] || ok[i]
+				vk := verdictKey(k, pairs[i].r.ID, digests[i])
+				if !v.Volatile && !written[vk] {
+					written[vk] = true
+					durable = append(durable, fresh{key: k, id: pairs[i].r.ID, digest: digests[i], why: v.Reason})
+				}
 			}
 		}
 	}
@@ -124,7 +151,7 @@ func (s *Service) judge(ctx context.Context, pairs []feedPair) []bool {
 	defer tx.Rollback()
 	now := s.now().Unix()
 	for _, f := range durable {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO availability_verdicts(policy,rating_key,release_id,digest,reason,evaluated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(policy,rating_key,release_id) DO UPDATE SET digest=excluded.digest,reason=excluded.reason,evaluated_at=excluded.evaluated_at`, policy, int64(f.key), f.id, f.digest, f.why, now); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO availability_verdicts(policy,rating_key,release_id,digest,reason,evaluated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(policy,rating_key,release_id,digest) DO UPDATE SET reason=excluded.reason,evaluated_at=excluded.evaluated_at`, policy, int64(f.key), f.id, f.digest, f.why, now); err != nil {
 			return ok
 		}
 	}
@@ -132,14 +159,13 @@ func (s *Service) judge(ctx context.Context, pairs []feedPair) []bool {
 	return ok
 }
 
-type storedVerdict struct{ digest, reason string }
-
-func verdictKey(key core.RatingKey, id string) string {
-	return observationKey(id, key, "")
+func verdictKey(key core.RatingKey, id, digest string) string {
+	return observationKey(id, key, digest)
 }
 
-func (s *Service) storedVerdicts(ctx context.Context, policy string, titles map[core.RatingKey]string) map[string]storedVerdict {
-	out := map[string]storedVerdict{}
+// storedVerdicts maps verdictKey to the stored reason ("" accepts).
+func (s *Service) storedVerdicts(ctx context.Context, policy string, titles map[core.RatingKey]string) map[string]string {
+	out := map[string]string{}
 	keys := make([]any, 0, len(titles))
 	for k := range titles {
 		keys = append(keys, int64(k))
@@ -153,10 +179,9 @@ func (s *Service) storedVerdicts(ctx context.Context, policy string, titles map[
 		}
 		for rows.Next() {
 			var key int64
-			var id string
-			var v storedVerdict
-			if rows.Scan(&key, &id, &v.digest, &v.reason) == nil {
-				out[verdictKey(core.RatingKey(key), id)] = v
+			var id, digest, reason string
+			if rows.Scan(&key, &id, &digest, &reason) == nil {
+				out[verdictKey(core.RatingKey(key), id, digest)] = reason
 			}
 		}
 		rows.Close()
@@ -218,7 +243,7 @@ func (s *Service) pruneVerdicts(ctx context.Context, retainedChanged bool) error
 		return err
 	}
 	if overflow {
-		_, err := s.db.ExecContext(ctx, `DELETE FROM availability_verdicts WHERE (policy,rating_key,release_id) IN (SELECT policy,rating_key,release_id FROM availability_verdicts ORDER BY evaluated_at DESC LIMIT 2147483647 OFFSET 60000)`)
+		_, err := s.db.ExecContext(ctx, `DELETE FROM availability_verdicts WHERE (policy,rating_key,release_id,digest) IN (SELECT policy,rating_key,release_id,digest FROM availability_verdicts ORDER BY evaluated_at DESC LIMIT 2147483647 OFFSET 60000)`)
 		return err
 	}
 	return nil
