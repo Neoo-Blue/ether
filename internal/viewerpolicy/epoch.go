@@ -65,6 +65,22 @@ func init() {
 		pg += fmt.Sprintf(` DO $$ BEGIN IF to_regclass('%s') IS NOT NULL THEN EXECUTE 'CREATE TRIGGER viewer_policy_%s AFTER %s ON %s FOR EACH STATEMENT EXECUTE FUNCTION viewer_policy_bump()'; END IF; END $$;`, table, table, operation, table)
 	}
 	store.RegisterDialect("viewer_policy", 1, store.Postgres, pg)
+	store.RegisterRestore("viewer_policy", restoreEpoch, "viewer_policy_epoch")
+}
+
+// restoreEpoch advances the epoch once past both the restored value and the
+// target's own, which a logical restore replaces. PostgreSQL restores with
+// policy triggers suspended, so this is the restore's single policy write.
+func restoreEpoch(ctx context.Context, tx *sql.Tx) (func(context.Context, *sql.Tx) error, error) {
+	var before int64
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(generation),0) FROM viewer_policy_epoch`).Scan(&before); err != nil {
+		return nil, err
+	}
+	return func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `INSERT INTO viewer_policy_epoch(id,generation) VALUES(1,?)
+			ON CONFLICT(id) DO UPDATE SET generation=CASE WHEN viewer_policy_epoch.generation>=excluded.generation THEN viewer_policy_epoch.generation+1 ELSE excluded.generation END`, before+1)
+		return err
+	}, nil
 }
 
 func Read(ctx context.Context, db *sql.DB) (int64, error) {
