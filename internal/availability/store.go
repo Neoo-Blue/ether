@@ -149,6 +149,7 @@ func (s *Service) prune(ctx context.Context) error {
 	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM availability_feed_items WHERE seen_at<?)`, cutoff).Scan(&hasExpiredFeedItems); err != nil {
 		return err
 	}
+	retainedChanged := hasExpiredFeedItems
 	if hasExpiredFeedItems {
 		if _, err := s.db.ExecContext(ctx, `DELETE FROM availability_feed_items WHERE seen_at<?`, cutoff); err != nil {
 			return err
@@ -158,6 +159,7 @@ func (s *Service) prune(ctx context.Context) error {
 	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM availability_feed_items LIMIT 1 OFFSET 30000)`).Scan(&hasOverflowFeedItems); err != nil {
 		return err
 	}
+	retainedChanged = retainedChanged || hasOverflowFeedItems
 	if hasOverflowFeedItems {
 		if _, err := s.db.ExecContext(ctx, `DELETE FROM availability_feed_items WHERE (id,source_id) IN (SELECT id,source_id FROM availability_feed_items ORDER BY seen_at DESC LIMIT 2147483647 OFFSET 30000)`); err != nil {
 			return err
@@ -168,6 +170,7 @@ func (s *Service) prune(ctx context.Context) error {
 	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM availability_releases WHERE last_seen<?)`, cutoff).Scan(&hasExpiredReleases); err != nil {
 		return err
 	}
+	retainedChanged = retainedChanged || hasExpiredReleases
 	if hasExpiredReleases {
 		if _, err := s.db.ExecContext(ctx, `DELETE FROM availability_releases WHERE last_seen<?`, cutoff); err != nil {
 			return err
@@ -179,11 +182,15 @@ func (s *Service) prune(ctx context.Context) error {
 	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM availability_releases LIMIT 1 OFFSET 30000)`).Scan(&hasOverflowReleases); err != nil {
 		return err
 	}
+	retainedChanged = retainedChanged || hasOverflowReleases
 	if hasOverflowReleases {
 		if _, err := s.db.ExecContext(ctx, `DELETE FROM availability_releases WHERE (id,rating_key,source_id) IN (SELECT id,rating_key,source_id FROM availability_releases ORDER BY last_seen DESC LIMIT 2147483647 OFFSET 30000)`); err != nil {
 			// Retention failures are surfaced rather than silently growing the table.
 			return err
 		}
+	}
+	if err := s.pruneVerdicts(ctx, retainedChanged); err != nil {
+		return err
 	}
 	budgetCutoff := s.now().Add(-35 * 24 * time.Hour).UTC().Format("2006-01-02")
 	var hasExpiredBudget bool

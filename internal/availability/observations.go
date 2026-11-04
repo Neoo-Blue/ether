@@ -157,7 +157,8 @@ func (s *Service) attachRetained(ctx context.Context, titles map[core.RatingKey]
 		feed core.ReleaseFeed
 		p    pending
 	}
-	var found []observed
+	var candidates []observed
+	var pairs []feedPair
 	for _, p := range work {
 		f, ok := feeds[p.source]
 		if !ok || f.Generation != p.gen || !input.usable(f.Protocol) {
@@ -183,10 +184,14 @@ func (s *Service) attachRetained(ctx context.Context, titles map[core.RatingKey]
 			if t.Type == core.TypeMovie && (len(r.Info.Seasons) > 0 || len(r.Info.Episodes) > 0) {
 				continue
 			}
-			if _, reason, err := s.d.Validator.FeedCandidate(ctx, t, r); err != nil || reason != "" {
-				continue
-			}
-			found = append(found, observed{r: r, t: t, feed: f, p: p})
+			candidates = append(candidates, observed{r: r, t: t, feed: f, p: p})
+			pairs = append(pairs, feedPair{t: t, r: r})
+		}
+	}
+	var found []observed
+	for i, ok := range s.judge(ctx, pairs) {
+		if ok {
+			found = append(found, candidates[i])
 		}
 	}
 	if len(found) == 0 {

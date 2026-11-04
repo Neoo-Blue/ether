@@ -50,12 +50,21 @@ type Deps struct {
 	Now              func() time.Time
 	Logger           *slog.Logger
 	ConfigGeneration func() uint64
+	// Async runs evidence refreshes on the service's own goroutines, off
+	// the request path; Close stops them. False runs each refresh inline,
+	// before the request that found its answer stale.
+	Async bool
 }
 type Service struct {
 	visibilityMu       sync.Mutex
 	visibilityRevision uint64
 	visibilityCache    map[string]visibilityEntry
-	hiddenCache        map[string]hiddenEntry
+	hiddenSets         map[string]*hiddenSet // by kind; guarded by visibilityMu
+	refreshing         map[string]int        // kind -> 1 refreshing, 2 another pass queued
+	bgCtx              context.Context
+	bgStop             context.CancelFunc
+	bg                 sync.WaitGroup
+	closed             bool // guarded by visibilityMu; no refresh starts after Close
 	db                 *sql.DB
 	cfg                func() config.Config
 	d                  Deps
@@ -86,8 +95,20 @@ func New(d Deps) (*Service, error) {
 	if d.Logger == nil {
 		d.Logger = slog.Default()
 	}
-	return &Service{db: d.DB, cfg: d.Config, d: d, now: d.Now, log: d.Logger}, nil
+	s := &Service{db: d.DB, cfg: d.Config, d: d, now: d.Now, log: d.Logger, hiddenSets: map[string]*hiddenSet{}}
+	s.bgCtx, s.bgStop = context.WithCancel(context.Background())
+	return s, nil
 }
+
+// Close stops background evidence refreshes and waits for them.
+func (s *Service) Close() {
+	s.visibilityMu.Lock()
+	s.closed = true
+	s.visibilityMu.Unlock()
+	s.bgStop()
+	s.bg.Wait()
+}
+
 func (s *Service) encode(r core.Release) (string, error) {
 	b, err := json.Marshal(r)
 	if err != nil {
@@ -204,6 +225,9 @@ func settingsUsable(c config.Config, protocol string) bool {
 	return false
 }
 func (s *Service) Run(ctx context.Context) {
+	// Answer the first browse from evidence judged before the restart,
+	// not from a full evaluation inside the request.
+	s.warmHidden()
 	timer := time.NewTimer(0)
 	defer timer.Stop()
 	for {
@@ -214,6 +238,7 @@ func (s *Service) Run(ctx context.Context) {
 			if err := s.Cycle(ctx); err != nil && !benign(err) {
 				s.log.Warn("availability cycle failed", "error", err)
 			}
+			s.warmHidden()
 			timer.Reset(time.Minute)
 		}
 	}

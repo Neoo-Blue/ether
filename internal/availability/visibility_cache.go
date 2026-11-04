@@ -39,11 +39,18 @@ func (s *Service) filterDiscoverySnapshot(ctx context.Context, items []core.Titl
 	var pending []core.Title
 	policy := fmt.Sprintf("%s:%+v", input.policy, input.availability)
 	feeds := []byte(fmt.Sprintf("%+v", input.feeds))
+	sets := s.answeredSets(input)
 	s.visibilityMu.Lock()
 	revision := s.visibilityRevision
 	for _, t := range items {
 		if input.upcomingMovie(t) || !evidenceWindow(t, now, input.availability) {
 			allowed[t.Key] = true
+			continue
+		}
+		// A title the last hidden set judged reads that answer, so a hub
+		// shows exactly what the library pages exclude.
+		if h := sets[t.Type]; h != nil && h.covered[t.Key] {
+			allowed[t.Key] = !h.hidden[t.Key]
 			continue
 		}
 		if _, seen := keys[t.Key]; seen {
@@ -86,7 +93,6 @@ func (s *Service) clearVisibility() {
 	s.visibilityMu.Lock()
 	s.visibilityRevision++
 	s.visibilityCache = nil
-	s.hiddenCache = nil
 	s.visibilityMu.Unlock()
 }
 
@@ -96,4 +102,26 @@ type currentPolicyKey struct{}
 // one bounded policy preflight batch. It performs no provider lookup.
 func (s *Service) FilterDiscoveryCurrent(ctx context.Context, items []core.Title) []core.Title {
 	return s.filterDiscovery(context.WithValue(ctx, currentPolicyKey{}, true), items, s.discoverySnapshot())
+}
+
+// answeredSets returns the hidden sets that exist and answer for input's
+// settings, refreshing stale ones as a library page would. It never
+// creates a set: a row before the first refresh judges its own page.
+func (s *Service) answeredSets(input discoverySnapshot) map[core.MediaType]*hiddenSet {
+	out := map[core.MediaType]*hiddenSet{}
+	for kind, typ := range map[string]core.MediaType{hiddenMovies: core.TypeMovie, hiddenShows: core.TypeShow} {
+		if kind == hiddenMovies && input.availability.DisableMovieEvidenceGate {
+			continue
+		}
+		s.visibilityMu.Lock()
+		_, exists := s.hiddenSets[kind]
+		s.visibilityMu.Unlock()
+		if !exists {
+			continue
+		}
+		if h := s.currentHidden(kind, input); h != nil && h.key == hiddenKey(kind, input) {
+			out[typ] = h
+		}
+	}
+	return out
 }
