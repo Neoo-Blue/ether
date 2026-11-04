@@ -85,3 +85,16 @@ func (a *App) databaseHealth() databaseHealth {
 }
 
 func (a *App) databaseStatus(context.Context) any { return a.databaseHealth() }
+
+// storageStatus is the playback data folder's filesystem and whether cache
+// cleanup trusts it (#305): GET /ether/api/status/storage, and the
+// "storage" dashboard section.
+func (a *App) storageStatus(context.Context) any {
+	if a.playback == nil {
+		return nil
+	}
+	if fs, ok := a.playback.PayloadFilesystem(); ok {
+		return fs
+	}
+	return nil
+}

@@ -25,6 +25,7 @@ import { Field, NumberInput } from "../../components/fields";
 import { useDraft, useUnsavedGuard } from "../../components/SaveBar";
 import { Workspace } from "../../components/workspace";
 import { api, apiFetch } from "../../lib/api";
+import { useApp } from "../../app-context";
 import { formatBytes, formatNumber, formatPercent } from "../../lib/format";
 import { useAsync, useInterval } from "../../lib/hooks";
 import type { EtherConfig } from "../../lib/types";
@@ -154,6 +155,7 @@ function Toggle({
 }
 
 export default function Cache() {
+  const { health } = useApp();
   const config = useAsync(() => api.getConfig(), []);
   const live = useAsync((signal) => apiFetch<CacheSnapshot>("/cache/", { signal }), []);
   const tab = useRouteTab(CACHE_TABS);
@@ -258,6 +260,7 @@ export default function Cache() {
       </Workspace>
     );
   const snap = live.data;
+  const storage = health.find((h) => h.id === "storage");
   const used = snap?.used ?? 0;
   const saved = config.data!.cache;
   const matched = cachePresetKey(saved);
@@ -288,6 +291,16 @@ export default function Cache() {
       }
     >
       <div className="@container flex min-h-0 flex-1 flex-col">
+        {storage && (
+          <div
+            role="status"
+            title={storage.details.join("\n")}
+            className="flex shrink-0 flex-col gap-0.5 border-b border-warning/20 bg-warning/10 px-5 py-2 text-xs text-warning"
+          >
+            <span className="font-medium">{storage.summary}</span>
+            <span>{storage.details[0]} {storage.note}</span>
+          </div>
+        )}
         {snap?.restartRequired && (
           <div
             role="status"

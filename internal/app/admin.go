@@ -180,6 +180,7 @@ func (a *App) buildAdmin() http.Handler {
 			"sources":  func(context.Context) any { return map[string]any{"startup": a.resolver.SourceStartups()} },
 			"database": a.databaseStatus,
 			"updates":  a.updateStatus,
+			"storage":  a.storageStatus,
 		},
 		ResolverTraces:  func(context.Context) (any, error) { return a.resolver.Traces(), nil },
 		Users:           a.users,
