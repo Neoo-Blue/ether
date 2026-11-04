@@ -347,6 +347,8 @@ func openSQLite(ctx context.Context, path string, files []SnapshotFile, progress
 		fmt.Sprintf("&_pragma=journal_size_limit(%d)", journalSizeLimit)
 	if path == ":memory:" {
 		dsn = "file::memory:?_pragma=foreign_keys(1)"
+	} else if err := checkSQLiteFilesystem(path); err != nil {
+		return nil, err
 	} else if err := protectDBFiles(path); err != nil {
 		return nil, err
 	}

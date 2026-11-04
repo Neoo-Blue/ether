@@ -20,6 +20,7 @@ export interface HealthItem {
     | "database"
     | "remote"
     | "plexdirect"
+    | "storage"
     | "transcode";
   label: string;
   level: HealthLevel;
@@ -697,6 +698,39 @@ export function databaseHealth(v: unknown, now = new Date()): HealthItem | null 
   };
 }
 
+/**
+ * The data folder's filesystem from the "storage" status section (#305).
+ * Only safe mode is a row: a filesystem Ether trusts has nothing to say.
+ */
+export function storageHealth(v: unknown): HealthItem | null {
+  if (!isPlainObject(v) || v.trust !== "safe-mode") return null;
+  const type = str(v.type);
+  const path = str(v.path);
+  const why =
+    v.reasonKind === "network"
+      ? t("It is a network share, so Ether can't tell when a crashed run has let go of its files.")
+      : t("It failed Ether's startup check, so Ether can't tell when a crashed run has let go of its files.");
+  const fixes: Record<string, string> = {
+    unraid: t("Map /config to the pool or disk path, for example /mnt/cache/appdata/ether, not /mnt/user."),
+    "docker-desktop": t("Use a Docker named volume for /config instead of a folder from your computer."),
+    network: t("Move the data folder to a disk in this machine."),
+    fuse: t("Move the data folder to a disk in this machine."),
+  };
+  return {
+    id: "storage",
+    label: t("Data folder"),
+    href: "/cache",
+    level: "warn",
+    summary: t("Cache cleanup is in safe mode: {path} is on {type}", { path, type }),
+    note: fixes[str(v.fixKind)] ?? t("Move the data folder to a local disk (ext4, XFS, Btrfs, ZFS, f2fs, bcachefs or NTFS)."),
+    details: [
+      why,
+      t("Files left by a crash are kept for 10 minutes before they are cleaned up. Everything else works normally."),
+      str(v.reason),
+    ].filter(Boolean),
+  };
+}
+
 /** One Plex row until the server is claimed. The certificate check is the same missing sign-in. */
 function plexConnectionHealth(remote: unknown, now: Date): HealthItem[] {
   if (isPlainObject(remote) && remote.claimed === false) {
@@ -727,6 +761,7 @@ export function computeHealth(
     cacheHealth(s.cache),
     catalogHealth(s.catalog, now),
     databaseHealth(s.database, now),
+    storageHealth(s.storage),
     ...(plexOn ? plexConnectionHealth(s.remote, now) : []),
   ].filter((item): item is HealthItem => item !== null);
   const transcode = transcodeHealth(s.hwaccel);

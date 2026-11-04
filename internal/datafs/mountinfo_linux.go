@@ -1,4 +1,4 @@
-package playback
+package datafs
 
 import (
 	"bufio"
@@ -7,12 +7,12 @@ import (
 	"strings"
 )
 
-// mountinfoPath is read to name the filesystem a refused data folder is on.
+// mountinfoPath is read to name the filesystem a data folder is on.
 var mountinfoPath = "/proc/self/mountinfo"
 
-// payloadFilesystemType is the type (fuse.shfs, nfs4, ...) of the mount
+// mountType is the type (fuse.shfs, nfs4, ...) of the mount
 // holding dir, from the longest mount point that contains it; "" if unknown.
-func payloadFilesystemType(dir string) string {
+func mountType(dir string) string {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		return ""
